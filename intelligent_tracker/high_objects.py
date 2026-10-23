@@ -91,8 +91,13 @@ class World(Space):
             # only leave if all scenes processes are closed
             conditions = [i.closed for i in scenes]
 
-        while any((not i() for i in conditions)):
-            pause(0.1)  # check avery 0.1 seconds  # FIXME _tkinter.TclError: can't invoke "update" command: application has been destroyed
+        try:
+            while any((not i() for i in conditions)):
+                pause(0.1)  # check every 0.1 seconds
+        except KeyboardInterrupt:
+            print("\n[INFO] Interrupt signal received (Ctrl+C). Closing scenes...")
+        except Exception:
+            pass
 
         # close all specified scenes
         if close:
@@ -350,7 +355,9 @@ class Scene(Space):
                     # _computed_vis is the computed visualization 
                     # at any given frame and if it is None it will
                     # not update the animation in the window
-                    return cv2.cvtColor(self._computed_vis, cv2.COLOR_BGR2RGB)
+                    if self._computed_vis is not None:
+                        return cv2.cvtColor(self._computed_vis, cv2.COLOR_BGR2RGB)
+                    return None
 
                 def key_press_event(selfo, event):
                     if event.key == 'q':

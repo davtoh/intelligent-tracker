@@ -21,9 +21,10 @@ else:
     # Legacy reference: _matplotlib.use('QT5Agg')  # FIXME not all back end working: tk is not thread safe
     for _backend in ('QtAgg', 'QT5Agg', 'TkAgg', 'Agg'):
         try:
+            _matplotlib.backends.registry.backend_registry.load_backend_module(_backend)
             _matplotlib.use(_backend)
             break
-        except (ImportError, ValueError):
+        except Exception:
             continue
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -83,7 +84,7 @@ class EventFigure(object):
         self._title = title
         self.figure = plt.figure(num=title, **kwargs)
         self.ax = self.figure.add_axes([0, 0, 1, 1], frame_on=False, xticks=[], yticks=[])
-        self.artist = self.ax.imshow(img, animated=True, interpolation="nearest")
+        self.artist = self.ax.imshow(img, animated=bool(blit), interpolation="nearest")
         self.animation = None
 
     @property
@@ -123,13 +124,13 @@ class EventFigure(object):
             res = self.update_func(*args)
             if res is not None:
                 if is_numpy(res):
-                    self.artist.set_array(res)
+                    self.artist.set_data(res)
                 else:
                     return res
         if self._blit:
             return self.artist,
         else:
-            self.figure.canvas.draw()
+            self.figure.canvas.draw_idle()
 
     def update_func(self, *args):
         return
