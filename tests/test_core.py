@@ -17,10 +17,17 @@ from random import random, choice
 from time import sleep
 
 # import third party modules
-from RRtoolbox.lib.root import TimeCode, Magnitude
-import pympler.asizeof  # https://stackoverflow.com/a/1816648/5288758
-import resource
-import psutil
+# Legacy reference (unused in tests):
+# from RRtoolbox.lib.root import TimeCode, Magnitude
+# import pympler.asizeof  # https://stackoverflow.com/a/1816648/5288758
+try:
+    import resource
+except ImportError:
+    resource = None
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 # special variables
 #__all__ = []
@@ -46,8 +53,13 @@ def bytes2MB(b):
 
 def mem(print_flag=True):
     # https://stackoverflow.com/q/32167386/5288758
-    usage = round(
-        bytes2MB(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss), 1)
+    if resource is not None:
+        usage = round(
+            bytes2MB(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss), 1)
+    elif psutil is not None:
+        usage = round(bytes2MB(psutil.Process(os.getpid()).memory_info().rss), 1)
+    else:
+        usage = 0.0
     if print_flag: print('Memory usage         : % 2.2f MB' % usage)
     return usage
 
@@ -55,10 +67,54 @@ def mem(print_flag=True):
 def memory_usage_psutil():
     # return the memory usage in percentage like top
     # https://stackoverflow.com/a/30014612/5288758
-    process = psutil.Process(os.getpid())
-    per = process.memory_percent()  # percentage
-    mem = bytes2MB(process.memory_full_info().rss)  # total used in MB
+    if psutil is not None:
+        process = psutil.Process(os.getpid())
+        per = process.memory_percent()  # percentage
+        mem = bytes2MB(process.memory_full_info().rss)  # total used in MB
+    else:
+        per, mem = 0.0, 0.0
     return per, mem
+
+
+import time
+
+class TimeCode(object):
+    """Execution timer context manager (self-contained replacement for legacy RRtoolbox.lib.root.TimeCode)."""
+    def __init__(self, msg="", printfunc=print):
+        self.msg = msg
+        self.printfunc = printfunc
+        self.time_start = None
+        self.time_end = None
+        self._cum_start = None
+        self.cumulative_time = 0.0
+
+    def __enter__(self):
+        self.time_start = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.time_end = time.perf_counter() - self.time_start
+        if self.printfunc:
+            self.printfunc("{}{:.6f} seconds".format(self.msg, self.time_end))
+
+    def start_cummulative(self):
+        self._cum_start = time.perf_counter()
+
+    def end_cummulative(self):
+        if self._cum_start is not None:
+            delta = time.perf_counter() - self._cum_start
+            self.cumulative_time += delta
+            self.time_end = delta
+            self._cum_start = None
+
+
+def asizeof(obj):
+    """Estimate memory footprint (self-contained fallback for pympler.asizeof)."""
+    try:
+        import pympler.asizeof
+        return pympler.asizeof.asizeof(obj)
+    except ImportError:
+        return sys.getsizeof(obj)
 
 
 class CustomAssertions:
@@ -580,7 +636,7 @@ class GroupEfficiencyTestCase(unittest.TestCase, CustomAssertions):
             name = g.__class__.__name__
             with TimeCode("updating {} with {} items: ".format(name, len(agents))):
                 g.update(agents, as_parent=True, as_contained=True)
-            my_size = bytes2MB(pympler.asizeof.asizeof(g))
+            my_size = bytes2MB(asizeof(g))
             percentage, used = memory_usage_psutil()
             print("{} size {:.2f} MB, program {:.2f} MB, {:.2f}% of total "
                   "memory".format(name, my_size, used, percentage))

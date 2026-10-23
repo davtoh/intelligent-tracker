@@ -1,176 +1,155 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# (C) 2017 David Toro <davsamirtor@gmail.com>
+"""
+Intelligent Tracker — Main Entrypoint.
 
-# compatibility with python 2 and 3
+Supports modular Edge AI detection backends:
+- ONNX Runtime: YOLOv8, YOLO11
+- Classical: Haar Cascades (Face, Eye)
+- Synthetic / CI: Mock Detector
+
+Controls:
+  'q' - Quit
+  'd' - Clear tracked objects in scene
+"""
+
 from __future__ import division
 from __future__ import print_function
 from __future__ import absolute_import
-from builtins import object
 
 import sys
-sys.setrecursionlimit(1000000)
+import os
+import time
+import argparse
 
-def trace_calls(frame, event, arg):
-    # https://pymotw.com/2/sys/tracing.html
-    if event != 'call':
-        return
-    co = frame.f_code
-    func_name = co.co_name
-    if func_name == 'write':
-        # Ignore write() calls from print statements
-        return
-    func_line_no = frame.f_lineno
-    func_filename = co.co_filename
-    caller = frame.f_back
-    caller_line_no = caller.f_lineno
-    caller_filename = caller.f_code.co_filename
-    print('Call to %s on line %s of %s from line %s of %s' % \
-        (func_name, func_line_no, func_filename,
-         caller_line_no, caller_filename))
-    return
-
-#sys.settrace(trace_calls)
-
-# import build-in modules
-import sys
-
-# import third party modules
-from intelligent_tracker.high_objects import Scene, World, Space
-from intelligent_tracker.forms import EventFigure
-import matplotlib.pyplot as plt
-#import pympler.asizeof  # https://stackoverflow.com/a/1816648/5288758
+from intelligent_tracker.high_objects import World
+from intelligent_tracker.detectors import DetectorFactory, COCO_CLASSES
 
 
-def mem():
-    # only linux
-    import resource
-    # https://stackoverflow.com/q/32167386/5288758
-    print('Memory usage         : % 2.2f MB' % round(
-        resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024.0/1024.0, 1)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Intelligent Tracker — Edge AI Retail & Security Analytics",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-
-# special variables
-# __all__ = []
-__author__ = "David Toro"
-# __copyright__ = "Copyright 2017, The <name> Project"
-# __credits__ = [""]
-__license__ = "GPL"
-# __version__ = "1.0.0"
-__maintainer__ = "David Toro"
-__email__ = "davsamirtor@gmail.com"
-# __status__ = "Pre-release"
-
-# create world in scene
-world = World(name="World")
-
-# create scenes in world
-newton1 = world.create_scene([None], name="Newton", framerate=30, resolution=(500, 500))
-# tests
-newton2 = world.scenes["Newton"]
-assert newton1 is newton2
-newton3 = world._space_get_item("scenes.Newton")
-assert newton2 is newton3
-newton4 = world.scenes[newton1]
-assert newton4 is newton1
-look = Space._space_get_from_hierarchy("Wo*")
-assert world.name in look and look[world.name] is world
-look2 = world._space_get_from_hierarchy("*")
-#bergen = world.create_scene([None], name="Bergen", framerate=1)
-
-# create detectors in world and assign them to the desired scenes
-#world.create_detector("colordetector", [148, 148, 0], [196, 255, 255], name="red")
-#world.create_detector("colordetector", [56, 73, 135], [86, 119, 204], name="green")
-world.create_detector("FaceDetector")
-# see world
-world.show(throw=False)
-#world.close("Newton")
-#world.show()
-#world.close()
-#scene = Scene([None])
-#scene.show()
-#scene.resolution = (300,200)
-#scene.framerate = 1
-#scene.close()
-#scene.show()
-# only leave if all scenes windows are closed
-world.block(close=True)
-
-import gc
-import pprint
-
-class Graph(object):
-    def __init__(self, name):
-        self.name = name
-        self.next = None
-
-    def set_next(self, next):
-        print('Linking nodes %s.next = %s' % (self, next))
-        self.next = next
-
-    def __repr__(self):
-        return '%s(%s)' % (self.__class__.__name__, self.name)
-
-    def __del__(self):
-        print('%s.__del__()' % self)
+    parser.add_argument(
+        "--detector",
+        default="haar",
+        choices=["haar", "yolov8", "yolo11", "mock", "face", "eye", "color"],
+        help="Detection architecture to use",
+    )
+    parser.add_argument(
+        "--source",
+        default="0",
+        help="Video source: camera index (0, 1), 'synthetic'/'mock', video file path, or RTSP URL",
+    )
+    parser.add_argument(
+        "--resolution",
+        default="640x480",
+        help="Input resolution formatted as WIDTHxHEIGHT",
+    )
+    parser.add_argument(
+        "--framerate",
+        type=int,
+        default=30,
+        help="Target processing frame rate",
+    )
+    parser.add_argument(
+        "--conf",
+        type=float,
+        default=0.25,
+        help="Confidence threshold for AI detectors (0.0 to 1.0)",
+    )
+    parser.add_argument(
+        "--classes",
+        nargs="*",
+        default=None,
+        help="Filter detected classes (e.g. 'person' or class IDs like 0)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run without GUI window (ideal for CI, servers, and benchmarks)",
+    )
+    parser.add_argument(
+        "--frames",
+        type=int,
+        default=60,
+        help="Maximum frames to process in headless mode before exiting (0 = run indefinitely)",
+    )
+    return parser.parse_args()
 
 
-# Construct two graph cycles
-one = Graph('one')
-two = Graph('two')
-three = Graph('three')
-one.set_next(two)
-two.set_next(three)
-three.set_next(one)
-
-# Remove references to the graph nodes in this module's namespace
-one = two = three = None
-
-# Collecting now keeps the objects as uncollectable
-print("")
-print('Collecting...')
-n = gc.collect()
-print('Unreachable objects:', n)
-print('Remaining Garbage:', end="")
-pprint.pprint(gc.garbage)
-
-REFERRERS_TO_IGNORE = [locals(), globals(), gc.garbage]
+def parse_resolution(res_str):
+    try:
+        parts = res_str.lower().split("x")
+        if len(parts) == 2:
+            return int(parts[0]), int(parts[1])
+    except Exception:
+        pass
+    return 640, 480
 
 
-def find_referring_graphs(obj):
-    #print('Looking for references to %s' % repr(obj))
-    referrers = (r for r in gc.get_referrers(obj)
-                 if r not in REFERRERS_TO_IGNORE)
-    for ref in referrers:
-        if isinstance(ref, Graph):
-            # A graph node
-            yield ref
-        elif isinstance(ref, dict):
-            # An instance or other namespace dictionary
-            for parent in find_referring_graphs(ref):
-                yield parent
+def main():
+    args = parse_args()
+    res_w, res_h = parse_resolution(args.resolution)
+
+    # Resolve camera source
+    source = args.source
+    if source.isdigit():
+        source = int(source)
+    elif source.lower() in ("synthetic", "mock"):
+        source = "mock"
+
+    print("=" * 60)
+    print("Intelligent Tracker — Edge AI Analytics Platform")
+    print("=" * 60)
+    print("  Detector   : {}".format(args.detector))
+    print("  Source     : {}".format(args.source))
+    print("  Resolution : {}x{}".format(res_w, res_h))
+    print("  Framerate  : {} FPS".format(args.framerate))
+    print("  Mode       : {}".format("Headless" if args.headless else "Interactive GUI"))
+    print("=" * 60)
+
+    # Initialize World and Scene
+    world = World(name="World")
+    scene = world.create_scene([source], name="TrackerScene", framerate=args.framerate, resolution=(res_w, res_h))
+
+    # Initialize Detector
+    detector_kwargs = {}
+    if args.detector in ("yolov8", "yolo11", "onnx"):
+        detector_kwargs["conf_threshold"] = args.conf
+        if args.classes:
+            detector_kwargs["classes"] = args.classes
+
+    try:
+        detector = world.create_detector(args.detector, **detector_kwargs)
+        print("[INFO] Successfully initialized detector: {}".format(detector.__class__.__name__))
+    except Exception as e:
+        print("[ERROR] Failed to initialize detector '{}': {}".format(args.detector, e))
+        sys.exit(1)
+
+    if args.headless:
+        print("[INFO] Running in headless mode for {} frames...".format(args.frames if args.frames > 0 else "infinite"))
+        start_time = time.time()
+        frame_count = 0
+        try:
+            while True:
+                scene.compute()
+                frame_count += 1
+                if 0 < args.frames <= frame_count:
+                    break
+        except KeyboardInterrupt:
+            print("\n[INFO] Stopped by user.")
+        elapsed = time.time() - start_time
+        fps = frame_count / elapsed if elapsed > 0 else 0
+        print("[SUMMARY] Processed {} frames in {:.2f}s ({:.1f} FPS)".format(frame_count, elapsed, fps))
+        world.close()
+    else:
+        print("[INFO] Opening visualization window. Press 'q' in the window to quit, 'd' to clear objects.")
+        world.show(throw=False)
+        world.block(close=True)
+        print("[INFO] Application closed.")
 
 
-# Look for objects that refer to the objects that remain in
-# gc.garbage.
-print("")
-print('Clearing referrers:')
-for obj in gc.garbage:
-    for ref in find_referring_graphs(obj):
-        ref.set_next(None)
-        del ref  # remove local reference so the node can be deleted
-    del obj  # remove local reference so the node can be deleted
-
-# Clear references held by gc.garbage
-print("")
-print('Clearing gc.garbage:')
-del gc.garbage[:]
-
-# Everything should have been freed this time
-print("")
-print('Collecting...')
-
-n = gc.collect()
-print('Unreachable objects:', n)
-print('Remaining Garbage:', end="")
-pprint.pprint(gc.garbage)
+if __name__ == "__main__":
+    main()

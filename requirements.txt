@@ -3,9 +3,14 @@ packaging>=16.8
 appdirs>=1.4
 numpy>=1.9 # for array manipulation and Memory-mapped file
 matplotlib>=1.4
-combomethod>=1.0
+combomethod>=1.0 # not in conda
 future>=0.16.0
-ordered-set>=2.0.2
+ordered-set>=2.0.2 # not in conda
 scipy>=1.1.0
-opencv-contrib-python>=3.4
+scikit-learn
+opencv-contrib-python>=3.4 # use conda alternative
+#PyQt5>=5.13.0  # use conda alternative
 # install RRtoolbox for debugging and development, I must migrate used methods to this project
+sympy
+psutil>=5.8.0
+onnxruntime>=1.18.0

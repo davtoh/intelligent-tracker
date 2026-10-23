@@ -36,7 +36,7 @@ def is_numpy(obj):
     return type(obj).__module__ == np.__name__
 
 
-def convert(points, roll=None, _type=np.int, shift=None, apply="contours"):
+def convert(points, roll=None, _type=int, shift=None, apply="contours"):
     """
     Convert contour or points.
 

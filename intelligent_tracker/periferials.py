@@ -34,6 +34,39 @@ class CameraError(Exception):
     pass
 
 
+class MockVideoCapture(object):
+    """Synthetic VideoCapture fallback for headless environments or devices without webcam."""
+    def __init__(self, width=640, height=480):
+        self.width = width
+        self.height = height
+        self._opened = True
+        self.frame_idx = 0
+
+    def isOpened(self):
+        return self._opened
+
+    def open(self, *args):
+        self._opened = True
+        return True
+
+    def read(self):
+        if not self._opened:
+            return False, None
+        self.frame_idx += 1
+        frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        # Background gradient
+        frame[:, :, 0] = (np.arange(self.height)[:, None] * 255 // self.height).astype(np.uint8)
+        frame[:, :, 1] = (np.arange(self.width)[None, :] * 255 // self.width).astype(np.uint8)
+        # Moving synthetic target
+        cx = int((self.width // 2) + (self.width // 4) * np.sin(self.frame_idx * 0.05))
+        cy = int((self.height // 2) + (self.height // 4) * np.cos(self.frame_idx * 0.05))
+        cv2.circle(frame, (cx, cy), 35, (0, 0, 255), -1)
+        return True, frame
+
+    def release(self):
+        self._opened = False
+
+
 class UnifiedCamera(object):
     """
     Emulate PiCamera in a system that does not have PiCamera support
@@ -41,19 +74,33 @@ class UnifiedCamera(object):
     """
     # https://github.com/waveform80/picamera/blob/master/picamera/camera.py
     # https://www.pyimagesearch.com/2015/03/30/accessing-the-raspberry-pi-camera-with-opencv-and-python/
-    def __init__(self, camera_num=None):
+    def __init__(self, camera_num=None, allow_mock=True):
         self.resolution = None
         self.framerate = None
-        if camera_num is None:
-            for camera_num in range(100):
-                _camera = cv2.VideoCapture(camera_num)
-                if _camera.isOpened():
+        _camera = None
+        if camera_num in ("mock", "synthetic"):
+            _camera = MockVideoCapture()
+        elif camera_num is None:
+            for idx in range(5):
+                _cam = cv2.VideoCapture(idx)
+                if _cam.isOpened():
+                    _camera = _cam
+                    camera_num = idx
                     break
-                _camera.release()
-            else:
-                raise CameraError("no camera found")
+                _cam.release()
+            if _camera is None:
+                if allow_mock:
+                    print("Notice: No hardware camera found. Falling back to MockVideoCapture synthetic feed.")
+                    _camera = MockVideoCapture()
+                    camera_num = "mock"
+                else:
+                    raise CameraError("no camera found")
         else:
             _camera = cv2.VideoCapture(camera_num)
+            if not _camera.isOpened() and allow_mock:
+                print("Notice: Camera {} failed to open. Falling back to MockVideoCapture.".format(camera_num))
+                _camera = MockVideoCapture()
+                camera_num = "mock"
 
         self._camera_num = camera_num
         self._camera = _camera

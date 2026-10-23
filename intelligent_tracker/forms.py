@@ -13,8 +13,18 @@ import sys
 from time import sleep
 
 # import third party modules
+import os
 import matplotlib as _matplotlib
-_matplotlib.use('QT5Agg')  # FIXME not all back end working: tk is not thread safe
+if 'MPLBACKEND' in os.environ:
+    _matplotlib.use(os.environ['MPLBACKEND'])
+else:
+    # Legacy reference: _matplotlib.use('QT5Agg')  # FIXME not all back end working: tk is not thread safe
+    for _backend in ('QtAgg', 'QT5Agg', 'TkAgg', 'Agg'):
+        try:
+            _matplotlib.use(_backend)
+            break
+        except (ImportError, ValueError):
+            continue
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from .array_utils import is_numpy

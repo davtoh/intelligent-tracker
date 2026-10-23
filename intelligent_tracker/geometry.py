@@ -40,8 +40,9 @@ class IncompleteAssociations(Exception):
 
 
 def norm_point(pt):
-    """normalize point to a tuple (x,y)"""
-    return tuple(pt.reshape(2))
+    """normalize point to a tuple (x,y) of native floats for cv2 compatibility"""
+    arr = np.asarray(pt).reshape(2)
+    return float(arr[0]), float(arr[1])
 
 
 def bezier(point, line, check=False):
@@ -147,7 +148,7 @@ def cnt_group(cnt, cnt_cmp, check=False):
     """
     assert len(cnt) > 1, "contour must have at least 2 points to test transitions"
     transitions = []
-    flags = np.empty(len(cnt), np.int)
+    flags = np.empty(len(cnt), int)
     pt_last = norm_point(cnt[-1])
     old_flag = cv2.pointPolygonTest(cnt_cmp, pt_last, False)
     for i, pt in enumerate(cnt):
@@ -986,12 +987,12 @@ def cnt_check_intersection(cnt0, cnt1):
     id0_f, id1_f = flags[id0], flags[id1]
 
     # check
-    if np.alltrue(id0_f == -1):  # all_outside0:
+    if np.all(id0_f == -1):  # all_outside0:
         id0_trans_raw = np.arange(len(id0_f))
     else:
         id0_trans_raw = trans_raw[id0]
 
-    if np.alltrue(id1_f == -1):  # all_outside1:
+    if np.all(id1_f == -1):  # all_outside1:
         id1_trans_raw = np.arange(len(id1_f))
     else:
         id1_trans_raw = trans_raw[id1]
@@ -1030,9 +1031,9 @@ def cnt_intersection(cnt0, cnt1):
     flags1, trans1_raw = cnt_group(cnt1, cnt0)
 
     ## fastest route: when a contour is inside another
-    if np.alltrue(flags0 != -1):
+    if np.all(flags0 != -1):
         return [cnt0]
-    elif np.alltrue(flags1 != -1):
+    elif np.all(flags1 != -1):
         return [cnt1]
 
     # default point shape
@@ -1063,7 +1064,7 @@ def cnt_intersection(cnt0, cnt1):
     trans = trans0, trans1
     cnts = cnt0, cnt1
     flags = flags0, flags1
-    used_flags = np.zeros_like(flags0, np.int), np.zeros_like(flags1, np.int)
+    used_flags = np.zeros_like(flags0, int), np.zeros_like(flags1, int)
     # unique key format
     # frozenset(((id0,frozenset((id0_i0, id0_i1))),
     #                   (id1,frozenset((id1_i0, id1_i1)))))
@@ -1083,8 +1084,8 @@ def cnt_intersection(cnt0, cnt1):
     #id0_u, id1_u = used_flags[id0], used_flags[id1]
 
     # check
-    all_outside0 = np.alltrue(id0_f == -1)
-    all_outside1 = np.alltrue(id1_f == -1)
+    all_outside0 = np.all(id0_f == -1)
+    all_outside1 = np.all(id1_f == -1)
 
     if all_outside0:
         id0_trans_raw = np.arange(len(id0_f))
@@ -1332,7 +1333,7 @@ def cnt_intersection(cnt0, cnt1):
     #cnt_ = list(conns[0].recurse_left())
     #assert check_contours([cnt], [cnt_]), "forward and reverse must yield the same indexes"
     #fastplt(draw_contour_groups([[cnt0], [cnt1]]), interpolation="nearest")
-    #fastplt(draw_contour_groups([[np.array(c, np.int)] for c in contours]), interpolation="nearest")
+    #fastplt(draw_contour_groups([[np.array(c, int)] for c in contours]), interpolation="nearest")
     return contours
 
 
@@ -1361,9 +1362,9 @@ def intersect_analytical(contours):
         for new_cnt in new_contours:
             ans = cnt_intersection(new_cnt, to_intersect)
             if ans:
-                new_contours_cache.extend([np.array(c, np.int) for c in ans])
+                new_contours_cache.extend([np.array(c, int) for c in ans])
         new_contours = new_contours_cache
-        # fastplt(draw_contour_groups([[np.array(c, np.int)] for c in new_contours]), interpolation="nearest")
+        # fastplt(draw_contour_groups([[np.array(c, int)] for c in new_contours]), interpolation="nearest")
         if not new_contours:
             break
 

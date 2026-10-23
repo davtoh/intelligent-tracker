@@ -65,6 +65,7 @@ class MyTestCase(unittest.TestCase):
         y = np.linspace(0, 2 * np.pi, 100).reshape(-1, 1)
         fig = Test(f(x, y))
 
+        iterations = 0
         while not fig.closed():
             x += np.pi / 15.
             y += np.pi / 20.
@@ -72,8 +73,10 @@ class MyTestCase(unittest.TestCase):
             # sleep(0.5)
             # plt.pause(1)
             # fig.show()
-        fig.show()
-        pass
+            iterations += 1
+            if iterations >= 10:
+                fig.close()
+                break
 
 
 def suite_alias():

@@ -18,7 +18,11 @@ from abc import ABCMeta
 from functools import wraps
 from threading import RLock
 from ordered_set import OrderedSet
-from collections import MutableMapping, MutableSet, namedtuple, OrderedDict, deque
+from collections import namedtuple, OrderedDict, deque
+try:
+    from collections.abc import MutableMapping, MutableSet
+except ImportError:
+    from collections import MutableMapping, MutableSet
 from weakref import ref, WeakValueDictionary, KeyedRef, _IterationGuard  # https://stackoverflow.com/a/36788452/5288758
 
 # import third party modules
@@ -27,7 +31,10 @@ from combomethod import combomethod  # https://stackoverflow.com/q/2589690/52887
 from scipy.spatial.distance import euclidean
 import numpy as np
 import cv2
-(cv_major_ver, cv_minor_ver, cv_subminor_ver) = cv2.__version__.split('.')
+_cv_ver = cv2.__version__.split('.')
+cv_major_ver = _cv_ver[0]
+cv_minor_ver = _cv_ver[1] if len(_cv_ver) > 1 else '0'
+cv_subminor_ver = _cv_ver[2] if len(_cv_ver) > 2 else '0'
 PY3 = sys.version_info[0] == 3
 if PY3:
     xrange = range
@@ -1337,7 +1344,7 @@ class Agent(Space):
         x, y = sz_x/2., sz_y/2.
         # construct contour in origin
         cnt_rect = np.array([((-x, -y),), ((x, -y),),
-                             ((x, y),), ((-x, y),)], np.float)#.reshape(-1, 1, 2)
+                             ((x, y),), ((-x, y),)], float)#.reshape(-1, 1, 2)
 
         # create transformation matrix to rotate and translate
         # https://en.wikipedia.org/wiki/Transformation_matrix
@@ -1346,7 +1353,7 @@ class Agent(Space):
         s = np.sin(a)
         H = np.array([(c, -s, tx),
                       (s, c, ty),
-                      (0, 0, 1)], np.float)
+                      (0, 0, 1)], float)
 
         # apply transformation with desired type
         # https://docs.opencv.org/2.4/modules/core/doc/operations_on_arrays.html#perspectivetransform
