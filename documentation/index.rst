@@ -14,6 +14,7 @@ Contents
    :caption: Contents:
 
    intelligent_tracker
+   detectors
 
 
 Indices and tables

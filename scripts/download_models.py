@@ -179,6 +179,28 @@ def ensure_model(model_name, output_dir=None):
     return download_model(model_name, output_dir=output_dir, force=False)
 
 
+def check_status(output_dir=None):
+    """Check and display presence and integrity of all known models."""
+    if output_dir is None:
+        output_dir = DEFAULT_MODELS_DIR
+    print("=" * 60)
+    print("AI Model Weights Status ({})".format(output_dir))
+    print("=" * 60)
+    for model_key, meta in MODELS.items():
+        dest = os.path.join(output_dir, meta["filename"])
+        if not os.path.isfile(dest):
+            print("  [-] {:<12}: MISSING ({})".format(model_key, meta["filename"]))
+        else:
+            size_mb = os.path.getsize(dest) / (1024.0 * 1024.0)
+            file_hash = compute_sha256(dest)
+            if file_hash.lower() == meta["sha256"].lower():
+                print("  [+] {:<12}: VALID ({:.2f} MB, SHA-256 OK)".format(model_key, size_mb))
+            else:
+                print("  [!] {:<12}: CORRUPT (Hash mismatch: expected {}, got {})".format(
+                    model_key, meta["sha256"][:12], file_hash[:12]))
+    print("=" * 60)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Download ONNX models for Intelligent Tracker.")
     parser.add_argument(
@@ -197,7 +219,16 @@ def main():
         action="store_true",
         help="Force re-download even if model file already exists and is valid",
     )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Check presence and SHA-256 integrity of all known models without downloading",
+    )
     args = parser.parse_args()
+
+    if args.status:
+        check_status(output_dir=args.output_dir)
+        return
 
     try:
         path = download_model(args.model, output_dir=args.output_dir, force=args.force)
@@ -209,3 +240,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

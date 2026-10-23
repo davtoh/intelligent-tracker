@@ -21,13 +21,14 @@ sys.path.insert(0, os.path.abspath("../")) # add Project path
 # -- Project information -----------------------------------------------------
 
 project = 'intelligent_tracker'
-copyright = '2018, David Toro'
+copyright = '2018-2026, David Toro'
 author = 'David Toro'
 
 # The short X.Y version
-version = ''
+version = '0.2'
 # The full version, including alpha/beta/rc tags
-release = '0.1.0'
+release = '0.2.0'
+
 
 
 # -- General configuration ---------------------------------------------------

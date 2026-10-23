@@ -127,36 +127,89 @@ When running camera captures on macOS:
 
 ---
 
-## 5. Running the Application
+## 5. Edge AI Model Weights & Environment Diagnostics
 
-### Running the Tracking Demo
-```bash
+### Step 5.1: Run Environment Diagnostics
+Verify Python, OpenCV camera device indexing, active GUI backend, and ONNX Runtime execution providers:
+```powershell
 # Windows
-.\.venv\Scripts\python.exe main.py
+.\.venv\Scripts\python.exe scripts/diagnostics.py
 
 # Linux / macOS
 source .venv/bin/activate
-python main.py
+python scripts/diagnostics.py
 ```
 
-### Controls in GUI:
-- `q`: Quit active window / application.
+### Step 5.2: Download Edge AI Models (ONNX)
+Download verified, ultralightweight YOLOv8 Nano or YOLO11 Nano models with mirror failover and SHA-256 integrity verification:
+```powershell
+# Windows
+.\.venv\Scripts\python.exe scripts/download_models.py --model yolov8n
+.\.venv\Scripts\python.exe scripts/download_models.py --model yolo11n
+
+# Linux / macOS
+source .venv/bin/activate
+python scripts/download_models.py --model yolov8n
+python scripts/download_models.py --model yolo11n
+```
 
 ---
 
-## 6. Modernization Architecture (Next Steps)
+## 6. Running the Application
 
-After establishing stable cross-platform execution, the project evolves according to `TODO_MODERNIZATION.md`:
+### Running with Edge AI Detectors
+```powershell
+# Windows: Run YOLOv8 Nano on default webcam
+.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0
 
-1. **Detection Engine (YOLOv8 / YOLOv11 Edge)**:
-   - Replacing legacy Haar cascade (`cv2.CascadeClassifier`) with ultra-light ONNX models (`yolov8n.onnx`, `yolov11n.onnx`).
-   - Hardware acceleration options:
-     - **Windows**: DirectML (`onnxruntime-directml`)
-     - **Linux / Raspberry Pi**: CPU / OpenVINO / Coral Edge TPU (`onnxruntime`)
-     - **macOS**: CoreML (`onnxruntime-silicon`)
-2. **RTSP Stream Pipelines**:
-   - Ingesting IP camera streams (`rtsp://username:password@camera_ip:554/stream1`) with automatic reconnection and frame-drop policies.
-3. **Retail & Space Analytics**:
+# Windows: Run YOLO11 Nano on synthetic feed (no camera required)
+.\.venv\Scripts\python.exe main.py --detector yolo11 --source synthetic
+
+# Filter for specific classes (e.g., person only)
+.\.venv\Scripts\python.exe main.py --detector yolov8 --classes person --conf 0.4
+
+# Run headless benchmark (ideal for CI, servers, Raspberry Pi testing)
+.\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 60
+
+# Run with legacy Haar cascade or synthetic mock detector
+.\.venv\Scripts\python.exe main.py --detector haar --source 0
+.\.venv\Scripts\python.exe main.py --detector mock --source synthetic
+```
+
+### CLI Command Options
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--detector` | `haar` | Detection architecture (`yolov8`, `yolo11`, `haar`, `mock`, `face`, `eye`, `color`) |
+| `--source` | `0` | Camera index (`0`, `1`), `synthetic`/`mock`, video file path, or RTSP URL |
+| `--resolution`| `640x480` | Input resolution (`WIDTHxHEIGHT`) |
+| `--framerate` | `30` | Target processing frame rate |
+| `--conf` | `0.25` | Confidence threshold for AI detectors (`0.0` to `1.0`) |
+| `--classes` | `None` | Filter detected classes (e.g. `person`, `car`, or class IDs like `0`) |
+| `--headless` | `False` | Run without GUI window (ideal for CI/CD, remote SSH, and benchmarking) |
+| `--frames` | `60` | Number of frames to process in headless mode (`0` = infinite) |
+
+### Controls in GUI Window:
+- `q`: Quit active window / application.
+- `d`: Clear tracked objects in the current scene.
+
+---
+
+## 7. Modernization Roadmap Status
+
+The project evolves according to `TODO_MODERNIZATION.md` and `milestone_plan.md`:
+
+1. ✅ **Milestone 1: Environment & Core Engine Revitalization**:
+   - Python 3.12 modern virtual environment, cross-platform fixes, 21 unit tests passing.
+2. ✅ **Milestone 2: Edge AI Detection Architecture**:
+   - Modular `BaseDetector` interface and `DetectorFactory` registry.
+   - Ultralight ONNX Runtime inference (`yolov8n.onnx`, `yolo11n.onnx`) with pure NumPy letterboxing and vectorized multi-class NMS.
+   - Full backwards compatibility for Haar cascades and color detection.
+   - 46/46 unit tests passing.
+3. ⬜ **Milestone 3: RTSP Stream Pipelines & Retail / Occupancy Analytics**:
+   - Threaded non-blocking RTSP video reader with auto-reconnection and zero-latency frame drop.
    - Polygonal ROI zones, entry/exit tripwire line intersections, dwell times, and 2D spatial occupancy heatmaps.
-4. **Alerts & Integrations**:
+4. ⬜ **Milestone 4: Edge Alerting & Event Dispatch**:
    - Webhooks (JSON POST), Telegram notifications (with snapshot frames), and MQTT telemetry for Smart Home / IoT platforms.
+5. ⬜ **Milestone 5: Modern Web Dashboard, Packaging & Edge Deployment**:
+   - FastAPI / WebSocket live dashboard, Docker containerization (ARM64 / amd64), and systemd service configurations.
+
