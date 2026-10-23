@@ -34,17 +34,17 @@
 
 ---
 
-### Phase 2: Edge AI Detection Architecture (Haar Cascades -> YOLOv8 / YOLOv11 Edge)
-- [ ] **Modular Detector Interface**:
-  - Refactor `intelligent_tracker.detectors` to define an abstract `BaseDetector` interface.
-  - Maintain legacy `HaarCascadeDetector` and `ColorDetector` as fallback options.
-- [ ] **YOLOv8 / YOLOv11 Edge Integration**:
-  - Support ultralightweight models (`yolov8n.onnx`, `yolov11n.onnx`, `yolo11n-pose.onnx`).
-  - Add native inference via **ONNX Runtime** (CPU, DirectML on Windows, OpenVINO on Intel, and Edge TPU / Coral on Raspberry Pi).
-  - Implement zero-dependency ONNX pre/post-processing (letterbox resizing, NMS suppression) without requiring heavy PyTorch on edge devices.
-- [ ] **Multi-Class Detection & Classification**:
-  - Person detection (`class_id=0`), vehicle detection, or custom retail objects.
-  - Optional face/anonymization detector for privacy compliance.
+### Phase 2: Edge AI Detection Architecture (COMPLETE ✅)
+- [x] **Modular Detector Interface**:
+  - `BaseDetector` abstract class and `Detection` namedtuple in `intelligent_tracker.detectors`.
+  - Concrete adapters for `HaarCascadeDetector` and `ColorDetector`.
+- [x] **YOLOv8 / YOLOv11 Edge Integration**:
+  - Zero-dependency `OnnxDetector` using ONNX Runtime with execution provider cascade (CUDA -> DirectML -> OpenVINO -> CoreML -> CPU).
+  - Pure NumPy letterbox resizing and multi-class Non-Maximum Suppression (NMS).
+  - Automatic download & checksum verification via `scripts/download_models.py`.
+- [x] **Multi-Class Detection & CLI**:
+  - Full COCO class filtering (`--classes person car`).
+  - Comprehensive unit test suite with 46 tests passing.
 
 ---
 
@@ -56,6 +56,8 @@
   - Virtual tripwires (entry/exit bidirectional counting).
   - Polygonal ROI zones (dwell areas, queue zones, checkout counters).
   - Intersection algorithms utilizing `intelligent_tracker.geometry` with NumPy vectorization.
+- [ ] **Multi-Object Tracking (Short-Term)**:
+  - `CentroidTracker` / SORT for frame-to-frame association while objects remain in field of view.
 - [ ] **Retail Analytics Engine**:
   - Real-time occupancy tracking (current occupants, entries, exits).
   - Dwell time estimation per zone.
@@ -63,23 +65,44 @@
 
 ---
 
-### Phase 4: Event Dispatching & Alerting System
-- [ ] **Webhook Dispatcher**:
-  - HTTP POST event payloads (JSON) on tripwire cross, zone intrusion, or occupancy threshold breach.
-- [ ] **Telegram Bot Integration**:
-  - Instant alert messages with optional snapshot frame attachments on intrusion or alert trigger.
-- [ ] **MQTT Broker Publisher**:
-  - Lightweight telemetry publication (`tracker/{camera_id}/occupancy`, `tracker/{camera_id}/events`) for integration with Home Assistant, Node-RED, or enterprise dashboards.
-- [ ] **Configurable Rules & Quiet Hours**:
-  - Cooldown periods to prevent alert fatigue.
-  - Time-of-day schedules for intrusion vs retail modes.
+### Phase 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
+- [ ] **Persistent SQLite Database (`tracker.db`)**:
+  - `entities`: `(id, name, category, status, notes, timestamps)`.
+  - `entity_signatures`: `(id, entity_id, embedding_blob, crop_path)`.
+  - `sightings`: `(id, entity_id, track_id, source, timestamp, zone_id, bbox, confidence, snapshot)`.
+- [ ] **Visual Feature Descriptors & Re-ID Embeddings**:
+  - Lightweight ONNX Re-ID feature extractor (`osnet_x0_25.onnx` / `mobilenetv3_reid.onnx`).
+  - Ultra-lightweight spatial HSV color histogram fallback for Raspberry Pi CPU.
+  - Cosine similarity matching against enrolled gallery in SQLite.
+- [ ] **Interactive Screen Selection & Tagging**:
+  - Mouse click on bounding box in live view or paused recording to select object.
+  - Dialog / prompt to assign name (e.g. "Forklift 02", "Alice"), category ("VIP", "Staff", "Authorized"), and notes.
+- [ ] **Cross-Session Re-Appearance Engine**:
+  - Automatic identification when previously enrolled entity appears again in live stream or different camera.
+  - Audit logging of all sightings into database.
+- [ ] **Offline Recording Indexer & Analytics**:
+  - Batch process recorded video files to index all appearances.
+  - Sighting timeline and frequency/dwell-time query reports.
 
 ---
 
-### Phase 5: Modern Web Dashboard, Packaging & Edge Deployment
+### Phase 5: Event Dispatching & Alerting System
+- [ ] **Webhook Dispatcher**:
+  - HTTP POST event payloads (JSON) on tripwire cross, zone intrusion, occupancy breach, or tagged entity sighting.
+- [ ] **Telegram Bot Integration**:
+  - Instant alert messages with snapshot attachments on intrusion, threshold, or recognized VIP/restricted entity.
+- [ ] **MQTT Broker Publisher**:
+  - Lightweight telemetry (`tracker/{camera_id}/occupancy`, `tracker/{camera_id}/sightings/{entity_id}`).
+- [ ] **Configurable Rules & Entity Filters**:
+  - Quiet hours, alert cooldowns, and entity-specific triggers (e.g. alert if restricted vehicle appears).
+
+---
+
+### Phase 6: Modern Web Dashboard, Packaging & Edge Deployment
 - [ ] **Modern Web Analytics Dashboard**:
-  - Lightweight FastAPI / WebSocket or Streamlit / Next.js live monitoring dashboard.
-  - Live RTSP stream overlay with heatmaps, bounding boxes, and real-time counter metrics.
+  - FastAPI + WebSocket backend with live MJPEG camera streams.
+  - React / HTML5 frontend with real-time zone counters, heatmaps, and alert logs.
+  - **Entity Gallery View**: Browse enrolled people/objects, view appearance timelines, click-to-tag in browser.
 - [ ] **Raspberry Pi OS / Edge Deployment**:
   - Systemd service configurations and Docker containerization (`Dockerfile` for ARM64 and x86_64).
   - Hardware acceleration flags (OpenVINO, Coral Edge TPU delegate, Raspberry Pi Camera Module `libcamera`).

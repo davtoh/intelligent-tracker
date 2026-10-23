@@ -15,8 +15,9 @@
 | 1 | Environment & Core Engine Revitalization | ✅ **COMPLETE** |
 | 2 | Edge AI Detection (ONNX/YOLOv8/v11) | ✅ **COMPLETE** |
 | 3 | RTSP Streams & Retail/Occupancy Analytics | ⬜ Next |
-| 4 | Event Dispatching & Alerting | ⬜ Planned |
-| 5 | Web Dashboard, Packaging & Edge Deployment | ⬜ Planned |
+| 4 | Object Identity Gallery, Re-ID & Sighting Database | ⬜ Planned |
+| 5 | Event Dispatching & Alerting System | ⬜ Planned |
+| 6 | Web Dashboard, Packaging & Edge Deployment | ⬜ Planned |
 
 ---
 
@@ -147,38 +148,101 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## ⬜ [Milestone 4] — Event Dispatching & Alerting System
-**Scope:** Webhook, Telegram, and MQTT alerting on zone events.
+## ⬜ [Milestone 4] — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
+**Scope:** Persistent SQLite entity database, visual Re-ID embeddings (ONNX + color descriptor fallback), interactive screen selection/tagging, cross-session re-appearance matching, and offline recording occurrence analytics.
 
 ### Objectives
 
-**4a — Event Bus:**
+**4a — Persistent SQLite Entity & Sighting Database (`intelligent_tracker/database.py`):**
+- Embedded, zero-configuration local database (`data/tracker.db`), edge-ready for Raspberry Pi, PC, and servers.
+- `TrackerDB` thread-safe manager:
+  - `entities` table: `(id INTEGER PRIMARY KEY, name TEXT, category TEXT, status TEXT, notes TEXT, created_at TIMESTAMP, updated_at TIMESTAMP)`
+    - Categorization: e.g. `"person"`, `"vehicle"`, `"vip"`, `"employee"`, `"customer"`, `"delivery"`, `"restricted"`, or custom tags.
+  - `entity_signatures` table: `(id INTEGER PRIMARY KEY, entity_id INTEGER, embedding BLOB, crop_path TEXT, created_at TIMESTAMP)`
+    - Stores multi-dimensional feature vector representations and representative thumbnail crops.
+  - `sightings` table: `(id INTEGER PRIMARY KEY, entity_id INTEGER, track_id INTEGER, source TEXT, timestamp TIMESTAMP, zone_id TEXT, bbox TEXT, confidence REAL, snapshot_path TEXT)`
+    - Complete audit trail of where and when each entity was seen.
+  - Indexed queries for rapid lookup: `(entity_id, timestamp)` and `(source, timestamp)`.
+
+**4b — Visual Feature Descriptors & Re-ID Embeddings (`intelligent_tracker/reid.py`):**
+- Abstract `BaseFeatureExtractor` interface: `extract(frame, bbox) -> np.ndarray` (L2-normalized feature vector).
+- Implementations:
+  - **`OnnxReIDExtractor`**: Lightweight ONNX Re-ID model (e.g., `osnet_x0_25.onnx` ~3.5MB or `mobilenetv3_reid.onnx`). Runs via ONNX Runtime with the same multi-platform execution provider cascade (CUDA/DirectML/OpenVINO/CPU).
+  - **`ColorHistogramExtractor`**: Ultra-lightweight CPU fallback using spatial-grid HSV color histograms (zero neural network dependency, pure NumPy, sub-millisecond execution on Raspberry Pi). Re-connects directly to the original project's descriptor vision (`self.descriptors`).
+- Cosine similarity matching: `similarity = np.dot(gallery_embeddings, query_vector)`.
+
+**4c — Screen Selection & Interactive Tagging (`intelligent_tracker/interactive.py`):**
+- **Live / Paused Video Screen Selection**:
+  - Mouse click on any tracked bounding box in the GUI / display window to select and inspect the target.
+  - Interactive prompt / dialog: assign name (e.g. `"Forklift #02"`, `"Alice"`, `"White Sedan ABC-123"`), assign category/tags (`"Staff"`, `"VIP"`, `"Authorized"`), add notes.
+  - Instantly enrolls entity, thumbnail crop, and feature embedding vector into the SQLite gallery.
+- **Python API**:
+  - `db.enroll_entity(name, category, frame, bbox, notes)` for headless scripts, REST APIs, or dashboard integration.
+  - Ability to re-assign or merge tracks if user corrects an identification.
+
+**4d — Gallery Matcher & Re-Appearance Engine (`intelligent_tracker/matcher.py`):**
+- Combines short-term frame-to-frame tracking (`CentroidTracker`) with long-term gallery Re-ID:
+  - As an object is tracked, collect and average embeddings across high-confidence frames.
+  - Query `TrackerDB` gallery: if top cosine similarity exceeds `reid_threshold` (e.g. ≥ 0.70), automatically link the track to the enrolled `entity_id`.
+  - When an object leaves the camera view and reappears later (minutes, days, or across different camera sources), the system recognizes: *"Identified as 'Forklift #02' (match: 86%)"*.
+  - Emits `EntityIdentifiedEvent` and records sighting in `sightings` table.
+
+**4e — Offline Video Recording Indexer & Occurrence Analytics (`intelligent_tracker/batch.py`):**
+- Batch process recorded video files (`.mp4`, `.avi`, `.mkv`):
+  - Ingests video at fast-forward speed or sampled frame rate.
+  - Detects, tracks, extracts features, and catalogs all occurrences in the database.
+- Occurrence queries & analytics:
+  - **Sighting Timeline**: "List all timestamps and video files where Entity X appeared."
+  - **Visit Frequency & Dwell Time**: Total duration observed, visit count, first seen, last seen.
+  - **Zone Journey**: Flow of the entity across defined zones and tripwires.
+  - Export audit logs to JSON and CSV formats.
+
+### Verification
+```powershell
+# Enroll entity via CLI / script
+.\.venv\Scripts\python.exe -m intelligent_tracker.interactive --source test_video.mp4
+
+# Run live tracking with gallery matching against SQLite DB
+.\.venv\Scripts\python.exe main.py --detector yolov8 --reid onnx --db data/tracker.db
+
+# Process offline recording and print sighting analytics
+.\.venv\Scripts\python.exe -m intelligent_tracker.batch --video test_footage.mp4 --db data/tracker.db --report
+```
+
+---
+
+## ⬜ [Milestone 5] — Event Dispatching & Alerting System
+**Scope:** Webhook, Telegram, and MQTT alerting on zone events, tripwires, and tagged entity recognition.
+
+### Objectives
+
+**5a — Event Bus:**
 - `intelligent_tracker/events.py`
-  - `EventBus`: publish/subscribe, async dispatch queue (no dropped events)
-  - `ZoneEvent`, `IntrusionAlert`, `OccupancyThresholdEvent` typed dataclasses
-  - Thread-safe queue consumed by dispatcher workers
+  - `EventBus`: publish/subscribe, async dispatch queue (no dropped events).
+  - Typed dataclasses: `ZoneEvent`, `IntrusionAlert`, `OccupancyThresholdEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`.
+  - Thread-safe queue consumed by dispatcher workers.
 
-**4b — Webhook Dispatcher:**
-- HTTP POST JSON payloads on: tripwire cross, zone intrusion, occupancy threshold breach
-- Configurable URL, auth header, retry logic (3 retries, exponential backoff)
-- Payload includes: `camera_id`, `zone_id`, `event_type`, `timestamp`, optional base64 snapshot
+**5b — Webhook Dispatcher:**
+- HTTP POST JSON payloads on: tripwire cross, zone intrusion, occupancy breach, or specific entity sighting.
+- Configurable URL, auth header, retry logic (3 retries, exponential backoff).
+- Payload includes: `camera_id`, `zone_id`, `entity_id`, `entity_name`, `event_type`, `timestamp`, optional base64 snapshot.
 
-**4c — Telegram Bot:**
-- `python-telegram-bot` integration
-- Alert message with snapshot attachment on intrusion or threshold
-- Rate limiting: configurable cooldown (default 60s per zone per event type)
-- `/status` command returns live occupancy summary
+**5c — Telegram Bot:**
+- `python-telegram-bot` integration.
+- Alert message with snapshot attachment on intrusion, threshold, or recognized VIP/restricted entity.
+- Rate limiting: configurable cooldown (default 60s per zone/entity).
+- `/status` command returns live occupancy summary and recent sightings.
 
-**4d — MQTT Publisher:**
-- `paho-mqtt` based publisher
-- Topics: `tracker/{camera_id}/occupancy`, `tracker/{camera_id}/events`
-- Home Assistant / Node-RED compatible JSON payloads
-- Retained messages for occupancy counts
+**5d — MQTT Publisher:**
+- `paho-mqtt` based publisher.
+- Topics: `tracker/{camera_id}/occupancy`, `tracker/{camera_id}/events`, `tracker/{camera_id}/sightings/{entity_id}`.
+- Home Assistant / Node-RED compatible JSON payloads.
+- Retained messages for occupancy counts and last known entity locations.
 
-**4e — Configurable Rules:**
-- Quiet hours (time-of-day schedule per zone)
-- Alert cooldowns to prevent fatigue
-- Minimum confidence threshold per event type
+**5e — Configurable Rules & Entity Filters:**
+- Quiet hours (time-of-day schedule per zone).
+- Entity triggers: e.g. *"Alert if category=='restricted' enters Zone A"*, *"Log if category=='staff' arrives"*.
+- Alert cooldowns to prevent notification fatigue.
 
 ### Verification
 ```powershell
@@ -191,44 +255,44 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## ⬜ [Milestone 5] — Web Dashboard, Packaging & Edge Deployment
-**Scope:** Modern live web dashboard, Docker containers, systemd service, Sphinx docs.
+## ⬜ [Milestone 6] — Web Dashboard, Packaging & Edge Deployment
+**Scope:** Modern live web dashboard with entity gallery and sighting search, Docker containers, systemd service, Sphinx docs.
 
 ### Objectives
 
-**5a — FastAPI + WebSocket Dashboard:**
+**6a — FastAPI + WebSocket Dashboard:**
 - `dashboard/` directory — FastAPI app
   - Live MJPEG stream endpoint: `GET /stream/{camera_id}`
-  - WebSocket metrics endpoint: `WS /ws/{camera_id}` — pushes occupancy JSON 10× per second
-  - REST API: `GET /cameras`, `GET /zones`, `GET /analytics/heatmap`, `GET /events`
+  - WebSocket metrics endpoint: `WS /ws/{camera_id}` — pushes occupancy and sighting JSON in real time.
+  - REST API: `GET /cameras`, `GET /zones`, `GET /analytics/heatmap`, `GET /entities`, `GET /sightings`.
 - React or plain HTML5 + Chart.js frontend:
-  - Live annotated camera feed
-  - Zone occupancy counters (real-time)
-  - Entry/exit time series chart (last 1h)
-  - Heatmap overlay toggle
-  - Alert history log
+  - Live annotated camera feed with interactive click-to-tag bounding box capability in browser.
+  - **Entity Gallery View**: Grid of enrolled people/objects, category badges, appearance counts.
+  - **Sighting Timeline Player**: Search sightings by entity name, date/time range, or zone.
+  - Zone occupancy counters and entry/exit time series charts.
+  - Heatmap overlay toggle and alert history log.
 
-**5b — Raspberry Pi & Edge Deployment:**
-- `Dockerfile.arm64` + `Dockerfile.amd64` (multi-stage: builder + slim runtime)
-- `docker-compose.yml`: `tracker` service + `dashboard` service + optional `mosquitto` MQTT broker
-- `deployment/intelligent-tracker.service` — systemd unit for Raspberry Pi OS / Ubuntu
+**6b — Raspberry Pi & Edge Deployment:**
+- `Dockerfile.arm64` + `Dockerfile.amd64` (multi-stage: builder + slim runtime).
+- `docker-compose.yml`: `tracker` service + `dashboard` service + optional `mosquitto` MQTT broker.
+- `deployment/intelligent-tracker.service` — systemd unit for Raspberry Pi OS / Ubuntu.
 - Hardware acceleration flags:
-  - Coral Edge TPU delegate (`pycoral`/`tflite-runtime`) for RPi
-  - `libcamera` source support for Raspberry Pi Camera Module v3
-  - Intel NUC: `onnxruntime-openvino`
+  - Coral Edge TPU delegate (`pycoral`/`tflite-runtime`) for RPi.
+  - `libcamera` source support for Raspberry Pi Camera Module v3.
+  - Intel NUC: `onnxruntime-openvino`.
 
-**5c — CI/CD:**
-- `.github/workflows/ci.yml`: install deps → test → lint (ruff) → optional Docker build
-- Badge on `README.rst`
+**6c — CI/CD:**
+- `.github/workflows/ci.yml`: install deps → test → lint (ruff) → optional Docker build.
+- Badge on `README.rst`.
 
-**5d — Sphinx Documentation Modernization:**
-- Update `documentation/conf.py` for Sphinx 7+
-- Auto-generate API reference for new modules (`video.py`, `tracker.py`, `analytics.py`, `events.py`)
-- Architecture diagram (Mermaid or draw.io)
-- ReadTheDocs deployment (`.readthedocs.yml` already present)
+**6d — Sphinx Documentation Modernization:**
+- Update `documentation/conf.py` for Sphinx 7+.
+- Auto-generate API reference for new modules (`video.py`, `tracker.py`, `database.py`, `reid.py`, `analytics.py`, `events.py`).
+- Architecture diagram (Mermaid or draw.io).
+- ReadTheDocs deployment (`.readthedocs.yml` already present).
 
-**5e — `install_opencv.sh` update:**
-- Ensure `install_opencv.sh` works for Raspberry Pi OS Bookworm (64-bit) and Ubuntu 24.04
+**6e — `install_opencv.sh` update:**
+- Ensure `install_opencv.sh` works for Raspberry Pi OS Bookworm (64-bit) and Ubuntu 24.04.
 
 ### Verification
 ```powershell
@@ -260,10 +324,11 @@ docker compose exec tracker python -m unittest discover tests
 
 ```
 M1 (Env & Core) ✅
-  └── M2 (ONNX Detectors)
-        └── M3 (RTSP + Analytics)
-              └── M4 (Alerting)
-                    └── M5 (Dashboard + Edge Deploy)
+  └── M2 (ONNX Detectors) ✅
+        └── M3 (RTSP + Spatial Analytics)
+              └── M4 (Re-ID Gallery & Sighting DB)
+                    └── M5 (Alerting + Entity Triggers)
+                          └── M6 (Dashboard + Edge Deploy)
 ```
 
 ---
