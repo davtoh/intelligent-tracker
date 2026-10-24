@@ -137,29 +137,74 @@ Supported Models:
 | yolo11n    | yolo11n.onnx  | baeb4c1d6f3bb460689823cc2d40daa31e6156f2517fcd48aab0db9490d9f4e5 | ~10.20 MB   |
 +------------+---------------+------------------------------------------------------------------+-------------+
 
-Command-Line Usage
-------------------
+Command-Line Usage & Execution Recipes
+---------------------------------------
 
-Run with YOLOv8 on camera 0:
+Verification & Diagnostics
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Before launching real-time detection pipelines, verify hardware devices, camera indices, and model integrity:
 
 .. code-block:: powershell
 
+    # 1. Check AI models presence and SHA-256 integrity
+    python scripts/download_models.py --status
+
+    # 2. Probe hardware cameras, GUI backends, and ONNX execution providers
+    python scripts/diagnostics.py
+
+    # 3. Run full automated test suite (46 tests)
+    $env:MPLBACKEND="Agg"; python -m unittest discover tests
+
+Sample Code Executions
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: powershell
+
+    # 1. Run YOLOv8 on default webcam
     python main.py --detector yolov8 --source 0
 
-Run with YOLO11 on synthetic test frames:
-
-.. code-block:: powershell
-
+    # 2. Run YOLO11 on synthetic test frames (no camera needed)
     python main.py --detector yolo11 --source synthetic
 
-Filter for person detections only with 0.40 confidence:
-
-.. code-block:: powershell
-
+    # 3. Filter for person detections only with 0.40 confidence
     python main.py --detector yolov8 --classes person --conf 0.40
 
-Run headless benchmark (30 frames):
+    # 4. Run headless benchmark (60 frames)
+    python main.py --detector yolov8 --source synthetic --headless --frames 60
 
-.. code-block:: powershell
+    # 5. Run legacy Haar cascade face tracking
+    python main.py --detector face --source 0
 
-    python main.py --detector yolov8 --source synthetic --headless --frames 30
+    # 6. Run synthetic mock detector for CI pipeline testing
+    python main.py --detector mock --source synthetic --headless --frames 30
+
+Scenario Combinations Matrix
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The table below outlines recommended parameter combinations across common edge deployment and testing scenarios:
+
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| Scenario / Objective                | Detector   | Source            | Resolution      | Framerate     | Confidence | Classes            | Mode                | Example Command                                                                                    |
++=====================================+============+===================+=================+===============+============+====================+=====================+====================================================================================================+
+| **Synthetic Smoke Test** (CI/Mock)  | ``mock``   | ``synthetic``     | ``640x480``     | ``30``        | ``0.95``   | all                | Headless (30f)      | ``python main.py --detector mock --source synthetic --headless --frames 30``                      |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **YOLOv8 Edge AI Smoke Test**       | ``yolov8`` | ``synthetic``     | ``640x480``     | ``30``        | ``0.25``   | all                | Headless (60f)      | ``python main.py --detector yolov8 --source synthetic --headless --frames 60``                    |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **YOLO11 Performance Benchmark**    | ``yolo11`` | ``synthetic``     | ``640x480``     | ``30``        | ``0.25``   | all                | Headless (100f)     | ``python main.py --detector yolo11 --source synthetic --headless --frames 100``                   |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Retail Person Counting** (Webcam) | ``yolov8`` | ``0``             | ``640x480``     | ``30``        | ``0.40``   | ``person``         | Interactive GUI     | ``python main.py --detector yolov8 --source 0 --classes person --conf 0.40``                      |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **High-Precision Security Cam**     | ``yolo11`` | ``0``             | ``1920x1080``   | ``15``        | ``0.35``   | ``person``         | Interactive GUI     | ``python main.py --detector yolo11 --source 0 --resolution 1920x1080 --framerate 15 --classes person`` |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Vehicle / Traffic Monitoring**    | ``yolov8`` | ``traffic.mp4``   | ``1280x720``     | ``25``        | ``0.50``   | ``car truck bus``  | Interactive GUI     | ``python main.py --detector yolov8 --source traffic.mp4 --classes car truck bus --conf 0.50``     |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Legacy Face Tracking**            | ``face``   | ``0``             | ``640x480``     | ``30``        | ``1.0``    | ``face``           | Interactive GUI     | ``python main.py --detector face --source 0``                                                      |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Legacy Eye Tracking**             | ``eye``    | ``0``             | ``640x480``     | ``30``        | ``1.0``    | ``eye``            | Interactive GUI     | ``python main.py --detector eye --source 0``                                                       |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Color Blob / Marker Tracking**    | ``color``  | ``0``             | ``640x480``     | ``30``        | ``1.0``    | ``color``          | Interactive GUI     | ``python main.py --detector color --source 0``                                                     |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Headless Remote Server / RPi**    | ``yolov8`` | ``synthetic``     | ``640x480``     | ``30``        | ``0.30``   | ``person``         | Headless (120f)     | ``$env:MPLBACKEND="Agg"; python main.py --detector yolov8 --source synthetic --headless --frames 120`` |
++-------------------------------------+------------+-------------------+-----------------+---------------+------------+--------------------+---------------------+----------------------------------------------------------------------------------------------------+
+

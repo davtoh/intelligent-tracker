@@ -155,9 +155,22 @@ python scripts/download_models.py --model yolo11n
 
 ---
 
-## 6. Running the Application
+## 6. Running the Application & Execution Recipes
 
-### Running with Edge AI Detectors
+### Pre-Run Verification & Diagnostics
+```powershell
+# 1. Verify model weights and SHA-256 integrity
+.\.venv\Scripts\python.exe scripts/download_models.py --status
+
+# 2. Check camera hardware indices and ONNX execution providers
+.\.venv\Scripts\python.exe scripts/diagnostics.py
+
+# 3. Run full automated test suite (all 46 tests)
+$env:MPLBACKEND="Agg"
+.\.venv\Scripts\python.exe -m unittest discover tests
+```
+
+### Sample Executions
 ```powershell
 # Windows: Run YOLOv8 Nano on default webcam
 .\.venv\Scripts\python.exe main.py --detector yolov8 --source 0
@@ -166,7 +179,7 @@ python scripts/download_models.py --model yolo11n
 .\.venv\Scripts\python.exe main.py --detector yolo11 --source synthetic
 
 # Filter for specific classes (e.g., person only)
-.\.venv\Scripts\python.exe main.py --detector yolov8 --classes person --conf 0.4
+.\.venv\Scripts\python.exe main.py --detector yolov8 --classes person --conf 0.40
 
 # Run headless benchmark (ideal for CI, servers, Raspberry Pi testing)
 .\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 60
@@ -175,6 +188,20 @@ python scripts/download_models.py --model yolo11n
 .\.venv\Scripts\python.exe main.py --detector haar --source 0
 .\.venv\Scripts\python.exe main.py --detector mock --source synthetic
 ```
+
+### Scenario Combinations Matrix
+| Scenario / Objective | Detector | Source (`--source`) | Resolution (`--resolution`) | Framerate (`--framerate`) | Confidence (`--conf`) | Classes (`--classes`) | Mode | Full PowerShell Command |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Synthetic Smoke Test** (CI/Mock) | `mock` | `synthetic` | `640x480` | `30` | `0.95` | all | Headless (30f) | `.\.venv\Scripts\python.exe main.py --detector mock --source synthetic --headless --frames 30` |
+| **YOLOv8 Edge AI Smoke Test** | `yolov8` | `synthetic` | `640x480` | `30` | `0.25` | all | Headless (60f) | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 60` |
+| **YOLO11 Performance Benchmark** | `yolo11` | `synthetic` | `640x480` | `30` | `0.25` | all | Headless (100f) | `.\.venv\Scripts\python.exe main.py --detector yolo11 --source synthetic --headless --frames 100` |
+| **Retail Person Counting** (Webcam) | `yolov8` | `0` | `640x480` | `30` | `0.40` | `person` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0 --classes person --conf 0.40` |
+| **High-Precision Security Cam** | `yolo11` | `0` | `1920x1080` | `15` | `0.35` | `person` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolo11 --source 0 --resolution 1920x1080 --framerate 15 --classes person` |
+| **Vehicle / Traffic Monitoring** | `yolov8` | `traffic.mp4` / `rtsp://...` | `1280x720` | `25` | `0.50` | `car truck bus` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source traffic.mp4 --classes car truck bus --conf 0.50` |
+| **Legacy Face Tracking** | `face` | `0` | `640x480` | `30` | `1.0` | `face` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector face --source 0` |
+| **Legacy Eye Tracking** | `eye` | `0` | `640x480` | `30` | `1.0` | `eye` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector eye --source 0` |
+| **Color Blob / Marker Tracking** | `color` | `0` | `640x480` | `30` | `1.0` | `color` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector color --source 0` |
+| **Headless Remote Server / RPi** | `yolov8` | `synthetic` | `640x480` | `30` | `0.30` | `person` | Headless (120f) | `$env:MPLBACKEND="Agg"; .\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 120` |
 
 ### CLI Command Options
 | Flag | Default | Description |
