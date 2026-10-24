@@ -191,4 +191,107 @@
     - 3d: Occupancy heatmap accumulation (`intelligent_tracker/analytics.py`).
     - 3e: Real-time visual overlay and CLI configuration.
 
+---
+
+## [Milestone 3] - 2026-10-23 - RTSP Camera Streams & Retail / Occupancy Analytics
+
+### 1. Objectives & Scope
+- Deliver non-blocking, multi-source video ingestion supporting RTSP IP network streams, local webcams, video files, and high-fidelity synthetic feeds.
+- Build a dedicated background acquisition reader (`VideoSource`) with configurable buffer queues, automatic frame-drop on lag (guaranteeing zero latency drift for live streams), auto-reconnect backoff on network dropouts, and live connection health metrics (FPS, drop rate %, frames read, reconnections).
+- Extend `intelligent_tracker.geometry` with spatial analytics primitives:
+  - `Tripwire`: Virtual line segment with trajectory vector normal analysis for bidirectional entry/exit crossing detection and tally counters.
+  - `ZoneROI`: Polygonal region of interest using `cv2.pointPolygonTest` with occupant state machine, entry/exit/dwell events, dwell time estimation, and translucent overlay rendering.
+  - `ZoneEvent` and `TripwireEvent`: Strongly typed dataclasses with dictionary serialization.
+  - Integrated `Area` and `Line` in `intelligent_tracker/high_objects.py` to wrap `ZoneROI` and `Tripwire`.
+- Implement multi-object tracking in `intelligent_tracker.tracker`:
+  - `Track`: Rich entity representation with centroid motion history, smoothed velocity estimation, dwell times, and state lifecycle (`tentative`, `confirmed`, `lost`).
+  - `CentroidTracker`: Two-stage IoU and Euclidean distance matching with zero heavy dependencies.
+  - `SortTracker`: Simple Online and Realtime Tracking using 2D kinematic Kalman filters in pure NumPy.
+  - `TrackerFactory`: Registry for decoupled runtime instantiation (`centroid`, `sort`).
+- Build spatial analytics engine in `intelligent_tracker.analytics`:
+  - `OccupancyHeatmap`: 2D spatial Gaussian density accumulation, continuous temporal decay, false-color overlay blending (JET/INFERNO), PNG snapshot, and CSV grid exports.
+  - `AnalyticsEngine`: Central coordinator managing multi-zone occupancy, tripwire tallies, events, and telemetry report generation.
+- Modernize CLI and configurations:
+  - Created declarative YAML templates: `configs/demo.yaml` (synthetic demo) and `configs/retail.yaml` (production retail surveillance).
+  - Modernized `main.py` CLI supporting `--config`, `--tracker`, `--heatmap`, `--output` video recording, and interactive controls (`q` quit, `d` clear, `h` heatmap toggle, `s` save snapshot/report).
+- Expanded unit test coverage: Added 17 new tests across `tests/test_video.py`, `tests/test_tracker.py`, and `tests/test_analytics.py`, achieving 63/63 passing tests (100% green).
+- Created technical documentation in `documentation/analytics.rst` and updated Sphinx toctree.
+
+### 2. Files Touched
+- `intelligent_tracker/video.py`: Created threaded non-blocking video reader (`VideoSource`) and `SyntheticFrameGenerator`.
+- `intelligent_tracker/geometry.py`: Added `Tripwire`, `ZoneROI`, `ZoneEvent`, `TripwireEvent`, and `segments_intersect`.
+- `intelligent_tracker/high_objects.py`: Integrated `Area` and `Line` agents with `ZoneROI` and `Tripwire`.
+- `intelligent_tracker/tracker.py`: Created `Track`, `CentroidTracker`, `SortTracker` (NumPy Kalman filter), and `TrackerFactory`.
+- `intelligent_tracker/analytics.py`: Created `OccupancyHeatmap` and `AnalyticsEngine`.
+- `configs/demo.yaml`: Created synthetic demo configuration template.
+- `configs/retail.yaml`: Created production retail surveillance configuration template.
+- `main.py`: Modernized with `--config`, `--tracker`, `--heatmap`, `--output` video recording, and analytics overlay.
+- `requirements.txt`: Added `pyyaml>=6.0.0`.
+- `tests/test_video.py`: Added 5 unit tests for VideoSource and SyntheticFrameGenerator.
+- `tests/test_tracker.py`: Added 7 unit tests for Track, CentroidTracker, SortTracker, and TrackerFactory.
+- `tests/test_analytics.py`: Added 5 unit tests for Tripwire, ZoneROI, OccupancyHeatmap, and AnalyticsEngine.
+- `milestone_plan.md`: Updated Milestone 3 status to COMPLETE with verification commands and deliverables.
+- `TODO_MODERNIZATION.md`: Marked Phase 3 milestones complete.
+- `README.rst`: Updated capabilities, CLI options table, test commands, and roadmap.
+- `documentation/analytics.rst`: Created detailed technical documentation for video ingestion and retail analytics.
+- `documentation/index.rst`: Added `analytics` to Sphinx table of contents.
+- `MIGRATION_LOG.md`: Documented Milestone 3 completion and updated context recovery guide.
+
+### 3. State & Checkpoint
+- **Status:** Milestone 3 COMPLETE (100% Green Unit Tests)
+- **Automated Verification:**
+  - Full test suite: `.\.venv\Scripts\python.exe -m unittest discover tests` with `MPLBACKEND=Agg`.
+  - Result: **Ran 63 tests in 4.32s — OK (0 failures, 0 errors)**.
+  - Video unit tests: `tests/test_video.py` -> **5/5 OK (0.35s)**.
+  - Tracker unit tests: `tests/test_tracker.py` -> **7/7 OK (0.01s)**.
+  - Analytics unit tests: `tests/test_analytics.py` -> **5/5 OK (0.06s)**.
+  - Detector unit tests: `tests/test_detectors.py` -> **25/25 OK (0.84s)**.
+  - Core & geometry legacy tests: `tests/test_geometry.py`, `tests/test_core.py`, `tests/test_forms.py` -> **21/21 OK (1.42s)**.
+- **Pipeline Benchmarks:**
+  - `main.py --config configs/demo.yaml --headless --frames 30` -> 29.1 FPS (Mock + Synthetic).
+  - `main.py --config configs/demo.yaml --detector yolov8 --headless --frames 30` -> 16.6 FPS (YOLOv8 + Bounded buffer frame-drop).
+  - `main.py --config configs/demo.yaml --headless --frames 30 --output scratch/test_output.mp4` -> Output video verified with bounding boxes, trajectory trails, zone occupancy badges, and tripwire counters.
+- **Next Phase:**
+  - Milestone 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database (persistent SQLite database `data/tracker.db`, visual Re-ID embeddings via ONNX/HSV color descriptors, interactive screen selection/tagging, cross-session re-appearance matching, and offline recording occurrence indexer).
+
+### 4. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run full automated test suite (63 tests)
+  $env:MPLBACKEND="Agg"
+  .\.venv\Scripts\python.exe -m unittest discover tests
+
+  # 2. Run Milestone 3 unit test modules specifically
+  .\.venv\Scripts\python.exe -m unittest tests/test_video.py tests/test_tracker.py tests/test_analytics.py
+
+  # 3. Run synthetic demo with YAML config (headless)
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 30
+
+  # 4. Run YOLOv8 tracking with video recording output
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 30 --output scratch/test_output.mp4
+
+  # 5. Run live interactive GUI with synthetic or webcam feed
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python main.py --config configs/demo.yaml --headless --frames 30
+  ```
+
+### 5. Quota / Context Recovery Guide
+- If a new agent session starts:
+  - Working directory: `g:\Mi unidad\projects\products\intelligent_tracker`
+  - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
+  - Completed Milestones: Milestone 1, Milestone 2, Milestone 3 (all passing 63 tests).
+  - Next task to execute: **Milestone 4 — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database**.
+  - Review `milestone_plan.md` (lines 151-210) and `TODO_MODERNIZATION.md` (lines 68-87) for Milestone 4 requirements:
+    - 4a: Persistent SQLite database manager (`intelligent_tracker/database.py`).
+    - 4b: Visual feature descriptors and Re-ID embeddings (`intelligent_tracker/reid.py`).
+    - 4c: Screen selection and interactive entity tagging (`intelligent_tracker/interactive.py`).
+    - 4d: Gallery matcher & re-appearance engine (`intelligent_tracker/matcher.py`).
+    - 4e: Offline video recording indexer & occurrence analytics (`intelligent_tracker/batch.py`).
+
+
 

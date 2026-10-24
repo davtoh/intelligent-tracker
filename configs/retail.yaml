@@ -1,0 +1,52 @@
+# Intelligent Tracker - Retail & Occupancy Analytics Configuration
+# Production template for RTSP cameras, YOLOv8/YOLO11 person tracking, and store analytics
+
+video:
+  source: "rtsp://192.168.1.100/stream1"
+  resolution: [1280, 720]
+  framerate: 25
+  buffer_size: 1
+  auto_reconnect: true
+  reconnect_delay: 2.0
+
+detector:
+  model: yolov8
+  confidence: 0.35
+  classes: ["person"]
+
+tracker:
+  type: centroid
+  max_disappeared: 30
+  min_hits: 3
+  iou_threshold: 0.25
+
+analytics:
+  heatmap:
+    enabled: true
+    decay: 0.998
+    radius: 35
+    colormap: "jet"
+
+  tripwires:
+    - name: store_entrance
+      line: [[200, 500], [1080, 500]]
+      bidirectional: true
+      color: [0, 255, 255]
+
+  zones:
+    - name: checkout_queue
+      polygon: [[100, 150], [450, 150], [450, 450], [100, 450]]
+      dwell_threshold: 10.0
+      color: [0, 200, 100]
+
+    - name: promo_display
+      polygon: [[700, 180], [1150, 180], [1150, 460], [700, 460]]
+      dwell_threshold: 5.0
+      color: [255, 100, 50]
+
+visualization:
+  draw_zones: true
+  draw_tripwires: true
+  draw_tracks: true
+  draw_heatmap: false
+  draw_hud: true

@@ -47,6 +47,11 @@ _build/
 *.h5
 mytestfile.*
 req.txt
+scratch/
+*.mp4
+*.avi
+*.mkv
+*.mov
 
 # Design tool artifacts (StarUML, legacy UML)
 *.mdj

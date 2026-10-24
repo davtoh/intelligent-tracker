@@ -1438,3 +1438,365 @@ def intersect_ADD(img, contours, function=draw_drawContours):
     return cv2.findContours((img == (num_cnt+1)).astype(np.uint8),
                             mode=cv2.RETR_LIST,
                             method=cv2.CHAIN_APPROX_SIMPLE)[:2]
+
+
+# ==============================================================================
+# Milestone 3: Retail & Occupancy Analytics Geometry (Tripwires & Zone ROIs)
+# ==============================================================================
+
+import time
+from dataclasses import dataclass, asdict
+from typing import List, Tuple, Dict, Optional, Any, Union
+
+
+@dataclass
+class ZoneEvent:
+    """
+    Event emitted when a tracked entity interacts with a ZoneROI.
+    event_type: 'enter', 'exit', or 'dwell'
+    """
+    zone_id: str
+    track_id: int
+    event_type: str  # 'enter', 'exit', 'dwell'
+    timestamp: float
+    dwell_time: float = 0.0
+    centroid: Optional[Tuple[float, float]] = None
+    bbox: Optional[Tuple[int, int, int, int]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class TripwireEvent:
+    """
+    Event emitted when a tracked entity crosses a virtual Tripwire.
+    direction: 'in' (A_to_B) or 'out' (B_to_A)
+    """
+    tripwire_id: str
+    track_id: int
+    direction: str  # 'in', 'out', 'A_to_B', 'B_to_A'
+    timestamp: float
+    pt1: Tuple[float, float]
+    pt2: Tuple[float, float]
+    centroid: Optional[Tuple[float, float]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+def segments_intersect(p1, p2, p3, p4):
+    """
+    Test whether line segment p1-p2 intersects line segment p3-p4.
+    Points are (x, y) tuples.
+    """
+    def ccw(a, b, c):
+        return (c[1] - a[1]) * (b[0] - a[0]) - (c[0] - a[0]) * (b[1] - a[1])
+
+    d1 = ccw(p3, p4, p1)
+    d2 = ccw(p3, p4, p2)
+    d3 = ccw(p1, p2, p3)
+    d4 = ccw(p1, p2, p4)
+
+    # General intersection case
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+       ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+        return True
+
+    return False
+
+
+class Tripwire(object):
+    """
+    Bidirectional virtual tripwire for person / vehicle crossing detection.
+
+    Parameters:
+    -----------
+    line_segment : Tuple[Tuple[float, float], Tuple[float, float]] or List
+        Line coordinates ((x1, y1), (x2, y2))
+    name : str
+        Unique identifier for the tripwire (e.g. 'store_entrance')
+    bidirectional : bool
+        If True, tracks crossings in both directions ('in' / 'out')
+    color : Tuple[int, int, int]
+        BGR color for visualization
+    """
+
+    def __init__(self, line_segment, name="tripwire_1", bidirectional=True, color=(0, 255, 255)):
+        pt1, pt2 = line_segment
+        self.pt1 = (float(pt1[0]), float(pt1[1]))
+        self.pt2 = (float(pt2[0]), float(pt2[1]))
+        self.name = str(name)
+        self.bidirectional = bool(bidirectional)
+        self.color = color
+
+        # Counters
+        self.total_in = 0
+        self.total_out = 0
+        self.last_crossed_time = None
+        self.event_history = []
+
+        # Vector representation for direction determination
+        self.dx = self.pt2[0] - self.pt1[0]
+        self.dy = self.pt2[1] - self.pt1[1]
+
+    def check_crossing(self, track_id, prev_centroid, curr_centroid, timestamp=None):
+        """
+        Check if trajectory between prev_centroid and curr_centroid crossed the tripwire.
+
+        :param track_id: Identifier of the tracked object
+        :param prev_centroid: (x, y) coordinates on previous frame
+        :param curr_centroid: (x, y) coordinates on current frame
+        :param timestamp: Event timestamp (defaults to current time)
+        :return: TripwireEvent if crossed, else None
+        """
+        if prev_centroid is None or curr_centroid is None:
+            return None
+
+        p1 = (float(prev_centroid[0]), float(prev_centroid[1]))
+        p2 = (float(curr_centroid[0]), float(curr_centroid[1]))
+
+        if not segments_intersect(self.pt1, self.pt2, p1, p2):
+            return None
+
+        # Determine crossing direction relative to tripwire vector (pt1 -> pt2)
+        # Using 2D cross product: dx * my - dy * mx
+        mx = p2[0] - p1[0]
+        my = p2[1] - p1[1]
+        cross_prod = self.dx * my - self.dy * mx
+
+        if cross_prod > 0:
+            direction = "in"
+            self.total_in += 1
+        else:
+            direction = "out"
+            self.total_out += 1
+
+        ts = timestamp if timestamp is not None else time.time()
+        self.last_crossed_time = ts
+
+        event = TripwireEvent(
+            tripwire_id=self.name,
+            track_id=int(track_id),
+            direction=direction,
+            timestamp=ts,
+            pt1=self.pt1,
+            pt2=self.pt2,
+            centroid=p2,
+        )
+        self.event_history.append(event)
+        return event
+
+    def draw(self, frame, color=None, thickness=2, show_counts=True):
+        """Draw tripwire line and counter labels onto an image frame."""
+        col = color or self.color
+        p1 = (int(self.pt1[0]), int(self.pt1[1]))
+        p2 = (int(self.pt2[0]), int(self.pt2[1]))
+
+        # Line
+        cv2.line(frame, p1, p2, col, thickness, cv2.LINE_AA)
+
+        # Endpoints
+        cv2.circle(frame, p1, 4, (0, 0, 255), -1)
+        cv2.circle(frame, p2, 4, (255, 0, 0), -1)
+
+        # Direction indicator arrow in the middle
+        mid_x = int((p1[0] + p2[0]) / 2)
+        mid_y = int((p1[1] + p2[1]) / 2)
+
+        # Normal vector pointing 'in'
+        length = np.hypot(self.dx, self.dy)
+        if length > 0:
+            nx = int(-self.dy / length * 15)
+            ny = int(self.dx / length * 15)
+            cv2.arrowedLine(frame, (mid_x, mid_y), (mid_x + nx, mid_y + ny), col, 1, tipLength=0.3)
+
+        if show_counts:
+            label = "{}: IN {} | OUT {}".format(self.name, self.total_in, self.total_out)
+            cv2.putText(
+                frame,
+                label,
+                (mid_x - 40, max(20, mid_y - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+        return frame
+
+
+class ZoneROI(object):
+    """
+    Polygonal Region of Interest (ROI) for occupancy counting and dwell time monitoring.
+
+    Parameters:
+    -----------
+    polygon : Union[List[Tuple[float, float]], np.ndarray]
+        List of vertices [(x, y), ...] defining the polygonal zone boundary.
+    name : str
+        Unique identifier for the zone (e.g. 'checkout_queue', 'aisle_3')
+    dwell_threshold : float
+        Seconds of continuous presence before emitting a 'dwell' event.
+    color : Tuple[int, int, int]
+        BGR color for boundary and translucent fill.
+    """
+
+    def __init__(
+        self,
+        polygon,
+        name="zone_1",
+        dwell_threshold=5.0,
+        color=(0, 200, 100),
+    ):
+        self.name = str(name)
+        self.dwell_threshold = float(dwell_threshold)
+        self.color = color
+
+        # Normalize polygon points to NumPy array of shape (N, 1, 2) int32 for OpenCV
+        pts = []
+        for pt in polygon:
+            pts.append([float(pt[0]), float(pt[1])])
+        self.points = np.array(pts, dtype=np.float32)
+        self.contour = np.array(pts, dtype=np.int32).reshape((-1, 1, 2))
+
+        # Occupant tracking: track_id -> dict(entry_time=float, last_seen=float, dwell_emitted=bool)
+        self.current_occupants = {}
+        self.total_entries = 0
+        self.total_exits = 0
+        self.max_occupancy = 0
+        self.event_history = []
+
+    def contains_point(self, pt):
+        """Vectorized point-in-polygon containment test via cv2.pointPolygonTest."""
+        p = (float(pt[0]), float(pt[1]))
+        return cv2.pointPolygonTest(self.contour, p, False) >= 0
+
+    @property
+    def occupancy(self):
+        """Current number of active occupants inside the zone."""
+        return len(self.current_occupants)
+
+    def update(self, tracks, timestamp=None):
+        """
+        Update zone state with active tracked entities.
+
+        :param tracks: Dict[track_id, Track] or Dict[track_id, centroid] or List[Track]
+        :param timestamp: Current frame timestamp
+        :return: List of ZoneEvent instances generated on this frame
+        """
+        now = timestamp if timestamp is not None else time.time()
+        events = []
+
+        # Standardize tracks into Dict[track_id, (centroid, bbox)]
+        active_items = {}
+        if isinstance(tracks, dict):
+            for tid, val in tracks.items():
+                if hasattr(val, "centroid"):
+                    active_items[int(tid)] = (val.centroid, getattr(val, "bbox", None))
+                elif isinstance(val, (tuple, list)) and len(val) >= 2:
+                    active_items[int(tid)] = (val[:2], None)
+        elif isinstance(tracks, (list, tuple)):
+            for trk in tracks:
+                tid = getattr(trk, "track_id", id(trk))
+                centroid = getattr(trk, "centroid", None)
+                bbox = getattr(trk, "bbox", None)
+                if centroid is not None:
+                    active_items[int(tid)] = (centroid, bbox)
+
+        present_tids = set()
+
+        for tid, (centroid, bbox) in active_items.items():
+            if centroid is None:
+                continue
+
+            if self.contains_point(centroid):
+                present_tids.add(tid)
+                if tid not in self.current_occupants:
+                    # New entrant
+                    self.current_occupants[tid] = {
+                        "entry_time": now,
+                        "last_seen": now,
+                        "dwell_emitted": False,
+                        "centroid": centroid,
+                        "bbox": bbox,
+                    }
+                    self.total_entries += 1
+                    event = ZoneEvent(
+                        zone_id=self.name,
+                        track_id=tid,
+                        event_type="enter",
+                        timestamp=now,
+                        dwell_time=0.0,
+                        centroid=centroid,
+                        bbox=bbox,
+                    )
+                    events.append(event)
+                    self.event_history.append(event)
+                else:
+                    # Existing occupant
+                    occ = self.current_occupants[tid]
+                    occ["last_seen"] = now
+                    occ["centroid"] = centroid
+                    occ["bbox"] = bbox
+                    dwell_dur = now - occ["entry_time"]
+
+                    if dwell_dur >= self.dwell_threshold and not occ["dwell_emitted"]:
+                        occ["dwell_emitted"] = True
+                        event = ZoneEvent(
+                            zone_id=self.name,
+                            track_id=tid,
+                            event_type="dwell",
+                            timestamp=now,
+                            dwell_time=dwell_dur,
+                            centroid=centroid,
+                            bbox=bbox,
+                        )
+                        events.append(event)
+                        self.event_history.append(event)
+
+        # Handle exits (occupants no longer inside or no longer tracked)
+        departed_tids = [tid for tid in self.current_occupants if tid not in present_tids]
+        for tid in departed_tids:
+            occ = self.current_occupants.pop(tid)
+            dwell_dur = max(0.0, now - occ["entry_time"])
+            self.total_exits += 1
+            event = ZoneEvent(
+                zone_id=self.name,
+                track_id=tid,
+                event_type="exit",
+                timestamp=now,
+                dwell_time=dwell_dur,
+                centroid=occ.get("centroid"),
+                bbox=occ.get("bbox"),
+            )
+            events.append(event)
+            self.event_history.append(event)
+
+        self.max_occupancy = max(self.max_occupancy, len(self.current_occupants))
+        return events
+
+    def draw(self, frame, alpha=0.25, color=None, show_label=True):
+        """Draw translucent polygon overlay and occupancy badge onto frame."""
+        col = color or self.color
+
+        # Translucent fill
+        overlay = frame.copy()
+        cv2.fillPoly(overlay, [self.contour], col)
+        cv2.addWeighted(overlay, alpha, frame, 1.0 - alpha, 0, frame)
+
+        # Polygon outline
+        cv2.polylines(frame, [self.contour], True, col, 2, cv2.LINE_AA)
+
+        if show_label:
+            # Place badge near top-left vertex of polygon
+            min_y_idx = np.argmin(self.points[:, 1])
+            lx = int(self.points[min_y_idx, 0])
+            ly = max(20, int(self.points[min_y_idx, 1]) - 8)
+
+            label = "{}: {} occ".format(self.name, len(self.current_occupants))
+            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            cv2.rectangle(frame, (lx, ly - h - 4), (lx + w + 8, ly + 4), (30, 30, 30), -1)
+            cv2.putText(frame, label, (lx + 4, ly), cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 1, cv2.LINE_AA)
+
+        return frame

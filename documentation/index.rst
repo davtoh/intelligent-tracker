@@ -15,6 +15,7 @@ Contents
 
    intelligent_tracker
    detectors
+   analytics
 
 
 Indices and tables

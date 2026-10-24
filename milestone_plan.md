@@ -94,57 +94,55 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## ⬜ [Milestone 3] — RTSP Camera Streams & Retail / Occupancy Analytics
+## ✅ [Milestone 3] — RTSP Camera Streams & Retail / Occupancy Analytics (COMPLETE)
 **Scope:** Robust multi-source video ingestion, zone definition, person counting, heatmaps.
 
-### Objectives
-
-**3a — Non-blocking RTSP Video Reader:**
-- `intelligent_tracker/video.py` — new module
-  - `VideoSource` class: threaded frame reader with configurable buffer, auto-reconnect, frame-drop on lag
-  - Sources: RTSP URLs (`rtsp://...`), USB webcam index, video file path, synthetic generator
-  - Context manager (`with VideoSource(...) as vs:`) with clean shutdown
-  - Connection health metrics: FPS, drop rate, reconnection count
-
-**3b — Zone & Tripwire Geometry:**
-- Extend `intelligent_tracker/geometry.py`:
-  - `Tripwire(line_segment)`: bidirectional entry/exit crossing detection using centroid trajectory
-  - `ZoneROI(polygon)`: polygon containment test (vectorized via `pointPolygonTest`)
-  - `ZoneEvent` dataclass: `{zone_id, track_id, event_type: "enter"|"exit"|"dwell", timestamp}`
-  - Integration with existing `Contour` / `Line` classes
-
-**3c — Multi-Object Tracker:**
-- `intelligent_tracker/tracker.py` — new module
-  - `CentroidTracker`: IoU-based frame-to-frame ID assignment (no heavy dependencies)
-  - Output: `Dict[track_id, Track]` where `Track` has bbox, centroid history, entry_time
-  - Optional: SORT (Simple Online and Realtime Tracking) adapter using `numpy` only
-
-**3d — Heatmap Engine:**
-- `intelligent_tracker/analytics.py` — new module
-  - `OccupancyHeatmap`: accumulate centroid positions over frames into 2D density array
-  - Colormap overlay on camera frame (jet / inferno colormap, OpenCV `COLORMAP_JET`)
-  - Export: PNG snapshot, CSV export, rolling-window reset
-
-**3e — Analytics Dashboard (CLI / OpenCV window):**
-- Real-time overlay: bounding boxes + track IDs + zone labels + occupancy counters
-- Side panel: entry/exit tally per zone, current occupancy, dwell time
-- Headless mode: write annotated frames to `output.mp4` file
-
-**3f — Configuration:**
-- `config.yaml` template for camera sources, zone polygons, model selection
-- `--config path/to/config.yaml` CLI flag on `main.py`
+### Deliverables Completed
+- **`intelligent_tracker/video.py`**:
+  - `VideoSource`: Non-blocking threaded video reader with bounded buffer queue, automatic frame-drop on lag (zero latency drift), auto-reconnect logic, and connection telemetry (`fps`, `drop_rate_pct`, `frames_read`, `frames_dropped`, `reconnections`).
+  - `SyntheticFrameGenerator`: High-fidelity synthetic frame generator with moving targets crossing lines and dwelling in zones for automated testing without cameras.
+- **`intelligent_tracker/geometry.py`**:
+  - `Tripwire`: Bidirectional crossing detection using centroid trajectory and vector normal analysis, counters (`total_in`, `total_out`), and visualization drawing.
+  - `ZoneROI`: Polygonal region of interest using `cv2.pointPolygonTest` with occupant state machine, entry/exit/dwell events, dwell time estimation, and translucent overlay rendering.
+  - `ZoneEvent` & `TripwireEvent`: Strongly typed dataclasses with dictionary serialization.
+  - `Area` & `Line` in `intelligent_tracker/high_objects.py`: Integrated to wrap `ZoneROI` and `Tripwire`.
+- **`intelligent_tracker/tracker.py`**:
+  - `Track`: Rich tracked entity representation with centroid history, velocity estimation, dwell times, and state lifecycle (`tentative`, `confirmed`, `lost`).
+  - `CentroidTracker`: Two-stage IoU and Euclidean distance association with zero heavy dependencies.
+  - `SortTracker`: Simple Online and Realtime Tracking using 2D kinematic Kalman filters in pure NumPy.
+  - `TrackerFactory`: Dynamic registration and instantiation.
+- **`intelligent_tracker/analytics.py`**:
+  - `OccupancyHeatmap`: 2D spatial Gaussian density accumulation, continuous temporal decay, false-color overlay blending (JET/INFERNO), PNG snapshot, and CSV grid exports.
+  - `AnalyticsEngine`: Central coordinator managing multi-zone occupancy, tripwire tallies, events, and telemetry report generation.
+- **Declarative YAML Configurations & CLI (`main.py`)**:
+  - `configs/demo.yaml`: Synthetic demo configuration.
+  - `configs/retail.yaml`: Production-ready retail analytics configuration.
+  - `--config`, `--tracker`, `--heatmap`, `--output` video recording integration in `main.py`.
+- **`requirements.txt`**: Added `pyyaml>=6.0.0`.
+- **Documentation**:
+  - `documentation/analytics.rst`: Comprehensive technical documentation.
+  - `documentation/index.rst`: Added `analytics` to Sphinx toctree.
+  - `README.rst`: Updated capabilities, CLI options table, test commands, and roadmap.
+- **Unit Test Suite**:
+  - `tests/test_video.py`: 5 tests covering VideoSource, synthetic generation, metrics, and frame drops.
+  - `tests/test_tracker.py`: 7 tests covering Track, IoU matching, CentroidTracker lifecycle, and SortTracker.
+  - `tests/test_analytics.py`: 5 tests covering Tripwire, ZoneROI, OccupancyHeatmap, and AnalyticsEngine.
+  - Full suite: **63 tests passing (100% green)**.
 
 ### Verification
 ```powershell
-# With synthetic source
-.\.venv\Scripts\python.exe main.py --detector mock --source synthetic --config configs/demo.yaml
+# Synthetic demo with YAML configuration in headless mode
+.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 30
 
-# With RTSP stream
-.\.venv\Scripts\python.exe main.py --detector yolov8 --source rtsp://192.168.1.100/stream1 --config configs/retail.yaml
+# YOLOv8 with YAML configuration and video recording export
+.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 30 --output scratch/test_output.mp4
 
-# Tests
+# Full test suite (63 tests)
+$env:MPLBACKEND="Agg"
 .\.venv\Scripts\python.exe -m unittest discover tests
+# → Ran 63 tests in ~4.3s — OK (all pass)
 ```
+
 
 ---
 

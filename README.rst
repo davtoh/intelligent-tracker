@@ -22,11 +22,16 @@ Key Capabilities
 ----------------
 
 - **Edge AI Object Detection**: Native inference with **YOLOv8 Nano** and **YOLO11 Nano** via ONNX Runtime without heavy deep learning frameworks (no PyTorch/CUDA required on edge devices).
+- **Multi-Object Tracking (MOT)**: High-speed ``CentroidTracker`` (IoU and Euclidean distance matching) and pure NumPy ``SortTracker`` (2D Kalman filtering).
+- **Retail & Security Analytics**: Polygonal Zone ROIs for occupancy counting, dwell time monitoring, and bidirectional Virtual Tripwires for entry/exit traffic tallying.
+- **Occupancy Heatmap Engine**: 2D spatial Gaussian density accumulation, continuous temporal decay, colormap overlays, and PNG/CSV exports.
+- **Declarative YAML Configuration**: Template-driven setup (``configs/demo.yaml``, ``configs/retail.yaml``) for cameras, zones, tripwires, and models.
+- **Non-blocking Threaded RTSP Reader**: Decoupled ingestion with automatic frame-drop on lag, auto-reconnection, and connection telemetry.
 - **Zero-Dependency Computer Vision Primitives**: Pure NumPy aspect-ratio preserving letterbox resizing, coordinate remapping, and vectorized multi-class Non-Maximum Suppression (NMS).
 - **Hardware Acceleration Cascade**: Automatic runtime provider selection:
   ``CUDAExecutionProvider`` -> ``DmlExecutionProvider`` (DirectML on Windows) -> ``OpenVINOExecutionProvider`` (Intel) -> ``CoreMLExecutionProvider`` (macOS) -> ``CPUExecutionProvider``.
 - **Pluggable Detector Interface**: Abstract ``BaseDetector`` contract returning typed ``Detection(bbox, class_id, confidence, label)`` namedtuples, decoupled by ``DetectorFactory``.
-- **Flexible Video Ingestion**: USB webcams, IP camera RTSP streams, local video files, and headless synthetic mock feeds.
+- **Flexible Video Ingestion & Export**: USB webcams, IP camera RTSP streams, local video files, headless synthetic mock feeds, and annotated MP4 video recording.
 - **Cross-Platform**: Tested and verified on Windows 10/11, Linux (Ubuntu, Debian, Raspberry Pi OS ARM64), and macOS (Apple Silicon & Intel).
 - **Diagnostics & Tooling**: Built-in environment diagnostic tool (``scripts/diagnostics.py``) and model downloader with SHA-256 verification (``scripts/download_models.py``).
 
@@ -126,25 +131,34 @@ Headless Benchmarking (CI / Servers)
 CLI Options
 ~~~~~~~~~~~
 
-+---------------+---------------+--------------------------------------------------------------------------+
-| Argument      | Default       | Description                                                              |
-+===============+===============+==========================================================================+
-| ``--detector``| ``haar``      | Detection architecture: ``yolov8``, ``yolo11``, ``haar``, ``mock``, etc. |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--source``  | ``0``         | Camera index (``0``, ``1``), ``synthetic``, video file, or RTSP URL      |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--resolution``| ``640x480`` | Frame resolution as ``WIDTHxHEIGHT``                                     |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--framerate``| ``30``       | Target processing framerate (FPS)                                        |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--conf``    | ``0.25``      | Detection confidence threshold (``0.0`` – ``1.0``)                       |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--classes`` | ``None``      | Filter classes by name (``person``) or ID (``0``)                        |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--headless``| ``False``     | Run without GUI (ideal for CI, servers, and benchmarks)                  |
-+---------------+---------------+--------------------------------------------------------------------------+
-| ``--frames``  | ``60``        | Frames to process in headless mode (``0`` = infinite)                    |
-+---------------+---------------+--------------------------------------------------------------------------+
++-----------------+---------------+--------------------------------------------------------------------------+
+| Argument        | Default       | Description                                                              |
++=================+===============+==========================================================================+
+| ``--config``    | ``None``      | Path to YAML/JSON configuration file (e.g. ``configs/demo.yaml``)        |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--detector``  | ``haar``      | Detection architecture: ``yolov8``, ``yolo11``, ``haar``, ``mock``, etc. |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--tracker``   | ``centroid``  | Multi-object tracker: ``centroid`` or ``sort`` (Kalman filter)           |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--source``    | ``0``         | Camera index (``0``, ``1``), ``synthetic``, video file, or RTSP URL      |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--resolution``| ``640x480``   | Frame resolution as ``WIDTHxHEIGHT``                                     |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--framerate`` | ``30``        | Target processing framerate (FPS)                                        |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--conf``      | ``0.25``      | Detection confidence threshold (``0.0`` – ``1.0``)                       |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--classes``   | ``None``      | Filter classes by name (``person``) or ID (``0``)                        |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--heatmap``   | ``False``     | Enable spatial occupancy heatmap overlay                                 |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--output``    | ``None``      | Output path to save annotated video recording (``output.mp4``)           |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--headless``  | ``False``     | Run without GUI (ideal for CI, servers, and benchmarks)                  |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--frames``    | ``60``        | Frames to process in headless mode (``0`` = infinite)                    |
++-----------------+---------------+--------------------------------------------------------------------------+
+
 
 Scenario Combinations Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -180,19 +194,22 @@ All unit tests run via Python's standard ``unittest`` discovery:
 
 .. code-block:: powershell
 
-    # Run full test suite (46 tests)
+    # Run full test suite (63 tests)
     $env:MPLBACKEND="Agg"
     .\.venv\Scripts\python.exe -m unittest discover tests
 
     # Run detector-specific unit tests (25 tests)
     .\.venv\Scripts\python.exe -m unittest tests/test_detectors.py
 
+    # Run video, tracker, and analytics unit tests (17 tests)
+    .\.venv\Scripts\python.exe -m unittest tests/test_video.py tests/test_tracker.py tests/test_analytics.py
+
 Roadmap & Status
 ----------------
 
 - [x] **Milestone 1**: Environment & Core Engine Revitalization (Python 3.12, NumPy 2.x, cross-platform fixes).
 - [x] **Milestone 2**: Edge AI Detection Architecture (YOLOv8/YOLO11 ONNX, BaseDetector, pure NumPy NMS).
-- [ ] **Milestone 3**: RTSP Camera Streams & Retail / Occupancy Analytics (non-blocking reader, tripwires, heatmaps).
+- [x] **Milestone 3**: RTSP Camera Streams & Retail / Occupancy Analytics (non-blocking reader, tripwires, heatmaps).
 - [ ] **Milestone 4**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT).
 - [ ] **Milestone 5**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd).
 

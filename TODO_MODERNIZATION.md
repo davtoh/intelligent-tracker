@@ -49,19 +49,23 @@
 ---
 
 ### Phase 3: RTSP Camera Streams & Retail / Occupancy Analytics
-- [ ] **Robust RTSP Video Ingestion Pipeline**:
+- [x] **Robust RTSP Video Ingestion Pipeline**:
   - Threaded non-blocking RTSP frame reader with automatic reconnection and frame-drop policy (zero latency drift).
-  - Support multiple camera inputs (IP cameras, USB webcams, RTSP streams, video test files).
-- [ ] **Zone Definition & Spatial Geometry**:
-  - Virtual tripwires (entry/exit bidirectional counting).
-  - Polygonal ROI zones (dwell areas, queue zones, checkout counters).
+  - Support multiple camera inputs (IP cameras, USB webcams, RTSP streams, video test files, synthetic generator).
+  - Context manager (`with VideoSource(...) as vs:`) with connection health telemetry.
+- [x] **Zone Definition & Spatial Geometry**:
+  - Virtual tripwires (bidirectional crossing detection with trajectory normal vector analysis).
+  - Polygonal ROI zones (occupancy counting, dwell times, automated enter/exit/dwell events).
   - Intersection algorithms utilizing `intelligent_tracker.geometry` with NumPy vectorization.
-- [ ] **Multi-Object Tracking (Short-Term)**:
-  - `CentroidTracker` / SORT for frame-to-frame association while objects remain in field of view.
-- [ ] **Retail Analytics Engine**:
-  - Real-time occupancy tracking (current occupants, entries, exits).
+- [x] **Multi-Object Tracking (Short-Term)**:
+  - `CentroidTracker` with multi-stage IoU and Euclidean distance matching.
+  - Pure NumPy `SortTracker` using 2D Kalman filters and `TrackerFactory` registry.
+- [x] **Retail Analytics Engine**:
+  - Real-time occupancy tracking (current occupants, entries, exits, max occupancy).
   - Dwell time estimation per zone.
-  - Heatmap generation (2D occupancy density accumulation mapped over camera frames).
+  - Heatmap generation (`OccupancyHeatmap` 2D Gaussian density accumulation, temporal decay, false-color overlay, PNG/CSV export).
+  - Declarative YAML configuration (``configs/demo.yaml``, ``configs/retail.yaml``) and headless video recording.
+
 
 ---
 

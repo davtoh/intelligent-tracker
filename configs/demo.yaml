@@ -1,0 +1,57 @@
+# Intelligent Tracker - Demo Configuration
+# Uses synthetic frame generator and deterministic mock detector for zero-hardware testing
+
+video:
+  source: synthetic
+  resolution: [640, 480]
+  framerate: 30
+  buffer_size: 1
+  auto_reconnect: true
+
+detector:
+  model: mock
+  confidence: 0.25
+  classes: ["person"]
+
+tracker:
+  type: centroid
+  max_disappeared: 30
+  min_hits: 2
+  iou_threshold: 0.2
+  max_distance: 120.0
+
+analytics:
+  heatmap:
+    enabled: true
+    decay: 0.998
+    radius: 25
+    colormap: "jet"
+  
+  tripwires:
+    - name: main_corridor
+      line: [[100, 240], [540, 240]]
+      bidirectional: true
+      color: [0, 255, 255]
+
+    - name: side_gate
+      line: [[400, 50], [400, 220]]
+      bidirectional: true
+      color: [255, 120, 0]
+
+  zones:
+    - name: lounge_zone
+      polygon: [[40, 40], [280, 40], [280, 220], [40, 220]]
+      dwell_threshold: 3.0
+      color: [0, 200, 100]
+
+    - name: checkout_area
+      polygon: [[340, 260], [600, 260], [600, 440], [340, 440]]
+      dwell_threshold: 4.0
+      color: [200, 100, 0]
+
+visualization:
+  draw_zones: true
+  draw_tripwires: true
+  draw_tracks: true
+  draw_heatmap: false
+  draw_hud: true

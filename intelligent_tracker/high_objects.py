@@ -480,7 +480,23 @@ class Area(Agent):
     Area must only be inside an specific Scene. The Area can tell when
     an object is inside it or outside.
     """
-    pass
+    def __init__(self, polygon, name=None, dwell_threshold=5.0, color=(0, 200, 100), **kwargs):
+        super(Area, self).__init__(name=name, **kwargs)
+        from intelligent_tracker.geometry import ZoneROI
+        self.roi = ZoneROI(polygon=polygon, name=self.name, dwell_threshold=dwell_threshold, color=color)
+
+    def contains(self, point):
+        return self.roi.contains_point(point)
+
+    def update(self, tracks, timestamp=None):
+        return self.roi.update(tracks, timestamp=timestamp)
+
+    @property
+    def occupancy(self):
+        return self.roi.occupancy
+
+    def draw(self, frame, alpha=0.25):
+        return self.roi.draw(frame, alpha=alpha)
 
 
 class Line(Agent):
@@ -488,4 +504,22 @@ class Line(Agent):
     A line is a special kind of Area but that cannot have objects inside,
     it just tells when an object passes from one side to the other.
     """
-    pass
+    def __init__(self, line_segment, name=None, bidirectional=True, color=(0, 255, 255), **kwargs):
+        super(Line, self).__init__(name=name, **kwargs)
+        from intelligent_tracker.geometry import Tripwire
+        self.tripwire = Tripwire(line_segment=line_segment, name=self.name, bidirectional=bidirectional, color=color)
+
+    def check_crossing(self, track_id, prev_centroid, curr_centroid, timestamp=None):
+        return self.tripwire.check_crossing(track_id, prev_centroid, curr_centroid, timestamp=timestamp)
+
+    @property
+    def total_in(self):
+        return self.tripwire.total_in
+
+    @property
+    def total_out(self):
+        return self.tripwire.total_out
+
+    def draw(self, frame, thickness=2, show_counts=True):
+        return self.tripwire.draw(frame, thickness=thickness, show_counts=show_counts)
+

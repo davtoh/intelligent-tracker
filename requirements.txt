@@ -13,4 +13,5 @@ opencv-contrib-python>=3.4 # use conda alternative
 # install RRtoolbox for debugging and development, I must migrate used methods to this project
 sympy
 psutil>=5.8.0
-onnxruntime>=1.18.0
+onnxruntime>=1.18.0
+pyyaml>=6.0.0
