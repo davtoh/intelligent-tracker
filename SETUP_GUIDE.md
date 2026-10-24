@@ -165,59 +165,69 @@ python scripts/download_models.py --model yolo11n
 # 2. Check camera hardware indices and ONNX execution providers
 .\.venv\Scripts\python.exe scripts/diagnostics.py
 
-# 3. Run full automated test suite (all 46 tests)
+# 3. Run full automated test suite (all 63 tests)
 $env:MPLBACKEND="Agg"
 .\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
 ### Sample Executions
 ```powershell
-# Windows: Run YOLOv8 Nano on default webcam
-.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0
+# Windows: Run YAML-configured synthetic demo with tripwires & zones
+.\.venv\Scripts\python.exe main.py --config configs/demo.yaml
 
-# Windows: Run YOLO11 Nano on synthetic feed (no camera required)
-.\.venv\Scripts\python.exe main.py --detector yolo11 --source synthetic
+# Windows: Run YOLOv8 on default webcam with real-time heatmap overlay
+.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0 --heatmap
 
-# Filter for specific classes (e.g., person only)
+# Filter for specific classes (e.g., person only) with high confidence
 .\.venv\Scripts\python.exe main.py --detector yolov8 --classes person --conf 0.40
 
-# Run headless benchmark (ideal for CI, servers, Raspberry Pi testing)
-.\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 60
+# Headless benchmark with automated annotated video recording
+.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 60 --output demo_recording.mp4
 
-# Run with legacy Haar cascade or synthetic mock detector
-.\.venv\Scripts\python.exe main.py --detector haar --source 0
-.\.venv\Scripts\python.exe main.py --detector mock --source synthetic
+# Run with pure NumPy SORT (Kalman filter) tracker
+.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --tracker sort --headless --frames 60
+
+# Production RTSP retail surveillance template
+.\.venv\Scripts\python.exe main.py --config configs/retail.yaml
 ```
 
 ### Scenario Combinations Matrix
-| Scenario / Objective | Detector | Source (`--source`) | Resolution (`--resolution`) | Framerate (`--framerate`) | Confidence (`--conf`) | Classes (`--classes`) | Mode | Full PowerShell Command |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Synthetic Smoke Test** (CI/Mock) | `mock` | `synthetic` | `640x480` | `30` | `0.95` | all | Headless (30f) | `.\.venv\Scripts\python.exe main.py --detector mock --source synthetic --headless --frames 30` |
-| **YOLOv8 Edge AI Smoke Test** | `yolov8` | `synthetic` | `640x480` | `30` | `0.25` | all | Headless (60f) | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 60` |
-| **YOLO11 Performance Benchmark** | `yolo11` | `synthetic` | `640x480` | `30` | `0.25` | all | Headless (100f) | `.\.venv\Scripts\python.exe main.py --detector yolo11 --source synthetic --headless --frames 100` |
-| **Retail Person Counting** (Webcam) | `yolov8` | `0` | `640x480` | `30` | `0.40` | `person` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0 --classes person --conf 0.40` |
-| **High-Precision Security Cam** | `yolo11` | `0` | `1920x1080` | `15` | `0.35` | `person` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolo11 --source 0 --resolution 1920x1080 --framerate 15 --classes person` |
-| **Vehicle / Traffic Monitoring** | `yolov8` | `traffic.mp4` / `rtsp://...` | `1280x720` | `25` | `0.50` | `car truck bus` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source traffic.mp4 --classes car truck bus --conf 0.50` |
-| **Legacy Face Tracking** | `face` | `0` | `640x480` | `30` | `1.0` | `face` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector face --source 0` |
-| **Legacy Eye Tracking** | `eye` | `0` | `640x480` | `30` | `1.0` | `eye` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector eye --source 0` |
-| **Color Blob / Marker Tracking** | `color` | `0` | `640x480` | `30` | `1.0` | `color` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector color --source 0` |
-| **Headless Remote Server / RPi** | `yolov8` | `synthetic` | `640x480` | `30` | `0.30` | `person` | Headless (120f) | `$env:MPLBACKEND="Agg"; .\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 120` |
+| Scenario / Objective | Detector | Tracker | Source (`--source`) | Config File | Key Parameters | Mode | Full Runnable PowerShell Command |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Synthetic CI Smoke Test** | `mock` | `centroid` | `synthetic` | `configs/demo.yaml` | `--headless --frames 30` | Headless (30f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 30` |
+| **YOLOv8 Edge AI Benchmark** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--detector yolov8 --headless --frames 60` | Headless (60f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 60` |
+| **YOLO11 Performance Test** | `yolo11` | `centroid` | `synthetic` | `configs/demo.yaml` | `--detector yolo11 --headless --frames 100` | Headless (100f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolo11 --headless --frames 100` |
+| **SORT Kalman Tracking Benchmark** | `mock` | `sort` | `synthetic` | `configs/demo.yaml` | `--tracker sort --headless --frames 60` | Headless (60f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --tracker sort --headless --frames 60` |
+| **Headless Video Export** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--output recording.mp4 --headless --frames 90` | Headless Record | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --output recording.mp4 --headless --frames 90` |
+| **Retail Person Counting (Webcam)** | `yolov8` | `centroid` | `0` | - | `--classes person --conf 0.40` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0 --classes person --conf 0.40` |
+| **Store Foot-Traffic & Heatmap** | `yolov8` | `centroid` | `0` | `configs/retail.yaml` | `--heatmap` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --config configs/retail.yaml --source 0 --heatmap` |
+| **RTSP IP Camera Surveillance** | `yolov8` | `centroid` | `rtsp://...` | `configs/retail.yaml` | - | Interactive / Stream | `.\.venv\Scripts\python.exe main.py --config configs/retail.yaml --source rtsp://192.168.1.100/stream1` |
+| **Vehicle / Traffic Monitoring** | `yolov8` | `centroid` | `traffic.mp4` | - | `--classes car truck bus --conf 0.50` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source traffic.mp4 --classes car truck bus --conf 0.50` |
+| **Legacy Face Tracking** | `face` | `centroid` | `0` | - | - | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector face --source 0` |
+| **Color Blob / Marker Tracking** | `color` | `centroid` | `0` | - | - | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector color --source 0` |
+| **Headless Remote Server / RPi** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--headless --frames 120` | Headless Offscreen | `$env:MPLBACKEND="Agg"; .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 120` |
 
 ### CLI Command Options
 | Flag | Default | Description |
 | :--- | :--- | :--- |
+| `--config` | `None` | Path to YAML/JSON configuration file (e.g. `configs/demo.yaml`, `configs/retail.yaml`) |
 | `--detector` | `haar` | Detection architecture (`yolov8`, `yolo11`, `haar`, `mock`, `face`, `eye`, `color`) |
+| `--tracker` | `centroid` | Multi-object tracking algorithm (`centroid`, `sort`) |
 | `--source` | `0` | Camera index (`0`, `1`), `synthetic`/`mock`, video file path, or RTSP URL |
 | `--resolution`| `640x480` | Input resolution (`WIDTHxHEIGHT`) |
 | `--framerate` | `30` | Target processing frame rate |
 | `--conf` | `0.25` | Confidence threshold for AI detectors (`0.0` to `1.0`) |
 | `--classes` | `None` | Filter detected classes (e.g. `person`, `car`, or class IDs like `0`) |
+| `--heatmap` | `False` | Enable live 2D spatial occupancy heatmap overlay |
+| `--output` | `None` | Output path to save annotated video recording (`output.mp4`) |
 | `--headless` | `False` | Run without GUI window (ideal for CI/CD, remote SSH, and benchmarking) |
 | `--frames` | `60` | Number of frames to process in headless mode (`0` = infinite) |
 
-### Controls in GUI Window:
-- `q`: Quit active window / application.
-- `d`: Clear tracked objects in the current scene.
+### Interactive GUI Controls:
+- `q`: Quit active window and finalize telemetry.
+- `d`: Clear / reset active tracks.
+- `h`: Toggle live 2D spatial occupancy heatmap overlay.
+- `s`: Save instantaneous snapshot image (`snapshot_<timestamp>.png`) and analytics report (`analytics_report_<timestamp>.json`).
 
 ---
 
@@ -232,11 +242,13 @@ The project evolves according to `TODO_MODERNIZATION.md` and `milestone_plan.md`
    - Ultralight ONNX Runtime inference (`yolov8n.onnx`, `yolo11n.onnx`) with pure NumPy letterboxing and vectorized multi-class NMS.
    - Full backwards compatibility for Haar cascades and color detection.
    - 46/46 unit tests passing.
-3. ⬜ **Milestone 3: RTSP Stream Pipelines & Retail / Occupancy Analytics**:
+3. ✅ **Milestone 3: RTSP Stream Pipelines & Retail / Occupancy Analytics**:
    - Threaded non-blocking RTSP video reader with auto-reconnection and zero-latency frame drop.
    - Polygonal ROI zones, entry/exit tripwire line intersections, dwell times, and 2D spatial occupancy heatmaps.
-4. ⬜ **Milestone 4: Edge Alerting & Event Dispatch**:
-   - Webhooks (JSON POST), Telegram notifications (with snapshot frames), and MQTT telemetry for Smart Home / IoT platforms.
+   - Declarative YAML configs (`configs/demo.yaml`, `configs/retail.yaml`), video recording, and 63/63 tests passing.
+4. ⬜ **Milestone 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database**:
+   - Persistent SQLite entity database, visual Re-ID embeddings (ONNX + color descriptor fallback), interactive screen selection/tagging, cross-session re-appearance matching, and offline recording occurrence analytics.
 5. ⬜ **Milestone 5: Modern Web Dashboard, Packaging & Edge Deployment**:
    - FastAPI / WebSocket live dashboard, Docker containerization (ARM64 / amd64), and systemd service configurations.
+
 
