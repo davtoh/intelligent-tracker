@@ -70,23 +70,23 @@
 ---
 
 ### Phase 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
-- [ ] **Persistent SQLite Database (`tracker.db`)**:
+- [x] **Persistent SQLite Database (`tracker.db`)**:
   - `entities`: `(id, name, category, status, notes, timestamps)`.
   - `entity_signatures`: `(id, entity_id, embedding_blob, crop_path)`.
   - `sightings`: `(id, entity_id, track_id, source, timestamp, zone_id, bbox, confidence, snapshot)`.
-- [ ] **Visual Feature Descriptors & Re-ID Embeddings**:
+- [x] **Visual Feature Descriptors & Re-ID Embeddings**:
   - Lightweight ONNX Re-ID feature extractor (`osnet_x0_25.onnx` / `mobilenetv3_reid.onnx`).
   - Ultra-lightweight spatial HSV color histogram fallback for Raspberry Pi CPU.
   - Cosine similarity matching against enrolled gallery in SQLite.
-- [ ] **Interactive Screen Selection, Tagging & GUI Controls**:
+- [x] **Interactive Screen Selection, Tagging & GUI Controls**:
   - Mouse click on bounding box in live or paused view to inspect/select object.
   - Dialog / prompt to assign name (e.g. "Forklift 02", "Alice"), category ("VIP", "Staff", "Authorized"), and notes.
   - Interactive on-screen controls (Play/Pause, Step, Heatmap toggle, Snapshot, drag-and-drop ROI polygon/tripwire definition).
   - Dual GUI support: High-speed OpenCV HUD (`--gui opencv`) and Matplotlib navigation toolbar (`--gui forms`).
-- [ ] **Cross-Session Re-Appearance Engine**:
+- [x] **Cross-Session Re-Appearance Engine**:
   - Automatic identification when previously enrolled entity appears again in live stream or different camera.
   - Audit logging of all sightings into database.
-- [ ] **Offline Recording Indexer & Analytics**:
+- [x] **Offline Recording Indexer & Analytics**:
   - Batch process recorded video files to index all appearances.
   - Sighting timeline and frequency/dwell-time query reports.
 

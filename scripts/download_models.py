@@ -44,6 +44,16 @@ MODELS = {
         "size_bytes": 10699288,
         "description": "YOLO11 Nano object detection model (COCO 80 classes, ~10.7 MB)",
     },
+    "osnet_x0_25": {
+        "filename": "osnet_x0_25.onnx",
+        "urls": [
+            "https://huggingface.co/kornia/osnet/resolve/main/osnet_x0_25_msmt17.onnx",
+            "https://huggingface.co/anriha/osnet_x0_25_msmt17/resolve/main/osnet_x0_25_msmt17.onnx",
+        ],
+        "sha256": "e78604f4ccda49b8f41cd0f8f7303800ce75d2361895ebb0729513c1bf53d277",
+        "size_bytes": 907169,
+        "description": "OSNet x0.25 lightweight visual Re-ID embedding model (~907 KB)",
+    },
 }
 
 

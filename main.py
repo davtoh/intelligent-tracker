@@ -47,6 +47,9 @@ from intelligent_tracker.video import VideoSource, resolve_camera_source
 from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.analytics import OccupancyHeatmap, AnalyticsEngine
+from intelligent_tracker.database import TrackerDB
+from intelligent_tracker.reid import ReIDExtractorFactory
+from intelligent_tracker.matcher import GalleryMatcher
 
 
 def parse_args():
@@ -108,6 +111,23 @@ def parse_args():
         "--output",
         default=None,
         help="Optional path to output annotated video file (e.g. output.mp4)",
+    )
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="Path to SQLite database file for Re-ID gallery and sighting audit trail (default: data/tracker.db)",
+    )
+    parser.add_argument(
+        "--reid",
+        default=None,
+        choices=["color", "onnx", "mock", "none"],
+        help="Visual Re-ID feature extractor for cross-session identification (default: none or config value)",
+    )
+    parser.add_argument(
+        "--reid-thresh",
+        type=float,
+        default=None,
+        help="Cosine similarity threshold for Re-ID gallery matching (0.0 to 1.0)",
     )
     parser.add_argument(
         "--gui",
@@ -220,6 +240,19 @@ def main():
     framerate = args.framerate or int(video_cfg.get("framerate", 30))
     show_heatmap = args.heatmap or vis_cfg.get("draw_heatmap", False)
 
+    # Re-ID & SQLite Database configuration
+    db_cfg = cfg.get("database", {})
+    reid_cfg = cfg.get("reid", {})
+    reid_name = args.reid or reid_cfg.get("model", None)
+    if reid_name and str(reid_name).lower() == "none":
+        reid_name = None
+
+    db_path = args.db or db_cfg.get("path", None)
+    if reid_name and not db_path:
+        db_path = "data/tracker.db"
+
+    reid_threshold = args.reid_thresh if args.reid_thresh is not None else float(reid_cfg.get("threshold", 0.65))
+
     print("=" * 65)
     print("Intelligent Tracker - Edge AI Retail & Security Analytics")
     print("=" * 65)
@@ -227,6 +260,9 @@ def main():
     print("  Source      : {}".format(source))
     print("  Detector    : {} (conf={})".format(detector_name, conf_thresh))
     print("  Tracker     : {} (max_disappeared={}, min_hits={})".format(tracker_name, max_disappeared, min_hits))
+    print("  Re-ID Engine: {} (threshold={:.2f})".format(reid_name or "[Disabled]", reid_threshold))
+    if db_path:
+        print("  Database    : {}".format(db_path))
     print("  Resolution  : {}x{}".format(res_w, res_h))
     print("  Target FPS  : {}".format(framerate))
     print("  Mode        : {}".format("Headless" if args.headless else f"Interactive GUI ({args.gui})"))
@@ -310,6 +346,26 @@ def main():
             analytics.add_zone(zone)
             print("[INFO] Registered Zone ROI: '{}' ({} vertices)".format(z_name, len(z_poly)))
 
+    # 5b. Initialize Re-ID Engine & Sighting Database (if enabled)
+    db = None
+    reid_extractor = None
+    gallery_matcher = None
+    if reid_name:
+        try:
+            db = TrackerDB(db_path)
+            reid_extractor = ReIDExtractorFactory.create(reid_name)
+            gallery_matcher = GalleryMatcher(
+                db=db,
+                extractor=reid_extractor,
+                reid_threshold=reid_threshold,
+            )
+            print("[INFO] Initialized Re-ID Engine: {} (gallery: {} signatures) -> {}".format(
+                reid_extractor.__class__.__name__, gallery_matcher.gallery_size, db_path
+            ))
+        except Exception as e:
+            print("[WARN] Failed to initialize Re-ID engine: {}".format(e))
+            gallery_matcher = None
+
     # 6. Initialize Video Writer (if output specified)
     writer = None
     if args.output:
@@ -349,6 +405,7 @@ def main():
         print("  - Click '[X]' button or press 'q' / ESC to quit")
         print("  - Press Spacebar to Pause / Resume playback")
         print("  - Click on any tracked bounding box to inspect/select")
+        print("  - Press 'e' to enroll selected entity into Re-ID database")
         print("  - Press 'd' to clear tracks, 'h' to toggle heatmap, 's' to save snapshot")
 
     # 8. Main Tracking & Analytics Loop
@@ -397,6 +454,19 @@ def main():
                 # Step B: Multi-Object Tracking
                 tracks = tracker.update(detections, timestamp=t0)
                 current_tracks = tracks
+
+                # Step B.5: Visual Re-ID Gallery Matching
+                if gallery_matcher is not None:
+                    id_events = gallery_matcher.match_tracks(
+                        tracks=tracks,
+                        frame=frame,
+                        source=str(source),
+                        timestamp=t0,
+                    )
+                    for ev in id_events:
+                        print("[RE-ID] Identified Track #{}: '{}' [{}] (similarity: {:.1f}%)".format(
+                            ev.track_id, ev.name, ev.category, float(ev.similarity) * 100
+                        ))
 
                 # Step C: Analytics (Tripwires, Zones, Heatmap)
                 analytics_telemetry = analytics.update(tracks, timestamp=t0)
@@ -471,6 +541,30 @@ def main():
                     if key == ord(" "):
                         paused = not paused
                         print("[INFO] Playback {}".format("paused" if paused else "resumed"))
+                    elif key == ord("e"):
+                        if selected_track_id and selected_track_id in current_tracks and db is not None:
+                            sel_trk = current_tracks[selected_track_id]
+                            print("\n" + "=" * 50)
+                            print(">>> ENROLL ENTITY IN GALLERY (Track #{}) <<<".format(sel_trk.track_id))
+                            try:
+                                ent_name = input("Enter Entity Name (e.g. 'Alice', 'Forklift #02'): ").strip()
+                                if ent_name:
+                                    ent_cat = input("Enter Category ['person', 'staff', 'vip', 'vehicle'] [person]: ").strip() or "person"
+                                    enrolled = db.enroll_entity(
+                                        name=ent_name,
+                                        category=ent_cat,
+                                        frame=frame,
+                                        bbox=sel_trk.bbox,
+                                        extractor=reid_extractor,
+                                    )
+                                    if gallery_matcher is not None:
+                                        gallery_matcher.reload_gallery()
+                                        gallery_matcher.reassign_track(sel_trk, enrolled["id"])
+                                    print("[SUCCESS] Enrolled '{}' (ID #{}) into Gallery!".format(ent_name, enrolled["id"]))
+                            except Exception as ex:
+                                print("[WARN] Enrollment error: {}".format(ex))
+                        else:
+                            print("[INFO] Click on a tracked bounding box before pressing 'e' to enroll.")
                     elif key == ord("d"):
                         tracker.reset()
                         selected_track_id = None
@@ -495,6 +589,10 @@ def main():
     if writer is not None:
         writer.release()
         print("[INFO] Video recording finalized: {}".format(args.output))
+
+    if db is not None:
+        db.close()
+        print("[INFO] SQLite database closed.")
 
     if not args.headless:
         cv2.destroyAllWindows()

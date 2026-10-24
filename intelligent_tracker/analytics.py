@@ -371,7 +371,12 @@ class AnalyticsEngine(object):
                 cv2.rectangle(out, (x, y), (x + w, y + h), col, 2)
 
                 # Track header badge
-                label_text = "#{}: {} ({:.2f})".format(tid, trk.label, trk.confidence)
+                if getattr(trk, "entity_name", None):
+                    label_text = "#{}: {} ({:.0f}%)".format(
+                        tid, trk.entity_name, getattr(trk, "reid_score", 1.0) * 100
+                    )
+                else:
+                    label_text = "#{}: {} ({:.2f})".format(tid, trk.label, trk.confidence)
                 (tw_val, th_val), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
                 cv2.rectangle(out, (x, max(0, y - th_val - 6)), (x + tw_val + 6, y), col, -1)
                 cv2.putText(

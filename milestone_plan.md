@@ -146,10 +146,10 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## ⬜ [Milestone 4] — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
+## ✅ [Milestone 4] — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
 **Scope:** Persistent SQLite entity database, visual Re-ID embeddings (ONNX + color descriptor fallback), interactive screen selection/tagging, cross-session re-appearance matching, and offline recording occurrence analytics.
 
-### Objectives
+### Objectives & Deliverables Completed
 
 **4a — Persistent SQLite Entity & Sighting Database (`intelligent_tracker/database.py`):**
 - Embedded, zero-configuration local database (`data/tracker.db`), edge-ready for Raspberry Pi, PC, and servers.
@@ -165,9 +165,9 @@ $env:MPLBACKEND="Agg"
 **4b — Visual Feature Descriptors & Re-ID Embeddings (`intelligent_tracker/reid.py`):**
 - Abstract `BaseFeatureExtractor` interface: `extract(frame, bbox) -> np.ndarray` (L2-normalized feature vector).
 - Implementations:
-  - **`OnnxReIDExtractor`**: Lightweight ONNX Re-ID model (e.g., `osnet_x0_25.onnx` ~3.5MB or `mobilenetv3_reid.onnx`). Runs via ONNX Runtime with the same multi-platform execution provider cascade (CUDA/DirectML/OpenVINO/CPU).
-  - **`ColorHistogramExtractor`**: Ultra-lightweight CPU fallback using spatial-grid HSV color histograms (zero neural network dependency, pure NumPy, sub-millisecond execution on Raspberry Pi). Re-connects directly to the original project's descriptor vision (`self.descriptors`).
-- Cosine similarity matching: `similarity = np.dot(gallery_embeddings, query_vector)`.
+  - **`OnnxReIDExtractor`**: Lightweight ONNX Re-ID model (`osnet_x0_25.onnx` ~907 KB, 512-d embeddings). Runs via ONNX Runtime with multi-platform execution provider cascade (CUDA/DirectML/OpenVINO/CPU). Accommodates both dynamic and fixed batch architectures.
+  - **`ColorHistogramExtractor`**: Ultra-lightweight CPU fallback using spatial-grid joint 3D HSV color histograms (zero neural network dependency, pure NumPy/OpenCV, sub-millisecond execution on Raspberry Pi). Re-connects directly to the original project's descriptor vision (`self.descriptors`).
+- Cosine similarity matching: vectorized `batch_cosine_similarity(gallery_matrix, query_vector)`.
 
 **4c — Screen Selection, Interactive Tagging & GUI Controls (`intelligent_tracker/interactive.py`):**
 - **Interactive Screen Selection & Inspection**:
@@ -177,41 +177,46 @@ $env:MPLBACKEND="Agg"
   - Interactive prompt / dialog: assign name (e.g. `"Forklift #02"`, `"Alice"`, `"White Sedan ABC-123"`), assign category/tags (`"Staff"`, `"VIP"`, `"Authorized"`), add notes.
   - Instantly enrolls entity, thumbnail crop, and feature embedding vector into the SQLite gallery.
 - **Interactive Control Bar & Video Navigation**:
-  - On-screen / HUD controls: Play, Pause (Spacebar), Step frame-by-frame, Clear tracks (`d`), Heatmap toggle (`h`), and Snapshot export (`s`).
-  - Interactive ROI drawing: mouse drag-and-drop to define new virtual tripwires or zone polygons directly on the live video window.
+  - On-screen / HUD controls: Play, Pause (Spacebar), Step frame-by-frame, Clear tracks (`d`), Heatmap toggle (`h`), and Snapshot export (`s`), Enroll entity (`e`).
+  - Interactive ROI drawing: mouse drag-and-drop to define new virtual tripwires (`t`) or zone polygons (`z`) directly on the live video window.
   - Dual GUI support: High-performance OpenCV HUD (`--gui opencv`) and Classical Matplotlib navigation toolbar (`--gui forms`).
 - **Python API**:
   - `db.enroll_entity(name, category, frame, bbox, notes)` for headless scripts, REST APIs, or dashboard integration.
   - Ability to re-assign or merge tracks if user corrects an identification.
 
-
 **4d — Gallery Matcher & Re-Appearance Engine (`intelligent_tracker/matcher.py`):**
 - Combines short-term frame-to-frame tracking (`CentroidTracker`) with long-term gallery Re-ID:
-  - As an object is tracked, collect and average embeddings across high-confidence frames.
-  - Query `TrackerDB` gallery: if top cosine similarity exceeds `reid_threshold` (e.g. ≥ 0.70), automatically link the track to the enrolled `entity_id`.
-  - When an object leaves the camera view and reappears later (minutes, days, or across different camera sources), the system recognizes: *"Identified as 'Forklift #02' (match: 86%)"*.
-  - Emits `EntityIdentifiedEvent` and records sighting in `sightings` table.
+  - As an object is tracked, collect and average embeddings across high-confidence frames with temporal feature smoothing.
+  - Query `TrackerDB` gallery: if top cosine similarity exceeds `reid_threshold` (e.g. ≥ 0.65), automatically link the track to the enrolled `entity_id`.
+  - When an object leaves the camera view and reappears later (minutes, days, or across different camera sources), the system recognizes the entity and displays identification badge.
+  - Emits `EntityIdentifiedEvent` and records debounced sighting in `sightings` table.
 
 **4e — Offline Video Recording Indexer & Occurrence Analytics (`intelligent_tracker/batch.py`):**
 - Batch process recorded video files (`.mp4`, `.avi`, `.mkv`):
-  - Ingests video at fast-forward speed or sampled frame rate.
+  - Ingests video at fast-forward speed or sampled frame rate (`--sample-rate N`).
   - Detects, tracks, extracts features, and catalogs all occurrences in the database.
 - Occurrence queries & analytics:
   - **Sighting Timeline**: "List all timestamps and video files where Entity X appeared."
   - **Visit Frequency & Dwell Time**: Total duration observed, visit count, first seen, last seen.
   - **Zone Journey**: Flow of the entity across defined zones and tripwires.
-  - Export audit logs to JSON and CSV formats.
+  - Export audit logs to JSON and CSV formats (`--export-json`, `--export-csv`).
 
-### Verification
+### Verification & Test Suite
+- Full test suite: **92 tests passing (100% green)** in ~4.8s.
+- Verified commands:
 ```powershell
-# Enroll entity via CLI / script
-.\.venv\Scripts\python.exe -m intelligent_tracker.interactive --source test_video.mp4
+# 1. Run full test suite (92 tests)
+$env:MPLBACKEND="Agg"
+.\.venv\Scripts\python.exe -m unittest discover tests
 
-# Run live tracking with gallery matching against SQLite DB
-.\.venv\Scripts\python.exe main.py --detector yolov8 --reid onnx --db data/tracker.db
+# 2. Interactive tagging studio CLI help & standalone app
+.\.venv\Scripts\python.exe -m intelligent_tracker.interactive --help
 
-# Process offline recording and print sighting analytics
-.\.venv\Scripts\python.exe -m intelligent_tracker.batch --video test_footage.mp4 --db data/tracker.db --report
+# 3. Live tracking with YOLOv8, ONNX Re-ID, and SQLite database
+.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --reid onnx --db data/tracker.db --headless --frames 30
+
+# 4. Offline video recording indexer and occurrence analytics report
+.\.venv\Scripts\python.exe -m intelligent_tracker.batch --video scratch/test_output.mp4 --db data/tracker.db --report
 ```
 
 ---

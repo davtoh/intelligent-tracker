@@ -156,6 +156,12 @@ CLI Options
 +-----------------+---------------+--------------------------------------------------------------------------+
 | ``--output``    | ``None``      | Output path to save annotated video recording (``output.mp4``)           |
 +-----------------+---------------+--------------------------------------------------------------------------+
+| ``--db``        | ``data/...``  | Path to SQLite database file for Re-ID gallery and sightings             |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--reid``      | ``None``      | Visual Re-ID extractor: ``color``, ``onnx``, ``mock``, or ``none``       |
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--reid-thresh``| ``0.65``     | Cosine similarity threshold for Re-ID gallery matching (``0.0`` – ``1.0``)|
++-----------------+---------------+--------------------------------------------------------------------------+
 | ``--headless``  | ``False``     | Run without GUI (ideal for CI, servers, and benchmarks)                  |
 +-----------------+---------------+--------------------------------------------------------------------------+
 | ``--frames``    | ``60``        | Frames to process in headless mode (``0`` = infinite)                    |
@@ -196,12 +202,19 @@ Scenario Combinations Matrix
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Headless Remote Server / RPi**    | ``yolov8`` | ``centroid``| ``synthetic``     | ``configs/demo.yaml``| ``--headless --frames 120``                     | Headless Offscreen  | ``$env:MPLBACKEND="Agg"; python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 120`` |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Visual Re-ID Person Gallery**     | ``yolov8`` | ``centroid``| ``real``          | ``configs/retail.yaml``| ``--reid onnx --db data/tracker.db``         | Interactive GUI     | ``python main.py --detector yolov8 --source real --reid onnx --db data/tracker.db``                 |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Interactive Tagging Studio**      | ``yolov8`` | ``centroid``| ``real``          | -                   | ``--reid color --db data/tracker.db``           | Tagging Studio      | ``python -m intelligent_tracker.interactive --source real --reid color --db data/tracker.db``        |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Offline Video Recording Indexer** | ``yolov8`` | ``centroid``| ``footage.mp4``   | -                   | ``--sample-rate 2 --report``                    | Offline Batch       | ``python -m intelligent_tracker.batch --video footage.mp4 --db data/tracker.db --report``           |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 
 Interactive GUI Controls
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Mouse Click**: Left-click on any tracked bounding box in the GUI window to inspect/select that entity and display real-time telemetry (ID, label, confidence, dwell time, velocity). Click in empty space to deselect.
 - **Spacebar**: Pause / Resume video playback without losing tracking states.
+- ``e``: Enroll currently selected track into persistent SQLite Re-ID gallery with custom name, category, and notes.
 - ``d``: Clear / reset active tracks and deselect.
 - ``h``: Toggle live 2D spatial occupancy heatmap overlay.
 - ``s``: Save instantaneous snapshot image (``snapshot_<timestamp>.png``) and analytics report (``analytics_report_<timestamp>.json``).
@@ -215,14 +228,17 @@ All unit tests run via Python's standard ``unittest`` discovery:
 
 .. code-block:: powershell
 
-    # Run full test suite (63 tests)
+    # Run full test suite (92 tests)
     $env:MPLBACKEND="Agg"
     .\.venv\Scripts\python.exe -m unittest discover tests
+
+    # Run database, Re-ID, and batch indexing tests (21 tests)
+    .\.venv\Scripts\python.exe -m unittest tests/test_database.py tests/test_reid.py tests/test_matcher.py tests/test_interactive.py tests/test_batch.py
 
     # Run detector-specific unit tests (25 tests)
     .\.venv\Scripts\python.exe -m unittest tests/test_detectors.py
 
-    # Run video, tracker, and analytics unit tests (17 tests)
+    # Run video, tracker, and analytics unit tests (21 tests)
     .\.venv\Scripts\python.exe -m unittest tests/test_video.py tests/test_tracker.py tests/test_analytics.py
 
 Roadmap & Status
@@ -231,8 +247,9 @@ Roadmap & Status
 - [x] **Milestone 1**: Environment & Core Engine Revitalization (Python 3.12, NumPy 2.x, cross-platform fixes).
 - [x] **Milestone 2**: Edge AI Detection Architecture (YOLOv8/YOLO11 ONNX, BaseDetector, pure NumPy NMS).
 - [x] **Milestone 3**: RTSP Camera Streams & Retail / Occupancy Analytics (non-blocking reader, tripwires, heatmaps).
-- [ ] **Milestone 4**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT).
-- [ ] **Milestone 5**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd).
+- [x] **Milestone 4**: Object Identity Gallery, Visual Re-ID & Sighting Database (SQLite DB, ONNX OSNet, HSV fallback, interactive tagging, batch indexer).
+- [ ] **Milestone 5**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT).
+- [ ] **Milestone 6**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd).
 
 See ``milestone_plan.md`` and ``TODO_MODERNIZATION.md`` for complete details.
 

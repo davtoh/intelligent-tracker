@@ -20,6 +20,13 @@ tracker:
   iou_threshold: 0.2
   max_distance: 120.0
 
+database:
+  path: "data/tracker.db"
+
+reid:
+  model: "color"
+  threshold: 0.65
+
 analytics:
   heatmap:
     enabled: true

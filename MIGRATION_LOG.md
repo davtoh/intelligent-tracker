@@ -349,6 +349,133 @@
   .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --gui forms
   ```
 
+### 5. Quota / Context Recovery Guide
+- If a new agent session starts:
+  - Working directory: `c:\dev\projects\products\intelligent_tracker`
+  - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
+  - Next task to execute: **Milestone 4 — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database**.
+
+---
+
+## [Milestone 4] - 2026-10-24 - Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
+
+### 1. Objectives & Scope
+- Deliver a persistent, embedded SQLite database (`TrackerDB` in `intelligent_tracker/database.py`) managing:
+  - `entities`: Name, category (`person`, `vehicle`, `vip`, `staff`, `visitor`, `delivery`), status, notes, timestamps.
+  - `entity_signatures`: Multi-dimensional feature vector BLOBs and representative thumbnail crops.
+  - `sightings`: Full chronological audit trail of where and when each entity was seen (track ID, camera source, timestamp, zone, bbox, confidence).
+  - Compound indexes on `(entity_id, timestamp)` and `(source, timestamp)` for rapid historical lookup.
+  - Comprehensive occurrence analytics (dwell duration approximation, distinct sources, zone journeys, JSON/CSV exports).
+- Implement visual Re-ID feature extractors in `intelligent_tracker/reid.py`:
+  - `BaseFeatureExtractor`: Abstract interface returning L2-normalized float32 vectors.
+  - `OnnxReIDExtractor`: Deep visual embedding extractor via ONNX Runtime with multi-platform execution provider cascade (CUDA -> DirectML -> OpenVINO -> CoreML -> CPU). Includes support for both dynamic and fixed batch architectures (e.g. OSNet x0.25).
+  - `ColorHistogramExtractor`: Ultra-lightweight CPU fallback using spatial-grid joint 3D HSV color histograms (zero neural network dependency, pure NumPy/OpenCV, sub-millisecond on Raspberry Pi CPU). Reconnects directly to the original project's descriptor vision (`self.descriptors`).
+  - `MockFeatureExtractor`: Deterministic synthetic feature generator for automated CI and headless testing.
+  - Vectorized `batch_cosine_similarity` for matrix-vector gallery matching.
+- Create Gallery Matcher & Re-Appearance Engine in `intelligent_tracker/matcher.py`:
+  - Temporal feature pooling: collects and averages embeddings across high-confidence frames per track.
+  - Vectorized gallery search against enrolled active signatures.
+  - Debounced sighting audit trail: logs verified entity sightings to SQLite database without redundant per-frame writes.
+  - Emits `EntityIdentifiedEvent` and decorates `Track` with entity ID, name, category, and similarity score.
+- Deliver Interactive Screen Selection, Tagging & GUI Controls in `intelligent_tracker/interactive.py`:
+  - Left-click on tracked bounding box to inspect target telemetry (Track ID, Re-ID match, dwell time, velocity).
+  - Press `e` to trigger entity enrollment prompt, automatically capturing thumbnail crops and extracting feature vectors.
+  - Interactive ROI drawing: Press `t` to draw virtual tripwires or `z` to draw polygonal zones directly on the live/paused window.
+  - Standalone studio CLI: `python -m intelligent_tracker.interactive`.
+- Implement Offline Video Recording Indexer & Occurrence Analytics in `intelligent_tracker/batch.py`:
+  - Fast-forward video batch processing with frame sampling (`--sample-rate N`).
+  - Sighting timelines, visit frequencies, and zone journey reports.
+  - Export reports to JSON and CSV formats.
+  - Standalone indexer CLI: `python -m intelligent_tracker.batch`.
+- Integrated Re-ID into `main.py` CLI (`--db`, `--reid`, `--reid-thresh`), updated declarative YAML configs (`configs/demo.yaml`, `configs/retail.yaml`), and added `osnet_x0_25` ONNX model download with SHA-256 verification in `scripts/download_models.py`.
+- Expanded test suite from 67 to 92 tests (+25 new unit tests) across `test_database.py`, `test_reid.py`, `test_matcher.py`, `test_interactive.py`, and `test_batch.py` (100% green).
+- Created technical documentation in `documentation/reid.rst` and updated Sphinx toctree.
+
+### 2. Files Touched
+- `intelligent_tracker/database.py`: Created `TrackerDB` SQLite database manager, schema, CRUD, signatures, sightings, analytics, and JSON/CSV exporters.
+- `intelligent_tracker/reid.py`: Created `BaseFeatureExtractor`, `ColorHistogramExtractor` (joint 3D HSV), `OnnxReIDExtractor`, `MockFeatureExtractor`, `ReIDExtractorFactory`, and `batch_cosine_similarity`.
+- `intelligent_tracker/matcher.py`: Created `GalleryMatcher`, `EntityIdentifiedEvent`, multi-frame feature pooling, and debounced sighting audit trail.
+- `intelligent_tracker/interactive.py`: Created `InteractiveController` (screen inspection, enrollment dialog, interactive tripwire/zone drawing) and standalone CLI runner.
+- `intelligent_tracker/batch.py`: Created `VideoIndexer` (batch frame-sampled video ingestion, occurrence reporting, JSON/CSV exports) and CLI runner.
+- `intelligent_tracker/analytics.py`: Enhanced `analytics.draw` track badge to render recognized entity names and match percentages.
+- `main.py`: Added `--db`, `--reid`, and `--reid-thresh` CLI arguments, Re-ID matcher loop integration, interactive `'e'` enrollment key handler, and clean database lifecycle teardown.
+- `scripts/download_models.py`: Added `osnet_x0_25.onnx` model entry with dual Hugging Face mirrors, SHA-256 verification, and streaming progress.
+- `configs/demo.yaml`: Added `database` and `reid` configuration blocks.
+- `configs/retail.yaml`: Added production `database` and `reid` (ONNX) configuration blocks.
+- `tests/test_database.py`: Created 8 unit tests for SQLite database schema, CRUD, signatures, sightings, analytics, cascade delete, and thread safety.
+- `tests/test_reid.py`: Created 7 unit tests for feature extractors, spatial HSV histograms, OnnxReIDExtractor fallback, and cosine similarity.
+- `tests/test_matcher.py`: Created 4 unit tests for GalleryMatcher, feature pooling, recognition threshold, sighting debouncing, and manual reassignment.
+- `tests/test_interactive.py`: Created 4 unit tests for mouse click inspection, tripwire drawing, zone drawing, and HUD overlay rendering.
+- `tests/test_batch.py`: Created 2 unit tests for offline video batch indexing, occurrence reporting, and JSON/CSV export.
+- `documentation/reid.rst`: Created detailed technical documentation for visual Re-ID, SQLite database, interactive tagging, and batch indexing.
+- `documentation/index.rst`: Added `reid` to Sphinx toctree.
+- `documentation/intelligent_tracker.rst`: Added automodule documentation blocks for `database`, `reid`, `matcher`, `interactive`, and `batch`.
+- `README.rst`: Updated CLI options table, scenarios matrix, interactive keyboard controls, test commands, and roadmap.
+- `TODO_MODERNIZATION.md`: Marked Phase 4 tasks complete.
+- `milestone_plan.md`: Updated Milestone 4 status to COMPLETE with verification commands and deliverables.
+- `MIGRATION_LOG.md`: Documented Milestone 4 completion and updated context recovery guide.
+
+### 3. State & Checkpoint
+- **Status:** Milestone 4 COMPLETE (100% Green Unit Tests)
+- **Automated Verification:**
+  - Full test suite: `.\.venv\Scripts\python.exe -m unittest discover tests` with `MPLBACKEND=Agg`.
+  - Result: **Ran 92 tests in 4.834s — OK (0 failures, 0 errors, 100% passing)**.
+  - Database unit tests: `tests/test_database.py` -> **8/8 OK (0.74s)**.
+  - Re-ID unit tests: `tests/test_reid.py` -> **7/7 OK (0.07s)**.
+  - Matcher unit tests: `tests/test_matcher.py` -> **4/4 OK (0.004s)**.
+  - Interactive unit tests: `tests/test_interactive.py` -> **4/4 OK (0.03s)**.
+  - Batch indexer unit tests: `tests/test_batch.py` -> **2/2 OK (0.14s)**.
+  - Detector unit tests: `tests/test_detectors.py` -> **25/25 OK (0.84s)**.
+  - Video, tracker & analytics unit tests: `tests/test_video.py`, `tests/test_tracker.py`, `tests/test_analytics.py` -> **21/21 OK (0.42s)**.
+  - Core & geometry legacy tests: `tests/test_geometry.py`, `tests/test_core.py`, `tests/test_forms.py` -> **21/21 OK (1.42s)**.
+- **Pipeline Benchmarks:**
+  - `main.py --config configs/demo.yaml --headless --frames 15 --reid color` -> 26.5 FPS.
+  - `main.py --config configs/demo.yaml --headless --frames 15 --reid onnx` -> 26.5 FPS (ONNX OSNet x0.25).
+  - `main.py --config configs/demo.yaml --detector yolov8 --reid onnx --headless --frames 30` -> 15.0 FPS.
+  - `batch.py --video scratch/test_output.mp4 --report` -> 656.9 FPS (offline video batch processing).
+- **Next Phase:**
+  - Milestone 5: Event Dispatching & Alerting System (Webhooks, Telegram bot, MQTT broker integration, configurable alert rules).
+
+### 4. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run full test suite (92 tests)
+  $env:MPLBACKEND="Agg"
+  .\.venv\Scripts\python.exe -m unittest discover tests
+
+  # 2. Run Milestone 4 Re-ID and Database unit test suite specifically (25 tests)
+  .\.venv\Scripts\python.exe -m unittest tests/test_database.py tests/test_reid.py tests/test_matcher.py tests/test_interactive.py tests/test_batch.py
+
+  # 3. Interactive tagging & Re-ID studio CLI help
+  .\.venv\Scripts\python.exe -m intelligent_tracker.interactive --help
+
+  # 4. Run live tracking with YOLOv8, ONNX Re-ID, and SQLite database
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --reid onnx --db data/tracker.db --headless --frames 30
+
+  # 5. Process offline recording and print sighting occurrence analytics
+  .\.venv\Scripts\python.exe -m intelligent_tracker.batch --video scratch/test_output.mp4 --db data/tracker.db --report
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python main.py --config configs/demo.yaml --detector yolov8 --reid color --db data/tracker.db --headless --frames 30
+  ```
+
+### 5. Quota / Context Recovery Guide
+- If a new agent session starts:
+  - Working directory: `c:\dev\projects\products\intelligent_tracker`
+  - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
+  - Downloaded AI models: Located in `models/` (`yolov8n.onnx`, `yolo11n.onnx`, `osnet_x0_25.onnx`).
+  - Next task to execute: **Milestone 5 — Event Dispatching & Alerting System**.
+  - Review `milestone_plan.md` (lines 218-265) and `TODO_MODERNIZATION.md` (lines 95-105) for Milestone 5 requirements:
+    - 5a: Centralized Event Bus (`intelligent_tracker/events.py`).
+    - 5b: Webhook Dispatcher with retry & backoff.
+    - 5c: Telegram Bot notification with snapshot image attachment.
+    - 5d: MQTT broker publisher with QoS and camera telemetry topics.
+    - 5e: Configurable rules & quiet hours alerting engine.
+
+
 
 
 

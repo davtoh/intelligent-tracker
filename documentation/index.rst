@@ -16,6 +16,7 @@ Contents
    intelligent_tracker
    detectors
    analytics
+   reid
 
 
 Indices and tables

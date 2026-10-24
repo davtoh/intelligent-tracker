@@ -20,6 +20,13 @@ tracker:
   min_hits: 3
   iou_threshold: 0.25
 
+database:
+  path: "data/tracker.db"
+
+reid:
+  model: "onnx"
+  threshold: 0.70
+
 analytics:
   heatmap:
     enabled: true

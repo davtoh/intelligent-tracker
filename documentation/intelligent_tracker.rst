@@ -100,6 +100,46 @@ intelligent\_tracker.analytics module
     :undoc-members:
     :show-inheritance:
 
+intelligent\_tracker.database module
+------------------------------------
+
+.. automodule:: intelligent_tracker.database
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.reid module
+--------------------------------
+
+.. automodule:: intelligent_tracker.reid
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.matcher module
+-----------------------------------
+
+.. automodule:: intelligent_tracker.matcher
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.interactive module
+---------------------------------------
+
+.. automodule:: intelligent_tracker.interactive
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.batch module
+---------------------------------
+
+.. automodule:: intelligent_tracker.batch
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

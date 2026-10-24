@@ -63,3 +63,8 @@ models/
 *.tflite
 *.pt
 *.pth
+
+# Local SQLite databases and captured crops
+data/
+*.db
+*.sqlite3
