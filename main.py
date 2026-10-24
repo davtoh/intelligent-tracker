@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Intelligent Tracker — Edge AI Retail & Security Analytics Platform.
+Intelligent Tracker - Edge AI Retail & Security Analytics Platform.
 
 Supports:
 - Robust Video Ingestion: RTSP network streams, USB webcams, video files, synthetic feeds.
@@ -13,12 +13,16 @@ Supports:
   - Spatial Occupancy Heatmaps (Gaussian density accumulation, decay, false-color overlay)
 - YAML Configuration: Template-driven setup via `--config configs/demo.yaml`.
 - Output recording: Headless annotated video export via `--output result.mp4`.
+- Dual GUI Modes: High-speed OpenCV HUD (`--gui opencv`) or Classical Matplotlib Toolbar (`--gui forms`).
 
-Controls (Interactive GUI):
-  'q' - Quit application
-  'd' - Clear / reset active tracks
-  'h' - Toggle occupancy heatmap overlay
-  's' - Save snapshot image and analytics summary report
+Controls (Interactive OpenCV GUI):
+  'X' button  - Close window and quit cleanly
+  'q' / ESC   - Quit application
+  Spacebar    - Pause / Resume video playback
+  Mouse Click - Click any tracked bounding box to inspect/select entity
+  'd'         - Clear / reset active tracks
+  'h'         - Toggle occupancy heatmap overlay
+  's'         - Save instantaneous snapshot image and analytics summary report
 """
 
 from __future__ import division, print_function, absolute_import
@@ -39,7 +43,7 @@ except ImportError:
     yaml = None
 
 from intelligent_tracker.detectors import DetectorFactory, COCO_CLASSES
-from intelligent_tracker.video import VideoSource
+from intelligent_tracker.video import VideoSource, resolve_camera_source
 from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.analytics import OccupancyHeatmap, AnalyticsEngine
@@ -47,7 +51,7 @@ from intelligent_tracker.analytics import OccupancyHeatmap, AnalyticsEngine
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Intelligent Tracker — Edge AI Retail & Security Analytics",
+        description="Intelligent Tracker - Edge AI Retail & Security Analytics",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -70,7 +74,7 @@ def parse_args():
     parser.add_argument(
         "--source",
         default=None,
-        help="Video source: camera index (0, 1), 'synthetic'/'mock', video file path, or RTSP URL",
+        help="Video source: camera index (0, 1), 'real'/'auto' (first physical webcam with data), 'synthetic', video file, or RTSP URL",
     )
     parser.add_argument(
         "--resolution",
@@ -104,6 +108,12 @@ def parse_args():
         "--output",
         default=None,
         help="Optional path to output annotated video file (e.g. output.mp4)",
+    )
+    parser.add_argument(
+        "--gui",
+        default="opencv",
+        choices=["opencv", "forms"],
+        help="GUI backend: 'opencv' (high-speed HUD with mouse selection) or 'forms' (Matplotlib toolbar)",
     )
     parser.add_argument(
         "--headless",
@@ -146,6 +156,25 @@ def parse_resolution(res_str: Optional[str], default=(640, 480)):
     return default
 
 
+def run_legacy_forms_gui(args, res_w, res_h, source, detector_name, conf_thresh, classes_filter):
+    """Fallback GUI using legacy Matplotlib forms with pan/zoom toolbar."""
+    from intelligent_tracker.high_objects import World
+    print("[INFO] Launching legacy Matplotlib GUI with interactive toolbar...")
+    world = World(name="Intelligent Tracker")
+    world.create_scene([source], name="TrackerScene", framerate=args.framerate or 30, resolution=(res_w, res_h))
+
+    det_kwargs = {}
+    if detector_name in ("yolov8", "yolo11", "onnx"):
+        det_kwargs["conf_threshold"] = conf_thresh
+        if classes_filter:
+            det_kwargs["classes"] = classes_filter
+
+    world.create_detector(detector_name, **det_kwargs)
+    world.show(throw=False)
+    world.block(close=True)
+    print("[INFO] Application closed.")
+
+
 def main():
     args = parse_args()
     cfg = load_config(args.config)
@@ -171,12 +200,10 @@ def main():
 
     # Source
     raw_source = args.source or video_cfg.get("source", "0")
-    if str(raw_source).isdigit():
-        source = int(raw_source)
-    elif str(raw_source).lower() in ("synthetic", "mock"):
+    if str(raw_source).lower() in ("synthetic", "mock"):
         source = "synthetic"
     else:
-        source = str(raw_source)
+        source = resolve_camera_source(raw_source)
 
     # Detector
     detector_name = args.detector or detector_cfg.get("model", "haar")
@@ -194,7 +221,7 @@ def main():
     show_heatmap = args.heatmap or vis_cfg.get("draw_heatmap", False)
 
     print("=" * 65)
-    print("Intelligent Tracker — Edge AI Retail & Security Analytics")
+    print("Intelligent Tracker - Edge AI Retail & Security Analytics")
     print("=" * 65)
     print("  Config File : {}".format(args.config if args.config else "[None - defaults]"))
     print("  Source      : {}".format(source))
@@ -202,10 +229,15 @@ def main():
     print("  Tracker     : {} (max_disappeared={}, min_hits={})".format(tracker_name, max_disappeared, min_hits))
     print("  Resolution  : {}x{}".format(res_w, res_h))
     print("  Target FPS  : {}".format(framerate))
-    print("  Mode        : {}".format("Headless" if args.headless else "Interactive GUI"))
+    print("  Mode        : {}".format("Headless" if args.headless else f"Interactive GUI ({args.gui})"))
     if args.output:
         print("  Recording   : {}".format(args.output))
     print("=" * 65)
+
+    # Legacy Matplotlib GUI route
+    if not args.headless and args.gui == "forms":
+        run_legacy_forms_gui(args, res_w, res_h, source, detector_name, conf_thresh, classes_filter)
+        return
 
     # 2. Initialize Video Source
     video_source = VideoSource(
@@ -286,16 +318,68 @@ def main():
         writer = cv2.VideoWriter(args.output, fourcc, float(framerate), (res_w, res_h))
         print("[INFO] Video recording enabled -> {}".format(args.output))
 
-    # 7. Main Tracking & Analytics Loop
+    # 7. Setup Interactive Window & Mouse Callbacks
+    window_name = "Intelligent Tracker - Analytics"
+    selected_track_id = None
+    paused = False
+    current_tracks = {}
+
+    def on_mouse_click(event, x, y, flags, param):
+        nonlocal selected_track_id
+        if event == cv2.EVENT_LBUTTONDOWN:
+            clicked_tid = None
+            for tid, trk in current_tracks.items():
+                bx, by, bw, bh = trk.bbox
+                if bx <= x <= bx + bw and by <= y <= by + bh:
+                    clicked_tid = tid
+                    break
+            selected_track_id = clicked_tid
+            if clicked_tid is not None:
+                trk = current_tracks[clicked_tid]
+                print("[INSPECT] Selected Track #{}: {} (conf: {:.2f}, dwell: {:.1f}s, vel: {})".format(
+                    clicked_tid, trk.label, trk.confidence, trk.dwell_time, trk.velocity
+                ))
+            else:
+                print("[INSPECT] Deselected track.")
+
+    if not args.headless:
+        cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+        cv2.setMouseCallback(window_name, on_mouse_click)
+        print("[INFO] Interactive Window Controls:")
+        print("  - Click '[X]' button or press 'q' / ESC to quit")
+        print("  - Press Spacebar to Pause / Resume playback")
+        print("  - Click on any tracked bounding box to inspect/select")
+        print("  - Press 'd' to clear tracks, 'h' to toggle heatmap, 's' to save snapshot")
+
+    # 8. Main Tracking & Analytics Loop
     frame_count = 0
     start_time = time.time()
     measured_fps = 0.0
     fps_history = []
+    window_closed = False
 
     print("[INFO] Starting pipeline execution...")
     with video_source as vs:
         try:
-            while True:
+            while not window_closed:
+                # Handle paused state
+                if paused and not args.headless:
+                    key = cv2.waitKey(30) & 0xFF
+                    if key in (ord("q"), 27):
+                        print("[INFO] Quit requested by user.")
+                        break
+                    try:
+                        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                            print("[INFO] Window closed via [X] button.")
+                            break
+                    except Exception:
+                        print("[INFO] Window closed via [X] button.")
+                        break
+                    if key == ord(" "):
+                        paused = False
+                        print("[INFO] Playback resumed.")
+                    continue
+
                 t0 = time.time()
                 ret, frame = vs.read(timeout=2.0)
                 if not ret or frame is None:
@@ -312,6 +396,7 @@ def main():
 
                 # Step B: Multi-Object Tracking
                 tracks = tracker.update(detections, timestamp=t0)
+                current_tracks = tracks
 
                 # Step C: Analytics (Tripwires, Zones, Heatmap)
                 analytics_telemetry = analytics.update(tracks, timestamp=t0)
@@ -327,6 +412,14 @@ def main():
                     draw_hud=vis_cfg.get("draw_hud", True),
                     fps=measured_fps,
                 )
+
+                # Highlight selected track if inspected
+                if selected_track_id and selected_track_id in tracks:
+                    sel_trk = tracks[selected_track_id]
+                    sx, sy, sw, sh = sel_trk.bbox
+                    cv2.rectangle(annotated, (sx - 3, sy - 3), (sx + sw + 3, sy + sh + 3), (255, 255, 0), 2)
+                    sel_label = "INSPECTING #{} [Dwell: {:.1f}s]".format(selected_track_id, sel_trk.dwell_time)
+                    cv2.putText(annotated, sel_label, (sx, max(15, sy - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 
                 # Record frame if output writer active
                 if writer is not None:
@@ -357,13 +450,30 @@ def main():
                     if 0 < args.frames <= frame_count:
                         break
                 else:
-                    cv2.imshow("Intelligent Tracker — Analytics", annotated)
+                    cv2.imshow(window_name, annotated)
+
                     key = cv2.waitKey(1) & 0xFF
-                    if key == ord("q"):
+                    if key in (ord("q"), 27):
                         print("[INFO] Quit requested by user.")
                         break
+
+                    # Check if window was closed via the [X] close button immediately after waitKey
+                    try:
+                        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                            print("[INFO] Window closed via [X] button.")
+                            window_closed = True
+                            break
+                    except Exception:
+                        print("[INFO] Window closed via [X] button.")
+                        window_closed = True
+                        break
+
+                    if key == ord(" "):
+                        paused = not paused
+                        print("[INFO] Playback {}".format("paused" if paused else "resumed"))
                     elif key == ord("d"):
                         tracker.reset()
+                        selected_track_id = None
                         print("[INFO] Tracks cleared.")
                     elif key == ord("h"):
                         show_heatmap = not show_heatmap
@@ -378,7 +488,7 @@ def main():
         except KeyboardInterrupt:
             print("\n[INFO] Stopped by user (KeyboardInterrupt).")
 
-    # 8. Clean Shutdown & Summary
+    # 9. Clean Shutdown & Summary
     elapsed = time.time() - start_time
     final_fps = frame_count / elapsed if elapsed > 0 else 0.0
 
@@ -388,6 +498,8 @@ def main():
 
     if not args.headless:
         cv2.destroyAllWindows()
+        for _ in range(5):
+            cv2.waitKey(1)
 
     summary = analytics.export_summary()
     print("=" * 65)

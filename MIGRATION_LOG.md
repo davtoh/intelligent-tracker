@@ -247,6 +247,9 @@
   - Analytics unit tests: `tests/test_analytics.py` -> **5/5 OK (0.06s)**.
   - Detector unit tests: `tests/test_detectors.py` -> **25/25 OK (0.84s)**.
   - Core & geometry legacy tests: `tests/test_geometry.py`, `tests/test_core.py`, `tests/test_forms.py` -> **21/21 OK (1.42s)**.
+- **Hardware & GUI Stabilization Fixes (Windows Edge Cases):**
+  - **Window Close `[X]` Button**: Fixed OpenCV HighGUI event pumping sequence in `main.py`. Moving `cv2.getWindowProperty` check immediately after `cv2.waitKey(1)` prevents `cv2.imshow` from re-instantiating destroyed window handles. Added event loop flush (`for _ in range(5): cv2.waitKey(1)`) after `cv2.destroyAllWindows()`.
+  - **Webcam Driver Lock (`Error: -1072873822`)**: Enforced DirectShow (`cv2.CAP_DSHOW`) backend exclusively on Windows for webcams in `video.py` and `periferials.py`, eliminating async COM device locks from `cap_msmf.cpp`. Added 15-frame transient read retry to prevent unnecessary device teardown on momentary exposure/frame drops, accompanied by clean driver release teardown delays.
 - **Pipeline Benchmarks:**
   - `main.py --config configs/demo.yaml --headless --frames 30` -> 29.1 FPS (Mock + Synthetic).
   - `main.py --config configs/demo.yaml --detector yolov8 --headless --frames 30` -> 16.6 FPS (YOLOv8 + Bounded buffer frame-drop).
@@ -284,14 +287,68 @@
 - If a new agent session starts:
   - Working directory: `g:\Mi unidad\projects\products\intelligent_tracker`
   - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
-  - Completed Milestones: Milestone 1, Milestone 2, Milestone 3 (all passing 63 tests).
-  - Next task to execute: **Milestone 4 — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database**.
-  - Review `milestone_plan.md` (lines 151-210) and `TODO_MODERNIZATION.md` (lines 68-87) for Milestone 4 requirements:
-    - 4a: Persistent SQLite database manager (`intelligent_tracker/database.py`).
-    - 4b: Visual feature descriptors and Re-ID embeddings (`intelligent_tracker/reid.py`).
-    - 4c: Screen selection and interactive entity tagging (`intelligent_tracker/interactive.py`).
-    - 4d: Gallery matcher & re-appearance engine (`intelligent_tracker/matcher.py`).
-    - 4e: Offline video recording indexer & occurrence analytics (`intelligent_tracker/batch.py`).
+
+
+---
+
+## [Hardware & GUI Stabilization: Camera Auto-Detection & DirectShow Driver Unbind Cooldown] - 2026-10-23
+
+### 1. Objectives & Scope
+- **DirectShow Unbind Race Condition Resolution**:
+  - Diagnosed a race condition on Windows where probing device indices with DirectShow (`cv2.CAP_DSHOW`) left the kernel UVC device handle in a brief unbinding transition (~0.35s).
+  - When `find_first_real_camera` probed device index `0` and immediately released it with only a `0.05s` delay, a subsequent `cv2.VideoCapture(0, cv2.CAP_DSHOW)` in `VideoSource` found index `0` momentarily locked; DirectShow silently routed capture to the next available filter in the category (OBS Virtual Camera at index `1`).
+  - Added an unbind cooldown of `0.45s` on Windows in `find_first_real_camera` and `find_physical_cameras`, plus a transition settle check on index 0 to ensure deterministic, exclusive binding to the physical camera.
+- **Physical vs Virtual Camera Discrimination**:
+  - `is_physical_camera(cap)`: Distinguishes physical UVC hardware webcams from virtual software devices (OBS Virtual Camera, GoPro Webcam, ManyCam) by querying UVC hardware sensor registers (`CONTRAST`, `SHARPNESS`, `GAIN`, `SATURATION`, `BRIGHTNESS`). Virtual cameras return `-1.0` for all hardware registers.
+  - `resolve_camera_source(source)`: Automatically resolves `'real'`, `'auto'`, `'physical'`, `'hardware'`, or `'webcam'` to the first verified physical webcam, emitting clear console notifications (`[INFO] Auto-detected real physical camera at device index #0`), while warning and falling back safely to index `0` when disconnected (`[WARN] No physical hardware camera found with real data; defaulting to device index 0.`). Preserves numeric indices (`0`, `1`) deterministically.
+- **Interactive OpenCV HUD & Screen Inspection (`--gui opencv`)**:
+  - Left-click on any tracked bounding box in the GUI to inspect target telemetry (Track ID, label, confidence, dwell duration in seconds, velocity). Click in empty space to deselect.
+  - Spacebar: Real-time pause/resume without resetting tracking state.
+  - `d`: Clear/reset tracks and active target selection.
+  - Window `[X]` button / `q` / `ESC`: HighGUI event loop flushing and clean termination.
+  - Dual GUI support: `--gui opencv` (OpenCV HUD) and `--gui forms` (legacy Matplotlib navigation toolbar).
+- **Documentation Updates**:
+  - `SETUP_GUIDE.md`: Updated Section 6 with `--source real` auto-detection behavior, dual GUI flags, interactive controls, and scenarios matrix.
+  - `README.rst`: Updated Key Capabilities, CLI options table, scenarios matrix, and interactive keyboard/mouse controls.
+  - `documentation/intelligent_tracker.rst`: Added Sphinx automodules for `video`, `tracker`, and `analytics`.
+
+### 2. Files Touched
+- `intelligent_tracker/video.py` (Unbind cooldowns, settle delays, console logging, physical camera verification)
+- `intelligent_tracker/periferials.py` (DirectShow backend alignment on Windows)
+- `main.py` (GUI modes, interactive mouse selection callback, spacebar pause, [X] event pumping)
+- `tests/test_video.py` (Tests for `is_physical_camera`, `resolve_camera_source`, immediate unblocking)
+- `SETUP_GUIDE.md` (CLI tables, scenarios matrix, hardware auto-detect guide, interactive controls)
+- `README.rst` (CLI table, scenarios matrix, GUI controls)
+- `documentation/intelligent_tracker.rst` (Sphinx submodule references)
+- `TODO_MODERNIZATION.md` (Updated task tracking)
+- `milestone_plan.md` (Updated Milestone 4 interactive GUI specifications)
+- `MIGRATION_LOG.md` (Persistent task log)
+
+### 3. State & Checkpoint
+- **Status:** All unit tests green (67/67 OK in 5.3s).
+- **Automated Verification:**
+  - `.\.venv\Scripts\python.exe -m unittest discover tests` -> **67/67 OK (5.32s)**.
+  - `.\.venv\Scripts\python.exe -m unittest tests/test_video.py` -> **9/9 OK (0.38s)**.
+- **Next Phase:**
+  - Milestone 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database (`intelligent_tracker/database.py`, `intelligent_tracker/reid.py`).
+
+### 4. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run full test suite (67 tests)
+  $env:MPLBACKEND="Agg"
+  .\.venv\Scripts\python.exe -m unittest discover tests
+
+  # 2. Run camera auto-detection with real physical hardware webcam
+  .\.venv\Scripts\python.exe main.py --detector yolo11 --source real --classes person --conf 0.35
+
+  # 3. Run interactive GUI with mouse click inspection and spacebar pause
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml
+
+  # 4. Run with legacy Matplotlib forms GUI
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --gui forms
+  ```
+
 
 
 

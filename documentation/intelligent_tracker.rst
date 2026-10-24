@@ -76,6 +76,30 @@ intelligent\_tracker.persistence module
     :undoc-members:
     :show-inheritance:
 
+intelligent\_tracker.video module
+---------------------------------
+
+.. automodule:: intelligent_tracker.video
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.tracker module
+-----------------------------------
+
+.. automodule:: intelligent_tracker.tracker
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.analytics module
+-------------------------------------
+
+.. automodule:: intelligent_tracker.analytics
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

@@ -94,6 +94,60 @@ class TestVideoSource(unittest.TestCase):
         finally:
             vs.stop()
 
+    def test_video_source_wait_ready_unblocks_immediately(self):
+        vs = VideoSource(source="synthetic", width=320, height=240)
+        t0 = time.time()
+        ready = vs.wait_ready(timeout=3.0)
+        elapsed = time.time() - t0
+        try:
+            self.assertTrue(ready)
+            # Synthetic source should unblock virtually immediately (< 0.5s), never waiting 3.0s
+            self.assertLess(elapsed, 0.5)
+            self.assertTrue(vs.is_alive())
+        finally:
+            vs.stop()
+
+    def test_video_source_stop_releases_cleanly(self):
+        vs = VideoSource(source="synthetic", width=320, height=240)
+        vs.start()
+        self.assertTrue(vs.is_alive())
+        t0 = time.time()
+        vs.stop()
+        elapsed = time.time() - t0
+        self.assertFalse(vs.is_alive())
+        self.assertLess(elapsed, 1.0)
+
+    def test_is_physical_camera_detection(self):
+        from intelligent_tracker.video import is_physical_camera
+        import cv2
+
+        class MockPhysicalCap(object):
+            def isOpened(self):
+                return True
+            def get(self, prop):
+                if prop == cv2.CAP_PROP_BRIGHTNESS:
+                    return 10.0
+                return -1.0
+
+        class MockVirtualCap(object):
+            def isOpened(self):
+                return True
+            def get(self, prop):
+                return -1.0
+
+        self.assertTrue(is_physical_camera(MockPhysicalCap()))
+        self.assertFalse(is_physical_camera(MockVirtualCap()))
+
+    def test_resolve_camera_source_agnostic_numeric(self):
+        from intelligent_tracker.video import resolve_camera_source
+        # Numeric indices must be strictly preserved without modification
+        self.assertEqual(resolve_camera_source(0), 0)
+        self.assertEqual(resolve_camera_source("0"), 0)
+        self.assertEqual(resolve_camera_source(1), 1)
+        self.assertEqual(resolve_camera_source("1"), 1)
+        self.assertEqual(resolve_camera_source("synthetic"), "synthetic")
+        self.assertEqual(resolve_camera_source("test.mp4"), "test.mp4")
+
 
 if __name__ == "__main__":
     unittest.main()

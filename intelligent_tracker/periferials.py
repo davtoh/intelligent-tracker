@@ -81,8 +81,9 @@ class UnifiedCamera(object):
         if camera_num in ("mock", "synthetic"):
             _camera = MockVideoCapture()
         elif camera_num is None:
+            backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
             for idx in range(5):
-                _cam = cv2.VideoCapture(idx)
+                _cam = cv2.VideoCapture(idx, backend) if backend else cv2.VideoCapture(idx)
                 if _cam.isOpened():
                     _camera = _cam
                     camera_num = idx
@@ -96,7 +97,8 @@ class UnifiedCamera(object):
                 else:
                     raise CameraError("no camera found")
         else:
-            _camera = cv2.VideoCapture(camera_num)
+            backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
+            _camera = cv2.VideoCapture(camera_num, backend) if backend else cv2.VideoCapture(camera_num)
             if not _camera.isOpened() and allow_mock:
                 print("Notice: Camera {} failed to open. Falling back to MockVideoCapture.".format(camera_num))
                 _camera = MockVideoCapture()
@@ -156,8 +158,14 @@ class UnifiedCamera(object):
             yield self.capture(rawCapture, format, use_video_port)
 
     def close(self):
-        self._camera.release()
+        if self._camera is not None:
+            try:
+                self._camera.release()
+            except Exception:
+                pass
         self._closed = True
+        if sys.platform.startswith("win"):
+            sleep(0.05)
 
     def closed(self):
         return self._closed

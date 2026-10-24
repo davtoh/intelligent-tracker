@@ -78,9 +78,11 @@
   - Lightweight ONNX Re-ID feature extractor (`osnet_x0_25.onnx` / `mobilenetv3_reid.onnx`).
   - Ultra-lightweight spatial HSV color histogram fallback for Raspberry Pi CPU.
   - Cosine similarity matching against enrolled gallery in SQLite.
-- [ ] **Interactive Screen Selection & Tagging**:
-  - Mouse click on bounding box in live view or paused recording to select object.
+- [ ] **Interactive Screen Selection, Tagging & GUI Controls**:
+  - Mouse click on bounding box in live or paused view to inspect/select object.
   - Dialog / prompt to assign name (e.g. "Forklift 02", "Alice"), category ("VIP", "Staff", "Authorized"), and notes.
+  - Interactive on-screen controls (Play/Pause, Step, Heatmap toggle, Snapshot, drag-and-drop ROI polygon/tripwire definition).
+  - Dual GUI support: High-speed OpenCV HUD (`--gui opencv`) and Matplotlib navigation toolbar (`--gui forms`).
 - [ ] **Cross-Session Re-Appearance Engine**:
   - Automatic identification when previously enrolled entity appears again in live stream or different camera.
   - Audit logging of all sightings into database.

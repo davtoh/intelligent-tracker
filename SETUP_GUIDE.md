@@ -175,11 +175,14 @@ $env:MPLBACKEND="Agg"
 # Windows: Run YAML-configured synthetic demo with tripwires & zones
 .\.venv\Scripts\python.exe main.py --config configs/demo.yaml
 
-# Windows: Run YOLOv8 on default webcam with real-time heatmap overlay
-.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0 --heatmap
+# Windows: Auto-detect real physical hardware webcam (filtering out OBS/GoPro virtual cameras)
+.\.venv\Scripts\python.exe main.py --detector yolov8 --source real --heatmap
 
-# Filter for specific classes (e.g., person only) with high confidence
-.\.venv\Scripts\python.exe main.py --detector yolov8 --classes person --conf 0.40
+# Windows: Filter for specific classes (e.g., person only) with high confidence on real camera
+.\.venv\Scripts\python.exe main.py --detector yolo11 --source real --classes person --conf 0.35
+
+# Windows: Run with legacy Matplotlib navigation toolbar GUI
+.\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --gui forms
 
 # Headless benchmark with automated annotated video recording
 .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 60 --output demo_recording.mp4
@@ -194,17 +197,19 @@ $env:MPLBACKEND="Agg"
 ### Scenario Combinations Matrix
 | Scenario / Objective | Detector | Tracker | Source (`--source`) | Config File | Key Parameters | Mode | Full Runnable PowerShell Command |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Physical Webcam Auto-Detect** | `yolov8` | `centroid` | `real` | - | `--classes person --conf 0.40` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source real --classes person --conf 0.40` |
 | **Synthetic CI Smoke Test** | `mock` | `centroid` | `synthetic` | `configs/demo.yaml` | `--headless --frames 30` | Headless (30f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 30` |
 | **YOLOv8 Edge AI Benchmark** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--detector yolov8 --headless --frames 60` | Headless (60f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 60` |
 | **YOLO11 Performance Test** | `yolo11` | `centroid` | `synthetic` | `configs/demo.yaml` | `--detector yolo11 --headless --frames 100` | Headless (100f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolo11 --headless --frames 100` |
 | **SORT Kalman Tracking Benchmark** | `mock` | `sort` | `synthetic` | `configs/demo.yaml` | `--tracker sort --headless --frames 60` | Headless (60f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --tracker sort --headless --frames 60` |
 | **Headless Video Export** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--output recording.mp4 --headless --frames 90` | Headless Record | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --output recording.mp4 --headless --frames 90` |
 | **Retail Person Counting (Webcam)** | `yolov8` | `centroid` | `0` | - | `--classes person --conf 0.40` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source 0 --classes person --conf 0.40` |
-| **Store Foot-Traffic & Heatmap** | `yolov8` | `centroid` | `0` | `configs/retail.yaml` | `--heatmap` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --config configs/retail.yaml --source 0 --heatmap` |
+| **Store Foot-Traffic & Heatmap** | `yolov8` | `centroid` | `real` | `configs/retail.yaml` | `--heatmap` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --config configs/retail.yaml --source real --heatmap` |
 | **RTSP IP Camera Surveillance** | `yolov8` | `centroid` | `rtsp://...` | `configs/retail.yaml` | - | Interactive / Stream | `.\.venv\Scripts\python.exe main.py --config configs/retail.yaml --source rtsp://192.168.1.100/stream1` |
 | **Vehicle / Traffic Monitoring** | `yolov8` | `centroid` | `traffic.mp4` | - | `--classes car truck bus --conf 0.50` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source traffic.mp4 --classes car truck bus --conf 0.50` |
-| **Legacy Face Tracking** | `face` | `centroid` | `0` | - | - | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector face --source 0` |
-| **Color Blob / Marker Tracking** | `color` | `centroid` | `0` | - | - | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector color --source 0` |
+| **Matplotlib Forms Toolbar GUI** | `yolov8` | `centroid` | `synthetic` | - | `--gui forms` | Matplotlib GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --gui forms` |
+| **Legacy Face Tracking** | `face` | `centroid` | `real` | - | - | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector face --source real` |
+| **Color Blob / Marker Tracking** | `color` | `centroid` | `real` | - | - | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector color --source real` |
 | **Headless Remote Server / RPi** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--headless --frames 120` | Headless Offscreen | `$env:MPLBACKEND="Agg"; .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 120` |
 
 ### CLI Command Options
@@ -213,7 +218,8 @@ $env:MPLBACKEND="Agg"
 | `--config` | `None` | Path to YAML/JSON configuration file (e.g. `configs/demo.yaml`, `configs/retail.yaml`) |
 | `--detector` | `haar` | Detection architecture (`yolov8`, `yolo11`, `haar`, `mock`, `face`, `eye`, `color`) |
 | `--tracker` | `centroid` | Multi-object tracking algorithm (`centroid`, `sort`) |
-| `--source` | `0` | Camera index (`0`, `1`), `synthetic`/`mock`, video file path, or RTSP URL |
+| `--source` | `0` | Video source: `'real'` / `'auto'` (auto-detects real physical webcam with sensor data), camera index (`0`, `1`), `'synthetic'` / `'mock'`, video file path, or RTSP URL |
+| `--gui` | `opencv` | GUI interface backend: `'opencv'` (high-speed HUD with mouse track inspection) or `'forms'` (legacy Matplotlib toolbar) |
 | `--resolution`| `640x480` | Input resolution (`WIDTHxHEIGHT`) |
 | `--framerate` | `30` | Target processing frame rate |
 | `--conf` | `0.25` | Confidence threshold for AI detectors (`0.0` to `1.0`) |
@@ -223,11 +229,18 @@ $env:MPLBACKEND="Agg"
 | `--headless` | `False` | Run without GUI window (ideal for CI/CD, remote SSH, and benchmarking) |
 | `--frames` | `60` | Number of frames to process in headless mode (`0` = infinite) |
 
-### Interactive GUI Controls:
-- `q`: Quit active window and finalize telemetry.
-- `d`: Clear / reset active tracks.
-- `h`: Toggle live 2D spatial occupancy heatmap overlay.
-- `s`: Save instantaneous snapshot image (`snapshot_<timestamp>.png`) and analytics report (`analytics_report_<timestamp>.json`).
+### Interactive GUI Controls (OpenCV HUD)
+- **Mouse Left-Click**: Click on any tracked bounding box in the video window to inspect/select that entity. Highlights the target with a cyan bounding border and displays real-time track telemetry (Track ID, label, detection confidence, dwell duration in seconds, and velocity vector). Click in an empty area to deselect.
+- **Spacebar**: Pause / Resume video playback in real time without dropping tracker state.
+- **`d`**: Clear / reset active tracks and deselect any active target.
+- **`h`**: Toggle live 2D spatial occupancy heatmap overlay.
+- **`s`**: Save instantaneous snapshot image (`snapshot_<timestamp>.png`) and analytics report (`analytics_report_<timestamp>.json`).
+- **`[X]` Window Close Button / `q` / `ESC`**: Clean shutdown with HighGUI event loop flushing.
+
+### Hardware Camera Auto-Detection Details (`--source real`)
+- **Physical vs. Virtual Device Discrimination**: Real USB/UVC hardware cameras expose hardware sensor control registers (`cv2.CAP_PROP_CONTRAST`, `cv2.CAP_PROP_SHARPNESS`, `cv2.CAP_PROP_GAIN`, `cv2.CAP_PROP_SATURATION`, `cv2.CAP_PROP_BRIGHTNESS`), which return values `>= 0.0`. Software virtual cameras (e.g., OBS Virtual Camera, GoPro Webcam, ManyCam) return `-1.0` for all hardware registers.
+- **Agnostic & Deterministic Fallback**: Numeric camera indices (e.g. `--source 0`, `--source 1`) are strictly preserved as configured. When `--source real` is specified and no physical camera is detected, the engine emits a clear warning (`[WARN] No physical hardware camera found with real data; defaulting to device index 0.`) and safely defaults to index `0`.
+- **Windows DirectShow Stabilization**: Incorporates an unbind cooldown (`0.45s`) between probing and stream acquisition, avoiding DirectShow kernel device locks and preventing silent fallback to virtual devices.
 
 ---
 

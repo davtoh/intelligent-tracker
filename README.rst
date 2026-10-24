@@ -140,7 +140,9 @@ CLI Options
 +-----------------+---------------+--------------------------------------------------------------------------+
 | ``--tracker``   | ``centroid``  | Multi-object tracker: ``centroid`` or ``sort`` (Kalman filter)           |
 +-----------------+---------------+--------------------------------------------------------------------------+
-| ``--source``    | ``0``         | Camera index (``0``, ``1``), ``synthetic``, video file, or RTSP URL      |
+| ``--source``    | ``0``         | Camera index, ``real`` (auto-detects physical webcam), ``synthetic``, etc|
++-----------------+---------------+--------------------------------------------------------------------------+
+| ``--gui``       | ``opencv``    | GUI backend: ``opencv`` (interactive HUD) or ``forms`` (Matplotlib)     |
 +-----------------+---------------+--------------------------------------------------------------------------+
 | ``--resolution``| ``640x480``   | Frame resolution as ``WIDTHxHEIGHT``                                     |
 +-----------------+---------------+--------------------------------------------------------------------------+
@@ -166,6 +168,8 @@ Scenario Combinations Matrix
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | Scenario / Objective                | Detector   | Tracker    | Source            | Config File         | Key Parameters                                  | Mode                | Example Runnable Command                                                                           |
 +=====================================+============+============+===================+=====================+=================================================+=====================+====================================================================================================+
+| **Physical Webcam Auto-Detect**     | ``yolov8`` | ``centroid``| ``real``          | -                   | ``--classes person --conf 0.40``                | Interactive GUI     | ``python main.py --detector yolov8 --source real --classes person --conf 0.40``                     |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Synthetic CI Smoke Test**         | ``mock``   | ``centroid``| ``synthetic``    | ``configs/demo.yaml``| ``--headless --frames 30``                     | Headless (30f)      | ``python main.py --config configs/demo.yaml --headless --frames 30``                                |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **YOLOv8 Edge AI Benchmark**        | ``yolov8`` | ``centroid``| ``synthetic``    | ``configs/demo.yaml``| ``--detector yolov8 --headless --frames 60``     | Headless (60f)      | ``python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 60``              |
@@ -178,15 +182,17 @@ Scenario Combinations Matrix
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Retail Person Counting** (Webcam) | ``yolov8`` | ``centroid``| ``0``             | -                   | ``--classes person --conf 0.40``                | Interactive GUI     | ``python main.py --detector yolov8 --source 0 --classes person --conf 0.40``                        |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
-| **Store Foot-Traffic & Heatmap**    | ``yolov8`` | ``centroid``| ``0``             | ``configs/retail.yaml``| ``--heatmap``                                | Interactive GUI     | ``python main.py --config configs/retail.yaml --source 0 --heatmap``                                |
+| **Store Foot-Traffic & Heatmap**    | ``yolov8`` | ``centroid``| ``real``          | ``configs/retail.yaml``| ``--heatmap``                                | Interactive GUI     | ``python main.py --config configs/retail.yaml --source real --heatmap``                             |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **RTSP IP Camera Surveillance**     | ``yolov8`` | ``centroid``| ``rtsp://...``    | ``configs/retail.yaml``| -                                            | Interactive / Stream| ``python main.py --config configs/retail.yaml --source rtsp://192.168.1.100/stream1``               |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Vehicle / Traffic Monitoring**    | ``yolov8`` | ``centroid``| ``traffic.mp4``   | -                   | ``--classes car truck bus --conf 0.50``         | Interactive GUI     | ``python main.py --detector yolov8 --source traffic.mp4 --classes car truck bus --conf 0.50``       |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
-| **Legacy Face Tracking**            | ``face``   | ``centroid``| ``0``             | -                   | -                                               | Interactive GUI     | ``python main.py --detector face --source 0``                                                        |
+| **Matplotlib Forms Toolbar GUI**    | ``yolov8`` | ``centroid``| ``synthetic``     | -                   | ``--gui forms``                                 | Matplotlib GUI      | ``python main.py --detector yolov8 --source synthetic --gui forms``                                 |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
-| **Color Blob / Marker Tracking**    | ``color``  | ``centroid``| ``0``             | -                   | -                                               | Interactive GUI     | ``python main.py --detector color --source 0``                                                       |
+| **Legacy Face Tracking**            | ``face``   | ``centroid``| ``real``          | -                   | -                                               | Interactive GUI     | ``python main.py --detector face --source real``                                                     |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Color Blob / Marker Tracking**    | ``color``  | ``centroid``| ``real``          | -                   | -                                               | Interactive GUI     | ``python main.py --detector color --source real``                                                    |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Headless Remote Server / RPi**    | ``yolov8`` | ``centroid``| ``synthetic``     | ``configs/demo.yaml``| ``--headless --frames 120``                     | Headless Offscreen  | ``$env:MPLBACKEND="Agg"; python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 120`` |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
@@ -194,10 +200,12 @@ Scenario Combinations Matrix
 Interactive GUI Controls
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``q``: Quit active window and finalize telemetry report.
-- ``d``: Clear / reset active tracks.
+- **Mouse Click**: Left-click on any tracked bounding box in the GUI window to inspect/select that entity and display real-time telemetry (ID, label, confidence, dwell time, velocity). Click in empty space to deselect.
+- **Spacebar**: Pause / Resume video playback without losing tracking states.
+- ``d``: Clear / reset active tracks and deselect.
 - ``h``: Toggle live 2D spatial occupancy heatmap overlay.
 - ``s``: Save instantaneous snapshot image (``snapshot_<timestamp>.png``) and analytics report (``analytics_report_<timestamp>.json``).
+- ``[X]`` Close Button / ``q`` / ``ESC``: Gracefully exit application with highgui event flushing.
 
 
 Running the Test Suite

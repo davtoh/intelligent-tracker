@@ -169,14 +169,21 @@ $env:MPLBACKEND="Agg"
   - **`ColorHistogramExtractor`**: Ultra-lightweight CPU fallback using spatial-grid HSV color histograms (zero neural network dependency, pure NumPy, sub-millisecond execution on Raspberry Pi). Re-connects directly to the original project's descriptor vision (`self.descriptors`).
 - Cosine similarity matching: `similarity = np.dot(gallery_embeddings, query_vector)`.
 
-**4c — Screen Selection & Interactive Tagging (`intelligent_tracker/interactive.py`):**
-- **Live / Paused Video Screen Selection**:
+**4c — Screen Selection, Interactive Tagging & GUI Controls (`intelligent_tracker/interactive.py`):**
+- **Interactive Screen Selection & Inspection**:
   - Mouse click on any tracked bounding box in the GUI / display window to select and inspect the target.
+  - Real-time inspector overlay displaying track ID, classification confidence, trajectory, dwell duration, and speed.
+- **Entity Enrollment Dialog**:
   - Interactive prompt / dialog: assign name (e.g. `"Forklift #02"`, `"Alice"`, `"White Sedan ABC-123"`), assign category/tags (`"Staff"`, `"VIP"`, `"Authorized"`), add notes.
   - Instantly enrolls entity, thumbnail crop, and feature embedding vector into the SQLite gallery.
+- **Interactive Control Bar & Video Navigation**:
+  - On-screen / HUD controls: Play, Pause (Spacebar), Step frame-by-frame, Clear tracks (`d`), Heatmap toggle (`h`), and Snapshot export (`s`).
+  - Interactive ROI drawing: mouse drag-and-drop to define new virtual tripwires or zone polygons directly on the live video window.
+  - Dual GUI support: High-performance OpenCV HUD (`--gui opencv`) and Classical Matplotlib navigation toolbar (`--gui forms`).
 - **Python API**:
   - `db.enroll_entity(name, category, frame, bbox, notes)` for headless scripts, REST APIs, or dashboard integration.
   - Ability to re-assign or merge tracks if user corrects an identification.
+
 
 **4d — Gallery Matcher & Re-Appearance Engine (`intelligent_tracker/matcher.py`):**
 - Combines short-term frame-to-frame tracking (`CentroidTracker`) with long-term gallery Re-ID:

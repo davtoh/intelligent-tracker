@@ -24,6 +24,7 @@ import os
 import sys
 import time
 import queue
+import atexit
 import logging
 import threading
 from typing import Optional, Tuple, Union, Dict, Any
@@ -32,6 +33,103 @@ import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def is_physical_camera(cap: cv2.VideoCapture) -> bool:
+    """
+    Determine if an open VideoCapture corresponds to a physical hardware webcam
+    or a virtual software camera (OBS Virtual Camera, GoPro, ManyCam, etc.).
+    Physical UVC cameras implement hardware sensor control registers (Brightness, Contrast, Sharpness, etc.).
+    Virtual cameras return -1.0 for all hardware control registers.
+    """
+    if not cap or not cap.isOpened():
+        return False
+    for prop in (cv2.CAP_PROP_BRIGHTNESS, cv2.CAP_PROP_CONTRAST, cv2.CAP_PROP_SHARPNESS, cv2.CAP_PROP_GAIN, cv2.CAP_PROP_SATURATION):
+        val = cap.get(prop)
+        if val >= 0.0:
+            return True
+    return False
+
+
+def find_physical_cameras(max_devices: int = 5) -> list:
+    """
+    Probe camera device indices (0..max_devices-1) and return indices of physical hardware webcams.
+    """
+    physical_indices = []
+    backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
+    for idx in range(max_devices):
+        cap = cv2.VideoCapture(idx, backend) if backend else cv2.VideoCapture(idx)
+        if cap.isOpened():
+            if is_physical_camera(cap):
+                physical_indices.append(idx)
+            cap.release()
+            if sys.platform.startswith("win"):
+                time.sleep(0.1)
+    if physical_indices and sys.platform.startswith("win"):
+        time.sleep(0.35)
+    return physical_indices
+
+
+def find_first_real_camera(max_devices: int = 5) -> Optional[int]:
+    """
+    Probe camera device indices (0..max_devices-1) and return the index of the first
+    physical hardware camera producing valid video frame data.
+    """
+    backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
+    for idx in range(max_devices):
+        cap = cv2.VideoCapture(idx, backend) if backend else cv2.VideoCapture(idx)
+        if cap.isOpened() and not is_physical_camera(cap) and idx == 0 and sys.platform.startswith("win"):
+            # On Windows, if a physical camera was recently released by a previous run,
+            # DirectShow may momentarily route index 0 to a virtual camera while the driver unbinds.
+            # Give it a brief settle delay and re-check index 0.
+            cap.release()
+            time.sleep(0.4)
+            cap = cv2.VideoCapture(0, backend)
+
+        if cap.isOpened():
+            is_phys = is_physical_camera(cap)
+            if is_phys:
+                ret, frame = cap.read()
+                cap.release()
+                if sys.platform.startswith("win"):
+                    # DirectShow COM driver on Windows requires ~0.45s cooldown to unbind hardware
+                    # before a subsequent VideoCapture can reliably re-acquire the physical camera.
+                    time.sleep(0.45)
+                else:
+                    time.sleep(0.05)
+                if ret and frame is not None:
+                    return idx
+            cap.release()
+            if sys.platform.startswith("win"):
+                time.sleep(0.1)
+            else:
+                time.sleep(0.05)
+    return None
+
+
+def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
+    """
+    Resolve camera source string or integer:
+    - If 'auto', 'real', 'physical', 'hardware', or 'webcam':
+      Automatically finds and returns the index of the first camera delivering real physical sensor data.
+    - If a numeric index (e.g. 0, 1, '0', '1'):
+      Strictly preserves the configured index without alteration, ensuring deterministic and agnostic behavior.
+    - If synthetic/mock/file/rtsp:
+      Preserved as-is.
+    """
+    s_str = str(source).strip().lower()
+    if s_str in ("auto", "real", "physical", "hardware", "webcam"):
+        real_idx = find_first_real_camera(max_devices=5)
+        if real_idx is not None:
+            logger.info("Auto-detected real physical camera at device index #%d", real_idx)
+            print("[INFO] Auto-detected real physical camera at device index #{}".format(real_idx))
+            return real_idx
+        logger.warning("No physical hardware camera found with real data; defaulting to device index 0.")
+        print("[WARN] No physical hardware camera found with real data; defaulting to device index 0.")
+        return 0
+    elif s_str.isdigit():
+        return int(s_str)
+    return source
 
 
 class SyntheticFrameGenerator(object):
@@ -158,6 +256,8 @@ class VideoSource(object):
         self._cap = None
         self._thread = None
         self._running = False
+        self._ready_event = threading.Event()
+        self._first_frame_read = False
         self._lock = threading.Lock()
         self._queue = queue.Queue(maxsize=self.buffer_size)
 
@@ -217,6 +317,12 @@ class VideoSource(object):
                 # Force TCP transport if possible to eliminate UDP packet loss artifacts
                 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;102400"
                 self._cap = cv2.VideoCapture(str(self.source), cv2.CAP_FFMPEG)
+            elif self.is_webcam and sys.platform.startswith("win"):
+                # On Windows, DirectShow (CAP_DSHOW) avoids MSMF async device locks (-1072873822)
+                self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
+                if not self._cap or not self._cap.isOpened():
+                    time.sleep(0.35)
+                    self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
             else:
                 self._cap = cv2.VideoCapture(self.source)
 
@@ -246,8 +352,8 @@ class VideoSource(object):
             self._is_connected = False
             return False
 
-    def start(self) -> "VideoSource":
-        """Start background capture thread."""
+    def start(self, wait_for_ready: bool = True, timeout: float = 3.0) -> "VideoSource":
+        """Start background capture thread and wait for first valid frame without arbitrary sleeping."""
         with self._lock:
             if self._running:
                 return self
@@ -257,87 +363,136 @@ class VideoSource(object):
                 raise RuntimeError("Could not open video source: {}".format(self.source))
 
             self._running = True
+            self._first_frame_read = False
+            self._ready_event.clear()
             self._start_time = time.time()
             self._thread = threading.Thread(target=self._capture_worker, name="VideoSourceWorker", daemon=True)
             self._thread.start()
-            return self
+            try:
+                atexit.register(self.stop)
+            except Exception:
+                pass
+
+        if wait_for_ready:
+            self.wait_ready(timeout=timeout)
+
+        return self
+
+    def wait_ready(self, timeout: float = 3.0) -> bool:
+        """
+        Wait until the stream delivers its first valid frame, unblocking immediately when ready.
+        Does NOT sleep for the entire timeout: returns in ~700ms on webcam cold start.
+        """
+        if not self._running:
+            self.start(wait_for_ready=False)
+        return self._ready_event.wait(timeout=timeout)
 
     def _capture_worker(self):
-        """Worker thread that continuously polls frames and buffers them."""
+        """Worker thread that continuously polls frames, buffers them, and safely owns capture cleanup."""
         reconnect_attempts = 0
+        consecutive_empty = 0
         min_frame_time = (1.0 / self.fps_limit) if self.fps_limit else 0.0
 
-        while self._running:
-            loop_start = time.time()
+        try:
+            while self._running:
+                loop_start = time.time()
 
-            if not self._cap or not self._cap.isOpened():
-                self._is_connected = False
-                if self.auto_reconnect and (self.max_reconnect_attempts == 0 or reconnect_attempts < self.max_reconnect_attempts):
-                    reconnect_attempts += 1
-                    self._reconnections += 1
-                    logger.info("VideoSource '%s': Attempting reconnect #%d in %.1fs...", self.source, reconnect_attempts, self.reconnect_delay)
-                    time.sleep(self.reconnect_delay)
-                    if self._open_capture():
-                        reconnect_attempts = 0
-                        logger.info("VideoSource '%s': Successfully reconnected.", self.source)
-                    continue
-                else:
-                    logger.error("VideoSource '%s': Stream closed and reconnect exhausted.", self.source)
-                    break
+                if not self._cap or not self._cap.isOpened():
+                    self._is_connected = False
+                    if self.auto_reconnect and (self.max_reconnect_attempts == 0 or reconnect_attempts < self.max_reconnect_attempts):
+                        reconnect_attempts += 1
+                        self._reconnections += 1
+                        logger.info("VideoSource '%s': Attempting reconnect #%d in %.1fs...", self.source, reconnect_attempts, self.reconnect_delay)
+                        time.sleep(self.reconnect_delay)
+                        if self._open_capture():
+                            reconnect_attempts = 0
+                            logger.info("VideoSource '%s': Successfully reconnected.", self.source)
+                        continue
+                    else:
+                        logger.error("VideoSource '%s': Stream closed and reconnect exhausted.", self.source)
+                        break
 
-            ret, frame = self._cap.read()
+                ret, frame = self._cap.read()
 
-            if not ret or frame is None:
-                if self.is_file and self.loop_video:
-                    # Rewind video file
-                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
+                if not ret or frame is None:
+                    if self.is_file and self.loop_video:
+                        # Rewind video file
+                        self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
 
-                self._is_connected = False
-                if self.auto_reconnect and not self.is_file:
-                    reconnect_attempts += 1
-                    self._reconnections += 1
-                    time.sleep(self.reconnect_delay)
-                    if self._cap:
-                        self._cap.release()
-                    self._open_capture()
-                    continue
-                else:
-                    break
+                    if self.is_webcam:
+                        # Transient webcam frame miss: retry multiple times before tearing down hardware
+                        consecutive_empty += 1
+                        if consecutive_empty < 15:
+                            time.sleep(0.02)
+                            continue
 
-            now = time.time()
-            self._frames_read += 1
-            if self._last_frame_time is not None:
-                dt = now - self._last_frame_time
-                if dt > 0:
-                    self._frame_interval_samples.append(dt)
-                    if len(self._frame_interval_samples) > 30:
-                        self._frame_interval_samples.pop(0)
-                    avg_dt = sum(self._frame_interval_samples) / len(self._frame_interval_samples)
-                    self._measured_fps = 1.0 / avg_dt if avg_dt > 0 else 0.0
-            self._last_frame_time = now
+                    self._is_connected = False
+                    if self.auto_reconnect and not self.is_file:
+                        reconnect_attempts += 1
+                        self._reconnections += 1
+                        time.sleep(self.reconnect_delay)
+                        if self._cap:
+                            try:
+                                self._cap.release()
+                            except Exception:
+                                pass
+                            self._cap = None
+                        if sys.platform.startswith("win"):
+                            time.sleep(0.3)
+                        self._open_capture()
+                        continue
+                    else:
+                        break
 
-            # Frame-drop logic on queue saturation (keeps real-time latency zero)
-            if self._queue.full():
+                consecutive_empty = 0
+
+                # Signal readiness on the very first frame
+                if not self._first_frame_read:
+                    self._first_frame_read = True
+                    self._ready_event.set()
+
+                now = time.time()
+                self._frames_read += 1
+                if self._last_frame_time is not None:
+                    dt = now - self._last_frame_time
+                    if dt > 0:
+                        self._frame_interval_samples.append(dt)
+                        if len(self._frame_interval_samples) > 30:
+                            self._frame_interval_samples.pop(0)
+                        avg_dt = sum(self._frame_interval_samples) / len(self._frame_interval_samples)
+                        self._measured_fps = 1.0 / avg_dt if avg_dt > 0 else 0.0
+                self._last_frame_time = now
+
+                # Frame-drop logic on queue saturation (keeps real-time latency zero)
+                if self._queue.full():
+                    try:
+                        self._queue.get_nowait()
+                        self._frames_dropped += 1
+                    except queue.Empty:
+                        pass
+
                 try:
-                    self._queue.get_nowait()
+                    self._queue.put(frame, timeout=0.01)
+                except queue.Full:
                     self._frames_dropped += 1
-                except queue.Empty:
-                    pass
 
-            try:
-                self._queue.put(frame, timeout=0.01)
-            except queue.Full:
-                self._frames_dropped += 1
-
-            # FPS throttling for file replay
-            if min_frame_time > 0:
-                elapsed = time.time() - loop_start
-                sleep_dur = min_frame_time - elapsed
-                if sleep_dur > 0:
-                    time.sleep(sleep_dur)
-
-        self._is_connected = False
+                # FPS throttling for file replay
+                if min_frame_time > 0:
+                    elapsed = time.time() - loop_start
+                    sleep_dur = min_frame_time - elapsed
+                    if sleep_dur > 0:
+                        time.sleep(sleep_dur)
+        finally:
+            # Worker thread owns the release of its capture object in finally block
+            with self._lock:
+                if self._cap:
+                    try:
+                        self._cap.release()
+                    except Exception:
+                        pass
+                    self._cap = None
+                self._is_connected = False
 
     def read(self, timeout: float = 1.0) -> Tuple[bool, Optional[np.ndarray]]:
         """
@@ -384,23 +539,30 @@ class VideoSource(object):
         }
 
     def stop(self):
-        """Stop background worker and release resources."""
+        """Stop background worker and release camera hardware cleanly without cross-thread races."""
+        if not self._running and self._cap is None:
+            return
         self._running = False
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.0)
-        with self._lock:
-            if self._cap:
-                self._cap.release()
-                self._cap = None
-            self._is_connected = False
-            # Drain queue
-            while not self._queue.empty():
-                try:
-                    self._queue.get_nowait()
-                except queue.Empty:
-                    break
+            self._thread.join(timeout=2.0)
+            self._thread = None
+        # Drain queue
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        if sys.platform.startswith("win"):
+            time.sleep(0.05)
+        try:
+            atexit.unregister(self.stop)
+        except Exception:
+            pass
 
     def release(self):
+        self.stop()
+
+    def __del__(self):
         self.stop()
 
     def is_alive(self) -> bool:
@@ -412,3 +574,4 @@ class VideoSource(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
+
