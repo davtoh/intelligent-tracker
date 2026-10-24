@@ -60,6 +60,17 @@ Batch processing engine for recorded video files (``.mp4``, ``.avi``, ``.mkv``):
   - **Zone Journey**: Spatial movement across monitored zones.
   - Exports to console summary tables, JSON, and CSV formats.
 
+6. Predictive Motion Coasting & Automatic Session Re-ID
+-------------------------------------------------------
+Solves real-world detector drops, temporary occlusions, and track ID inflation (e.g. a single individual being assigned arbitrary IDs up to "Person #35" over time):
+
+- **Dead-Reckoning Trajectory Coasting**: Extrapolates bounding box positions using physical smoothed velocity vectors (:math:`\vec{p}_t = \vec{p}_{t-1} + \vec{v} \cdot \Delta t`) for up to ``coast_frames`` (default 30–45 frames / 1.0–1.5s).
+- **Track Lifecycle State Machine**: Explicit transitions across ``tentative``, ``confirmed``, ``predicting``, and ``dormant``.
+- **Automatic Session Gallery**: Automatically registers and maintains stable canonical labels (e.g. ``"Person #1"``, ``"Vehicle #2"``) in an in-memory session gallery without polluting persistent SQLite storage unless enrolled.
+- **Fused Affinity Re-Linker**: Evaluates visual Re-ID cosine similarity combined with a spatial exit proximity bonus (:math:`\text{score} = \cos(\mathbf{u}, \mathbf{v}) + 0.15 \cdot (1 - d/r)`) when targets reappear near their last known boundary exit location.
+- **Zone Dwell & Occupancy Continuity**: Maintains zone occupancy counters and uninterrupted dwell timers while objects coast in ``predicting`` state, preventing spurious exit/enter event oscillation.
+- **Predictive HUD Visualisation**: Displays an orange bounding box with a ``[PREDICTING]`` badge during dead-reckoning coasting.
+
 CLI Usage Examples
 ==================
 

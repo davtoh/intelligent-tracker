@@ -14,9 +14,9 @@
 |---|---|---|
 | 1 | Environment & Core Engine Revitalization | ✅ **COMPLETE** |
 | 2 | Edge AI Detection (ONNX/YOLOv8/v11) | ✅ **COMPLETE** |
-| 3 | RTSP Streams & Retail/Occupancy Analytics | ⬜ Next |
-| 4 | Object Identity Gallery, Re-ID & Sighting Database | ⬜ Planned |
-| 5 | Event Dispatching & Alerting System | ⬜ Planned |
+| 3 | RTSP Streams & Retail/Occupancy Analytics | ✅ **COMPLETE** |
+| 4 | Object Identity Gallery, Re-ID & Sighting Database | ✅ **COMPLETE** |
+| 5 | Event Dispatching & Alerting System | ⬜ Next |
 | 6 | Web Dashboard, Packaging & Edge Deployment | ⬜ Planned |
 
 ---
@@ -147,9 +147,10 @@ $env:MPLBACKEND="Agg"
 ---
 
 ## ✅ [Milestone 4] — Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
-**Scope:** Persistent SQLite entity database, visual Re-ID embeddings (ONNX + color descriptor fallback), interactive screen selection/tagging, cross-session re-appearance matching, and offline recording occurrence analytics.
+**Status: COMPLETE** — Verified: 97/97 tests pass in Python 3.12.10
+**Scope:** Persistent SQLite entity database, visual Re-ID embeddings (ONNX + color descriptor fallback), interactive screen selection/tagging, cross-session re-appearance matching, offline recording occurrence analytics, predictive dead-reckoning trajectory coasting, and automatic session gallery re-identification.
 
-### Objectives & Deliverables Completed
+### Objectives & Deliverables Completed (4a–4f)
 
 **4a — Persistent SQLite Entity & Sighting Database (`intelligent_tracker/database.py`):**
 - Embedded, zero-configuration local database (`data/tracker.db`), edge-ready for Raspberry Pi, PC, and servers.
@@ -199,13 +200,20 @@ $env:MPLBACKEND="Agg"
   - **Sighting Timeline**: "List all timestamps and video files where Entity X appeared."
   - **Visit Frequency & Dwell Time**: Total duration observed, visit count, first seen, last seen.
   - **Zone Journey**: Flow of the entity across defined zones and tripwires.
-  - Export audit logs to JSON and CSV formats (`--export-json`, `--export-csv`).
+**4f — Predictive Motion Coasting, Dead-Reckoning & Automatic Session Re-ID:**
+- **Velocity-based Trajectory Coasting**: Extrapolates bounding box position during brief detector dropouts using smoothed physical velocity ($\vec{p}_{t} = \vec{p}_{t-1} + \vec{v} \cdot \Delta t$) for up to `coast_frames` (default: 30–45 frames / 1.0–1.5s).
+- **Track Lifecycle States**: Explicitly tracks `active` / `confirmed`, `predicting` / `coasting`, and `dormant` states.
+- **Zone & Occupancy Continuity**: Keeps zone presence and dwell time counter alive during predictive coasting, preventing spurious entry/exit event oscillation.
+- **Predictive Rendering Style**: Distinct dashed/dimmed bounding box with `[PREDICTING]` badge in OpenCV HUD overlay.
+- **Automatic Session Gallery**: Automatically registers and maintains stable canonical identities (`Person #1`, `Person #2`, etc.) in an in-memory session gallery.
+- **Fused Affinity Re-Linker**: Matches re-appearing objects using visual Re-ID cosine similarity combined with a spatial proximity boost if entering near the boundary/location where the object was last seen leaving.
+- **Unified Persistent HUD Labels**: Displays stable session identity labels throughout the video, avoiding track ID inflation (e.g. preventing the same person from becoming Person #35).
 
 ### Verification & Test Suite
-- Full test suite: **92 tests passing (100% green)** in ~4.8s.
+- Full test suite: **97 tests passing (100% green)** in ~4.9s.
 - Verified commands:
 ```powershell
-# 1. Run full test suite (92 tests)
+# 1. Run full test suite (97 tests)
 $env:MPLBACKEND="Agg"
 .\.venv\Scripts\python.exe -m unittest discover tests
 

@@ -89,6 +89,12 @@
 - [x] **Offline Recording Indexer & Analytics**:
   - Batch process recorded video files to index all appearances.
   - Sighting timeline and frequency/dwell-time query reports.
+- [x] **Predictive Motion Coasting, Dead-Reckoning & Automatic Session Re-ID**:
+  - Velocity-based position extrapolation during detector dropouts for up to `coast_frames`.
+  - Lifecycle state management (`active`, `predicting`, `dormant`).
+  - Automatic session gallery preventing track ID churn (e.g. Person #1 vs Person #35).
+  - Fused affinity matching (visual appearance + spatial exit proximity bonus).
+  - Distinct `[PREDICTING]` visual HUD overlay and unified stable session labels.
 
 ---
 

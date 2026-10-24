@@ -124,8 +124,14 @@ class Track(object):
         # State tracking
         self.hits = 1
         self.missed_frames = 0
-        self.state = "tentative"  # 'tentative', 'confirmed', 'lost'
+        self.state = "tentative"  # 'tentative', 'confirmed', 'predicting', 'dormant'
         self.velocity = (0.0, 0.0)
+
+        # Persistent session identity & boundary exit telemetry
+        self.identity_label: Optional[str] = None
+        self.session_id: Optional[int] = None
+        self.exit_point: Optional[Tuple[float, float]] = None
+        self.exit_time: Optional[float] = None
 
     def update(
         self,
@@ -159,8 +165,48 @@ class Track(object):
 
         self.hits += 1
         self.missed_frames = 0
+        self.state = "confirmed" if self.hits >= 2 else "tentative"
         self.history.append((new_cx, new_cy, now))
         self.bbox_history.append(new_bbox)
+
+    def predict(
+        self,
+        timestamp: Optional[float] = None,
+        bounds: Optional[Tuple[int, int]] = None,
+    ) -> Tuple[int, int, int, int]:
+        """
+        Extrapolate track position and bounding box using physical velocity (dead-reckoning).
+
+        :param timestamp: Current frame timestamp
+        :param bounds: Optional (frame_width, frame_height) to clamp coordinates
+        :return: Updated (x, y, w, h) predicted bounding box
+        """
+        now = timestamp if timestamp is not None else time.time()
+        dt = max(1e-4, min(1.0, now - self.last_seen))
+        self.last_seen = now
+
+        # Extrapolate centroid along current velocity vector
+        vx, vy = self.velocity
+        new_cx = self.centroid[0] + vx * dt
+        new_cy = self.centroid[1] + vy * dt
+
+        w, h = self.bbox[2], self.bbox[3]
+        new_x = int(round(new_cx - w / 2.0))
+        new_y = int(round(new_cy - h / 2.0))
+
+        if bounds is not None:
+            max_w, max_h = bounds
+            new_x = max(0, min(new_x, max_w - w))
+            new_y = max(0, min(new_y, max_h - h))
+            new_cx = new_x + w / 2.0
+            new_cy = new_y + h / 2.0
+
+        self.bbox = (int(new_x), int(new_y), int(w), int(h))
+        self.centroid = (float(new_cx), float(new_cy))
+        self.state = "predicting"
+        self.history.append((new_cx, new_cy, now))
+        self.bbox_history.append(self.bbox)
+        return self.bbox
 
     def mark_missed(self):
         self.missed_frames += 1
@@ -181,6 +227,9 @@ class Track(object):
             "hits": self.hits,
             "missed_frames": self.missed_frames,
             "state": self.state,
+            "is_predicting": self.state == "predicting",
+            "identity_label": self.identity_label,
+            "session_id": self.session_id,
             "velocity": (round(self.velocity[0], 1), round(self.velocity[1], 1)),
         }
 
@@ -211,18 +260,22 @@ class CentroidTracker(object):
         min_hits: int = 3,
         max_distance: float = 120.0,
         iou_threshold: float = 0.2,
+        coast_frames: int = 0,
     ):
         self.max_disappeared = int(max_disappeared)
         self.min_hits = int(min_hits)
         self.max_distance = float(max_distance)
         self.iou_threshold = float(iou_threshold)
+        self.coast_frames = max(0, int(coast_frames))
 
         self.next_track_id = 1
         self.tracks: Dict[int, Track] = {}
+        self.dormant_tracks: Dict[int, Track] = {}
 
     def reset(self):
         self.next_track_id = 1
         self.tracks.clear()
+        self.dormant_tracks.clear()
 
     def update(
         self,
@@ -268,13 +321,19 @@ class CentroidTracker(object):
                 )
             return self._get_active_tracks(confirmed_only)
 
-        # If no detections in current frame, mark all active tracks as missed
+        # If no detections in current frame, predictively coast active tracks
         if len(det_bboxes) == 0:
             to_remove = []
             for tid, trk in self.tracks.items():
                 trk.mark_missed()
                 if trk.missed_frames > self.max_disappeared:
+                    trk.state = "dormant"
+                    trk.exit_point = trk.centroid
+                    trk.exit_time = now
+                    self.dormant_tracks[tid] = trk
                     to_remove.append(tid)
+                elif self.coast_frames > 0 and trk.missed_frames <= self.coast_frames:
+                    trk.predict(timestamp=now)
             for tid in to_remove:
                 del self.tracks[tid]
             return self._get_active_tracks(confirmed_only)
@@ -349,7 +408,13 @@ class CentroidTracker(object):
                 trk = self.tracks[tid]
                 trk.mark_missed()
                 if trk.missed_frames > self.max_disappeared:
+                    trk.state = "dormant"
+                    trk.exit_point = trk.centroid
+                    trk.exit_time = now
+                    self.dormant_tracks[tid] = trk
                     to_remove.append(tid)
+                elif self.coast_frames > 0 and trk.missed_frames <= self.coast_frames:
+                    trk.predict(timestamp=now)
             else:
                 trk = self.tracks[tid]
                 if trk.hits >= self.min_hits:
@@ -387,10 +452,18 @@ class CentroidTracker(object):
         self.tracks[tid] = track
         return track
 
-    def _get_active_tracks(self, confirmed_only: bool) -> Dict[int, Track]:
+    def _get_active_tracks(self, confirmed_only: bool, include_predicting: bool = True) -> Dict[int, Track]:
+        can_coast = include_predicting and self.coast_frames > 0
         if not confirmed_only:
-            return {tid: trk for tid, trk in self.tracks.items() if trk.missed_frames == 0}
-        return {tid: trk for tid, trk in self.tracks.items() if trk.state == "confirmed" and trk.missed_frames == 0}
+            return {
+                tid: trk for tid, trk in self.tracks.items()
+                if trk.missed_frames == 0 or (can_coast and trk.missed_frames <= self.coast_frames)
+            }
+        return {
+            tid: trk for tid, trk in self.tracks.items()
+            if (trk.state in ("confirmed", "predicting") if can_coast else trk.state == "confirmed")
+            and (trk.missed_frames == 0 or (can_coast and trk.missed_frames <= self.coast_frames))
+        }
 
 
 class KalmanBoxTracker(object):

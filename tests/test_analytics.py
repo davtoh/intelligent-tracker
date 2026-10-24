@@ -196,6 +196,35 @@ class TestAnalyticsAndGeometry(unittest.TestCase):
         self.assertIn("tripwires", summary)
         self.assertEqual(summary["tripwires"]["line1"]["total_in"], 1)
 
+    def test_zone_continuity_during_coasting(self):
+        """Zone dwell and occupancy should remain continuous without false exits during predictive coasting."""
+        polygon = [(50, 50), (150, 50), (150, 150), (50, 150)]
+        zone = ZoneROI(polygon=polygon, name="secure_zone", dwell_threshold=2.0)
+
+        # 1. Track enters zone
+        t1 = Track(track_id=1, bbox=(90, 90, 20, 20), timestamp=10.0)
+        events1 = zone.update({1: t1}, timestamp=10.0)
+        self.assertEqual(len(events1), 1)
+        self.assertEqual(events1[0].event_type, "enter")
+        self.assertEqual(zone.occupancy, 1)
+
+        # 2. Detector loses sight, track enters predicting / dead-reckoning state
+        t1.predict(timestamp=11.0)
+        self.assertEqual(t1.state, "predicting")
+        events2 = zone.update({1: t1}, timestamp=11.0)
+        # Should NOT emit premature exit event
+        self.assertEqual(len(events2), 0)
+        self.assertEqual(zone.occupancy, 1)
+        self.assertEqual(zone.total_exits, 0)
+
+        # 3. Coasting continues past dwell threshold (2.0s since entry at 10.0)
+        t1.predict(timestamp=12.5)
+        events3 = zone.update({1: t1}, timestamp=12.5)
+        self.assertEqual(len(events3), 1)
+        self.assertEqual(events3[0].event_type, "dwell")
+        self.assertAlmostEqual(events3[0].dwell_time, 2.5, places=1)
+        self.assertEqual(zone.total_exits, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

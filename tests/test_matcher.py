@@ -121,6 +121,51 @@ class TestGalleryMatcher(unittest.TestCase):
         self.assertEqual(trk.entity_name, "VIP Charlie")
         self.assertEqual(trk.entity_category, "vip")
 
+    def test_auto_session_gallery_assignment(self):
+        """Unenrolled tracks should be assigned canonical session labels without cluttering SQLite."""
+        frame = np.full((100, 100, 3), 120, dtype=np.uint8)
+        trk1 = Track(track_id=1, bbox=(10, 10, 40, 40), label="person")
+        trk1.hits = 3
+        trk2 = Track(track_id=2, bbox=(60, 60, 30, 30), label="person")
+        trk2.hits = 3
+
+        self.matcher.match_tracks({1: trk1, 2: trk2}, frame)
+        self.assertEqual(trk1.identity_label, "Person #1")
+        self.assertEqual(trk1.session_id, 1)
+        self.assertEqual(trk2.identity_label, "Person #2")
+        self.assertEqual(trk2.session_id, 2)
+        # Database should still have 0 persistent entities enrolled
+        self.assertEqual(len(self.db.list_entities()), 0)
+
+    def test_auto_session_gallery_reidentification_on_reappearance(self):
+        """Returning entities should be re-identified with their canonical session identity."""
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        frame[20:70, 20:70] = [200, 100, 50]  # Visual object pattern
+
+        # 1. Track #1 appears on screen
+        trk1 = Track(track_id=1, bbox=(20, 20, 50, 50), label="person", timestamp=10.0)
+        trk1.hits = 3
+        self.matcher.match_tracks({1: trk1}, frame, timestamp=10.0)
+        self.assertEqual(trk1.identity_label, "Person #1")
+        self.assertEqual(trk1.session_id, 1)
+
+        # 2. Track #1 departs / disappears (empty tracks signal departure)
+        self.matcher.match_tracks({}, frame, timestamp=15.0)
+        ent = self.matcher.session_entities[1]
+        self.assertIsNotNone(ent.exit_point)
+        self.assertEqual(ent.exit_time, 10.0)
+
+        # 3. Target re-enters at t=18.0 (8s later) near exit location (e.g. bbox 25,25)
+        # Detector assigns arbitrary new track ID 35
+        trk35 = Track(track_id=35, bbox=(25, 25, 50, 50), label="person", timestamp=18.0)
+        trk35.hits = 2
+        self.matcher.match_tracks({35: trk35}, frame, timestamp=18.0)
+
+        # Track #35 should be re-associated with Person #1 via fused visual + spatial affinity!
+        self.assertEqual(trk35.session_id, 1)
+        self.assertEqual(trk35.identity_label, "Person #1")
+        self.assertEqual(self.matcher.next_session_id, 2)  # No inflation of session ID count
+
 
 if __name__ == "__main__":
     unittest.main()

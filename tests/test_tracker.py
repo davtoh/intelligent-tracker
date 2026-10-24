@@ -153,6 +153,62 @@ class TestTracker(unittest.TestCase):
         with self.assertRaises(ValueError):
             TrackerFactory.create("invalid_tracker_name")
 
+    def test_dead_reckoning_predict(self):
+        trk = Track(track_id=1, bbox=(100, 100, 50, 50), timestamp=1.0)
+        self.assertEqual(trk.state, "tentative")
+
+        # Update with rightward movement: (100,100) -> (120,100) in 0.1s
+        trk.update(bbox=(120, 100, 50, 50), timestamp=1.1)
+        self.assertEqual(trk.state, "confirmed")
+        self.assertGreater(trk.velocity[0], 0.0)
+
+        # Predict next position at t=1.2 using velocity
+        pred_bbox = trk.predict(timestamp=1.2, bounds=(640, 480))
+        self.assertEqual(trk.state, "predicting")
+        self.assertGreater(pred_bbox[0], 120)  # Extrapolated to the right
+        d = trk.to_dict()
+        self.assertTrue(d["is_predicting"])
+        self.assertEqual(d["state"], "predicting")
+
+    def test_centroid_tracker_coasting_and_recovery(self):
+        tracker = CentroidTracker(max_disappeared=6, min_hits=2, coast_frames=3)
+
+        # F1 & F2: Establish confirmed track with rightward velocity
+        tracker.update([Detection((100, 100, 40, 40), 0, 0.95, "person")], timestamp=1.0)
+        t2 = tracker.update([Detection((110, 100, 40, 40), 0, 0.95, "person")], timestamp=1.1, confirmed_only=True)
+        self.assertEqual(len(t2), 1)
+        tid = list(t2.keys())[0]
+        self.assertEqual(t2[tid].state, "confirmed")
+
+        # F3: Detector drops frame (missed_frames = 1 <= coast_frames = 3)
+        t3 = tracker.update([], timestamp=1.2, confirmed_only=True)
+        self.assertEqual(len(t3), 1)
+        self.assertIn(tid, t3)
+        self.assertEqual(t3[tid].state, "predicting")
+        self.assertGreater(t3[tid].bbox[0], 110)  # Coasters extrapolated forward
+
+        # F4: Detector drops frame again (missed_frames = 2 <= 3)
+        t4 = tracker.update([], timestamp=1.3, confirmed_only=True)
+        self.assertEqual(len(t4), 1)
+        self.assertEqual(t4[tid].state, "predicting")
+
+        # F5: Detector recovers entity near extrapolated location
+        rec_bbox = (int(t4[tid].bbox[0] + 5), 100, 40, 40)
+        t5 = tracker.update([Detection(rec_bbox, 0, 0.92, "person")], timestamp=1.4, confirmed_only=True)
+        self.assertEqual(len(t5), 1)
+        self.assertIn(tid, t5)  # Same track ID maintained!
+        self.assertEqual(t5[tid].state, "confirmed")
+        self.assertEqual(t5[tid].missed_frames, 0)
+
+        # Dropping past max_disappeared moves track to dormant_tracks with exit telemetry
+        for step in range(7):
+            tracker.update([], timestamp=2.0 + step * 0.1)
+        self.assertNotIn(tid, tracker.tracks)
+        self.assertIn(tid, tracker.dormant_tracks)
+        self.assertEqual(tracker.dormant_tracks[tid].state, "dormant")
+        self.assertIsNotNone(tracker.dormant_tracks[tid].exit_point)
+        self.assertIsNotNone(tracker.dormant_tracks[tid].exit_time)
+
 
 if __name__ == "__main__":
     unittest.main()

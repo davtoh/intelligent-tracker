@@ -412,26 +412,34 @@
 - `documentation/intelligent_tracker.rst`: Added automodule documentation blocks for `database`, `reid`, `matcher`, `interactive`, and `batch`.
 - `README.rst`: Updated CLI options table, scenarios matrix, interactive keyboard controls, test commands, and roadmap.
 - `TODO_MODERNIZATION.md`: Marked Phase 4 tasks complete.
-- `milestone_plan.md`: Updated Milestone 4 status to COMPLETE with verification commands and deliverables.
-- `MIGRATION_LOG.md`: Documented Milestone 4 completion and updated context recovery guide.
+- `milestone_plan.md`: Updated Milestone 4 status to COMPLETE (including Enhancement 4f) with verification commands and deliverables.
+- `MIGRATION_LOG.md`: Documented Milestone 4 completion (with 4f predictive coasting & session Re-ID) and updated context recovery guide.
+- `intelligent_tracker/tracker.py`: Implemented `Track.predict(timestamp, bounds)` dead-reckoning extrapolation, `Track.state` lifecycle transitions (`active`/`confirmed`, `predicting`, `dormant`), boundary `exit_point`/`exit_time` telemetry, and `CentroidTracker(coast_frames=N)` trajectory coasting.
+- `intelligent_tracker/matcher.py`: Built `SessionEntity` in-memory canonical identity management (`Person #1`, `Person #2`), eliminating track ID inflation (Person #35), and implemented fused affinity re-linking (visual cosine similarity + spatial exit proximity bonus).
+- `intelligent_tracker/analytics.py`: Enhanced `AnalyticsEngine.draw` with distinct dimmed/orange bounding boxes and `[PREDICTING]` badge; maintained continuous zone dwell time and occupancy during coasting.
+- `main.py`: Set default Re-ID to spatial color histogram descriptor; modernized interactive HUD and selection inspection to display persistent session identity and predicting state.
+- `tests/test_tracker.py`: Added 2 unit tests (`test_dead_reckoning_predict`, `test_centroid_tracker_coasting_and_recovery`).
+- `tests/test_matcher.py`: Added 2 unit tests (`test_auto_session_gallery_assignment`, `test_auto_session_gallery_reidentification_on_reappearance`).
+- `tests/test_analytics.py`: Added 1 unit test (`test_zone_continuity_during_coasting`).
+- `documentation/reid.rst`: Documented predictive motion coasting, dead-reckoning, automatic session gallery, and fused affinity re-linking.
 
 ### 3. State & Checkpoint
 - **Status:** Milestone 4 COMPLETE (100% Green Unit Tests)
 - **Automated Verification:**
   - Full test suite: `.\.venv\Scripts\python.exe -m unittest discover tests` with `MPLBACKEND=Agg`.
-  - Result: **Ran 92 tests in 4.834s — OK (0 failures, 0 errors, 100% passing)**.
+  - Result: **Ran 97 tests in 4.137s — OK (0 failures, 0 errors, 100% passing)**.
   - Database unit tests: `tests/test_database.py` -> **8/8 OK (0.74s)**.
   - Re-ID unit tests: `tests/test_reid.py` -> **7/7 OK (0.07s)**.
-  - Matcher unit tests: `tests/test_matcher.py` -> **4/4 OK (0.004s)**.
+  - Matcher unit tests: `tests/test_matcher.py` -> **6/6 OK (0.01s)**.
   - Interactive unit tests: `tests/test_interactive.py` -> **4/4 OK (0.03s)**.
   - Batch indexer unit tests: `tests/test_batch.py` -> **2/2 OK (0.14s)**.
   - Detector unit tests: `tests/test_detectors.py` -> **25/25 OK (0.84s)**.
-  - Video, tracker & analytics unit tests: `tests/test_video.py`, `tests/test_tracker.py`, `tests/test_analytics.py` -> **21/21 OK (0.42s)**.
+  - Video, tracker & analytics unit tests: `tests/test_video.py`, `tests/test_tracker.py`, `tests/test_analytics.py` -> **24/24 OK (0.45s)**.
   - Core & geometry legacy tests: `tests/test_geometry.py`, `tests/test_core.py`, `tests/test_forms.py` -> **21/21 OK (1.42s)**.
 - **Pipeline Benchmarks:**
   - `main.py --config configs/demo.yaml --headless --frames 15 --reid color` -> 26.5 FPS.
   - `main.py --config configs/demo.yaml --headless --frames 15 --reid onnx` -> 26.5 FPS (ONNX OSNet x0.25).
-  - `main.py --config configs/demo.yaml --detector yolov8 --reid onnx --headless --frames 30` -> 15.0 FPS.
+  - `main.py --config configs/demo.yaml --detector yolov8 --reid onnx --headless --frames 30` -> 18.0 FPS.
   - `batch.py --video scratch/test_output.mp4 --report` -> 656.9 FPS (offline video batch processing).
 - **Next Phase:**
   - Milestone 5: Event Dispatching & Alerting System (Webhooks, Telegram bot, MQTT broker integration, configurable alert rules).
@@ -439,11 +447,11 @@
 ### 4. Verification Instructions
 - **Windows (PowerShell):**
   ```powershell
-  # 1. Run full test suite (92 tests)
+  # 1. Run full test suite (97 tests)
   $env:MPLBACKEND="Agg"
   .\.venv\Scripts\python.exe -m unittest discover tests
 
-  # 2. Run Milestone 4 Re-ID and Database unit test suite specifically (25 tests)
+  # 2. Run Milestone 4 Re-ID and Database unit test suite specifically (27 tests)
   .\.venv\Scripts\python.exe -m unittest tests/test_database.py tests/test_reid.py tests/test_matcher.py tests/test_interactive.py tests/test_batch.py
 
   # 3. Interactive tagging & Re-ID studio CLI help

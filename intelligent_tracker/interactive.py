@@ -233,8 +233,8 @@ class InteractiveController(object):
             cv2.rectangle(out, (cx1, cy1), (cx2, cy2), (255, 255, 0), 1)
 
             # Inspector details text
-            name_str = getattr(trk, "entity_name", "Unidentified")
-            score_str = "{:.1f}%".format(getattr(trk, "reid_score", 0.0) * 100)
+            name_str = getattr(trk, "entity_name", None) or getattr(trk, "identity_label", None) or "Unidentified"
+            score_str = "{:.1f}%".format(getattr(trk, "reid_score", 0.0) * 100) if getattr(trk, "entity_name", None) else trk.state.upper()
             lines = [
                 "INSPECTOR: Track #{}".format(trk.track_id),
                 "Identity : {} ({})".format(name_str, score_str),

@@ -243,14 +243,11 @@ def main():
     # Re-ID & SQLite Database configuration
     db_cfg = cfg.get("database", {})
     reid_cfg = cfg.get("reid", {})
-    reid_name = args.reid or reid_cfg.get("model", None)
+    reid_name = args.reid or reid_cfg.get("model", "color")
     if reid_name and str(reid_name).lower() == "none":
         reid_name = None
 
-    db_path = args.db or db_cfg.get("path", None)
-    if reid_name and not db_path:
-        db_path = "data/tracker.db"
-
+    db_path = args.db or db_cfg.get("path", "data/tracker.db" if reid_name else None)
     reid_threshold = args.reid_thresh if args.reid_thresh is not None else float(reid_cfg.get("threshold", 0.65))
 
     print("=" * 65)
@@ -392,8 +389,10 @@ def main():
             selected_track_id = clicked_tid
             if clicked_tid is not None:
                 trk = current_tracks[clicked_tid]
-                print("[INSPECT] Selected Track #{}: {} (conf: {:.2f}, dwell: {:.1f}s, vel: {})".format(
-                    clicked_tid, trk.label, trk.confidence, trk.dwell_time, trk.velocity
+                disp_name = trk.entity_name or trk.identity_label or "Track #{}".format(clicked_tid)
+                state_tag = " [{}]".format(trk.state.upper()) if trk.state != "confirmed" else ""
+                print("[INSPECT] Selected {}{}: {} (conf: {:.2f}, dwell: {:.1f}s, vel: {})".format(
+                    disp_name, state_tag, trk.label, trk.confidence, trk.dwell_time, trk.velocity
                 ))
             else:
                 print("[INSPECT] Deselected track.")
@@ -488,7 +487,8 @@ def main():
                     sel_trk = tracks[selected_track_id]
                     sx, sy, sw, sh = sel_trk.bbox
                     cv2.rectangle(annotated, (sx - 3, sy - 3), (sx + sw + 3, sy + sh + 3), (255, 255, 0), 2)
-                    sel_label = "INSPECTING #{} [Dwell: {:.1f}s]".format(selected_track_id, sel_trk.dwell_time)
+                    disp_name = sel_trk.entity_name or sel_trk.identity_label or "#{}".format(selected_track_id)
+                    sel_label = "INSPECTING: {} [Dwell: {:.1f}s]".format(disp_name, sel_trk.dwell_time)
                     cv2.putText(annotated, sel_label, (sx, max(15, sy - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 2)
 
                 # Record frame if output writer active

@@ -365,18 +365,30 @@ class AnalyticsEngine(object):
             for tid, trk in tracks.items():
                 x, y, w, h = trk.bbox
 
-                # Color-code by state (confirmed = green/cyan, tentative = yellow)
-                col = (0, 255, 0) if trk.state == "confirmed" else (0, 220, 255)
+                # Color-code by state (confirmed = green, predicting = orange, tentative = yellow)
+                if trk.state == "predicting":
+                    col = (0, 165, 255)  # Orange for predictive dead-reckoning
+                    border_th = 1
+                elif trk.state == "confirmed":
+                    col = (0, 255, 0)
+                    border_th = 2
+                else:
+                    col = (0, 220, 255)
+                    border_th = 2
 
-                cv2.rectangle(out, (x, y), (x + w, y + h), col, 2)
+                cv2.rectangle(out, (x, y), (x + w, y + h), col, border_th)
 
                 # Track header badge
                 if getattr(trk, "entity_name", None):
                     label_text = "#{}: {} ({:.0f}%)".format(
                         tid, trk.entity_name, getattr(trk, "reid_score", 1.0) * 100
                     )
+                elif getattr(trk, "identity_label", None):
+                    suffix = " [PREDICTING]" if trk.state == "predicting" else " [Active]"
+                    label_text = "#{}: {}{}".format(tid, trk.identity_label, suffix)
                 else:
-                    label_text = "#{}: {} ({:.2f})".format(tid, trk.label, trk.confidence)
+                    suffix = " [PREDICTING]" if trk.state == "predicting" else ""
+                    label_text = "#{}: {} ({:.2f}){}".format(tid, trk.label, trk.confidence, suffix)
                 (tw_val, th_val), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
                 cv2.rectangle(out, (x, max(0, y - th_val - 6)), (x + tw_val + 6, y), col, -1)
                 cv2.putText(
