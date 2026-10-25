@@ -99,14 +99,19 @@
 ---
 
 ### Phase 5: Event Dispatching & Alerting System
-- [ ] **Webhook Dispatcher**:
+- [x] **Webhook Dispatcher**:
   - HTTP POST event payloads (JSON) on tripwire cross, zone intrusion, occupancy breach, or tagged entity sighting.
-- [ ] **Telegram Bot Integration**:
+  - Exponential backoff retries (up to 3 retries) and Bearer auth support.
+- [x] **Telegram Bot Integration**:
   - Instant alert messages with snapshot attachments on intrusion, threshold, or recognized VIP/restricted entity.
-- [ ] **MQTT Broker Publisher**:
-  - Lightweight telemetry (`tracker/{camera_id}/occupancy`, `tracker/{camera_id}/sightings/{entity_id}`).
-- [ ] **Configurable Rules & Entity Filters**:
-  - Quiet hours, alert cooldowns, and entity-specific triggers (e.g. alert if restricted vehicle appears).
+  - Rate limiting cooldown and `/status` command responder.
+- [x] **MQTT Broker Publisher**:
+  - Lightweight telemetry (`tracker/{camera_id}/occupancy`, `tracker/{camera_id}/sightings/{entity_id}`, `tracker/{camera_id}/events`).
+  - Home Assistant / Node-RED compatible retained messages and LWT status.
+- [x] **Configurable Rules & Entity Filters**:
+  - Quiet hours (time-of-day schedule per zone including overnight spans).
+  - Entity-specific triggers (e.g. alert if restricted category appears, log if staff arrives).
+  - Alert cooldowns to prevent notification fatigue.
 
 ---
 

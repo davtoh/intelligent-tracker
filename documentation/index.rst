@@ -17,6 +17,7 @@ Contents
    detectors
    analytics
    reid
+   events
 
 
 Indices and tables

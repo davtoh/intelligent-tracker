@@ -229,46 +229,61 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## ⬜ [Milestone 5] — Event Dispatching & Alerting System
+## ✅ [Milestone 5] — Event Dispatching & Alerting System (COMPLETE)
 **Scope:** Webhook, Telegram, and MQTT alerting on zone events, tripwires, and tagged entity recognition.
 
-### Objectives
+### Objectives Completed
 
 **5a — Event Bus:**
 - `intelligent_tracker/events.py`
-  - `EventBus`: publish/subscribe, async dispatch queue (no dropped events).
-  - Typed dataclasses: `ZoneEvent`, `IntrusionAlert`, `OccupancyThresholdEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`.
-  - Thread-safe queue consumed by dispatcher workers.
+  - `EventBus`: Thread-safe publish/subscribe broker with async worker threads and background queue.
+  - Zero event loss with synchronous (`sync=True`) and asynchronous (`sync=False`) delivery.
+  - Type-based (`event_type=...`), predicate-based (`filter_fn=...`), and universal subscriber registration.
+  - Ring buffer history query (`get_recent_events`).
+  - Error isolation: Handlers execute with exception boundaries preventing worker thread crashes.
+  - Typed dataclasses: `BaseEvent`, `ZoneEvent`, `TripwireCrossEvent`, `IntrusionAlert`, `OccupancyThresholdEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`.
+  - Base64 JPEG frame and bounding box crop encoders: `frame_to_base64()`, `crop_to_base64()`, `decode_snapshot_base64()`.
 
 **5b — Webhook Dispatcher:**
-- HTTP POST JSON payloads on: tripwire cross, zone intrusion, occupancy breach, or specific entity sighting.
-- Configurable URL, auth header, retry logic (3 retries, exponential backoff).
-- Payload includes: `camera_id`, `zone_id`, `entity_id`, `entity_name`, `event_type`, `timestamp`, optional base64 snapshot.
+- `WebhookDispatcher`: HTTP POST JSON delivery with exponential backoff retries (3 retries).
+- Configurable URL, Bearer/custom auth headers, timeout, and event type filtering.
+- Payload includes `camera_id`, `zone_id`, `entity_id`, `entity_name`, `event_type`, `timestamp`, `data`, and optional JPEG `snapshot`.
+- Telemetry metrics: `sent_count`, `failed_count`, `retry_count`, `last_status_code`.
 
 **5c — Telegram Bot:**
-- `python-telegram-bot` integration.
-- Alert message with snapshot attachment on intrusion, threshold, or recognized VIP/restricted entity.
-- Rate limiting: configurable cooldown (default 60s per zone/entity).
-- `/status` command returns live occupancy summary and recent sightings.
+- `TelegramDispatcher`: Telegram Bot API notifications with visual Markdown formatting and status emojis.
+- Multipart photo upload attachment (`sendPhoto`) with base64 JPEG decode fallback.
+- Rate-limiting cooldown (default 60s per zone/entity) to eliminate notification fatigue.
+- Interactive `/status`, `/occupancy`, and `/help` command responder.
+- Offline mock mode for headless CI and local automated testing.
 
 **5d — MQTT Publisher:**
-- `paho-mqtt` based publisher.
-- Topics: `tracker/{camera_id}/occupancy`, `tracker/{camera_id}/events`, `tracker/{camera_id}/sightings/{entity_id}`.
-- Home Assistant / Node-RED compatible JSON payloads.
-- Retained messages for occupancy counts and last known entity locations.
+- `MqttPublisher`: Paho MQTT (compatible with 2.x `CallbackAPIVersion.VERSION2` and 1.x).
+- Telemetry topics: `tracker/{camera_id}/occupancy` (JSON, retained=True).
+- Event stream: `tracker/{camera_id}/events` (JSON, retained=False).
+- Sighting topic: `tracker/{camera_id}/sightings/{entity_id}` (JSON, retained=True for last known location).
+- Last Will & Testament (LWT) topic: `tracker/system/status` (`"online"` / `"offline"`).
 
 **5e — Configurable Rules & Entity Filters:**
-- Quiet hours (time-of-day schedule per zone).
-- Entity triggers: e.g. *"Alert if category=='restricted' enters Zone A"*, *"Log if category=='staff' arrives"*.
-- Alert cooldowns to prevent notification fatigue.
+- `QuietHours`: Time-of-day schedule evaluation supporting overnight spans crossing midnight (e.g. 22:00 to 06:00) and day-of-week filters.
+- `AlertRule`: Rule matching on zone, event type, entity category (e.g. `restricted`, `unknown`), minimum dwell time, and quiet hours.
+- `AlertRuleEngine`: Evaluates incoming events, checks rule cooldowns, captures visual snapshots, and publishes derived `IntrusionAlert` or `RestrictedEntityAlert` events.
+- `setup_event_pipeline()`: Declarative pipeline setup from YAML configuration (`configs/alert_demo.yaml`).
 
-### Verification
+### Verification & Test Suite
+- Full test suite: **115 tests passing (100% green)** in ~5.8s.
+- Milestone 5 dedicated test suite: **18 tests passing** in ~1.2s.
+- Verified commands:
 ```powershell
-# Webhook test (local echo server)
+# 1. Run full test suite (115 tests)
+$env:MPLBACKEND="Agg"
+.\.venv\Scripts\python.exe -m unittest discover tests
+
+# 2. Webhook, Telegram, MQTT, and Rules unit test suite (18 tests)
 .\.venv\Scripts\python.exe -m tests.test_events
 
-# MQTT test (mosquitto local broker)
-.\.venv\Scripts\python.exe main.py --config configs/alert_demo.yaml
+# 3. Live tracking with alerting pipeline (Webhooks, Telegram, MQTT, Rules)
+.\.venv\Scripts\python.exe main.py --config configs/alert_demo.yaml --headless --frames 30
 ```
 
 ---

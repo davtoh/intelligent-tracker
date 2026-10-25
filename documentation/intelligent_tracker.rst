@@ -140,6 +140,14 @@ intelligent\_tracker.batch module
     :undoc-members:
     :show-inheritance:
 
+intelligent\_tracker.events module
+----------------------------------
+
+.. automodule:: intelligent_tracker.events
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

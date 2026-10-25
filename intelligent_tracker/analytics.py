@@ -245,8 +245,12 @@ class AnalyticsEngine(object):
         heatmap_enabled: bool = True,
         resolution: Tuple[int, int] = (640, 480),
         heatmap_decay: Optional[float] = 0.998,
+        event_bus: Optional[Any] = None,
+        camera_id: str = "cam_01",
     ):
         self.width, self.height = resolution
+        self.event_bus = event_bus
+        self.camera_id = str(camera_id)
         self.zones: Dict[str, ZoneROI] = {}
         self.tripwires: Dict[str, Tripwire] = {}
 
@@ -265,7 +269,7 @@ class AnalyticsEngine(object):
                 decay_rate=heatmap_decay,
             )
 
-        self.events: List[Union[ZoneEvent, TripwireEvent]] = []
+        self.events: List[Any] = []
         self._prev_centroids: Dict[int, Tuple[float, float]] = {}
         self._start_time = time.time()
         self.total_frames_analyzed = 0
@@ -303,6 +307,25 @@ class AnalyticsEngine(object):
                     if ev is not None:
                         new_events.append(ev)
                         self.events.append(ev)
+                        if self.event_bus is not None:
+                            try:
+                                from intelligent_tracker.events import TripwireCrossEvent
+                                bus_ev = TripwireCrossEvent(
+                                    camera_id=self.camera_id,
+                                    tripwire_id=tw.name,
+                                    track_id=tid,
+                                    direction=ev.direction,
+                                    pt1=ev.pt1,
+                                    pt2=ev.pt2,
+                                    centroid=curr_c,
+                                    entity_id=getattr(track, "entity_id", None),
+                                    entity_name=getattr(track, "entity_name", getattr(track, "identity_label", None)),
+                                    entity_category=getattr(track, "entity_category", None),
+                                    timestamp=now,
+                                )
+                                self.event_bus.publish(bus_ev)
+                            except Exception as ex:
+                                pass
 
         # 2. Update Zone ROIs
         for z in self.zones.values():
@@ -310,6 +333,73 @@ class AnalyticsEngine(object):
             if z_events:
                 new_events.extend(z_events)
                 self.events.extend(z_events)
+                if self.event_bus is not None:
+                    try:
+                        from intelligent_tracker.events import ZoneEvent as BusZoneEvent
+                        for z_ev in z_events:
+                            trk = tracks.get(z_ev.track_id)
+                            bus_ev = BusZoneEvent(
+                                camera_id=self.camera_id,
+                                zone_id=z_ev.zone_id,
+                                track_id=z_ev.track_id,
+                                action=z_ev.event_type,
+                                dwell_time=z_ev.dwell_time,
+                                centroid=z_ev.centroid,
+                                bbox=z_ev.bbox,
+                                entity_id=getattr(trk, "entity_id", None) if trk else None,
+                                entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", None)) if trk else None,
+                                entity_category=getattr(trk, "entity_category", None) if trk else None,
+                                timestamp=now,
+                            )
+                            self.event_bus.publish(bus_ev)
+                    except Exception as ex:
+                        pass
+
+        # 2b. Check Capacity Limits per Zone
+        for z_name, z in self.zones.items():
+            cap = getattr(z, "capacity_limit", None)
+            if cap is not None and cap > 0:
+                breached = getattr(z, "_threshold_breached", False)
+                if z.occupancy > cap and not breached:
+                    z._threshold_breached = True
+                    try:
+                        from intelligent_tracker.events import OccupancyThresholdEvent
+                        thresh_ev = OccupancyThresholdEvent(
+                            camera_id=self.camera_id,
+                            zone_id=z_name,
+                            current_occupancy=z.occupancy,
+                            threshold=cap,
+                            breach_type="exceeded",
+                            severity="warning",
+                            message="Zone '{}' exceeded occupancy capacity ({}/max {})".format(z_name, z.occupancy, cap),
+                            timestamp=now,
+                        )
+                        new_events.append(thresh_ev)
+                        self.events.append(thresh_ev)
+                        if self.event_bus is not None:
+                            self.event_bus.publish(thresh_ev)
+                    except Exception:
+                        pass
+                elif z.occupancy <= cap and breached:
+                    z._threshold_breached = False
+                    try:
+                        from intelligent_tracker.events import OccupancyThresholdEvent
+                        thresh_ev = OccupancyThresholdEvent(
+                            camera_id=self.camera_id,
+                            zone_id=z_name,
+                            current_occupancy=z.occupancy,
+                            threshold=cap,
+                            breach_type="cleared",
+                            severity="info",
+                            message="Zone '{}' occupancy cleared within capacity ({}/max {})".format(z_name, z.occupancy, cap),
+                            timestamp=now,
+                        )
+                        new_events.append(thresh_ev)
+                        self.events.append(thresh_ev)
+                        if self.event_bus is not None:
+                            self.event_bus.publish(thresh_ev)
+                    except Exception:
+                        pass
 
         # 3. Update Heatmap
         if self.heatmap is not None:

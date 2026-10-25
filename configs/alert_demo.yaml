@@ -1,0 +1,112 @@
+# Intelligent Tracker - Milestone 5 Alerting & Event Dispatching Demo Configuration
+# Demonstrates Webhook, Telegram, MQTT, and Rules engine on synthetic video stream
+
+video:
+  source: synthetic
+  resolution: [640, 480]
+  framerate: 30
+  buffer_size: 1
+  auto_reconnect: true
+
+detector:
+  model: mock
+  confidence: 0.25
+  classes: ["person"]
+
+tracker:
+  type: centroid
+  max_disappeared: 30
+  min_hits: 2
+  iou_threshold: 0.2
+  max_distance: 120.0
+
+database:
+  path: "data/tracker.db"
+
+reid:
+  model: "color"
+  threshold: 0.65
+
+analytics:
+  heatmap:
+    enabled: true
+    decay: 0.998
+
+  tripwires:
+    - name: perimeter_gate
+      line: [[100, 240], [540, 240]]
+      bidirectional: true
+      color: [0, 255, 255]
+
+  zones:
+    - name: restricted_vault
+      polygon: [[40, 40], [280, 40], [280, 220], [40, 220]]
+      dwell_threshold: 2.0
+      capacity_limit: 1
+      color: [0, 0, 220]
+
+    - name: public_lobby
+      polygon: [[340, 260], [600, 260], [600, 440], [340, 440]]
+      dwell_threshold: 3.0
+      capacity_limit: 5
+      color: [0, 200, 100]
+
+alerting:
+  camera_id: "cam_warehouse_01"
+
+  webhooks:
+    - url: "http://127.0.0.1:8080/events/webhook"
+      auth_token: "secret_webhook_token_abc123"
+      timeout: 3.0
+      max_retries: 2
+      include_snapshot: true
+      event_types: ["intrusion_alert", "restricted_entity_alert", "occupancy_threshold"]
+
+  telegram:
+    enabled: true
+    token: "mock"
+    chat_id: "123456789"
+    cooldown: 30.0
+    include_snapshot: true
+    mock: true
+
+  mqtt:
+    enabled: true
+    broker: "localhost"
+    port: 1883
+    base_topic: "tracker"
+    client_id: "intelligent_tracker_demo"
+    qos: 1
+    retain_occupancy: true
+    retain_sightings: true
+    mock: true
+
+  rules:
+    - name: vault_intrusion_alert
+      zone_id: "restricted_vault"
+      event_types: ["zone_enter", "enter", "dwell"]
+      categories: ["restricted", "unknown"]
+      cooldown: 20.0
+      severity: "critical"
+      message: "Security Breach: Unauthorized entity entered restricted vault!"
+
+    - name: vault_quiet_hours
+      zone_id: "restricted_vault"
+      quiet_hours_only: true
+      quiet_hours:
+        start: "22:00"
+        end: "06:00"
+      severity: "critical"
+      message: "Perimeter Alert: Vault access detected during quiet hours schedule!"
+
+    - name: lobby_overcrowding
+      zone_id: "public_lobby"
+      event_types: ["occupancy_threshold"]
+      severity: "warning"
+      message: "Occupancy limit exceeded in public lobby area."
+
+visualization:
+  draw_zones: true
+  draw_tripwires: true
+  draw_tracks: true
+  draw_hud: true

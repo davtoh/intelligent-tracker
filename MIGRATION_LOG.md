@@ -475,13 +475,103 @@
   - Working directory: `c:\dev\projects\products\intelligent_tracker`
   - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
   - Downloaded AI models: Located in `models/` (`yolov8n.onnx`, `yolo11n.onnx`, `osnet_x0_25.onnx`).
-  - Next task to execute: **Milestone 5 — Event Dispatching & Alerting System**.
-  - Review `milestone_plan.md` (lines 218-265) and `TODO_MODERNIZATION.md` (lines 95-105) for Milestone 5 requirements:
-    - 5a: Centralized Event Bus (`intelligent_tracker/events.py`).
-    - 5b: Webhook Dispatcher with retry & backoff.
-    - 5c: Telegram Bot notification with snapshot image attachment.
-    - 5d: MQTT broker publisher with QoS and camera telemetry topics.
-    - 5e: Configurable rules & quiet hours alerting engine.
+  - Milestone 4 and Milestone 5 are COMPLETE.
+  - Next task to execute: **Milestone 6 — Modern Web Dashboard, Packaging & Edge Deployment**.
+
+---
+
+## [Milestone 5] - 2026-10-24 - Event Dispatching & Alerting System
+
+### 1. Objectives & Scope
+- Design and implement a centralized, asynchronous, thread-safe publish-subscribe Event Bus (`EventBus`) with zero dropped events and error containment.
+- Implement typed event dataclasses: `BaseEvent`, `ZoneEvent`, `TripwireCrossEvent`, `IntrusionAlert`, `OccupancyThresholdEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`.
+- Provide base64 JPEG snapshot serialization and cropping helpers (`frame_to_base64`, `crop_to_base64`, `decode_snapshot_base64`).
+- Build HTTP POST Webhook Dispatcher (`WebhookDispatcher`) with exponential backoff retry logic (3 retries), Bearer/custom authentication, and event type filtering.
+- Build Telegram Bot Dispatcher (`TelegramDispatcher`) with rich Markdown alert formatting, status emojis (🚨, ⚠️, 👤, 🛑), photo attachment upload (`sendPhoto`), rate-limiting cooldown per entity/zone, and interactive `/status`, `/occupancy`, `/help` query command responders.
+- Build MQTT Telemetry Publisher (`MqttPublisher`) compatible with Home Assistant and Node-RED:
+  - Occupancy topic: `tracker/{camera_id}/occupancy` (retained).
+  - Event stream: `tracker/{camera_id}/events` (unretained).
+  - Sighting topic: `tracker/{camera_id}/sightings/{entity_id}` (retained).
+  - Last Will & Testament (LWT) topic: `tracker/system/status` (`"online"` / `"offline"`).
+  - Supports modern Paho MQTT 2.x (`CallbackAPIVersion.VERSION2`) with graceful fallback to 1.x and offline mock mode.
+- Build Quiet Hours & Alert Rule Engine (`QuietHours`, `AlertRule`, `AlertRuleEngine`):
+  - Time-of-day quiet hours schedule evaluation supporting overnight spans crossing midnight (e.g. 22:00 to 06:00).
+  - Configurable alert rules with zone filters, event action triggers, entity categories (`restricted`, `unknown`), minimum dwell duration, and rule-level cooldowns.
+  - Automatic alert derivation: transforms raw track and zone interactions into `IntrusionAlert` and `RestrictedEntityAlert` with attached visual snapshots.
+- Integrate alerting pipeline into `AnalyticsEngine`, `main.py`, and `ZoneROI` (with `capacity_limit` threshold monitoring).
+- Provide complete demo configuration `configs/alert_demo.yaml`.
+- Build comprehensive unit test suite in `tests/test_events.py` with real local HTTP echo test server, mock MQTT, and rules integration (18 tests).
+
+### 2. Files Touched
+- `requirements.txt`: Added `paho-mqtt>=2.0.0`, `requests>=2.28.0`, and `python-telegram-bot>=20.0`.
+- `intelligent_tracker/events.py`: Created complete event dispatching and alerting system (`EventBus`, `WebhookDispatcher`, `TelegramDispatcher`, `MqttPublisher`, `QuietHours`, `AlertRule`, `AlertRuleEngine`, `setup_event_pipeline`, typed dataclasses, and snapshot encoders).
+- `intelligent_tracker/geometry.py`: Added `capacity_limit` and `_threshold_breached` attributes to `ZoneROI`.
+- `intelligent_tracker/analytics.py`: Integrated `event_bus` and `camera_id` into `AnalyticsEngine`, automated event conversion and publishing (`TripwireCrossEvent`, `ZoneEvent`), and added capacity limit threshold checking (`OccupancyThresholdEvent`).
+- `main.py`: Added `alerting` configuration parsing, event pipeline initialization, Re-ID recognition event publishing (`EntityIdentifiedEvent`, `RestrictedEntityAlert`), real-time MQTT occupancy telemetry broadcasting, and clean pipeline shutdown.
+- `configs/alert_demo.yaml`: Created complete demonstration configuration with synthetic source, mock detector, restricted vault zone, public lobby, webhook dispatcher, mock Telegram bot, mock MQTT broker, and security alert rules.
+- `tests/test_events.py`: Created 18 comprehensive unit tests covering dataclasses, snapshot encoders, event bus pub/sub, local HTTP echo server webhook delivery, retry/backoff, Telegram rate-limiting and `/status` commands, MQTT topics, quiet hours overnight spans, rule matching, and full pipeline integration.
+- `documentation/events.rst`: Created detailed technical documentation for Milestone 5.
+- `documentation/index.rst`: Added `events` to Sphinx toctree.
+- `documentation/intelligent_tracker.rst`: Added `intelligent_tracker.events` automodule documentation.
+- `README.rst`: Updated scenarios matrix with `configs/alert_demo.yaml`, updated test suite commands, and marked Milestone 5 complete in roadmap.
+- `TODO_MODERNIZATION.md`: Marked Phase 5 tasks complete.
+- `milestone_plan.md`: Updated Milestone 5 status to COMPLETE with verification commands and deliverables.
+- `MIGRATION_LOG.md`: Documented Milestone 5 completion and updated context recovery guide.
+
+### 3. State & Checkpoint
+- **Status:** Milestone 5 COMPLETE (100% Green Unit Tests)
+- **Automated Verification:**
+  - Full test suite: `.\.venv\Scripts\python.exe -m unittest discover tests` with `MPLBACKEND=Agg`.
+  - Result: **Ran 115 tests in 6.189s — OK (0 failures, 0 errors, 100% passing)**.
+  - Milestone 5 unit tests: `tests/test_events.py` -> **18/18 OK (1.21s)**.
+  - Database unit tests: `tests/test_database.py` -> **8/8 OK (0.74s)**.
+  - Re-ID unit tests: `tests/test_reid.py` -> **7/7 OK (0.07s)**.
+  - Matcher unit tests: `tests/test_matcher.py` -> **6/6 OK (0.01s)**.
+  - Interactive unit tests: `tests/test_interactive.py` -> **4/4 OK (0.03s)**.
+  - Batch indexer unit tests: `tests/test_batch.py` -> **2/2 OK (0.14s)**.
+  - Detector unit tests: `tests/test_detectors.py` -> **25/25 OK (0.84s)**.
+  - Video, tracker & analytics unit tests: `tests/test_video.py`, `tests/test_tracker.py`, `tests/test_analytics.py` -> **27/27 OK (0.50s)**.
+  - Core & geometry legacy tests: `tests/test_geometry.py`, `tests/test_core.py`, `tests/test_forms.py` -> **21/21 OK (1.42s)**.
+- **Pipeline Benchmarks:**
+  - `main.py --config configs/alert_demo.yaml --headless --frames 30` -> 27.7 FPS with active Webhook, Telegram, MQTT, and Rules engine.
+- **Next Phase:**
+  - Milestone 6: Web Dashboard, Packaging & Edge Deployment (FastAPI + WebSocket live stream, React/HTML5 web UI, Docker containerization, systemd service, Sphinx docs).
+
+### 4. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run full test suite (115 tests)
+  $env:MPLBACKEND="Agg"
+  .\.venv\Scripts\python.exe -m unittest discover tests
+
+  # 2. Run Milestone 5 Event Dispatching & Alerting unit test suite specifically (18 tests)
+  .\.venv\Scripts\python.exe -m tests.test_events
+
+  # 3. Run live tracking with YOLOv8, ONNX Re-ID, and SQLite database
+  .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --reid onnx --db data/tracker.db --headless --frames 30
+
+  # 4. Run live tracking with Milestone 5 Event Alerting Pipeline (Webhooks, Telegram, MQTT, Rules)
+  .\.venv\Scripts\python.exe main.py --config configs/alert_demo.yaml --headless --frames 30
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python -m tests.test_events
+  python main.py --config configs/alert_demo.yaml --headless --frames 30
+  ```
+
+### 5. Quota / Context Recovery Guide
+- If a new agent session starts:
+  - Working directory: `c:\dev\projects\products\intelligent_tracker`
+  - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
+  - Downloaded AI models: Located in `models/` (`yolov8n.onnx`, `yolo11n.onnx`, `osnet_x0_25.onnx`).
+  - Next task to execute: **Milestone 6 — Web Dashboard, Packaging & Edge Deployment**.
+  - Review `milestone_plan.md` (lines 276-320) and `TODO_MODERNIZATION.md` (lines 113-124) for Milestone 6 requirements:
+    - 6a: Modern Web Analytics Dashboard (FastAPI + WebSocket + MJPEG live stream).
+    - 6b: Entity Gallery View in Browser.
+    - 6c: Edge Deployment (Dockerfile for ARM64/x86_64, systemd service).
+    - 6d: Sphinx HTML Documentation Refresh.
 
 
 

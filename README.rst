@@ -208,17 +208,19 @@ Scenario Combinations Matrix
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Offline Video Recording Indexer** | ``yolov8`` | ``centroid``| ``footage.mp4``   | -                   | ``--sample-rate 2 --report``                    | Offline Batch       | ``python -m intelligent_tracker.batch --video footage.mp4 --db data/tracker.db --report``           |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Event Dispatching & Alerting**    | ``mock``   | ``centroid``| ``synthetic``     | ``configs/alert_demo.yaml``| ``--headless --frames 30``               | Headless / Live     | ``python main.py --config configs/alert_demo.yaml --headless --frames 30``                          |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 
 Interactive GUI Controls
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 - **Mouse Click**: Left-click on any tracked bounding box in the GUI window to inspect/select that entity and display real-time telemetry (ID, label, confidence, dwell time, velocity). Click in empty space to deselect.
 - **Spacebar**: Pause / Resume video playback without losing tracking states.
-- ``e``: Enroll currently selected track into persistent SQLite Re-ID gallery with custom name, category, and notes.
-- ``d``: Clear / reset active tracks and deselect.
-- ``h``: Toggle live 2D spatial occupancy heatmap overlay.
-- ``s``: Save instantaneous snapshot image (``snapshot_<timestamp>.png``) and analytics report (``analytics_report_<timestamp>.json``).
-- ``[X]`` Close Button / ``q`` / ``ESC``: Gracefully exit application with highgui event flushing.
+- **``e``**: Enroll currently selected track into persistent SQLite Re-ID gallery with custom name, category, and notes.
+- **``d``**: Clear / reset active tracks and deselect.
+- **``h``**: Toggle live 2D spatial occupancy heatmap overlay.
+- **``s``**: Save instantaneous snapshot image (``snapshot_<timestamp>.png``) and analytics report (``analytics_report_<timestamp>.json``).
+- **``[X]`` Close Button / ``q`` / ``ESC``**: Gracefully exit application with highgui event flushing.
 
 
 Running the Test Suite
@@ -228,17 +230,20 @@ All unit tests run via Python's standard ``unittest`` discovery:
 
 .. code-block:: powershell
 
-    # Run full test suite (92 tests)
+    # Run full test suite (115 tests, 100% green)
     $env:MPLBACKEND="Agg"
     .\.venv\Scripts\python.exe -m unittest discover tests
 
-    # Run database, Re-ID, and batch indexing tests (21 tests)
+    # Run Milestone 5 Event Dispatching & Alerting unit tests (18 tests)
+    .\.venv\Scripts\python.exe -m tests.test_events
+
+    # Run database, Re-ID, and batch indexing tests (27 tests)
     .\.venv\Scripts\python.exe -m unittest tests/test_database.py tests/test_reid.py tests/test_matcher.py tests/test_interactive.py tests/test_batch.py
 
     # Run detector-specific unit tests (25 tests)
     .\.venv\Scripts\python.exe -m unittest tests/test_detectors.py
 
-    # Run video, tracker, and analytics unit tests (21 tests)
+    # Run video, tracker, and analytics unit tests (24 tests)
     .\.venv\Scripts\python.exe -m unittest tests/test_video.py tests/test_tracker.py tests/test_analytics.py
 
 Roadmap & Status
@@ -248,7 +253,7 @@ Roadmap & Status
 - [x] **Milestone 2**: Edge AI Detection Architecture (YOLOv8/YOLO11 ONNX, BaseDetector, pure NumPy NMS).
 - [x] **Milestone 3**: RTSP Camera Streams & Retail / Occupancy Analytics (non-blocking reader, tripwires, heatmaps).
 - [x] **Milestone 4**: Object Identity Gallery, Visual Re-ID & Sighting Database (SQLite DB, ONNX OSNet, HSV fallback, interactive tagging, batch indexer).
-- [ ] **Milestone 5**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT).
+- [x] **Milestone 5**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT, quiet hours & rule engine).
 - [ ] **Milestone 6**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd).
 
 See ``milestone_plan.md`` and ``TODO_MODERNIZATION.md`` for complete details.

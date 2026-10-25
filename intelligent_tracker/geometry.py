@@ -1648,10 +1648,13 @@ class ZoneROI(object):
         name="zone_1",
         dwell_threshold=5.0,
         color=(0, 200, 100),
+        capacity_limit=None,
     ):
         self.name = str(name)
         self.dwell_threshold = float(dwell_threshold)
         self.color = color
+        self.capacity_limit = int(capacity_limit) if capacity_limit is not None else None
+        self._threshold_breached = False
 
         # Normalize polygon points to NumPy array of shape (N, 1, 2) int32 for OpenCV
         pts = []

@@ -338,10 +338,12 @@ def main():
         z_poly = z_data.get("polygon")
         z_dwell = float(z_data.get("dwell_threshold", 5.0))
         z_col = tuple(z_data.get("color", [0, 200, 100]))
+        z_cap = z_data.get("capacity_limit", z_data.get("max_occupancy"))
         if z_poly and len(z_poly) >= 3:
-            zone = ZoneROI(polygon=z_poly, name=z_name, dwell_threshold=z_dwell, color=z_col)
+            zone = ZoneROI(polygon=z_poly, name=z_name, dwell_threshold=z_dwell, color=z_col, capacity_limit=z_cap)
             analytics.add_zone(zone)
-            print("[INFO] Registered Zone ROI: '{}' ({} vertices)".format(z_name, len(z_poly)))
+            cap_str = " (capacity: {})".format(z_cap) if z_cap else ""
+            print("[INFO] Registered Zone ROI: '{}' ({} vertices){}".format(z_name, len(z_poly), cap_str))
 
     # 5b. Initialize Re-ID Engine & Sighting Database (if enabled)
     db = None
@@ -362,6 +364,32 @@ def main():
         except Exception as e:
             print("[WARN] Failed to initialize Re-ID engine: {}".format(e))
             gallery_matcher = None
+
+    # 5c. Initialize Event Alerting Pipeline (Webhooks, Telegram, MQTT, Rules)
+    event_pipeline = None
+    event_bus = None
+    alert_cfg = cfg.get("alerting", cfg.get("events"))
+    if alert_cfg:
+        try:
+            from intelligent_tracker.events import setup_event_pipeline
+            event_pipeline = setup_event_pipeline(cfg)
+            event_bus = event_pipeline.get("event_bus")
+            analytics.event_bus = event_bus
+            print("[INFO] Initialized Event Dispatching & Alerting Pipeline:")
+            if event_pipeline.get("webhooks"):
+                print("  - Webhooks   : {} active endpoint(s)".format(len(event_pipeline["webhooks"])))
+            if event_pipeline.get("telegram"):
+                print("  - Telegram   : enabled (mock={})".format(event_pipeline["telegram"].mock))
+            if event_pipeline.get("mqtt"):
+                print("  - MQTT       : {} (broker: {}:{})".format(
+                    "connected" if event_pipeline["mqtt"].is_connected else "offline",
+                    event_pipeline["mqtt"].broker,
+                    event_pipeline["mqtt"].port,
+                ))
+            if event_pipeline.get("rule_engine"):
+                print("  - Alert Rules: {} active rule(s)".format(len(event_pipeline["rule_engine"].rules)))
+        except Exception as e:
+            print("[WARN] Failed to initialize event alerting pipeline: {}".format(e))
 
     # 6. Initialize Video Writer (if output specified)
     writer = None
@@ -466,9 +494,53 @@ def main():
                         print("[RE-ID] Identified Track #{}: '{}' [{}] (similarity: {:.1f}%)".format(
                             ev.track_id, ev.name, ev.category, float(ev.similarity) * 100
                         ))
+                        if event_bus is not None:
+                            try:
+                                from intelligent_tracker.events import EntityIdentifiedEvent, RestrictedEntityAlert, crop_to_base64
+                                trk = tracks.get(ev.track_id)
+                                snap_b64 = crop_to_base64(frame, trk.bbox) if trk else None
+                                id_ev = EntityIdentifiedEvent(
+                                    camera_id=analytics.camera_id,
+                                    track_id=ev.track_id,
+                                    entity_id=getattr(ev, "entity_id", 0),
+                                    name=ev.name,
+                                    category=ev.category,
+                                    similarity=ev.similarity,
+                                    snapshot_base64=snap_b64,
+                                    timestamp=t0,
+                                )
+                                event_bus.publish(id_ev)
+
+                                if str(ev.category).lower() in ("restricted", "banned", "blacklisted"):
+                                    re_alert = RestrictedEntityAlert(
+                                        camera_id=analytics.camera_id,
+                                        track_id=ev.track_id,
+                                        entity_id=getattr(ev, "entity_id", 0),
+                                        name=ev.name,
+                                        category=ev.category,
+                                        severity="critical",
+                                        message="Restricted entity '{}' detected".format(ev.name),
+                                        snapshot_base64=snap_b64,
+                                        timestamp=t0,
+                                    )
+                                    event_bus.publish(re_alert)
+                            except Exception:
+                                pass
 
                 # Step C: Analytics (Tripwires, Zones, Heatmap)
                 analytics_telemetry = analytics.update(tracks, timestamp=t0)
+
+                # Broadcast MQTT live telemetry
+                if event_pipeline and event_pipeline.get("mqtt"):
+                    try:
+                        event_pipeline["mqtt"].publish_occupancy(
+                            camera_id=analytics.camera_id,
+                            zone_occupancy=analytics_telemetry["zone_occupancy"],
+                            total_tracks=len(tracks),
+                            timestamp=t0,
+                        )
+                    except Exception:
+                        pass
 
                 # Step D: Visual Overlay
                 annotated = analytics.draw(
@@ -598,6 +670,13 @@ def main():
         cv2.destroyAllWindows()
         for _ in range(5):
             cv2.waitKey(1)
+
+    if event_pipeline:
+        if event_pipeline.get("mqtt"):
+            event_pipeline["mqtt"].disconnect()
+        if event_pipeline.get("event_bus"):
+            event_pipeline["event_bus"].stop(timeout=1.0)
+        print("[INFO] Event alerting pipeline stopped cleanly.")
 
     summary = analytics.export_summary()
     print("=" * 65)
