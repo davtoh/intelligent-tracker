@@ -4,11 +4,14 @@
 Persistent SQLite Entity, Signature & Sighting Database Module.
 
 Provides:
-- `TrackerDB`: Embedded, zero-configuration thread-safe SQLite database manager
+
+- ``TrackerDB``: Embedded, zero-configuration thread-safe SQLite database manager
   storing:
-    1. `entities`: Registered individuals, vehicles, or tracked assets with categories and metadata.
-    2. `entity_signatures`: Feature embeddings (BLOBs) and thumbnail crops for visual Re-ID.
-    3. `sightings`: Complete audit trail of where, when, and with what confidence each entity appeared.
+
+  1. ``entities``: Registered individuals, vehicles, or tracked assets with categories and metadata.
+  2. ``entity_signatures``: Feature embeddings (BLOBs) and thumbnail crops for visual Re-ID.
+  3. ``sightings``: Complete audit trail of where, when, and with what confidence each entity appeared.
+
 - Indexing for fast chronological timeline and source-based lookup queries.
 - Occurrence analytics and summary export (JSON, CSV).
 """
@@ -456,6 +459,8 @@ class TrackerDB(object):
             finally:
                 cursor.close()
 
+    record_sighting = add_sighting
+
     def get_sightings(
         self,
         entity_id: Optional[int] = None,
@@ -504,6 +509,8 @@ class TrackerDB(object):
                 return [dict(r) for r in cursor.fetchall()]
             finally:
                 cursor.close()
+
+    query_sightings = get_sightings
 
     def get_entity_analytics(self, entity_id: int) -> Dict[str, Any]:
         """

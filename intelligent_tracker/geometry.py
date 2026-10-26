@@ -49,7 +49,7 @@ def bezier(point, line, check=False):
     """
     Apply bezier algorithm to return a value t from 0 to 1 in x and y,
     that is tx and ty, if point is inside line where t would be the
-     percentage of the distance from point1 to point2. If point
+    percentage of the distance from point1 to point2. If point
     is outside line then t<0 or t>1. If line is horizontal then ty is not
     percentage but the distance from the horizontal and conversely if line
     is vertical then tx is not percentage but the distance from the vertical.
@@ -1540,6 +1540,18 @@ class Tripwire(object):
         self.dx = self.pt2[0] - self.pt1[0]
         self.dy = self.pt2[1] - self.pt1[1]
 
+    @property
+    def line_segment(self):
+        return (self.pt1, self.pt2)
+
+    @property
+    def in_count(self):
+        return self.total_in
+
+    @property
+    def out_count(self):
+        return self.total_out
+
     def check_crossing(self, track_id, prev_centroid, curr_centroid, timestamp=None):
         """
         Check if trajectory between prev_centroid and curr_centroid crossed the tripwire.
@@ -1674,6 +1686,11 @@ class ZoneROI(object):
         """Vectorized point-in-polygon containment test via cv2.pointPolygonTest."""
         p = (float(pt[0]), float(pt[1]))
         return cv2.pointPolygonTest(self.contour, p, False) >= 0
+
+    @property
+    def polygon(self):
+        """Array of vertices defining the zone polygon."""
+        return self.points
 
     @property
     def occupancy(self):

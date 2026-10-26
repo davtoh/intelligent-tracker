@@ -4,13 +4,14 @@
 Visual Feature Descriptors & Re-Identification (Re-ID) Embeddings Module.
 
 Provides:
-- `BaseFeatureExtractor`: Abstract interface for visual feature extraction.
-- `ColorHistogramExtractor`: Ultra-lightweight spatial-grid HSV color descriptor
+
+- ``BaseFeatureExtractor``: Abstract interface for visual feature extraction.
+- ``ColorHistogramExtractor``: Ultra-lightweight spatial-grid HSV color descriptor
   (zero neural network dependency, pure NumPy, sub-millisecond execution).
-- `OnnxReIDExtractor`: Deep visual embedding extractor via ONNX Runtime
+- ``OnnxReIDExtractor``: Deep visual embedding extractor via ONNX Runtime
   with multi-provider execution cascade (CUDA -> DirectML -> OpenVINO -> CoreML -> CPU).
-- `MockFeatureExtractor`: Deterministic synthetic feature extractor for tests and headless CI.
-- `ReIDExtractorFactory`: Decoupled registry and factory for feature extractors.
+- ``MockFeatureExtractor``: Deterministic synthetic feature extractor for tests and headless CI.
+- ``ReIDExtractorFactory``: Decoupled registry and factory for feature extractors.
 - Cosine similarity matching primitives for gallery association.
 """
 

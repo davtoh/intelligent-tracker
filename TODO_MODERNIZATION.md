@@ -116,13 +116,15 @@
 ---
 
 ### Phase 6: Modern Web Dashboard, Packaging & Edge Deployment
-- [ ] **Modern Web Analytics Dashboard**:
+- [x] **Modern Web Analytics Dashboard**:
   - FastAPI + WebSocket backend with live MJPEG camera streams.
-  - React / HTML5 frontend with real-time zone counters, heatmaps, and alert logs.
+  - HTML5/Canvas/CSS frontend with real-time zone counters, heatmaps, and alert logs.
   - **Entity Gallery View**: Browse enrolled people/objects, view appearance timelines, click-to-tag in browser.
-- [ ] **Raspberry Pi OS / Edge Deployment**:
-  - Systemd service configurations and Docker containerization (`Dockerfile` for ARM64 and x86_64).
+- [x] **Raspberry Pi OS / Edge Deployment**:
+  - Systemd service configurations and Docker containerization (`Dockerfile`, `Dockerfile.arm64`, `Dockerfile.amd64`, `docker-compose.yml`).
   - Hardware acceleration flags (OpenVINO, Coral Edge TPU delegate, Raspberry Pi Camera Module `libcamera`).
-- [ ] **Documentation & Sphinx Modernization**:
-  - Refresh Sphinx configuration and generate clean HTML documentation.
-  - Update `README.md` with architecture diagrams and quickstart examples.
+  - Modernized `install_opencv.sh` with Bookworm (Debian 12) / Ubuntu 24.04 support.
+  - Multi-version matrix CI/CD with GitHub Actions (`.github/workflows/ci.yml`).
+- [x] **Documentation & Sphinx Modernization**:
+  - Refresh Sphinx configuration (Sphinx 9+ compatible, RTD theme, zero warnings).
+  - Update `README.rst`, `milestone_plan.md`, `MIGRATION_LOG.md` with architecture diagrams and quickstart examples.

@@ -1,0 +1,30 @@
+[Unit]
+Description=Intelligent Tracker - Web Analytics Dashboard & Live Gateway
+After=network.target intelligent-tracker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/intelligent-tracker
+Environment="PATH=/opt/intelligent-tracker/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="MPLBACKEND=Agg"
+Environment="TRACKER_CONFIG=configs/alert_demo.yaml"
+Environment="TRACKER_DB=data/tracker.db"
+
+# Uvicorn ASGI server hosting the FastAPI web dashboard
+ExecStart=/opt/intelligent-tracker/.venv/bin/python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000 --workers 1
+
+Restart=always
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/intelligent-tracker/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,81 @@
+services:
+  # ============================================================================
+  # 1. Web Analytics Dashboard & Live MJPEG/WebSocket Gateway
+  # ============================================================================
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: intelligent-tracker-dashboard
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - TRACKER_CONFIG=configs/alert_demo.yaml
+      - TRACKER_DB=/app/data/tracker.db
+      - MPLBACKEND=Agg
+    volumes:
+      - tracker-data:/app/data
+      - ./models:/app/models:ro
+      - ./configs:/app/configs:ro
+    depends_on:
+      mosquitto:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tracker-net
+
+  # ============================================================================
+  # 2. Standalone Edge Vision & Tracking Daemon (Optional Dedicated Worker)
+  # ============================================================================
+  tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: intelligent-tracker-core
+    restart: unless-stopped
+    command: ["python", "main.py", "--config", "configs/alert_demo.yaml", "--headless", "--frames", "0"]
+    environment:
+      - TRACKER_CONFIG=configs/alert_demo.yaml
+      - MPLBACKEND=Agg
+    volumes:
+      - tracker-data:/app/data
+      - ./models:/app/models:ro
+      - ./configs:/app/configs:ro
+    depends_on:
+      mosquitto:
+        condition: service_started
+    networks:
+      - tracker-net
+
+  # ============================================================================
+  # 3. Lightweight Local MQTT Broker (Home Assistant / Node-RED telemetry)
+  # ============================================================================
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: intelligent-tracker-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./deployment/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    networks:
+      - tracker-net
+
+volumes:
+  tracker-data:
+    driver: local
+  mosquitto-data:
+    driver: local
+  mosquitto-log:
+    driver: local
+
+networks:
+  tracker-net:
+    driver: bridge

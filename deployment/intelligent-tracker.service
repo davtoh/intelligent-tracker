@@ -1,0 +1,32 @@
+[Unit]
+Description=Intelligent Tracker - Edge AI Vision & Analytics Daemon
+After=network.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/intelligent-tracker
+Environment="PATH=/opt/intelligent-tracker/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="MPLBACKEND=Agg"
+Environment="TRACKER_CONFIG=configs/alert_demo.yaml"
+
+# Execution command (runs headless edge inference pipeline)
+ExecStart=/opt/intelligent-tracker/.venv/bin/python main.py --config configs/alert_demo.yaml --headless --frames 0
+
+# Reliability & Auto-restart configuration
+Restart=always
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# Security & Sandboxing
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/intelligent-tracker/data /opt/intelligent-tracker/logs
+DevicePolicy=auto
+
+[Install]
+WantedBy=multi-user.target

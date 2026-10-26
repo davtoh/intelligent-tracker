@@ -4,12 +4,13 @@
 Multi-Object Tracking (MOT) Module.
 
 Provides:
-- `Track`: Rich object tracking representation with trajectory history, velocity,
+
+- ``Track``: Rich object tracking representation with trajectory history, velocity,
   state lifecycle, and spatial bounding boxes.
-- `CentroidTracker`: IoU and Euclidean distance-based frame-to-frame association
+- ``CentroidTracker``: IoU and Euclidean distance-based frame-to-frame association
   with zero heavy dependencies.
-- `SortTracker`: Simple Online and Realtime Tracking using pure NumPy Kalman filters.
-- `TrackerFactory`: Registry for dynamic instantiation.
+- ``SortTracker``: Simple Online and Realtime Tracking using pure NumPy Kalman filters.
+- ``TrackerFactory``: Registry for dynamic instantiation.
 """
 
 from __future__ import division, print_function, absolute_import
@@ -469,10 +470,11 @@ class CentroidTracker(object):
 class KalmanBoxTracker(object):
     """
     2D Kinematic Kalman Filter for bounding box tracking in pure NumPy.
-    State: [x, y, s, r, vx, vy, vs]
-      (x, y) = center of bbox
-      s = area (w * h)
-      r = aspect ratio (w / h)
+
+    State: ``[x, y, s, r, vx, vy, vs]`` where:
+    - ``(x, y)`` = center of bbox
+    - ``s`` = area (w * h)
+    - ``r`` = aspect ratio (w / h)
     """
 
     count = 0

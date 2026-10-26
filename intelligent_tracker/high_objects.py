@@ -207,7 +207,7 @@ class Scene(Space):
     and configure how the place is seen through the perspectives it can
     observe in places (cameras)
     
-    .. example::
+    .. code-block:: python
         
         # create a scene with two available cameras
         scene = Scene([None, None])

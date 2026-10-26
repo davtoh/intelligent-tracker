@@ -4,9 +4,10 @@
 Retail & Occupancy Analytics Engine.
 
 Provides:
-- `OccupancyHeatmap`: Real-time 2D spatial density accumulation with Gaussian
+
+- ``OccupancyHeatmap``: Real-time 2D spatial density accumulation with Gaussian
   dispersion, temporal decay, false-color overlay, and PNG/CSV exports.
-- `AnalyticsEngine`: Orchestrates multi-zone occupancy, tripwire crossing
+- ``AnalyticsEngine``: Orchestrates multi-zone occupancy, tripwire crossing
   tallies, dwell times, event logging, and telemetry reporting.
 """
 
@@ -137,6 +138,15 @@ class OccupancyHeatmap(object):
         mask = norm >= min_threshold
         norm_uint8 = (norm * 255.0).astype(np.uint8)
         return norm_uint8, mask
+
+    def get_colored_map(self, colormap: Optional[int] = None) -> np.ndarray:
+        """
+        Render standalone false-color mapped heatmap image.
+        :return: Colorized BGR image (H, W, 3)
+        """
+        cmap = colormap if colormap is not None else self.colormap
+        norm_uint8, _ = self.get_normalized(min_threshold=0.0)
+        return cv2.applyColorMap(norm_uint8, cmap)
 
     def draw(
         self,

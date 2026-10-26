@@ -4,16 +4,17 @@
 Event Dispatching & Alerting System.
 
 Provides:
-- Typed event dataclasses: `BaseEvent`, `ZoneEvent`, `TripwireCrossEvent`,
-  `IntrusionAlert`, `OccupancyThresholdEvent`, `EntityIdentifiedEvent`,
-  `RestrictedEntityAlert`.
-- `EventBus`: Thread-safe publish/subscribe asynchronous dispatch queue.
-- `WebhookDispatcher`: HTTP POST delivery with exponential backoff retries.
-- `TelegramDispatcher`: Telegram Bot API notifications with image snapshots,
-  rate limiting, and `/status` command handling.
-- `MqttPublisher`: Home Assistant / Node-RED compatible MQTT telemetry and
+
+- Typed event dataclasses: ``BaseEvent``, ``ZoneEvent``, ``TripwireCrossEvent``,
+  ``IntrusionAlert``, ``OccupancyThresholdEvent``, ``EntityIdentifiedEvent``,
+  ``RestrictedEntityAlert``.
+- ``EventBus``: Thread-safe publish/subscribe asynchronous dispatch queue.
+- ``WebhookDispatcher``: HTTP POST delivery with exponential backoff retries.
+- ``TelegramDispatcher``: Telegram Bot API notifications with image snapshots,
+  rate limiting, and ``/status`` command handling.
+- ``MqttPublisher``: Home Assistant / Node-RED compatible MQTT telemetry and
   retained topics.
-- `QuietHours` & `AlertRuleEngine`: Time-of-day schedules, entity-specific
+- ``QuietHours`` & ``AlertRuleEngine``: Time-of-day schedules, entity-specific
   filters, dwell-time rules, and notification cooldowns.
 """
 
@@ -392,6 +393,12 @@ class EventBus(object):
             return True
         except Exception:
             return True
+
+    @property
+    def published_count(self) -> int:
+        """Total number of events recorded in the ring buffer."""
+        with self._history_lock:
+            return len(self._history)
 
     def get_recent_events(
         self,

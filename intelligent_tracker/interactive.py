@@ -4,6 +4,7 @@
 Interactive Screen Selection, Entity Tagging & Visual Controls Module.
 
 Provides:
+
 - Interactive mouse click inspection on tracked bounding boxes in live/paused video.
 - Real-time inspector overlay displaying Track ID, Re-ID entity match, trajectory,
   dwell duration, classification confidence, and velocity.
@@ -11,8 +12,8 @@ Provides:
   automatically storing thumbnail crops and feature signatures into TrackerDB.
 - Interactive ROI drawing: Click-and-draw virtual tripwires and polygonal zones
   directly on the video window.
-- Dual GUI support: High-speed OpenCV HUD (`--gui opencv`) and Matplotlib (`--gui forms`).
-- Standalone CLI execution (`python -m intelligent_tracker.interactive`).
+- Dual GUI support: High-speed OpenCV HUD (``--gui opencv``) and Matplotlib (``--gui forms``).
+- Standalone CLI execution (``python -m intelligent_tracker.interactive``).
 """
 
 from __future__ import division, print_function, absolute_import

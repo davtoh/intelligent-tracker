@@ -1,17 +1,43 @@
-.. intelligent-tracker documentation master file, created by
-   sphinx-quickstart on Fri Jul 13 19:22:56 2018.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. intelligent-tracker documentation master file.
 
-Welcome to intelligent-tracker's documentation!
-===============================================
+Intelligent Tracker Documentation
+=================================
 
-Contents
-========
+**Intelligent Tracker** is a modular, high-performance edge computer vision pipeline designed for real-time multi-object tracking, spatial analytics, Person/Vehicle Re-Identification (Re-ID), automated event alerting, and interactive web dashboard monitoring.
+
+System Architecture
+-------------------
+
+.. code-block:: text
+
+    +-------------------+      +-------------------+      +-------------------+
+    |   Video Source    | ---> | Deep Learning     | ---> | Multi-Object      |
+    | (Webcam/RTSP/Pi)  |      | Detectors (YOLO/  |      | Tracker           |
+    |                   |      | SSD/EdgeTPU/HOG)  |      | (ByteTrack/SORT)  |
+    +-------------------+      +-------------------+      +-------------------+
+                                                                    |
+                                                                    v
+    +-------------------+      +-------------------+      +-------------------+
+    | Web Dashboard     | <--- | Event Bus &       | <--- | Spatial Analytics |
+    | (FastAPI, Canvas, |      | Alert Rule Engine |      | (Zones, Tripwires,|
+    | MJPEG, WebSocket) |      | (MQTT/Telegram)   |      | Dwell, Heatmaps)  |
+    +-------------------+      +-------------------+      +-------------------+
+              ^                          ^                          ^
+              |                          |                          |
+              +--------------------------+--------------------------+
+                                         |
+                               +-------------------+
+                               | Person / Vehicle  |
+                               | Re-Identification |
+                               | (OSNet / SQLite)  |
+                               +-------------------+
+
+Documentation Contents
+----------------------
 
 .. toctree::
-   :maxdepth: 4
-   :caption: Contents:
+   :maxdepth: 2
+   :caption: Core Pipeline & Modules:
 
    intelligent_tracker
    detectors
@@ -19,6 +45,12 @@ Contents
    reid
    events
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Dashboard & Edge Deployment:
+
+   dashboard
+   deployment
 
 Indices and tables
 ==================

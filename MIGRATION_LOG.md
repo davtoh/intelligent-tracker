@@ -562,16 +562,158 @@
   ```
 
 ### 5. Quota / Context Recovery Guide
-- If a new agent session starts:
-  - Working directory: `c:\dev\projects\products\intelligent_tracker`
-  - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
-  - Downloaded AI models: Located in `models/` (`yolov8n.onnx`, `yolo11n.onnx`, `osnet_x0_25.onnx`).
-  - Next task to execute: **Milestone 6 — Web Dashboard, Packaging & Edge Deployment**.
-  - Review `milestone_plan.md` (lines 276-320) and `TODO_MODERNIZATION.md` (lines 113-124) for Milestone 6 requirements:
-    - 6a: Modern Web Analytics Dashboard (FastAPI + WebSocket + MJPEG live stream).
-    - 6b: Entity Gallery View in Browser.
-    - 6c: Edge Deployment (Dockerfile for ARM64/x86_64, systemd service).
-    - 6d: Sphinx HTML Documentation Refresh.
+- Working directory: `c:\dev\projects\products\intelligent_tracker`
+- Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
+- Downloaded AI models: Located in `models/` (`yolov8n.onnx`, `yolo11n.onnx`, `osnet_x0_25.onnx`).
+- All Project Milestones M1 through M6 are **COMPLETE (100% green unit tests)**.
+
+---
+
+## [Milestone 6] - 2026-10-24 - Web Dashboard, Packaging & Edge Deployment
+
+### 1. Objectives & Scope
+- **6a — Modern Web Analytics Dashboard (FastAPI + WebSockets + HTML5/CSS/JS):**
+  - Built standalone, high-performance web dashboard application in `dashboard/app.py` powered by FastAPI, Uvicorn, and Starlette.
+  - Live multipart MJPEG streaming endpoint: `GET /stream/{camera_id}` with boundary frame streaming and adaptive quality compression.
+  - Bidirectional WebSocket telemetry feed: `WS /ws/{camera_id}` pushing real-time active tracks, dwell durations, velocities, zone occupancies, tripwire tallies, and alert events.
+  - REST API surface:
+    - `GET /cameras`: Available camera feeds and operational statuses.
+    - `GET /zones`: Zone names, vertices, current occupancies, capacity limits, and breach states.
+    - `GET /analytics/heatmap`: False-color density overlay (JPEG) or raw 2D spatial grid (JSON).
+    - `POST /analytics/heatmap/toggle`: Dynamic toggle for real-time heatmap display on video.
+    - `GET /entities`, `POST /entities`, `GET /entities/{entity_id}`, `DELETE /entities/{entity_id}`: Full CRUD lifecycle for enrolled identities.
+    - `GET /sightings`: Chronological sighting queries with filtering by entity, zone, and time range.
+    - `GET /events`: Recent alert log from EventBus history.
+    - `POST /tag`: Interactive click-to-tag bounding box enrollment directly from live video.
+    - `GET /status`: Live hardware metrics (CPU %, RAM %, active stream FPS, memory consumption).
+    - `GET /crops/{filename}`: Static serving of enrolled entity facial/body thumbnail crops.
+  - Interactive Responsive Web UI in `dashboard/static/`:
+    - Dark-mode glassmorphic interface with vibrant neon accents and semantic HTML5 layout.
+    - Canvas-based bounding box hit-testing directly on the live MJPEG stream allowing operators to hover and click any tracked object to enroll their identity in real time.
+    - **Entity Gallery View**: Visual grid displaying enrolled identities, category badges (`staff`, `vip`, `restricted`, `customer`), appearance counts, and high-resolution thumbnail crops.
+    - **Sighting Timeline Player**: Searchable historical audit trail displaying sighting timestamps, confidence percentages, thumbnail evidence, and zone locations.
+    - **Spatial Heatmap Overlay**: Live false-color density visualization toggled on the camera feed.
+    - **Entry/Exit Traffic Analytics**: Chart.js time-series charts visualizing real-time tripwire crossing rates and zone occupancy levels.
+    - Real-time notification toast modals for incoming security alerts (`IntrusionAlert`, `RestrictedEntityAlert`, `OccupancyThresholdEvent`).
+
+- **6b — Edge Deployment & Multi-Architecture Packaging:**
+  - Multi-stage Docker containerization:
+    - `Dockerfile.arm64`: Tailored for Raspberry Pi 4/5 (Debian 12 Bookworm, GStreamer, libcamera support).
+    - `Dockerfile.amd64`: Tailored for x86_64 servers and Intel NUC (OpenVINO and DirectML acceleration).
+    - `Dockerfile`: Multi-arch slim runtime build on Python 3.11-slim.
+  - Multi-service composition (`docker-compose.yml`):
+    - `tracker`: Core tracking engine, Re-ID matcher, and event emitter.
+    - `dashboard`: FastAPI Web Dashboard on port `8000`.
+    - `mosquitto`: Eclipse Mosquitto MQTT message broker on port `1883` with volume persistence.
+  - Linux systemd production service definitions:
+    - `deployment/intelligent-tracker.service`: Native background daemon for core video pipeline with auto-restart.
+    - `deployment/intelligent-tracker-dashboard.service`: Native daemon for Uvicorn dashboard server.
+  - Edge hardware acceleration:
+    - Google Coral Edge TPU delegate integration via `EdgeTpuDetector` class in `intelligent_tracker/detectors.py` (supporting `libedgetpu.so.1` and `tflite_runtime`).
+    - Raspberry Pi Camera Module support via native `libcamera` GStreamer pipeline in `intelligent_tracker/video.py` (`libcamerasrc`).
+    - Intel OpenVINO Execution Provider hooks in ONNX Runtime descriptors.
+
+- **6c — Continuous Integration (CI/CD):**
+  - Configured GitHub Actions workflow (`.github/workflows/ci.yml`) matrix-testing Python 3.10, 3.11, and 3.12.
+  - Automated linting with `ruff`, unit testing with `unittest`, and Sphinx documentation building.
+  - Added build status badge to `README.rst`.
+
+- **6d — Sphinx Documentation Modernization:**
+  - Modernized `documentation/conf.py` for Sphinx 9+ compatibility (fixed `intersphinx_mapping`, enabled `sphinx_rtd_theme`).
+  - Added dedicated documentation modules:
+    - `documentation/dashboard.rst`: Architecture, WebSocket JSON schemas, and REST endpoints.
+    - `documentation/deployment.rst`: Raspberry Pi OS setup, libcamera, Docker Compose, systemd, Coral Edge TPU.
+  - Added clean ASCII system architecture diagram and updated toctree in `documentation/index.rst`.
+  - Resolved all docstring reStructuredText indentation and formatting warnings across the entire repository.
+  - Verified clean build with zero warnings (`sphinx -W --keep-going`).
+
+- **6e — Modernized OpenCV Installation Script:**
+  - Rewrote `install_opencv.sh` to support Raspberry Pi OS Bookworm (64-bit / Debian 12) and Ubuntu 24.04 LTS.
+  - Added flags: `--apt` (fast package manager install), `--pip` (venv wheels), and `--source` (custom compile with Coral/GStreamer flags).
+
+### 2. Files Touched
+- `requirements.txt`: Added `fastapi>=0.100.0` and `uvicorn>=0.20.0`.
+- `intelligent_tracker/detectors.py`: Implemented `EdgeTpuDetector` with TFLite delegate and registered in `DetectorFactory`.
+- `intelligent_tracker/video.py`: Added `libcamera` and GStreamer pipeline detection in `_classify_source` and `_open_capture`. Fixed module docstring formatting for Sphinx.
+- `intelligent_tracker/geometry.py`: Added `polygon` property to `ZoneROI`, added `line_segment`, `in_count`, `out_count` properties to `Tripwire`. Fixed docstring formatting in `bezier`.
+- `intelligent_tracker/database.py`: Added backward-compatible aliases `record_sighting` and `query_sightings`. Fixed docstring formatting.
+- `intelligent_tracker/matcher.py`: Added `refresh_gallery` alias to `GalleryMatcher`.
+- `intelligent_tracker/analytics.py`: Added `get_colored_map()` false-color colormap generation to `OccupancyHeatmap`. Fixed docstring formatting.
+- `intelligent_tracker/events.py`: Added `published_count` property to `EventBus`. Fixed docstring formatting.
+- `intelligent_tracker/tracker.py`: Fixed module and `KalmanBoxTracker` docstring formatting.
+- `intelligent_tracker/high_objects.py`: Fixed `.. code-block:: python` docstring directive in `Scene`.
+- `intelligent_tracker/reid.py`, `intelligent_tracker/interactive.py`, `intelligent_tracker/batch.py`: Fixed module docstrings.
+- `dashboard/__init__.py`: Initialized dashboard package.
+- `dashboard/stream_manager.py`: Implemented thread-safe `StreamManager` orchestrating detection, tracking, spatial analytics, Re-ID matching, HUD rendering, telemetry broadcast, and `tag_entity`.
+- `dashboard/app.py`: Created complete FastAPI application with CORS, static assets, MJPEG stream, WebSocket telemetry, and full REST API.
+- `dashboard/static/index.html`: Responsive single-page dashboard layout with Live Monitor, Entity Gallery, Sighting Timeline, Analytics, and Alert Toast components.
+- `dashboard/static/styles.css`: Dark-mode glassmorphic styling, responsive layout grid, glowing status indicators, and modal dialogs.
+- `dashboard/static/app.js`: WebSocket client controller with automatic reconnection, interactive click-to-tag bounding box canvas overlays, gallery filtering, and Chart.js integration.
+- `tests/test_dashboard.py`: Created 10 comprehensive unit tests covering root HTML, cameras, zones, heatmap image/json, entity CRUD, click-to-tag, events, status, MJPEG streaming, and WebSocket telemetry.
+- `Dockerfile.arm64`, `Dockerfile.amd64`, `Dockerfile`: Multi-stage Dockerfiles.
+- `docker-compose.yml`: Multi-service stack (tracker + dashboard + Mosquitto).
+- `deployment/mosquitto.conf`: MQTT broker configuration.
+- `deployment/intelligent-tracker.service`, `deployment/intelligent-tracker-dashboard.service`: Systemd service units.
+- `install_opencv.sh`: Modernized edge installation script.
+- `.github/workflows/ci.yml`: GitHub Actions matrix CI/CD workflow.
+- `documentation/conf.py`: Sphinx 9+ configuration update.
+- `documentation/dashboard.rst`, `documentation/deployment.rst`: Technical documentation guides.
+- `documentation/index.rst`: Architecture diagram and updated toctree.
+- `README.rst`: CI badge, Web Dashboard guide, and completed roadmap.
+- `TODO_MODERNIZATION.md`: Marked Phase 6 tasks complete.
+- `milestone_plan.md`: Updated Milestone 6 status to COMPLETE (100% Green).
+
+### 3. State & Checkpoint
+- **Status:** Milestone 6 COMPLETE — ALL PROJECT MILESTONES (M1 through M6) COMPLETED (100% Green).
+- **Automated Verification:**
+  - Full test suite: `powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"`
+  - Result: **Ran 125 tests in 6.042s — OK (0 failures, 0 errors, 100% passing)**.
+  - Web Dashboard unit tests: `tests/test_dashboard.py` -> **10/10 OK (0.57s)**.
+  - Event dispatching unit tests: `tests/test_events.py` -> **18/18 OK (1.21s)**.
+  - Database unit tests: `tests/test_database.py` -> **8/8 OK (0.74s)**.
+  - Re-ID unit tests: `tests/test_reid.py` -> **7/7 OK (0.07s)**.
+  - Matcher unit tests: `tests/test_matcher.py` -> **6/6 OK (0.01s)**.
+  - Interactive unit tests: `tests/test_interactive.py` -> **4/4 OK (0.03s)**.
+  - Batch indexer unit tests: `tests/test_batch.py` -> **2/2 OK (0.14s)**.
+  - Detector unit tests: `tests/test_detectors.py` -> **25/25 OK (0.84s)**.
+  - Video, tracker & analytics unit tests: `tests/test_video.py`, `tests/test_tracker.py`, `tests/test_analytics.py` -> **24/24 OK (0.45s)**.
+  - Core & geometry legacy tests: `tests/test_geometry.py`, `tests/test_core.py`, `tests/test_forms.py` -> **21/21 OK (1.42s)**.
+  - Sphinx documentation build: `.\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/` -> **0 warnings, exit code 0**.
+- **Live Pipeline Verification:**
+  - `main.py --config configs/alert_demo.yaml --headless --frames 30` -> 28.2 FPS.
+
+### 4. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run full test suite (125 tests)
+  powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"
+
+  # 2. Run Milestone 6 Web Dashboard unit tests (10 tests)
+  .\.venv\Scripts\python.exe -m unittest tests/test_dashboard.py
+
+  # 3. Build Sphinx HTML documentation (0 warnings)
+  .\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+
+  # 4. Launch local Web Analytics Dashboard server
+  .\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  # Open http://localhost:8000
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python -m unittest tests/test_dashboard.py
+  python -m sphinx -W --keep-going documentation/ documentation/_build/html/
+  python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  ```
+- **Docker Compose Deployment:**
+  ```bash
+  # Launch multi-service stack (tracker + dashboard + MQTT broker)
+  docker compose up -d
+
+  # View running container logs
+  docker compose logs -f dashboard
+  ```
 
 
 

@@ -2,6 +2,10 @@
 Intelligent Tracker — Edge AI Retail & Security Analytics Platform
 ==================================================================
 
+.. image:: https://github.com/davtoh/intelligent-tracker/actions/workflows/ci.yml/badge.svg
+   :target: https://github.com/davtoh/intelligent-tracker/actions/workflows/ci.yml
+   :alt: CI/CD Build Status
+
 .. image:: https://img.shields.io/pypi/v/intelligent-tracker.svg
    :target: https://pypi.org/project/intelligent-tracker/
    :alt: PyPI Version
@@ -234,17 +238,33 @@ All unit tests run via Python's standard ``unittest`` discovery:
     $env:MPLBACKEND="Agg"
     .\.venv\Scripts\python.exe -m unittest discover tests
 
-    # Run Milestone 5 Event Dispatching & Alerting unit tests (18 tests)
-    .\.venv\Scripts\python.exe -m tests.test_events
+    # Run Milestone 6 Web Dashboard unit tests (10 tests)
+    .\.venv\Scripts\python.exe -m unittest tests/test_dashboard.py
 
-    # Run database, Re-ID, and batch indexing tests (27 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_database.py tests/test_reid.py tests/test_matcher.py tests/test_interactive.py tests/test_batch.py
+    # Run complete test suite (125 tests)
+    powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"
 
-    # Run detector-specific unit tests (25 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_detectors.py
+Web Analytics Dashboard
+-----------------------
 
-    # Run video, tracker, and analytics unit tests (24 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_video.py tests/test_tracker.py tests/test_analytics.py
+Intelligent Tracker features a responsive real-time web monitoring platform built with **FastAPI**, **HTML5/Canvas**, **WebSockets**, and **Chart.js**:
+
+- **Live Multi-Camera Video Stream**: Low-latency MJPEG stream accessible via ``GET /stream/{camera_id}``.
+- **Interactive Click-to-Tag**: Hover over any live bounding box and click directly on the canvas to enroll identities with photo crops and Re-ID embeddings.
+- **Entity Gallery View**: Search registered staff, VIPs, customers, and restricted persons with thumbnails and signature counts.
+- **Sighting Timeline Player**: Search chronological appearance logs by entity, date, camera, and zone.
+- **Spatial Heatmap Overlay**: Live false-color density visualization toggled on the camera feed.
+- **Real-Time Security Alerts**: WebSockets telemetry feed emitting instant security event toasts.
+
+.. code-block:: bash
+
+    # Launch dashboard server locally
+    python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000 --reload
+
+    # Or run complete edge stack with Docker Compose
+    docker compose up -d
+
+Open your browser at ``http://localhost:8000``.
 
 Roadmap & Status
 ----------------
@@ -254,7 +274,7 @@ Roadmap & Status
 - [x] **Milestone 3**: RTSP Camera Streams & Retail / Occupancy Analytics (non-blocking reader, tripwires, heatmaps).
 - [x] **Milestone 4**: Object Identity Gallery, Visual Re-ID & Sighting Database (SQLite DB, ONNX OSNet, HSV fallback, interactive tagging, batch indexer).
 - [x] **Milestone 5**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT, quiet hours & rule engine).
-- [ ] **Milestone 6**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd).
+- [x] **Milestone 6**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd, multi-arch, Sphinx 9, Coral Edge TPU).
 
 See ``milestone_plan.md`` and ``TODO_MODERNIZATION.md`` for complete details.
 

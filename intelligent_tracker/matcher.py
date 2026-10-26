@@ -157,6 +157,8 @@ class GalleryMatcher(object):
         self.gallery_names = names
         self.gallery_categories = categories
 
+    refresh_gallery = reload_gallery
+
     @property
     def gallery_size(self) -> int:
         return len(self.gallery_entity_ids)

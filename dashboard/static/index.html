@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intelligent Tracker - Edge AI Retail & Security Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Chart.js CDN for zero-dependency real-time time-series -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="dark-theme">
+  <!-- Header & Navigation -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+            <circle cx="12" cy="12" r="3" fill="#06b6d4"></circle>
+            <path d="M12 7v2m0 6v2m-5-5H5m14 0h-2"></path>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <span class="brand-title">INTELLIGENT TRACKER</span>
+          <span class="brand-subtitle">EDGE AI VISION ANALYTICS</span>
+        </div>
+      </div>
+      <div class="live-pill">
+        <span class="pulse-dot"></span>
+        <span class="live-label">LIVE FEED</span>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" role="tablist">
+      <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab">
+        <span class="tab-icon">📹</span>
+        <span>Live Monitor</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab">
+        <span class="tab-icon">👥</span>
+        <span>Entity Gallery</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab">
+        <span class="tab-icon">⏱️</span>
+        <span>Sighting Timeline</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab">
+        <span class="tab-icon">📊</span>
+        <span>Analytics & Heatmap</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab">
+        <span class="tab-icon">🚨</span>
+        <span>Security Alerts</span>
+        <span class="badge alert-count-badge" id="header-alert-badge">0</span>
+      </button>
+    </nav>
+
+    <!-- Header Telemetry Controls -->
+    <div class="header-right">
+      <div class="telemetry-pill">
+        <span class="telemetry-label">FPS:</span>
+        <span class="telemetry-val" id="header-fps-val">--</span>
+      </div>
+      <div class="connection-status-pill online" id="connection-status-pill">
+        <span class="status-indicator"></span>
+        <span id="connection-status-text">Connected</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+
+    <!-- TAB 1: LIVE MONITOR -->
+    <section class="tab-pane active" id="tab-live" role="tabpanel">
+      <div class="live-grid">
+        <!-- Live Video Viewport -->
+        <div class="video-card glass-panel">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">🎥</span>
+              <span id="video-stream-title">Camera Feed: CAM_01</span>
+            </div>
+            <div class="card-actions">
+              <span class="resolution-badge" id="stream-res-badge">640x480</span>
+              <button class="btn btn-sm btn-outline" id="toggle-heatmap-btn" title="Toggle Heatmap Overlay">
+                🔥 Heatmap: OFF
+              </button>
+              <button class="btn btn-sm btn-outline" id="fullscreen-btn" title="Fullscreen">
+                ⛶ Fullscreen
+              </button>
+            </div>
+          </div>
+
+          <div class="video-container" id="video-wrapper">
+            <!-- MJPEG Video Stream -->
+            <img id="live-stream-img" src="/stream/cam_01" alt="Live Camera Stream" />
+            <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
+            <canvas id="interactive-canvas"></canvas>
+            <!-- Hover Inspection Tooltip -->
+            <div class="track-hover-tooltip" id="track-tooltip" style="display: none;">
+              <div class="tooltip-header" id="tooltip-title">Track #--</div>
+              <div class="tooltip-body" id="tooltip-body">Confidence: -- | Dwell: --s</div>
+              <button class="btn btn-xs btn-primary tooltip-tag-btn" id="tooltip-tag-btn">🏷️ Tag Entity</button>
+            </div>
+          </div>
+
+          <!-- Video Control Bar -->
+          <div class="video-controls-bar">
+            <div class="controls-left">
+              <button class="btn btn-sm btn-primary" id="btn-quick-tag">
+                🏷️ Click-to-Tag Active Track
+              </button>
+              <button class="btn btn-sm btn-secondary" id="btn-snapshot-save">
+                📸 Save Snapshot
+              </button>
+            </div>
+            <div class="controls-hint">
+              💡 <em>Click any detected bounding box directly on video to tag & enroll into Re-ID database.</em>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Telemetry Sidebar -->
+        <aside class="sidebar-column">
+          <!-- Metric KPI Cards -->
+          <div class="kpi-row">
+            <div class="kpi-card glass-panel">
+              <div class="kpi-label">Active Tracks</div>
+              <div class="kpi-value cyan" id="kpi-active-tracks">0</div>
+              <div class="kpi-sub" id="kpi-tracks-sub">In view</div>
+            </div>
+            <div class="kpi-card glass-panel">
+              <div class="kpi-label">Total Crossed</div>
+              <div class="kpi-value green" id="kpi-total-crossed">0</div>
+              <div class="kpi-sub">Tripwire entries</div>
+            </div>
+          </div>
+
+          <!-- Zone Occupancy Meter -->
+          <div class="glass-panel zone-panel">
+            <div class="panel-header">
+              <h3>Zone Occupancy</h3>
+              <span class="panel-badge" id="zone-count-badge">0 zones</span>
+            </div>
+            <div class="zones-list" id="zones-container">
+              <div class="empty-state">Loading zone status...</div>
+            </div>
+          </div>
+
+          <!-- Tripwires Telemetry -->
+          <div class="glass-panel tripwire-panel">
+            <div class="panel-header">
+              <h3>Virtual Tripwires</h3>
+              <span class="panel-badge">Bidirectional</span>
+            </div>
+            <div class="tripwires-list" id="tripwires-container">
+              <div class="empty-state">No tripwires active</div>
+            </div>
+          </div>
+
+          <!-- Live Alerts Mini Feed -->
+          <div class="glass-panel alerts-mini-panel">
+            <div class="panel-header">
+              <h3>Recent Alerts</h3>
+              <button class="btn-link" id="view-all-alerts-link">View All</button>
+            </div>
+            <div class="alerts-mini-list" id="live-alerts-feed">
+              <div class="empty-state">No active security alerts</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- TAB 2: ENTITY GALLERY VIEW -->
+    <section class="tab-pane" id="tab-gallery" role="tabpanel">
+      <div class="gallery-wrapper">
+        <div class="glass-panel toolbar-panel">
+          <div class="toolbar-left">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="gallery-search-input" placeholder="Search enrolled entities by name or note..." />
+            </div>
+            <div class="filter-pills" id="gallery-category-filters">
+              <button class="filter-pill active" data-category="">All</button>
+              <button class="filter-pill" data-category="staff">Staff</button>
+              <button class="filter-pill" data-category="vip">VIP</button>
+              <button class="filter-pill" data-category="restricted">Restricted</button>
+              <button class="filter-pill" data-category="person">Customer / Guest</button>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-primary" id="btn-enroll-modal">
+              ➕ Enroll New Identity
+            </button>
+          </div>
+        </div>
+
+        <!-- Gallery Cards Grid -->
+        <div class="gallery-grid" id="entity-gallery-grid">
+          <div class="empty-state">Loading gallery identities...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: SIGHTING TIMELINE PLAYER -->
+    <section class="tab-pane" id="tab-timeline" role="tabpanel">
+      <div class="timeline-wrapper">
+        <!-- Timeline Filter Bar -->
+        <div class="glass-panel toolbar-panel">
+          <div class="filter-row">
+            <div class="filter-item">
+              <label for="timeline-entity-select">Entity:</label>
+              <select id="timeline-entity-select">
+                <option value="">All Entities</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label for="timeline-zone-select">Zone:</label>
+              <select id="timeline-zone-select">
+                <option value="">All Zones</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label for="timeline-limit-select">Limit:</label>
+              <select id="timeline-limit-select">
+                <option value="25">25 records</option>
+                <option value="50" selected>50 records</option>
+                <option value="100">100 records</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-filter-sightings">
+              🔍 Search Sightings
+            </button>
+          </div>
+        </div>
+
+        <!-- Chronological Timeline Stream -->
+        <div class="timeline-stream-container">
+          <div class="timeline-stream" id="sightings-timeline-list">
+            <div class="empty-state">Select filters to search sighting audit trail.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: ANALYTICS & HEATMAP -->
+    <section class="tab-pane" id="tab-analytics" role="tabpanel">
+      <div class="analytics-grid">
+        <!-- Entry / Exit Chart -->
+        <div class="glass-panel chart-card">
+          <div class="card-header">
+            <h3>Entry & Exit Traffic Flows</h3>
+            <span class="panel-badge">Real-time series</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="trafficChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Spatial Heatmap Viewer -->
+        <div class="glass-panel heatmap-card">
+          <div class="card-header">
+            <h3>Cumulative Spatial Density Heatmap</h3>
+            <div class="heatmap-actions">
+              <button class="btn btn-sm btn-outline" id="btn-refresh-heatmap">🔄 Refresh Heatmap</button>
+              <a class="btn btn-sm btn-secondary" id="btn-download-heatmap" href="/analytics/heatmap" target="_blank">📥 Export High-Res</a>
+            </div>
+          </div>
+          <div class="heatmap-viewport">
+            <img id="static-heatmap-img" src="/analytics/heatmap" alt="Accumulated Density Heatmap" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: SECURITY ALERTS LOG -->
+    <section class="tab-pane" id="tab-alerts" role="tabpanel">
+      <div class="glass-panel alerts-table-card">
+        <div class="card-header">
+          <h3>Security & Alert Audit History</h3>
+          <span class="panel-badge" id="total-alerts-count">0 events</span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="alerts-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Zone / Source</th>
+                <th>Entity / Track</th>
+                <th>Details</th>
+                <th>Snapshot</th>
+              </tr>
+            </thead>
+            <tbody id="alerts-table-body">
+              <tr>
+                <td colspan="7" class="text-center">No alerts recorded in current session.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODALS -->
+
+  <!-- Modal 1: Click-to-Tag Entity -->
+  <div class="modal-backdrop" id="modal-tag-entity" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3 id="tag-modal-title">🏷️ Tag Track Identity</h3>
+        <button class="modal-close-btn" id="modal-tag-close">&times;</button>
+      </div>
+      <form id="tag-entity-form">
+        <input type="hidden" id="tag-track-id" />
+        <input type="hidden" id="tag-bbox-val" />
+
+        <div class="form-group">
+          <label for="tag-name-input">Full Name / Label *</label>
+          <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. John Doe (VIP), Guard #1" required />
+        </div>
+
+        <div class="form-group">
+          <label for="tag-category-select">Security Category *</label>
+          <select id="tag-category-select" class="form-input">
+            <option value="person">Standard Customer / Guest</option>
+            <option value="staff">Staff Member</option>
+            <option value="vip">VIP Guest</option>
+            <option value="restricted">Restricted / Blacklisted Entity</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="tag-notes-input">Security Notes</label>
+          <textarea id="tag-notes-input" class="form-input" rows="2" placeholder="Badge number, clearance details, or reason for restriction..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-tag-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="modal-tag-submit">💾 Enroll to Gallery</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Snapshot Preview Modal -->
+  <div class="modal-backdrop" id="modal-snapshot-view" style="display: none;">
+    <div class="modal-card glass-panel preview-modal">
+      <div class="modal-header">
+        <h3 id="snapshot-modal-title">📷 Visual Evidence Snapshot</h3>
+        <button class="modal-close-btn" id="modal-snapshot-close">&times;</button>
+      </div>
+      <div class="snapshot-modal-body">
+        <img id="snapshot-modal-img" src="" alt="Alert Snapshot" />
+        <div class="snapshot-modal-meta" id="snapshot-modal-meta"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

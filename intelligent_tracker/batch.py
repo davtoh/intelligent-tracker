@@ -4,15 +4,18 @@
 Offline Video Recording Indexer & Occurrence Analytics Module.
 
 Provides:
+
 - Fast-forward and sampled frame rate batch ingestion for recorded video files (.mp4, .avi, .mkv).
 - Automated object detection, tracking, feature extraction, Re-ID gallery matching,
   and audit trail logging into SQLite TrackerDB.
 - Occurrence Analytics:
+
   - Chronological Sighting Timelines per entity.
   - Visit frequency, first seen, last seen, and dwell duration estimates.
   - Spatial zone journeys across monitored regions.
   - Formatted terminal report and JSON/CSV export.
-- Standalone CLI execution (`python -m intelligent_tracker.batch`).
+
+- Standalone CLI execution (``python -m intelligent_tracker.batch``).
 """
 
 from __future__ import division, print_function, absolute_import

@@ -4,18 +4,20 @@
 Non-blocking Threaded Video Ingestion Module.
 
 Supports:
-- RTSP network streams (rtsp://...)
-- HTTP/HTTPS streams (http://...)
+
+- RTSP network streams (``rtsp://...``)
+- HTTP/HTTPS streams (``http://...``)
 - Local USB/V4L2 webcams (device index 0, 1, ...)
-- Video files (*.mp4, *.avi, *.mkv)
+- Video files (``*.mp4``, ``*.avi``, ``*.mkv``)
 - Synthetic / mock generator for testing without physical hardware
 
 Key Features:
+
 - Background reader thread to prevent network I/O from blocking inference
 - Bounded buffer with automatic frame-drop on lag for ultra-low latency RTSP
 - Auto-reconnect logic with exponential backoff on stream disruption
 - Real-time connection health metrics: FPS, drop rate, reconnection tally
-- Context manager protocol (`with VideoSource(...) as vs:`)
+- Context manager protocol (``with VideoSource(...) as vs:``)
 """
 
 from __future__ import division, print_function, absolute_import
@@ -110,6 +112,7 @@ def find_first_real_camera(max_devices: int = 5) -> Optional[int]:
 def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
     """
     Resolve camera source string or integer:
+
     - If 'auto', 'real', 'physical', 'hardware', or 'webcam':
       Automatically finds and returns the index of the first camera delivering real physical sensor data.
     - If a numeric index (e.g. 0, 1, '0', '1'):
@@ -127,6 +130,8 @@ def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
         logger.warning("No physical hardware camera found with real data; defaulting to device index 0.")
         print("[WARN] No physical hardware camera found with real data; defaulting to device index 0.")
         return 0
+    elif s_str in ("libcamera", "rpi", "picamera", "rpicam"):
+        return "libcamera"
     elif s_str.isdigit():
         return int(s_str)
     return source
@@ -249,6 +254,7 @@ class VideoSource(object):
         self.is_rtsp = False
         self.is_file = False
         self.is_webcam = False
+        self.is_libcamera = False
 
         self._classify_source()
 
@@ -281,6 +287,8 @@ class VideoSource(object):
         if s.lower() in ("mock", "synthetic", "test"):
             self.is_synthetic = True
             self.source = "synthetic"
+        elif s.lower() in ("libcamera", "rpi", "picamera", "rpicam") or s.startswith("libcamerasrc"):
+            self.is_libcamera = True
         elif s.isdigit():
             self.is_webcam = True
             self.source = int(s)
@@ -310,9 +318,21 @@ class VideoSource(object):
             self._is_connected = True
             return True
 
-        # Physical webcam, file, or RTSP
+        # Physical webcam, file, RTSP, or libcamera (Raspberry Pi)
         try:
-            if self.is_rtsp:
+            if self.is_libcamera:
+                w = self.target_width or 640
+                h = self.target_height or 480
+                fps = int(self.fps_limit or 30)
+                gst = "libcamerasrc ! video/x-raw, width={}, height={}, framerate={}/1 ! videoconvert ! videoscale ! appsink".format(
+                    w, h, fps
+                )
+                self._cap = cv2.VideoCapture(gst, cv2.CAP_GSTREAMER)
+                if not self._cap or not self._cap.isOpened():
+                    # Fallback to standard V4L2 device if GStreamer plugin is unavailable
+                    backend = cv2.CAP_V4L2 if hasattr(cv2, "CAP_V4L2") else 0
+                    self._cap = cv2.VideoCapture(0, backend)
+            elif self.is_rtsp:
                 # Optimized flags for low-latency RTSP via FFmpeg
                 # Force TCP transport if possible to eliminate UDP packet loss artifacts
                 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;102400"

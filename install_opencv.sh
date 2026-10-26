@@ -1,94 +1,136 @@
 #!/usr/bin/env bash
-# install latest openCV 3 in python 3
-# http://machinelearninguru.com/computer_vision/installation/opencv/opencv.html
-# http://www.samontab.com/web/2017/06/installing-opencv-3-2-0-with-contrib-modules-in-ubuntu-16-04-lts/
-# http://code.litomisky.com/2014/03/09/how-to-have-multiple-versions-of-the-same-library-side-by-side/
-# https://www.pyimagesearch.com/2015/06/22/install-opencv-3-0-and-python-2-7-on-ubuntu/
-# https://www.pyimagesearch.com/2015/06/29/install-opencv-3-0-and-python-3-4-on-osx/
-# https://www.pyimagesearch.com/2015/07/27/installing-opencv-3-0-for-both-python-2-7-and-python-3-on-your-raspberry-pi-2/
-# specify latest opencv version
-version="$(wget -q -O - http://sourceforge.net/projects/opencvlibrary/files/opencv-unix | egrep -m1 -o '\"[3](\.[0-9]+)+' | cut -c2-)"
-# specify the number of cores
-cores=$(($(nproc) + 1))
-# before installing clean build directory
-clean=false
-# uninstall previous installation
-uninstall=false
-# specify package name to install
-pkgname=opencv-$version-compilation
-if $uninstall; then
-        sudo apt remove $pkgname -y
+# ==============================================================================
+# Intelligent Tracker - OpenCV Installation Script
+# Supports: Raspberry Pi OS Bookworm (64-bit / Debian 12), Ubuntu 24.04 / 22.04 LTS
+# ==============================================================================
+
+set -e
+
+OPENCV_VERSION="4.10.0"
+CORES=$(nproc 2>/dev/null || echo 4)
+BUILD_FROM_SOURCE=false
+
+print_usage() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    echo "  --apt               Install precompiled system packages (fastest, recommended)"
+    echo "  --pip               Install opencv-contrib-python via pip in current environment"
+    echo "  --source            Compile OpenCV ${OPENCV_VERSION} with opencv_contrib from source"
+    echo "  --version <ver>     Specify custom OpenCV version for source compilation (default: ${OPENCV_VERSION})"
+    echo "  --help              Display this help message"
+    echo ""
+}
+
+# Parse Arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --apt) BUILD_MODE="apt"; shift ;;
+        --pip) BUILD_MODE="pip"; shift ;;
+        --source) BUILD_MODE="source"; shift ;;
+        --version) OPENCV_VERSION="$2"; shift 2 ;;
+        --help) print_usage; exit 0 ;;
+        *) echo "Unknown option: $1"; print_usage; exit 1 ;;
+    esac
+done
+
+# Default to APT package installation if not specified
+BUILD_MODE="${BUILD_MODE:-apt}"
+
+echo "======================================================================"
+echo " Intelligent Tracker - OpenCV Installer"
+echo " OS: $(grep -s PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '\"' || uname -s)"
+echo " Mode: ${BUILD_MODE}"
+echo "======================================================================"
+
+if [ "$BUILD_MODE" = "apt" ]; then
+    echo "[INFO] Updating package indices..."
+    sudo apt-get update -y
+
+    echo "[INFO] Installing OpenCV system packages and multimedia dependencies..."
+    sudo apt-get install -y --no-install-recommends \
+        python3-opencv \
+        libopencv-dev \
+        ffmpeg \
+        libgl1 \
+        libglib2.0-0 \
+        v4l-utils
+
+    echo "[SUCCESS] OpenCV installed via system package manager."
+    python3 -c "import cv2; print('[OK] Verified cv2 version:', cv2.__version__)"
+    exit 0
 fi
-echo "Preparing to install OpenCV" $version
-# pre-requisites
-echo "updating"
-sudo apt-get update
-sudo apt-get upgrade
-echo "Installing Dependenices"
-sudo apt-get -qq install build-essential checkinstall pkg-config cmake cmake-curses-gui python-dev python-numpy python-scipy python3-dev qt5-default libqt5opengl5-dev libpng3 pngtools libpng12-dev libpng12-0 libpng++-dev libtiff5-dev libtiff5 libtiff-tools libjpeg8-dev libjpeg8 libjpeg8-dbg libjasper-dev libjasper-runtime libjasper-dev libjasper-runtime libavformat-dev libavutil-dev libxine2-dev libxine2 libdc1394-22 libdc1394-22-dev libdc1394-utils libavcodec-dev libavformat-dev libswscale-dev libv4l-dev libfaac-dev libmp3lame-dev libopencore-amrnb-dev libopencore-amrwb-dev libtheora-dev libvorbis-dev libxvidcore-dev ffmpeg x264 libx264-dev libv4l-0 v4l-utils libtbb-dev
-# downloading OpenCV
-if [ -f "opencv-$version.zip" ]
-then
-	echo "using opencv-$version.zip already in folder."
-else
-	echo "Downloading OpenCV" $version
-	wget -O opencv-$version.zip http://sourceforge.net/projects/opencvlibrary/files/opencv-unix/$version/opencv-"$version".zip/download
-	#wget -O opencv-$version.zip https://github.com/opencv/opencv/archive/"$version".zip
+
+if [ "$BUILD_MODE" = "pip" ]; then
+    echo "[INFO] Installing opencv-contrib-python via pip..."
+    pip install --upgrade pip
+    pip install "opencv-contrib-python>=4.8.0"
+    python3 -c "import cv2; print('[OK] Verified cv2 version:', cv2.__version__)"
+    exit 0
 fi
-# downloading
-if [ -f "opencv_contrib-$version.zip" ]
-then
-	echo "using opencv_contrib-$version.zip already in folder."
-else
-	echo "Downloading opencv_contrib-" $version
-	wget -O opencv_contrib-$version.zip https://github.com/opencv/opencv_contrib/archive/"$version".zip
+
+if [ "$BUILD_MODE" = "source" ]; then
+    echo "[INFO] Installing build prerequisites for OpenCV ${OPENCV_VERSION}..."
+    sudo apt-get update -y
+    sudo apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        git \
+        pkg-config \
+        python3-dev \
+        python3-numpy \
+        libgl1-mesa-dev \
+        libgtk-3-dev \
+        libv4l-dev \
+        libgstreamer1.0-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libavcodec-dev \
+        libavformat-dev \
+        libswscale-dev \
+        libtbb-dev \
+        libjpeg-dev \
+        libpng-dev \
+        libtiff-dev
+
+    SRC_DIR="/tmp/opencv_build"
+    mkdir -p "${SRC_DIR}"
+    cd "${SRC_DIR}"
+
+    if [ ! -d "opencv" ]; then
+        echo "[INFO] Cloning opencv ${OPENCV_VERSION}..."
+        git clone --depth 1 --branch "${OPENCV_VERSION}" https://github.com/opencv/opencv.git
+    fi
+
+    if [ ! -d "opencv_contrib" ]; then
+        echo "[INFO] Cloning opencv_contrib ${OPENCV_VERSION}..."
+        git clone --depth 1 --branch "${OPENCV_VERSION}" https://github.com/opencv/opencv_contrib.git
+    fi
+
+    mkdir -p opencv/build
+    cd opencv/build
+
+    echo "[INFO] Configuring CMake build..."
+    cmake -D CMAKE_BUILD_TYPE=RELEASE \
+          -D CMAKE_INSTALL_PREFIX=/usr/local \
+          -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+          -D OPENCV_ENABLE_NONFREE=ON \
+          -D WITH_GSTREAMER=ON \
+          -D WITH_V4L=ON \
+          -D WITH_TBB=ON \
+          -D WITH_GTK=ON \
+          -D BUILD_EXAMPLES=OFF \
+          -D BUILD_TESTS=OFF \
+          -D BUILD_PERF_TESTS=OFF \
+          -D BUILD_opencv_python3=ON ..
+
+    echo "[INFO] Compiling on ${CORES} CPU core(s)..."
+    make -j"${CORES}"
+
+    echo "[INFO] Installing OpenCV to /usr/local..."
+    sudo make install
+    sudo ldconfig
+
+    echo "[SUCCESS] OpenCV ${OPENCV_VERSION} compiled and installed successfully!"
+    python3 -c "import cv2; print('[OK] Verified cv2 version:', cv2.__version__)"
+    exit 0
 fi
-# installing
-echo "Preparing OpenCV" $version
-if [ ! -d "opencv-$version" ]; then
-        unzip opencv-$version.zip
-fi
-if [ ! -d "opencv_contrib-$version" ]; then
-        unzip opencv_contrib-$version.zip
-fi
-echo "Installing OpenCV" $version
-cd opencv-$version
-mkdir build
-cd build
-if $clean; then
-        make clean
-        cd ..
-        rm -r build
-        mkdir build
-        cd build
-fi
-# to find correct python 3 path
-        export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# fix -D BUILD_opencv_dnn=OFF did not work https://github.com/BVLC/caffe/issues/1917
-cmake -D CMAKE_INSTALL_PREFIX=/usr/local \
-        -D CMAKE_BUILD_TYPE=RELEASE \
-        -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-$version/modules \
-        -D WITH_TBB=ON \
-        -D BUILD_NEW_PYTHON_SUPPORT=ON \
-        -D WITH_V4L=ON \
-        -D INSTALL_C_EXAMPLES=ON \
-        -D INSTALL_PYTHON_EXAMPLES=ON \
-        -D BUILD_EXAMPLES=ON \
-        -D WITH_QT=ON \
-        -D WITH_OPENGL=ON \
-        -D WITH_VTK=ON ..
-make -j $cores
-# to create deb package and install
-sudo checkinstall --pkgname $pkgname --default --nodoc
-# to install directly
-# sudo make install -j $cores
-sudo sh -c 'echo "/usr/local/lib" > /etc/ld.so.conf.d/opencv.conf'
-# keep track of shared libraries
-sudo ldconfig
-# exporting
-#echo 'PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig' | sudo tee --append ~/.bashrc
-#echo 'export PKG_CONFIG_PATH' | sudo tee --append ~/.bashrc
-#source ~/.bashrc
-cd /usr/local/lib/python3.5/dist-packages/
-sudo cp cv2.cpython-35m-x86_64-linux-gnu.so cv2.so
-echo "OpenCV" $version "finished"

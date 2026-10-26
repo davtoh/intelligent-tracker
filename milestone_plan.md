@@ -288,7 +288,7 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## ⬜ [Milestone 6] — Web Dashboard, Packaging & Edge Deployment
+## ✅ [Milestone 6] — Web Dashboard, Packaging & Edge Deployment (COMPLETE)
 **Scope:** Modern live web dashboard with entity gallery and sighting search, Docker containers, systemd service, Sphinx docs.
 
 ### Objectives
@@ -297,8 +297,8 @@ $env:MPLBACKEND="Agg"
 - `dashboard/` directory — FastAPI app
   - Live MJPEG stream endpoint: `GET /stream/{camera_id}`
   - WebSocket metrics endpoint: `WS /ws/{camera_id}` — pushes occupancy and sighting JSON in real time.
-  - REST API: `GET /cameras`, `GET /zones`, `GET /analytics/heatmap`, `GET /entities`, `GET /sightings`.
-- React or plain HTML5 + Chart.js frontend:
+  - REST API: `GET /cameras`, `GET /zones`, `GET /analytics/heatmap`, `GET /entities`, `GET /sightings`, `GET /events`, `POST /tag`, `GET /status`.
+- HTML5/Canvas + CSS + Chart.js frontend:
   - Live annotated camera feed with interactive click-to-tag bounding box capability in browser.
   - **Entity Gallery View**: Grid of enrolled people/objects, category badges, appearance counts.
   - **Sighting Timeline Player**: Search sightings by entity name, date/time range, or zone.
@@ -306,39 +306,45 @@ $env:MPLBACKEND="Agg"
   - Heatmap overlay toggle and alert history log.
 
 **6b — Raspberry Pi & Edge Deployment:**
-- `Dockerfile.arm64` + `Dockerfile.amd64` (multi-stage: builder + slim runtime).
-- `docker-compose.yml`: `tracker` service + `dashboard` service + optional `mosquitto` MQTT broker.
-- `deployment/intelligent-tracker.service` — systemd unit for Raspberry Pi OS / Ubuntu.
+- `Dockerfile.arm64` + `Dockerfile.amd64` + `Dockerfile` (multi-stage: builder + slim runtime).
+- `docker-compose.yml`: `tracker` service + `dashboard` service + `mosquitto` MQTT broker.
+- `deployment/intelligent-tracker.service` and `deployment/intelligent-tracker-dashboard.service` — systemd units for Raspberry Pi OS / Ubuntu.
 - Hardware acceleration flags:
-  - Coral Edge TPU delegate (`pycoral`/`tflite-runtime`) for RPi.
-  - `libcamera` source support for Raspberry Pi Camera Module v3.
-  - Intel NUC: `onnxruntime-openvino`.
+  - Coral Edge TPU delegate (`EdgeTpuDetector` with `libedgetpu.so.1` / `tflite_runtime`) for RPi.
+  - `libcamera` GStreamer pipeline support for Raspberry Pi Camera Module v2/v3/HQ.
+  - Intel NUC: OpenVINO execution provider hooks.
 
 **6c — CI/CD:**
-- `.github/workflows/ci.yml`: install deps → test → lint (ruff) → optional Docker build.
+- `.github/workflows/ci.yml`: Python 3.10, 3.11, 3.12 matrix, ruff lint, unit test suite, and Sphinx docs build.
 - Badge on `README.rst`.
 
 **6d — Sphinx Documentation Modernization:**
-- Update `documentation/conf.py` for Sphinx 7+.
-- Auto-generate API reference for new modules (`video.py`, `tracker.py`, `database.py`, `reid.py`, `analytics.py`, `events.py`).
-- Architecture diagram (Mermaid or draw.io).
-- ReadTheDocs deployment (`.readthedocs.yml` already present).
+- Modern Sphinx 9+ configuration (`conf.py`) with `sphinx_rtd_theme`.
+- Auto-generate API reference for all modules including `dashboard.rst` and `deployment.rst`.
+- Clean system architecture diagram in `index.rst`.
+- Verified build with zero warnings (`sphinx -W --keep-going`).
 
 **6e — `install_opencv.sh` update:**
-- Ensure `install_opencv.sh` works for Raspberry Pi OS Bookworm (64-bit) and Ubuntu 24.04.
+- Modernized for Raspberry Pi OS Bookworm (64-bit / Debian 12) and Ubuntu 24.04 LTS (`--apt`, `--pip`, `--source`).
 
-### Verification
+### Verification & Test Suite
+- Full test suite: **125 tests passing (100% green)** in ~6.0s.
+- Milestone 6 dedicated test suite: **10 tests passing** in ~0.57s (`tests/test_dashboard.py`).
+- Sphinx documentation build: **Passed with 0 warnings** (`sphinx -W documentation/ documentation/_build/html/`).
+- Verified commands:
 ```powershell
-# Dashboard
-.\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --reload
-# Open http://localhost:8000
+# 1. Run complete unit test suite (125 tests)
+$env:MPLBACKEND="Agg"
+.\.venv\Scripts\python.exe -m unittest discover tests
 
-# Docker (Linux/macOS)
-docker compose up --build
-docker compose exec tracker python -m unittest discover tests
+# 2. Web Dashboard dedicated unit test suite (10 tests)
+.\.venv\Scripts\python.exe -m unittest tests/test_dashboard.py
 
-# Sphinx docs
-.\.venv\Scripts\python.exe -m sphinx documentation/ documentation/_build/html/
+# 3. Build Sphinx documentation without warnings
+.\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+
+# 4. Start local Web Dashboard server
+.\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
 ```
 
 ---
@@ -358,10 +364,10 @@ docker compose exec tracker python -m unittest discover tests
 ```
 M1 (Env & Core) ✅
   └── M2 (ONNX Detectors) ✅
-        └── M3 (RTSP + Spatial Analytics)
-              └── M4 (Re-ID Gallery & Sighting DB)
-                    └── M5 (Alerting + Entity Triggers)
-                          └── M6 (Dashboard + Edge Deploy)
+        └── M3 (RTSP + Spatial Analytics) ✅
+              └── M4 (Re-ID Gallery & Sighting DB) ✅
+                    └── M5 (Alerting + Entity Triggers) ✅
+                          └── M6 (Dashboard + Edge Deploy) ✅
 ```
 
 ---
