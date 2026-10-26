@@ -13,8 +13,6 @@ Provides complete snapshot export and migration capabilities:
 4. CLI tooling: `python -m intelligent_tracker.backup --export backup.zip` and `--import backup.zip`.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -41,7 +39,7 @@ def calculate_sha256(filepath: str) -> str:
     return h.hexdigest()
 
 
-class BackupManager(object):
+class BackupManager:
     """
     Manages complete system state serialization, archive creation,
     and cross-platform migration extraction.

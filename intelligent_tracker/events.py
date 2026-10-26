@@ -18,8 +18,6 @@ Provides:
   filters, dwell-time rules, and notification cooldowns.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -255,7 +253,7 @@ class RestrictedEntityAlert(BaseEvent):
 # 3. Centralized Event Bus (Pub/Sub with Async Queue)
 # ==============================================================================
 
-class EventBus(object):
+class EventBus:
     """
     Thread-safe Publish/Subscribe asynchronous event bus.
 
@@ -419,7 +417,7 @@ class EventBus(object):
 # 4. Webhook Dispatcher
 # ==============================================================================
 
-class WebhookDispatcher(object):
+class WebhookDispatcher:
     """
     HTTP POST Webhook Dispatcher with retry logic and exponential backoff.
 
@@ -557,7 +555,7 @@ class WebhookDispatcher(object):
 # 5. Telegram Bot Dispatcher
 # ==============================================================================
 
-class TelegramDispatcher(object):
+class TelegramDispatcher:
     """
     Telegram Bot alert integration with rate limiting and snapshot delivery.
 
@@ -791,7 +789,7 @@ class TelegramDispatcher(object):
 # 6. MQTT Publisher
 # ==============================================================================
 
-class MqttPublisher(object):
+class MqttPublisher:
     """
     Lightweight MQTT Telemetry Publisher for Home Assistant, Node-RED & IoT.
 
@@ -990,7 +988,7 @@ class MqttPublisher(object):
 # 7. Quiet Hours & Alert Rule Engine
 # ==============================================================================
 
-class QuietHours(object):
+class QuietHours:
     """
     Time-of-day quiet hours schedule evaluation (handles overnight spans).
 
@@ -1096,7 +1094,7 @@ class AlertRule:
         return True
 
 
-class AlertRuleEngine(object):
+class AlertRuleEngine:
     """
     Evaluates events against configurable security rules and quiet hours.
 

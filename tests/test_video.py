@@ -4,8 +4,6 @@
 Unit tests for intelligent_tracker.video (VideoSource & Synthetic Generator).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import time
 import unittest
 import numpy as np
@@ -121,7 +119,7 @@ class TestVideoSource(unittest.TestCase):
         from intelligent_tracker.video import is_physical_camera
         import cv2
 
-        class MockPhysicalCap(object):
+        class MockPhysicalCap:
             def isOpened(self):
                 return True
             def get(self, prop):
@@ -129,7 +127,7 @@ class TestVideoSource(unittest.TestCase):
                     return 10.0
                 return -1.0
 
-        class MockVirtualCap(object):
+        class MockVirtualCap:
             def isOpened(self):
                 return True
             def get(self, prop):

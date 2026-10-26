@@ -13,8 +13,6 @@ Provides:
 - ``TrackerFactory``: Registry for dynamic instantiation.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import time
 import math
 from collections import deque
@@ -85,7 +83,7 @@ def greedy_assignment(cost_matrix: np.ndarray, max_cost: float = float("inf")) -
     return assignments
 
 
-class Track(object):
+class Track:
     """
     Represents an individual tracked entity across multiple video frames.
     """
@@ -235,7 +233,7 @@ class Track(object):
         }
 
 
-class CentroidTracker(object):
+class CentroidTracker:
     """
     Centroid and IoU Multi-Object Tracker.
 
@@ -467,7 +465,7 @@ class CentroidTracker(object):
         }
 
 
-class KalmanBoxTracker(object):
+class KalmanBoxTracker:
     """
     2D Kinematic Kalman Filter for bounding box tracking in pure NumPy.
 
@@ -567,7 +565,7 @@ class KalmanBoxTracker(object):
         return (x, y, int(w), int(h))
 
 
-class SortTracker(object):
+class SortTracker:
     """
     SORT (Simple Online and Realtime Tracking) implementation using pure NumPy Kalman filtering.
     """
@@ -678,7 +676,7 @@ class SortTracker(object):
         return active_tracks
 
 
-class TrackerFactory(object):
+class TrackerFactory:
     """Factory registry for multi-object tracking engines."""
 
     _registry = {

@@ -2,13 +2,7 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-
-# import build-in modules
+# import built-in modules
 import sys
 
 # import third party modules
@@ -34,7 +28,7 @@ class CameraError(Exception):
     pass
 
 
-class MockVideoCapture(object):
+class MockVideoCapture:
     """Synthetic VideoCapture fallback for headless environments or devices without webcam."""
     def __init__(self, width=640, height=480):
         self.width = width
@@ -67,7 +61,7 @@ class MockVideoCapture(object):
         self._opened = False
 
 
-class UnifiedCamera(object):
+class UnifiedCamera:
     """
     Emulate PiCamera in a system that does not have PiCamera support
     with a normal cv2.VideoCapture supported by OpenCV
@@ -186,7 +180,7 @@ try:
 except ImportError:
     import numpy as np
 
-    class PiRGBArray(object):
+    class PiRGBArray:
         """
         Emulate PiRGBArray in a system that does not have PiCamera support
         with a normal camera input supported by OpenCV
@@ -219,7 +213,7 @@ except ImportError:
     PiCamera = UnifiedCamera  # emulates PiCamera
 
 
-class VideoStream(object):
+class VideoStream:
 
     def __init__(self, src=None, usePiCamera=False, resolution=(320, 240),
                  framerate=30, format='bgr', trigger=None):
@@ -397,7 +391,7 @@ class VideoStream(object):
             cls.check_cum.add(data)
 
 
-class SyncCameras(object):
+class SyncCameras:
     """
     Synchronize cameras
     """

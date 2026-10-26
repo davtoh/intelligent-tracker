@@ -16,8 +16,6 @@ Provides:
 - Occurrence analytics and summary export (JSON, CSV).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import csv
 import json
@@ -31,7 +29,7 @@ import numpy as np
 import cv2
 
 
-class TrackerDB(object):
+class TrackerDB:
     """
     Thread-safe SQLite database manager for entities, Re-ID signatures, and sightings.
     """

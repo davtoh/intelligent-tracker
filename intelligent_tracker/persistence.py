@@ -2,18 +2,9 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from past.builtins import basestring
-
-# import build-in modules
+# import built-in modules
 import sys
-
-# import third party modules
 import json
-from six import reraise
 from json import JSONEncoder
 
 # special variables
@@ -61,7 +52,7 @@ def get_obj_module_name(obj):
 def register_json_class(class_obj, compatibility_name=None):
     extended_json_classes[class_obj.__name__] = class_obj
     if compatibility_name is not None:
-        if not isinstance(compatibility_name, basestring):
+        if not isinstance(compatibility_name, str):
             raise TypeError("compatibility_name must be string")
         extended_json_classes[compatibility_name] = class_obj
 
@@ -115,21 +106,17 @@ class DEVJSONEncoder(JSONEncoder):
                     else:
                         try:
                             data = enco(o)
-                        except Exception:
-                            e, msg, traceback = sys.exc_info()
-                            msg.args = (
-                                msg.args[0] + ". Watcher encoder failed",)
-                            reraise(e, msg, traceback)
+                        except Exception as e:
+                            raise type(e)(f"{e}. Watcher encoder failed") from e
                     return {json_class_data: data,  # get object data
                             json_class_id: class_name,  # get object class
                             json_class_module: module_name  # get module
                             }
-            except Exception:
-                e, msg, traceback = sys.exc_info()
-                msg.args = (
-                    msg.args[0] + ". Watched object of class '{}' could not be "
-                                "json serialized".format(class_name),)
-                reraise(e, msg, traceback)
+            except Exception as e:
+                raise type(e)(
+                    f"{e}. Watched object of class '{class_name}' could not be "
+                    f"json serialized"
+                ) from e
 
             # special case
             # if tuple is in register_json_watcher it can be handled there
@@ -218,11 +205,9 @@ def object_hook_DEVJSONDecoder(json_object):
         else:
             # provide data "as is"
             return recreate(json_data)
-    except Exception:
-        e, msg, traceback = sys.exc_info()
-        msg.args = (msg.args[0] + ". Object of class '{}' could not be recreated "
-                    "from '{}' method".format(custom_class_name, recreate_method),)
-        reraise(ValueError, msg, traceback)
+    except Exception as e:
+        raise ValueError(f"{e}. Object of class '{custom_class_name}' could not be recreated "
+                         f"from '{recreate_method}' method") from e
 
 
 def save_configuration(path, data, indent=2, separators=(',', ': '),

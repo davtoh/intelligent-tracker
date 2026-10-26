@@ -16,8 +16,6 @@ Provides:
 - Standalone CLI execution (``python -m intelligent_tracker.interactive``).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -37,7 +35,7 @@ from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.analytics import AnalyticsEngine
 
 
-class InteractiveController(object):
+class InteractiveController:
     """
     Manages user interaction, mouse callbacks, track inspection, on-screen enrollment,
     and interactive ROI drawing on OpenCV display windows.

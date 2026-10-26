@@ -11,8 +11,6 @@ Provides:
   tallies, dwell times, event logging, and telemetry reporting.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import csv
 import json
@@ -26,7 +24,7 @@ from intelligent_tracker.geometry import Tripwire, ZoneROI, ZoneEvent, TripwireE
 from intelligent_tracker.tracker import Track
 
 
-class OccupancyHeatmap(object):
+class OccupancyHeatmap:
     """
     2D Spatial Density Heatmap Engine.
 
@@ -237,7 +235,7 @@ class OccupancyHeatmap(object):
         self.density.fill(0.0)
 
 
-class AnalyticsEngine(object):
+class AnalyticsEngine:
     """
     Central orchestration engine for retail, occupancy, and security telemetry.
 

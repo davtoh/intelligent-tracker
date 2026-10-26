@@ -4,8 +4,6 @@
 Unit tests for Milestone 6 Web Dashboard (FastAPI, WebSockets, MJPEG streaming, REST API).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time

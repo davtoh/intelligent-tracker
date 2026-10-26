@@ -2,27 +2,15 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-from six import with_metaclass
-from past.builtins import basestring
-from past.utils import old_div
-
-# import build-in modules
+# import built-in modules
 import gc
 import sys
 from abc import ABCMeta
 from functools import wraps
 from threading import RLock
-from ordered_set import OrderedSet
+from collections.abc import MutableMapping, MutableSet
 from collections import namedtuple, OrderedDict, deque
-try:
-    from collections.abc import MutableMapping, MutableSet
-except ImportError:
-    from collections import MutableMapping, MutableSet
+from ordered_set import OrderedSet
 from weakref import ref, WeakValueDictionary, KeyedRef, _IterationGuard  # https://stackoverflow.com/a/36788452/5288758
 
 # import third party modules
@@ -336,7 +324,7 @@ class MetaSpace(ABCMeta):
         super(MetaSpace, cls).__init__(name, bases, dct)
 
 
-class Space(with_metaclass(MetaSpace, object)):
+class Space(metaclass=MetaSpace):
     """
     Anything that is created must have a name attribute and be in the Space
     """
@@ -383,7 +371,7 @@ class Space(with_metaclass(MetaSpace, object)):
         if value and value != self.name:
 
             # check it is a valid name
-            if not isinstance(value, basestring):
+            if not isinstance(value, str):
                 raise TypeError("name must be a string not {}".format(type(value)))
             special = "."
             if any(i in value for i in special):
@@ -479,7 +467,7 @@ class Space(with_metaclass(MetaSpace, object)):
         :return:
         """
 
-        if isinstance(key, basestring):
+        if isinstance(key, str):
             # METHOD: HIERARCHICAL
             #return self._space_entities[self._space_hierarchy(key)]
             key = key.split(".")
@@ -827,7 +815,7 @@ class Group(Space, MutableSet):
         corresponding to those indices. This is similar to NumPy's
         "fancy indexing" except the same object time is not returned.
         """
-        if isinstance(index, basestring):
+        if isinstance(index, str):
             # if looking by name
             return self._getitem_name(index)
         elif hasattr(index, '__index__') or isinstance(index, slice):
@@ -863,7 +851,7 @@ class Group(Space, MutableSet):
             self.__init__(state)
 
     def __contains__(self, key):
-        if isinstance(key, basestring):
+        if isinstance(key, str):
             return key in self.names
         else:
             try:
@@ -951,7 +939,7 @@ class Group(Space, MutableSet):
             return [self.index(subkey) for subkey in key]
         elif key not in self:
             raise IndexError("{} not in {}".format(key, self))
-        elif isinstance(key, basestring):
+        elif isinstance(key, str):
             # is name
             for i, j in enumerate(self.names.keys()):
                 if j == key:
@@ -988,7 +976,7 @@ class Group(Space, MutableSet):
         """
         implementation of discard method to be run safely
         """
-        if not isinstance(key, basestring):
+        if not isinstance(key, str):
             key = key.name
 
         try:
@@ -1122,7 +1110,7 @@ class CompleteGroup(Group):
         corresponding to those indices. This is similar to NumPy's
         "fancy indexing" except the same object time is not returned.
         """
-        if isinstance(index, basestring):
+        if isinstance(index, str):
             # if looking by name
             return self._getitem_name(index)
         elif hasattr(index, '__index__') or isinstance(index, slice):
@@ -1140,7 +1128,7 @@ class CompleteGroup(Group):
             raise KeyError("'{}' is not in {}".format(index, self))
 
     def __contains__(self, key):
-        if isinstance(key, basestring):
+        if isinstance(key, str):
             return key in self.names
         else:
             return key in self.map
@@ -1195,7 +1183,7 @@ class CompleteGroup(Group):
         """
         implementation of discard method to be run safely
         """
-        if isinstance(key, basestring):
+        if isinstance(key, str):
             try:
                 key = self.names[key]
             except KeyError:
@@ -1373,7 +1361,7 @@ class Agent(Space):
 Point = namedtuple('Point', ('x', 'y', 'z'))
 
 
-class TailItem(object):
+class TailItem:
     """TailItem(cnt, rbox, bbox, pt) which behaves like cnt"""
     # based from recordtype('TailItem', ['cnt', 'rbox', 'bbox', 'pt'])
     # why use __slots__
@@ -1499,8 +1487,8 @@ class TailItem(object):
             M = cv2.moments(self.cnt)
             z = M["m00"]
             try:
-                x, y = (int(old_div(M["m10"], M["m00"])),
-                        int(old_div(M["m01"], M["m00"])))
+                x, y = (int(M["m10"] / M["m00"]),
+                        int(M["m01"] / M["m00"]))
             except ZeroDivisionError:
                 # FIXME zerodivision
                 print("ZeroDivisionError with cnt", self.cnt)

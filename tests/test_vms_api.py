@@ -4,8 +4,6 @@
 Unit tests for Milestone 7 Multi-Camera VMS, Video Upload & Backup REST API endpoints.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import io
 import sys

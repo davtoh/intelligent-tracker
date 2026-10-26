@@ -4,8 +4,6 @@
 Unit tests for intelligent_tracker.analytics & geometry (Tripwire, ZoneROI, OccupancyHeatmap, AnalyticsEngine).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import shutil
 import tempfile

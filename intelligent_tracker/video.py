@@ -20,8 +20,6 @@ Key Features:
 - Context manager protocol (``with VideoSource(...) as vs:``)
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -137,7 +135,7 @@ def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
     return source
 
 
-class SyntheticFrameGenerator(object):
+class SyntheticFrameGenerator:
     """
     High-fidelity synthetic frame generator for automated testing and CI.
     Generates video frames with optional moving targets that cross virtual tripwires
@@ -202,7 +200,7 @@ class SyntheticFrameGenerator(object):
         self._opened = False
 
 
-class VideoSource(object):
+class VideoSource:
     """
     Thread-safe non-blocking video stream reader.
 

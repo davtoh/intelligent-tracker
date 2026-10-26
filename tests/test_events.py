@@ -13,8 +13,6 @@ Tests:
 7. End-to-end Pipeline & AnalyticsEngine integration.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -87,7 +85,7 @@ class WebhookTestServerHandler(BaseHTTPRequestHandler):
         self.wfile.write(b'{"status": "success"}')
 
 
-class WebhookTestServer(object):
+class WebhookTestServer:
     """Local HTTP Server running on an OS-assigned ephemeral port."""
 
     def __init__(self):

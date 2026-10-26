@@ -22,8 +22,6 @@ FastAPI application providing:
 - Modern single-page web UI served at `GET /`
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time

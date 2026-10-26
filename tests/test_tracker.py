@@ -4,8 +4,6 @@
 Unit tests for intelligent_tracker.tracker (Track, CentroidTracker, SortTracker, TrackerFactory).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import unittest
 from intelligent_tracker.tracker import (
     Track,

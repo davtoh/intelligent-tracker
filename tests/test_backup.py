@@ -4,8 +4,6 @@
 Unit tests for State Persistence, Auto-Restore & Full Backup Migration (Milestone 7).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import json

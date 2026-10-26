@@ -89,7 +89,7 @@ world.block(close=True)
 import gc
 import pprint
 
-class Graph(object):
+class Graph:
     def __init__(self, name):
         self.name = name
         self.next = None

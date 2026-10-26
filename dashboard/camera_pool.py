@@ -9,8 +9,6 @@ at runtime without requiring server restarts.
 Handles automatic boot restoration and state persistence via `configs/cameras.json`.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -24,7 +22,7 @@ from dashboard.stream_manager import StreamManager
 logger = logging.getLogger("intelligent_tracker.camera_pool")
 
 
-class CameraPool(object):
+class CameraPool:
     """
     Thread-safe multi-camera stream pool manager.
     Coordinates active StreamManager instances, camera configurations,

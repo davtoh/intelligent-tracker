@@ -4,8 +4,6 @@
 Unit tests for interactive screen selection & tagging (intelligent_tracker/interactive.py).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import unittest
 import numpy as np
 

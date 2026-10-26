@@ -4,8 +4,6 @@
 Unit tests for Dual Camera Auto-Discovery, RTSP Presets & Diagnostics (Milestone 7).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import unittest

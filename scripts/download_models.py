@@ -5,19 +5,12 @@ Model download utility for Intelligent Tracker.
 Downloads and verifies pre-exported ONNX models (YOLOv8n, YOLO11n) for Edge AI detection.
 """
 
-from __future__ import print_function, division
 import os
 import sys
 import hashlib
 import argparse
-
-# Try urllib.request for Python 3
-try:
-    import urllib.request as urllib_request
-    from urllib.error import URLError, HTTPError
-except ImportError:
-    import urllib2 as urllib_request
-    from urllib2 import URLError, HTTPError
+import urllib.request as urllib_request
+from urllib.error import URLError, HTTPError
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))

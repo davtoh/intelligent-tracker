@@ -18,8 +18,6 @@ Provides:
 - Standalone CLI execution (``python -m intelligent_tracker.batch``).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -39,7 +37,7 @@ from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.analytics import AnalyticsEngine
 
 
-class VideoIndexer(object):
+class VideoIndexer:
     """
     Offline batch video processor and occurrence analytics indexer.
     """

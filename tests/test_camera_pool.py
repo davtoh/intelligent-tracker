@@ -4,8 +4,6 @@
 Unit tests for Dynamic Multi-Stream Orchestrator (CameraPool) (Milestone 7).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time

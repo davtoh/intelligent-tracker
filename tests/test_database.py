@@ -4,8 +4,6 @@
 Unit tests for TrackerDB module (intelligent_tracker/database.py).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import csv
 import json

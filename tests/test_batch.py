@@ -4,8 +4,6 @@
 Unit tests for offline video recording indexer & occurrence analytics (intelligent_tracker/batch.py).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import shutil
 import tempfile

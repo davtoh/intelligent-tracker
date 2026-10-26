@@ -2,14 +2,7 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-from past.utils import old_div
-
-# import build-in modules
+# import built-in modules
 import os
 import abc
 from collections import deque, namedtuple
@@ -64,7 +57,7 @@ class BaseDetector(abc.ABC):
         raise NotImplementedError
 
 
-class DetectorFactory(object):
+class DetectorFactory:
     """
     Registry and factory for creating detectors by name from configuration or CLI.
     Supports 'haar', 'yolov8', 'yolo11', 'mock', 'color', 'face', 'eye', etc.
@@ -416,7 +409,7 @@ def affine(phi, img):
     return img, Ai
 
 
-class InvariantCascade(object):
+class InvariantCascade:
 
     def __init__(self, angles=None):
         self.angles = angles
@@ -630,8 +623,8 @@ class ColorDetector(Detector):
             #((x, y), z) = cv2.minEnclosingCircle(cnt)  # z as radius
             M = cv2.moments(ti.cnt)
             z = M["m00"]  # z as area
-            x, y = (int(old_div(M["m10"], M["m00"])),
-                    int(old_div(M["m01"], M["m00"])))
+            x, y = (int(M["m10"] / M["m00"]),
+                    int(M["m01"] / M["m00"]))
             # complete more data in tail item
             ti._pt = Point(*(x, y, z))
 
@@ -1518,7 +1511,7 @@ class Object(Agent):
                 continue
             # otherwise, compute the thickness of the line and
             # draw the connecting lines
-            thickness = int(np.sqrt(old_div(self.tail_len, float(i + 1))) * 2.5)
+            thickness = int(np.sqrt(self.tail_len / float(i + 1)) * 2.5)
             cv2.line(frame, tail[i - 1].pt[:2], tail[i].pt[:2], color, thickness)
 
     def draw_stats(self, frame, position=None, fontFace=None, fontScale=None,

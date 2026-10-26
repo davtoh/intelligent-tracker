@@ -4,8 +4,6 @@
 Unit tests for GalleryMatcher & Re-Appearance Engine (intelligent_tracker/matcher.py).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import unittest
 import numpy as np
 

@@ -8,8 +8,6 @@ Re-ID gallery matching, and event dispatching in a background worker thread.
 Provides thread-safe MJPEG streaming and real-time telemetry push for WebSocket clients.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time
@@ -42,7 +40,7 @@ from intelligent_tracker.events import setup_event_pipeline, EventBus, frame_to_
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
 
-class StreamManager(object):
+class StreamManager:
     """
     Manages live camera feeds, AI inference pipelines, MJPEG frame encoding,
     and real-time telemetry distribution for the web dashboard.

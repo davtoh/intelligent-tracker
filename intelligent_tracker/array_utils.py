@@ -2,13 +2,7 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-
-# import build-in modules
+# import built-in modules
 import sys
 
 # import third party modules

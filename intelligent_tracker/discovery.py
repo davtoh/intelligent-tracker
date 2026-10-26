@@ -10,8 +10,6 @@ Provides dual auto-discovery capabilities:
 4. One-click connection testing and live snapshot extraction.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 import sys
 import time

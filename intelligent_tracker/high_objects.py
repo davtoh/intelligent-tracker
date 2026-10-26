@@ -2,14 +2,7 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-from past.builtins import basestring
-
-# import build-in modules
+# import built-in modules
 import sys
 from numbers import Number
 from time import time
@@ -56,7 +49,7 @@ class World(Space):
         if names is None:
             for i in self.scenes:
                 getattr(i, func_name)(**kwargs)
-        elif isinstance(names, basestring):
+        elif isinstance(names, str):
             getattr(self.scenes[names], func_name)(**kwargs)
         else:
             for name in names:
@@ -78,7 +71,7 @@ class World(Space):
         """
         if names is None:
             scenes = self.scenes
-        elif isinstance(names, basestring):
+        elif isinstance(names, str):
             scenes = [self.scenes[names]]
         else:
             # only those scenes in world
@@ -140,7 +133,7 @@ class World(Space):
         if scenes is None:
             # assign all the available scenes
             scenes = self.scenes
-        elif isinstance(scenes, (Scene, basestring)):
+        elif isinstance(scenes, (Scene, str)):
             # test scene is in scenes
             scenes = [self.scenes[scenes]]
         elif scenes is False:

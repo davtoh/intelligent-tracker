@@ -12,8 +12,6 @@ visual Re-ID gallery matching against TrackerDB:
 - Event emission for identified entities.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import time
 from collections import deque
 from dataclasses import dataclass, asdict
@@ -27,7 +25,7 @@ from intelligent_tracker.tracker import Track
 
 
 @dataclass
-class EntityIdentifiedEvent(object):
+class EntityIdentifiedEvent:
     """Event emitted when a tracked entity is recognized in the gallery."""
     entity_id: int
     name: str
@@ -46,7 +44,7 @@ class EntityIdentifiedEvent(object):
 
 
 @dataclass
-class SessionEntity(object):
+class SessionEntity:
     """
     Represents an automatically tracked canonical identity in the current video session.
     Maintains temporal feature buffer and exit boundary telemetry for dead-reckoning re-linking.
@@ -78,7 +76,7 @@ class SessionEntity(object):
         return mean_vec
 
 
-class GalleryMatcher(object):
+class GalleryMatcher:
     """
     Coordinates gallery Re-ID matching between active tracks and persistent TrackerDB,
     as well as in-memory automatic session gallery tracking for consistent canonical identities.

@@ -2,13 +2,7 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-
-# import build-in modules
+# import built-in modules
 import sys
 
 # import third party modules
@@ -192,7 +186,7 @@ def go_around(index, size, negative=False):
     return False, new_index
 
 
-class BasePoly(object):
+class BasePoly:
     """
     Base Class to provide basic port allocation, inversion and selection
      of variables transparently while inverting ports.
@@ -742,7 +736,7 @@ class PolyLine(BasePoly):
         super(PolyLine, self).__init__(cnt, flags, None, None, (cnt_id, start), (cnt_id, stop), start, stop, None)
 
 
-class Completeness(object):
+class Completeness:
     """
     Search space to add BasePoly objects and find associations
     """
@@ -1506,7 +1500,7 @@ def segments_intersect(p1, p2, p3, p4):
     return False
 
 
-class Tripwire(object):
+class Tripwire:
     """
     Bidirectional virtual tripwire for person / vehicle crossing detection.
 
@@ -1638,7 +1632,7 @@ class Tripwire(object):
         return frame
 
 
-class ZoneROI(object):
+class ZoneROI:
     """
     Polygonal Region of Interest (ROI) for occupancy counting and dwell time monitoring.
 

@@ -2,13 +2,7 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# compatibility with python 2 and 3
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
-from builtins import object
-
-# import build-in modules
+# import built-in modules
 import os
 import sys
 from contextlib import contextmanager
@@ -78,7 +72,7 @@ def memory_usage_psutil():
 
 import time
 
-class TimeCode(object):
+class TimeCode:
     """Execution timer context manager (self-contained replacement for legacy RRtoolbox.lib.root.TimeCode)."""
     def __init__(self, msg="", printfunc=print):
         self.msg = msg

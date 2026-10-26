@@ -4,8 +4,6 @@
 Unit tests for visual feature extractors and Re-ID embeddings (intelligent_tracker/reid.py).
 """
 
-from __future__ import division, print_function, absolute_import
-
 import unittest
 import numpy as np
 

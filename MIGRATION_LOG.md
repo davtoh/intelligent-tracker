@@ -815,12 +815,31 @@
   python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
   ```
 
-### 5. Quota / Context Recovery Guide
+### 5. Code Modernization & Python 2 Decrufting (Clean-up Pass)
+- **Objective:** Eliminate obsolete Python 2/3 compatibility shims, dead imports, and redundant inheritance patterns across the entire codebase.
+- **Obsolete Shims Removed:**
+  - Removed all occurrences of `from __future__ import division, print_function, absolute_import` across all modules and unit test suites.
+  - Removed `from builtins import object` and modernized all `class Foo(object):` declarations to `class Foo:`.
+  - Removed `from past.builtins import basestring` and replaced `isinstance(..., basestring)` with native `isinstance(..., str)`.
+  - Removed `from past.utils import old_div` in `core.py` and `detectors.py`, standardizing on native Python 3 division (`/`).
+  - Removed `from six import with_metaclass` in `core.py`, modernizing to `class Space(metaclass=MetaSpace):`.
+  - Removed `from six import reraise` in `persistence.py`, modernizing to standard Python 3 exception chaining (`raise NewExc(...) from e`).
+  - Removed `six>=1.10.0` and `future>=0.16.0` from `requirements.txt`.
+  - Updated `setup.py` classifiers to target modern Python 3.10, 3.11, and 3.12.
+- **Rules & Governance Established:**
+  - Workspace rule active: [`.agents/rules/modernization_and_decrufting.md`](file:///c:/dev/projects/products/intelligent_tracker/.agents/rules/modernization_and_decrufting.md)
+  - Universal repository agent guidelines: [`AGENTS.md`](file:///c:/dev/projects/products/intelligent_tracker/AGENTS.md)
+- **Verification Results:**
+  - Unit Tests: 156 / 156 tests passing (100% green).
+  - Documentation: Sphinx documentation built with 0 warnings.
+
+### 6. Quota / Context Recovery Guide
 - If a new agent session starts:
   - Working directory: `c:\dev\projects\products\intelligent_tracker`
   - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
   - Next Phase: Milestone 8: World Scenario Studio, Space Awareness & Ground Plane Homography (Bird's-Eye-View Minimap, cross-camera topological space awareness, trajectory journey search).
   - Check `frontier_security_architecture.md` line 147 for Milestone 8 detailed specification.
+
 
 
 

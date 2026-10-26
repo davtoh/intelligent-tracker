@@ -15,8 +15,6 @@ Provides:
 - Cosine similarity matching primitives for gallery association.
 """
 
-from __future__ import division, print_function, absolute_import
-
 import os
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional, Any, Union, List, Dict
@@ -412,7 +410,7 @@ class MockFeatureExtractor(BaseFeatureExtractor):
 # Factory Registry
 # -----------------------------------------------------------------------------
 
-class ReIDExtractorFactory(object):
+class ReIDExtractorFactory:
     """Registry and factory for visual feature extractors."""
 
     _registry = {
