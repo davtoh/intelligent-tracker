@@ -715,6 +715,114 @@
   docker compose logs -f dashboard
   ```
 
+---
+
+## [Milestone 7] - 2026-10-26 - Multi-Camera VMS, Auto-Discovery & Video Source Manager
+
+### 1. Objectives & Scope
+- Design and implement an enterprise-grade Multi-Camera Video Management System (VMS) with dynamic runtime stream orchestration.
+- Implement dual auto-discovery capabilities in `intelligent_tracker/discovery.py`:
+  - Physical USB webcams & local capture devices probing using DirectShow on Windows (`cv2.CAP_DSHOW`) and V4L2/Default on Linux.
+  - LAN network camera discovery via ONVIF WS-Discovery (UDP 3702 multicast to `239.255.255.250`) and concurrent subnet RTSP port scanning (`554`, `8554`, `8000`).
+  - One-click source connectivity tester with fast socket pre-checks, resolution/FPS retrieval, and base64 JPEG snapshot for live browser preview.
+  - Built-in vendor presets with URL-encoded credential builder (`urllib.parse.quote`) for Hikvision, TP-Link Tapo, EZVIZ, Dahua/Imou, and Generic RTSP.
+- Implement dynamic multi-stream pool orchestrator (`dashboard/camera_pool.py`):
+  - Hot-add, configure, toggle, and remove streams dynamically at runtime without restarting the FastAPI server.
+  - Automatic boot restoration of configured streams from `configs/cameras.json`.
+  - Independent background worker threads with thread-safe telemetry distribution.
+- Implement local video recording studio & scrubber:
+  - Video upload support (`.mp4`, `.avi`, `.mkv`, `.mov`) into `data/videos/`.
+  - In-browser playback scrubber (`dashboard/static/video_scrubber.js`) with frame stepping (`< -1 Frame`, `> +1 Frame`) and variable playback rates (1x, 2x, 4x, 8x).
+  - Dynamic registration of video recordings as active live camera feeds.
+  - One-click offline occurrence indexing via `BatchVideoIndexer` with full detection and sighting audit reporting.
+- Implement responsive multi-camera grid switcher:
+  - 1x1 (focused single view with interactive bounding box canvas, click-to-tag, and heatmap overlay).
+  - 2x2 (quad multi-view matrix with individual live MJPEG tiles, status badges, and FPS counters).
+  - 3x3 (9-camera operational matrix with click-to-focus navigation).
+- Implement full system state persistence, auto-restore & migration (`intelligent_tracker/backup.py`):
+  - One-click system snapshot export (`GET /api/backup/export`) packaging `tracker.db`, `data/crops/`, `configs/`, and versioned `manifest.json` with SHA-256 checksums into a portable `.zip` archive.
+  - Full system import and edge migration (`POST /api/backup/import`) with Zip-Slip path traversal protection, schema validation, and hot-reload.
+  - CLI tooling: `python -m intelligent_tracker.backup --export backup.zip`, `--import backup.zip`, and `--info backup.zip`.
+- Full Sphinx documentation:
+  - Created `documentation/vms.rst` and updated Sphinx toctree in `documentation/index.rst`.
+  - Built clean documentation without warnings (`sphinx -W --keep-going`).
+
+### 2. Files Touched
+- `intelligent_tracker/discovery.py`: Created module for USB probing, ONVIF WS-Discovery, RTSP port scan, presets, and connection diagnostics.
+- `intelligent_tracker/backup.py`: Created module for snapshot backup creation, inspection, restoration, Zip-Slip security, and CLI tool.
+- `dashboard/camera_pool.py`: Created dynamic multi-stream pool orchestrator for hot-add, edit, toggle, remove, and auto-restore.
+- `dashboard/stream_manager.py`: Added `source_override`, `custom_cfg`, `name`, and `is_running` property for dynamic multi-camera orchestration.
+- `dashboard/app.py`: Integrated `CameraPool`, added `/api/cameras` CRUD, `/api/cameras/discover`, `/api/cameras/test`, `/api/cameras/presets`, `/api/videos` upload/analyze/scrubber, and `/api/backup/export` & `/api/backup/import`.
+- `dashboard/static/camera_manager.js`: Created frontend controller for camera discovery, preset builder, connection testing, and multi-camera grid rendering.
+- `dashboard/static/video_scrubber.js`: Created frontend controller for video uploads, frame stepping, speed controls, and batch occurrence reports.
+- `dashboard/static/index.html`: Added 1x1/2x2/3x3 grid switcher, video scrubber studio tab, camera manager modal, and backup modal.
+- `dashboard/static/styles.css`: Added styles for multi-camera grids (2x2, 3x3), tiles, video scrubber toolbar, discovery cards, and modals.
+- `requirements.txt`: Added `python-multipart>=0.0.9`.
+- `tests/test_discovery.py`: 11 unit tests for USB probing, ONVIF, RTSP scan, presets, and diagnostics.
+- `tests/test_camera_pool.py`: 8 unit tests for CameraPool lifecycle, hot-adding, updating, toggling, removing, and persistence.
+- `tests/test_backup.py`: 6 unit tests for backup creation, inspection, restore, Zip-Slip guard, and CLI.
+- `tests/test_vms_api.py`: 6 unit tests for REST API routes (cameras CRUD, discovery, test, video upload, backup export/import).
+- `documentation/vms.rst`: Technical documentation guide for VMS and Auto-Discovery.
+- `documentation/index.rst`: Added VMS to Sphinx toctree.
+- `milestone_plan.md`: Updated Milestone 7 status to COMPLETE, updated dependency graph and verification.
+- `MIGRATION_LOG.md`: Recorded Milestone 7 migration checkpoint.
+
+### 3. State & Checkpoint
+- **Status:** Milestone 7 COMPLETE — 156/156 Unit Tests Passing (100% Green).
+- **Automated Verification:**
+  - Full test suite: `powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"`
+  - Result: **Ran 156 tests in 15.636s — OK (0 failures, 0 errors, 100% passing)**.
+  - Discovery unit tests: `tests/test_discovery.py` -> **11/11 OK (0.43s)**.
+  - CameraPool unit tests: `tests/test_camera_pool.py` -> **8/8 OK (3.29s)**.
+  - Backup unit tests: `tests/test_backup.py` -> **6/6 OK (0.69s)**.
+  - VMS API unit tests: `tests/test_vms_api.py` -> **6/6 OK (3.55s)**.
+  - Web Dashboard unit tests: `tests/test_dashboard.py` -> **10/10 OK (0.58s)**.
+  - Sphinx documentation build: `.\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/` -> **0 warnings, exit code 0**.
+- **CLI Tooling Verification:**
+  - `python -m intelligent_tracker.backup --export backup.zip` -> `[OK] System state snapshot exported successfully`.
+  - `python -m intelligent_tracker.backup --info backup.zip` -> Verified manifest metadata and database statistics.
+
+### 4. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run full test suite (156 tests)
+  powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"
+
+  # 2. Run Milestone 7 dedicated test suites (31 tests)
+  .\.venv\Scripts\python.exe -m unittest tests/test_discovery.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_camera_pool.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_backup.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_vms_api.py
+
+  # 3. CLI backup snapshot export & inspection
+  .\.venv\Scripts\python.exe -m intelligent_tracker.backup --export backup.zip
+  .\.venv\Scripts\python.exe -m intelligent_tracker.backup --info backup.zip
+
+  # 4. Build Sphinx documentation (0 warnings)
+  .\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+
+  # 5. Launch local Web Analytics & Multi-Camera VMS server
+  .\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  # Open http://localhost:8000
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python -m unittest tests/test_discovery.py tests/test_camera_pool.py tests/test_backup.py tests/test_vms_api.py
+  python -m sphinx -W --keep-going documentation/ documentation/_build/html/
+  python -m intelligent_tracker.backup --export backup.zip
+  python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  ```
+
+### 5. Quota / Context Recovery Guide
+- If a new agent session starts:
+  - Working directory: `c:\dev\projects\products\intelligent_tracker`
+  - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
+  - Next Phase: Milestone 8: World Scenario Studio, Space Awareness & Ground Plane Homography (Bird's-Eye-View Minimap, cross-camera topological space awareness, trajectory journey search).
+  - Check `frontier_security_architecture.md` line 147 for Milestone 8 detailed specification.
+
+
 
 
 

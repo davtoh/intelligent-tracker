@@ -47,9 +47,10 @@ Documentation Contents
 
 .. toctree::
    :maxdepth: 2
-   :caption: Dashboard & Edge Deployment:
+   :caption: Dashboard & Multi-Camera VMS:
 
    dashboard
+   vms
    deployment
 
 Indices and tables

@@ -53,14 +53,23 @@ class StreamManager(object):
         config_path: Optional[str] = None,
         db_path: Optional[str] = None,
         camera_id: str = "cam_01",
+        name: Optional[str] = None,
+        source_override: Optional[Any] = None,
+        custom_cfg: Optional[Dict[str, Any]] = None,
     ):
         self.camera_id = camera_id
+        self.name = name or f"Camera {camera_id.upper()}"
+        self.source_override = source_override
         self.config_path = config_path or os.environ.get("TRACKER_CONFIG", "configs/alert_demo.yaml")
         if not os.path.exists(self.config_path) and os.path.exists("configs/demo.yaml"):
             self.config_path = "configs/demo.yaml"
 
         self.db_path = db_path or os.environ.get("TRACKER_DB", "data/tracker.db")
-        self.cfg = self._load_config(self.config_path)
+        loaded_cfg = self._load_config(self.config_path)
+        if custom_cfg:
+            self.cfg = {**loaded_cfg, **custom_cfg}
+        else:
+            self.cfg = loaded_cfg
 
         # Core Components
         self.db: Optional[TrackerDB] = None
@@ -99,6 +108,11 @@ class StreamManager(object):
         # Initialize Subsystems
         self._init_subsystems()
 
+    @property
+    def is_running(self) -> bool:
+        """Returns True if the background worker thread is active."""
+        return self._running
+
     def _load_config(self, path: Optional[str]) -> Dict[str, Any]:
         if not path or not os.path.exists(path):
             return {}
@@ -132,7 +146,7 @@ class StreamManager(object):
         res_w, res_h = (int(res[0]), int(res[1])) if isinstance(res, (list, tuple)) else (640, 480)
 
         # Source
-        raw_source = video_cfg.get("source", "synthetic")
+        raw_source = self.source_override if self.source_override is not None else video_cfg.get("source", "synthetic")
         if str(raw_source).lower() in ("synthetic", "mock"):
             source = "synthetic"
         else:

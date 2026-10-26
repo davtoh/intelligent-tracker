@@ -1152,3 +1152,449 @@ body.dark-theme {
     gap: 12px;
   }
 }
+
+/* ==========================================================================
+   Milestone 7: Multi-Camera VMS, Grid Switcher & Video Studio Scrubber
+   ========================================================================== */
+
+/* Header Action Buttons */
+.header-action-btn {
+  font-weight: 600;
+  border-color: rgba(6, 182, 212, 0.4);
+  color: var(--cyan);
+}
+.header-action-btn:hover {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: var(--cyan);
+}
+
+/* Camera Selector Dropdown */
+.camera-select-wrapper {
+  margin-right: 6px;
+}
+.form-select-sm {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-family: var(--font-sans);
+  outline: none;
+}
+.form-select-sm:focus {
+  border-color: var(--cyan);
+}
+
+/* Multi-Grid Switcher */
+.grid-switcher-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+.grid-switch-btn {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+}
+.grid-switch-btn.active {
+  background: var(--cyan);
+  color: #050b14;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.4);
+}
+
+/* Multi-Camera Grid Container */
+.multi-camera-grid {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.multi-camera-grid.grid-2x2 {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.multi-camera-grid.grid-3x3 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.camera-grid-tile {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: rgba(15, 23, 42, 0.7);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.camera-grid-tile:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
+  transform: scale(1.01);
+}
+
+.camera-grid-tile.focused-tile {
+  border-color: var(--emerald);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 2;
+}
+
+.tile-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.tile-status-badge {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.tile-status-badge.online { background: rgba(16, 185, 129, 0.2); color: var(--emerald); }
+.tile-status-badge.offline { background: rgba(239, 68, 68, 0.2); color: var(--crimson); }
+
+.tile-video-container {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+
+.tile-video-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tile-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+}
+
+.btn-tile-focus {
+  padding: 1px 6px;
+  font-size: 0.65rem;
+}
+
+/* ==========================================================================
+   Video Studio & Playback Scrubber Tab
+   ========================================================================== */
+.scrubber-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+}
+
+.video-player-card {
+  padding: 16px;
+}
+
+.scrubber-viewport {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+}
+
+.scrubber-viewport video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.scrubber-toolbar {
+  margin-top: 14px;
+  padding: 12px 16px;
+}
+
+.scrubber-timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.scrubber-timeline-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+
+.time-display {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--cyan);
+  white-space: nowrap;
+}
+
+.scrubber-controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scrubber-buttons-left {
+  display: flex;
+  gap: 8px;
+}
+
+.scrubber-speed-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.speed-btn {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+}
+.speed-btn.active {
+  background: var(--cyan);
+  color: #050b14;
+  border-color: var(--cyan);
+}
+
+.video-upload-panel {
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.upload-status-hint {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  margin-top: 8px;
+  text-align: center;
+}
+
+.video-library-panel {
+  padding: 16px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.video-recordings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-file-card {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  gap: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.video-file-card.active-video {
+  border-color: var(--cyan);
+  background: rgba(6, 182, 212, 0.08);
+}
+
+.video-file-icon {
+  font-size: 1.4rem;
+}
+
+.video-file-meta {
+  flex: 1;
+  overflow: hidden;
+}
+
+.video-filename {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-filesize {
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+}
+
+.video-file-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ==========================================================================
+   Modals: Camera Manager & Backup
+   ========================================================================== */
+.modal-card.modal-lg {
+  max-width: 900px;
+}
+
+.modal-body-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .modal-body-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.section-subhead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section-subhead h4 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.source-code {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  max-width: 140px;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discovered-devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.discovered-device-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.8rem;
+}
+
+.dev-title {
+  font-weight: 600;
+}
+
+.dev-sub {
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.badge-usb { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.badge-onvif { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+
+.connection-test-box {
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+}
+
+.test-box-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.test-preview-meta {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+/* Backup Modal */
+.backup-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.backup-card {
+  padding: 20px;
+  text-align: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.backup-card-icon {
+  font-size: 2.2rem;
+  margin-bottom: 8px;
+}
+
+.backup-card h4 {
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.backup-card p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  flex: 1;
+}
+

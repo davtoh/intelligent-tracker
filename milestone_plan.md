@@ -16,8 +16,10 @@
 | 2 | Edge AI Detection (ONNX/YOLOv8/v11) | ✅ **COMPLETE** |
 | 3 | RTSP Streams & Retail/Occupancy Analytics | ✅ **COMPLETE** |
 | 4 | Object Identity Gallery, Re-ID & Sighting Database | ✅ **COMPLETE** |
-| 5 | Event Dispatching & Alerting System | ⬜ Next |
-| 6 | Web Dashboard, Packaging & Edge Deployment | ⬜ Planned |
+| 5 | Event Dispatching & Alerting System | ✅ **COMPLETE** |
+| 6 | Web Dashboard, Packaging & Edge Deployment | ✅ **COMPLETE** |
+| 7 | Multi-Camera VMS, Auto-Discovery & Video Source Manager | ✅ **COMPLETE** |
+| 8 | World Scenario Studio, Space Awareness & Homography BEV | ⬜ Next |
 
 ---
 
@@ -349,13 +351,75 @@ $env:MPLBACKEND="Agg"
 
 ---
 
-## Untracked Files Assessment
+## ✅ [Milestone 7] — Multi-Camera VMS, Auto-Discovery & Video Source Manager (COMPLETE)
+**Status: COMPLETE** — Verified: 156/156 tests pass in Python 3.12.10
+**Scope:** Multi-Camera VMS, hardware USB & ONVIF network auto-discovery, vendor RTSP credential builders (Hikvision, Tapo, EZVIZ, Dahua, Generic), dynamic multi-stream pool (CameraPool) without server restarts, multi-grid switcher (1x1, 2x2, 3x3), local video file upload with timeline scrubber (1x, 2x, 4x, 8x), automatic boot restoration, and full portable system state snapshot export/import (.zip).
 
-| File | Recommendation | Reasoning |
-|---|---|---|
-| `dev_tracker.mdj` | ➕ Add to `.gitignore` | StarUML binary design file (518KB). Binary, large, tool-specific. Not useful in repo unless team uses StarUML. |
-| `intelligent_tracker.uml` | ➕ Add to `.gitignore` | Legacy UML file (17KB). Likely auto-generated or stale. Prefer Mermaid diagrams in docs. |
-| `tests/servo_caracterization.py` | ➕ Commit with note | Historical servo motor characterization experiment for PTZ camera pan/tilt control. Contains calibrated polynomial regression coefficients (steps/delay/velocity mapping). **Valuable domain knowledge** for future PTZ/gimbal control milestone. Add to `tests/experimental/`. |
+### Objectives & Deliverables Completed (7a–7f)
+
+**7a — Dual Camera Auto-Discovery (`intelligent_tracker/discovery.py`):**
+- **Physical USB Webcams**: Cross-platform video capture probing across physical indices using DirectShow (`cv2.CAP_DSHOW` on Windows) and V4L2/Default on Linux.
+- **ONVIF WS-Discovery**: Broadcasts standard XML SOAP probe messages over UDP port 3702 to `239.255.255.250`. Detects Network Video Transmitters (NVTs) and parses XAddrs.
+- **LAN Subnet RTSP Scanner**: High-speed concurrent socket scanning across ports 554, 8554, and 8000.
+- **Diagnostics & Preview**: `test_camera_connection()` with fast pre-connection socket reachability checks, decoded resolution, FPS, and base64 JPEG snapshot for live browser preview.
+
+**7b — Vendor RTSP Presets & URL Credential Builder:**
+- Built-in vendor presets with URL-encoded credential builder (`urllib.parse.quote`):
+  - **Hikvision**: `rtsp://{user}:{pass}@{ip}:554/Streaming/Channels/{channel}01` (main) or `02` (sub)
+  - **TP-Link Tapo**: `rtsp://{user}:{pass}@{ip}:554/stream1` (HD) or `/stream2` (SD)
+  - **EZVIZ**: `rtsp://admin:{verification_code}@{ip}:554/h264/ch{channel}/main`
+  - **Dahua / Imou**: `rtsp://{user}:{pass}@{ip}:554/cam/realmonitor?channel={channel}&subtype=0`
+  - **Generic RTSP / NVR Channel**: Custom user-defined string.
+
+**7c — Dynamic Multi-Stream Orchestrator (`dashboard/camera_pool.py`):**
+- Manages concurrent `StreamManager` pipelines in background threads.
+- Hot-add (`add_camera`), edit (`update_camera`), toggle (`toggle_camera`), and remove (`remove_camera`) camera feeds dynamically without restarting the FastAPI server.
+- Automatic boot restoration: Restores all configured cameras from `configs/cameras.json`.
+
+**7d — Local Video File Upload & Playback Scrubber:**
+- Upload `.mp4`, `.avi`, `.mkv`, `.mov` recordings into `data/videos/` via drag-and-drop or `POST /api/videos/upload`.
+- In-browser playback scrubber (`dashboard/static/video_scrubber.js`) with frame stepping (`< -1 Frame`, `> +1 Frame`), and variable playback rates (1x, 2x, 4x, 8x).
+- One-click registration of video recordings as active live camera feeds.
+- Offline occurrence indexer via `BatchVideoIndexer` returning entity counts and sighting audit records.
+
+**7e — Responsive Multi-Camera Grid Switcher:**
+- Interactive grid mode switcher in web dashboard:
+  - **1x1 Focused View**: High-resolution single camera stream with real-time bounding box canvas and click-to-tag.
+  - **2x2 Quad View**: 4-camera grid with status indicators, FPS badges, and track counters.
+  - **3x3 Matrix View**: 9-camera operational matrix. Clicking any tile instantly switches to focused 1x1 view.
+
+**7f — State Persistence, Auto-Restore & Full Import/Export (`intelligent_tracker/backup.py`):**
+- **Automatic Boot Restoration**: Restores configured cameras, zones, and rules on launch.
+- **One-Click System Snapshot Export (`GET /api/backup/export`)**: Packages SQLite database (`tracker.db`), signature crops (`data/crops/`), and configurations (`configs/`) into a versioned `.zip` archive with SHA-256 checksums.
+- **Full System Migration (`POST /api/backup/import`)**: Restores database, crops, and configurations with Zip-Slip path traversal protection.
+- **CLI Tooling**: `python -m intelligent_tracker.backup --export backup.zip`, `--import backup.zip`, and `--info backup.zip`.
+
+### Verification & Test Suite
+- Full test suite: **156 tests passing (100% green)** in ~15.6s.
+- Milestone 7 dedicated test suites:
+  - `tests/test_discovery.py`: **11 tests passing** in ~0.43s.
+  - `tests/test_camera_pool.py`: **8 tests passing** in ~3.29s.
+  - `tests/test_backup.py`: **6 tests passing** in ~0.69s.
+  - `tests/test_vms_api.py`: **6 tests passing** in ~3.55s.
+- Sphinx documentation build: **Passed with 0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+- Verified commands:
+```powershell
+# 1. Run complete unit test suite (156 tests)
+powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"
+
+# 2. Run Milestone 7 dedicated test suites (31 tests)
+.\.venv\Scripts\python.exe -m unittest tests/test_discovery.py
+.\.venv\Scripts\python.exe -m unittest tests/test_camera_pool.py
+.\.venv\Scripts\python.exe -m unittest tests/test_backup.py
+.\.venv\Scripts\python.exe -m unittest tests/test_vms_api.py
+
+# 3. CLI backup export and inspection
+.\.venv\Scripts\python.exe -m intelligent_tracker.backup --export backup.zip
+.\.venv\Scripts\python.exe -m intelligent_tracker.backup --info backup.zip
+
+# 4. Build Sphinx documentation without warnings
+.\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+```
 
 ---
 
@@ -368,6 +432,8 @@ M1 (Env & Core) ✅
               └── M4 (Re-ID Gallery & Sighting DB) ✅
                     └── M5 (Alerting + Entity Triggers) ✅
                           └── M6 (Dashboard + Edge Deploy) ✅
+                                └── M7 (Multi-Camera VMS & Auto-Discovery) ✅
+                                      └── M8 (World Scenario Studio & Homography BEV) ⬜
 ```
 
 ---

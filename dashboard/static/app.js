@@ -85,7 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
       pane.classList.toggle('active', pane.id === targetTabId);
     });
 
-    if (targetTabId === 'tab-gallery') {
+    if (targetTabId === 'tab-videos') {
+      if (window.VideoScrubber) window.VideoScrubber.loadVideosList();
+    } else if (targetTabId === 'tab-gallery') {
       loadGallery();
     } else if (targetTabId === 'tab-timeline') {
       loadTimelineFilters();
@@ -104,6 +106,67 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('view-all-alerts-link')?.addEventListener('click', () => {
     switchTab('tab-alerts');
   });
+
+  // Backup Modal bindings
+  const modalBackup = document.getElementById('modal-backup-manager');
+  const btnBackupOpen = document.getElementById('btn-backup-manager');
+  const btnBackupClose = document.getElementById('modal-backup-close');
+  const btnImportBackup = document.getElementById('btn-import-backup-file');
+  const backupFileInput = document.getElementById('backup-file-input');
+  const backupImportStatus = document.getElementById('backup-import-status');
+
+  if (btnBackupOpen && modalBackup) {
+    btnBackupOpen.addEventListener('click', () => {
+      modalBackup.style.display = 'flex';
+    });
+  }
+  if (btnBackupClose && modalBackup) {
+    btnBackupClose.addEventListener('click', () => {
+      modalBackup.style.display = 'none';
+    });
+  }
+  if (modalBackup) {
+    modalBackup.addEventListener('click', (e) => {
+      if (e.target === modalBackup) modalBackup.style.display = 'none';
+    });
+  }
+
+  if (btnImportBackup && backupFileInput) {
+    btnImportBackup.addEventListener('click', () => backupFileInput.click());
+    backupFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!confirm(`Import and restore full system state from '${file.name}'? Existing database records will be backed up.`)) {
+        backupFileInput.value = '';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+      backupImportStatus.innerHTML = '<span style="color:#06b6d4;">Restoring system snapshot...</span>';
+
+      try {
+        const resp = await fetch('/api/backup/import', {
+          method: 'POST',
+          body: formData,
+        });
+        if (resp.ok) {
+          const res = await resp.json();
+          backupImportStatus.innerHTML = `<span style="color:#10b981;">✓ Successfully restored ${res.details.restored_files_count} files!</span>`;
+          setTimeout(() => {
+            alert('System snapshot restored successfully! Reloading dashboard...');
+            window.location.reload();
+          }, 1200);
+        } else {
+          const err = await resp.json();
+          backupImportStatus.innerHTML = `<span style="color:#ef4444;">✗ Restore failed: ${err.detail || 'Error'}</span>`;
+        }
+      } catch (err) {
+        backupImportStatus.innerHTML = `<span style="color:#ef4444;">✗ Network error: ${err.message}</span>`;
+      } finally {
+        backupFileInput.value = '';
+      }
+    });
+  }
 
   // =========================================================================
   // WebSocket Connection

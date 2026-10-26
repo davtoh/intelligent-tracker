@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Intelligent Tracker - Edge AI Retail & Security Analytics</title>
+  <title>Intelligent Tracker - Edge AI Retail & Security Analytics VMS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -25,12 +25,12 @@
         </div>
         <div class="logo-text">
           <span class="brand-title">INTELLIGENT TRACKER</span>
-          <span class="brand-subtitle">EDGE AI VISION ANALYTICS</span>
+          <span class="brand-subtitle">MULTI-CAMERA EDGE AI VMS</span>
         </div>
       </div>
       <div class="live-pill">
         <span class="pulse-dot"></span>
-        <span class="live-label">LIVE FEED</span>
+        <span class="live-label">LIVE VMS</span>
       </div>
     </div>
 
@@ -39,6 +39,10 @@
       <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab">
         <span class="tab-icon">📹</span>
         <span>Live Monitor</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab">
+        <span class="tab-icon">📼</span>
+        <span>Video Studio</span>
       </button>
       <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab">
         <span class="tab-icon">👥</span>
@@ -59,8 +63,14 @@
       </button>
     </nav>
 
-    <!-- Header Telemetry Controls -->
+    <!-- Header Telemetry Controls & VMS Actions -->
     <div class="header-right">
+      <button class="btn btn-sm btn-outline header-action-btn" id="btn-manage-cameras" title="Camera Auto-Discovery & Stream Manager">
+        📹 Cameras
+      </button>
+      <button class="btn btn-sm btn-outline header-action-btn" id="btn-backup-manager" title="Export / Import System State Snapshot">
+        💾 Backup
+      </button>
       <div class="telemetry-pill">
         <span class="telemetry-label">FPS:</span>
         <span class="telemetry-val" id="header-fps-val">--</span>
@@ -75,7 +85,7 @@
   <!-- Main Container -->
   <main class="main-content">
 
-    <!-- TAB 1: LIVE MONITOR -->
+    <!-- TAB 1: LIVE MONITOR (WITH MULTI-CAMERA GRID) -->
     <section class="tab-pane active" id="tab-live" role="tabpanel">
       <div class="live-grid">
         <!-- Live Video Viewport -->
@@ -86,6 +96,20 @@
               <span id="video-stream-title">Camera Feed: CAM_01</span>
             </div>
             <div class="card-actions">
+              <!-- Active Camera Dropdown -->
+              <div class="camera-select-wrapper">
+                <select id="active-camera-select" class="form-select-sm" title="Select Focused Camera">
+                  <option value="cam_01">Main Entrance (cam_01)</option>
+                </select>
+              </div>
+
+              <!-- Multi-Grid Switcher -->
+              <div class="grid-switcher-group" title="Multi-Camera Grid Layout">
+                <button class="btn btn-sm btn-outline grid-switch-btn active" data-grid="1x1" title="Single Focused View (1x1)">1x1</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="2x2" title="Quad Multi-View (2x2)">2x2</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="3x3" title="Matrix Multi-View (3x3)">3x3</button>
+              </div>
+
               <span class="resolution-badge" id="stream-res-badge">640x480</span>
               <button class="btn btn-sm btn-outline" id="toggle-heatmap-btn" title="Toggle Heatmap Overlay">
                 🔥 Heatmap: OFF
@@ -96,6 +120,7 @@
             </div>
           </div>
 
+          <!-- Single Camera Focused Container (1x1 mode) -->
           <div class="video-container" id="video-wrapper">
             <!-- MJPEG Video Stream -->
             <img id="live-stream-img" src="/stream/cam_01" alt="Live Camera Stream" />
@@ -108,6 +133,9 @@
               <button class="btn btn-xs btn-primary tooltip-tag-btn" id="tooltip-tag-btn">🏷️ Tag Entity</button>
             </div>
           </div>
+
+          <!-- Multi-Camera Grid Container (2x2, 3x3 mode) -->
+          <div id="multi-grid-container" class="multi-camera-grid" style="display: none;"></div>
 
           <!-- Video Control Bar -->
           <div class="video-controls-bar">
@@ -171,6 +199,71 @@
             </div>
             <div class="alerts-mini-list" id="live-alerts-feed">
               <div class="empty-state">No active security alerts</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- TAB: VIDEO STUDIO & PLAYBACK SCRUBBER -->
+    <section class="tab-pane" id="tab-videos" role="tabpanel">
+      <div class="scrubber-grid">
+        <div class="glass-panel video-player-card">
+          <div class="card-header">
+            <h3 id="scrubber-loaded-title">📼 Video Playback Scrubber</h3>
+            <div class="card-actions">
+              <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera Feed</button>
+              <button class="btn btn-sm btn-outline" id="btn-video-analyze" disabled>⚡ Run Batch Analytics</button>
+            </div>
+          </div>
+          
+          <div class="scrubber-viewport">
+            <video id="scrubber-video-player" playsinline></video>
+          </div>
+
+          <!-- Interactive Playback Scrubber Toolbar -->
+          <div class="scrubber-toolbar glass-panel">
+            <div class="scrubber-timeline-row">
+              <input type="range" id="scrubber-timeline-slider" min="0" max="100" value="0" step="0.1" />
+              <span id="scrubber-time-display" class="time-display">0:00 / 0:00 (Frame #0)</span>
+            </div>
+            <div class="scrubber-controls-row">
+              <div class="scrubber-buttons-left">
+                <button class="btn btn-sm btn-outline" id="scrubber-btn-prev" title="Step Back 1 Frame">&lt; -1 Frame</button>
+                <button class="btn btn-sm btn-primary" id="scrubber-btn-play">▶ Play</button>
+                <button class="btn btn-sm btn-outline" id="scrubber-btn-next" title="Step Forward 1 Frame">&gt; +1 Frame</button>
+              </div>
+              <div class="scrubber-speed-group">
+                <span class="speed-label">Speed:</span>
+                <button class="btn btn-xs btn-outline speed-btn active" id="speed-btn-1x">1x</button>
+                <button class="btn btn-xs btn-outline speed-btn" id="speed-btn-2x">2x</button>
+                <button class="btn btn-xs btn-outline speed-btn" id="speed-btn-4x">4x</button>
+                <button class="btn btn-xs btn-outline speed-btn" id="speed-btn-8x">8x</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Occurrence Indexing Report Container -->
+          <div id="video-batch-report-container" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- Video Upload & Recordings List Sidebar -->
+        <aside class="sidebar-column">
+          <div class="glass-panel video-upload-panel">
+            <div class="panel-header">
+              <h3>Upload Recording</h3>
+            </div>
+            <input type="file" id="video-file-upload-input" accept=".mp4,.avi,.mkv,.mov" style="display: none;" />
+            <button class="btn btn-primary btn-block" id="btn-upload-video">📤 Upload Video File</button>
+            <div id="video-upload-status" class="upload-status-hint">Supports MP4, AVI, MKV up to 4K</div>
+          </div>
+
+          <div class="glass-panel video-library-panel">
+            <div class="panel-header">
+              <h3>Stored Recordings</h3>
+            </div>
+            <div class="video-recordings-list" id="video-recordings-list">
+              <div class="empty-state">Loading video library...</div>
             </div>
           </div>
         </aside>
@@ -366,6 +459,172 @@
     </div>
   </div>
 
+  <!-- Modal 3: Camera Management & Auto-Discovery -->
+  <div class="modal-backdrop" id="modal-camera-manager" style="display: none;">
+    <div class="modal-card glass-panel modal-lg">
+      <div class="modal-header">
+        <h3>📹 Multi-Camera VMS & Device Auto-Discovery</h3>
+        <button class="modal-close-btn" id="modal-cam-close">&times;</button>
+      </div>
+      <div class="modal-body-grid">
+        <!-- Left: Active Cameras & Auto-Discovery Scanner -->
+        <div class="modal-left-col">
+          <div class="section-subhead">
+            <h4>Active Camera Channels</h4>
+            <span class="badge">Hot-Swappable</span>
+          </div>
+          <div class="table-responsive" style="max-height: 220px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Toggle</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="active-cameras-table-body">
+                <tr><td colspan="6" class="text-center">Loading cameras...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section-subhead" style="margin-top: 16px;">
+            <h4>Hardware & LAN Auto-Discovery</h4>
+            <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
+          </div>
+          <div class="discovered-devices-list" id="discovered-devices-list">
+            <div class="empty-state">Click "Scan for Devices" to probe USB and ONVIF LAN cameras.</div>
+          </div>
+        </div>
+
+        <!-- Right: Add / Configure Camera Form & Connection Tester -->
+        <div class="modal-right-col">
+          <div class="section-subhead">
+            <h4>Add / Configure Camera</h4>
+          </div>
+          <form id="camera-config-form">
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="cam-id-input">Camera ID *</label>
+                <input type="text" id="cam-id-input" class="form-input" placeholder="e.g. cam_02" required />
+              </div>
+              <div class="form-group col-6">
+                <label for="cam-name-input">Display Label *</label>
+                <input type="text" id="cam-name-input" class="form-input" placeholder="e.g. Warehouse North" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cam-preset-select">Vendor RTSP Preset Builder</label>
+              <select id="cam-preset-select" class="form-input">
+                <option value="hikvision">Hikvision NVR / IP Camera</option>
+                <option value="tapo">TP-Link Tapo (C200 / C310 / C500)</option>
+                <option value="ezviz">EZVIZ Security Camera</option>
+                <option value="dahua">Dahua / Imou IP Camera</option>
+                <option value="generic">Generic RTSP / NVR Stream</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-8">
+                <label for="cam-ip-input">Camera IP / Hostname</label>
+                <input type="text" id="cam-ip-input" class="form-input" placeholder="192.168.1.100" />
+              </div>
+              <div class="form-group col-4">
+                <label for="cam-port-input">Port</label>
+                <input type="number" id="cam-port-input" class="form-input" value="554" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="cam-user-input">Username</label>
+                <input type="text" id="cam-user-input" class="form-input" placeholder="admin" />
+              </div>
+              <div class="form-group col-6">
+                <label for="cam-pass-input">Password / Code</label>
+                <input type="password" id="cam-pass-input" class="form-input" placeholder="Password" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="cam-channel-input">Channel</label>
+                <input type="number" id="cam-channel-input" class="form-input" value="1" min="1" max="64" />
+              </div>
+              <div class="form-group col-6">
+                <label for="cam-stream-select">Stream Type</label>
+                <select id="cam-stream-select" class="form-input">
+                  <option value="main">Main Stream (High Def)</option>
+                  <option value="sub">Sub Stream (Low Latency)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="cam-source-input">Resolved Stream URI / Device Source *</label>
+              <input type="text" id="cam-source-input" class="form-input" placeholder="rtsp://... or 0 for USB" required />
+            </div>
+
+            <!-- Live Snapshot Connection Preview Box -->
+            <div class="connection-test-box glass-panel">
+              <div class="test-box-header">
+                <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test Connection</button>
+                <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify source.</span>
+              </div>
+              <img id="test-preview-img" src="" alt="Test Snapshot" style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
+            </div>
+
+            <div class="modal-footer" style="margin-top: 15px;">
+              <button type="button" class="btn btn-outline" id="modal-cam-cancel" onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to VMS</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Backup & State Migration -->
+  <div class="modal-backdrop" id="modal-backup-manager" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>💾 System State Persistence & Backup Migration</h3>
+        <button class="modal-close-btn" id="modal-backup-close">&times;</button>
+      </div>
+      <div class="backup-modal-body">
+        <p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;">
+          Create a full portable snapshot of your entire security system including SQLite database (<code>tracker.db</code>), 
+          enrolled identities, thumbnail signatures, camera topologies, and alerting rules.
+        </p>
+
+        <div class="backup-actions-grid">
+          <div class="backup-card glass-panel">
+            <div class="backup-card-icon">📤</div>
+            <h4>Export System Snapshot</h4>
+            <p>Download a versioned <code>.zip</code> snapshot archive for backup or edge migration.</p>
+            <a href="/api/backup/export" class="btn btn-primary btn-block">Download Backup (.zip)</a>
+          </div>
+
+          <div class="backup-card glass-panel">
+            <div class="backup-card-icon">📥</div>
+            <h4>Import & Restore Snapshot</h4>
+            <p>Restore full database, signature crops, and configurations from a previously exported archive.</p>
+            <input type="file" id="backup-file-input" accept=".zip" style="display: none;" />
+            <button class="btn btn-secondary btn-block" id="btn-import-backup-file">Upload & Restore (.zip)</button>
+            <div id="backup-import-status" style="margin-top: 8px; font-size: 12px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Modules -->
   <script src="/static/app.js"></script>
+  <script src="/static/camera_manager.js"></script>
+  <script src="/static/video_scrubber.js"></script>
 </body>
 </html>

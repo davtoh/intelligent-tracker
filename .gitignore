@@ -66,5 +66,7 @@ models/
 
 # Local SQLite databases and captured crops
 data/
+crops/
 *.db
 *.sqlite3
+*.zip
