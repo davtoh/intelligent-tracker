@@ -96,6 +96,11 @@ document.addEventListener('DOMContentLoaded', () => {
       initTrafficChart();
     } else if (targetTabId === 'tab-alerts') {
       loadAlertsTable();
+    } else if (targetTabId === 'tab-studio') {
+      if (window.Studio) window.Studio.renderBEV();
+    } else if (targetTabId === 'tab-journey') {
+      // Focus search input
+      document.getElementById('journey-search-query')?.focus();
     }
   }
 

@@ -47,10 +47,11 @@ Documentation Contents
 
 .. toctree::
    :maxdepth: 2
-   :caption: Dashboard & Multi-Camera VMS:
+   :caption: Dashboard, VMS & Spatial Studio:
 
    dashboard
    vms
+   scenario_studio
    deployment
 
 Indices and tables

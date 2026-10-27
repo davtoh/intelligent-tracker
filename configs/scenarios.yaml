@@ -1,0 +1,99 @@
+version: "1.0"
+cameras:
+  cam_01:
+    zones:
+      - name: "Door Exit"
+        polygon:
+          - [420, 200]
+          - [620, 200]
+          - [620, 460]
+          - [420, 460]
+        dwell_threshold: 4.0
+        capacity_limit: 5
+        category_filter: ""
+        color: [0, 200, 100]
+      - name: "Lobby Area"
+        polygon:
+          - [50, 150]
+          - [350, 150]
+          - [350, 450]
+          - [50, 450]
+        dwell_threshold: 10.0
+        capacity_limit: 15
+        category_filter: ""
+        color: [0, 150, 255]
+    tripwires:
+      - name: "Entrance Tripwire"
+        line_segment:
+          - [420, 320]
+          - [620, 320]
+        bidirectional: true
+        color: [0, 255, 255]
+    homography:
+      metric_width: 12.0
+      metric_height: 8.0
+      src_points:
+        - [100, 150]
+        - [540, 150]
+        - [620, 450]
+        - [20, 450]
+      dst_points:
+        - [0.0, 0.0]
+        - [12.0, 0.0]
+        - [12.0, 8.0]
+        - [0.0, 8.0]
+
+  cam_02:
+    zones:
+      - name: "Door Entrance"
+        polygon:
+          - [40, 180]
+          - [240, 180]
+          - [240, 440]
+          - [40, 440]
+        dwell_threshold: 4.0
+        capacity_limit: 5
+        category_filter: ""
+        color: [0, 200, 100]
+      - name: "Vault Perimeter"
+        polygon:
+          - [360, 140]
+          - [600, 140]
+          - [600, 420]
+          - [360, 420]
+        dwell_threshold: 3.0
+        capacity_limit: 2
+        category_filter: "restricted"
+        color: [0, 0, 255]
+    tripwires:
+      - name: "Hallway Line"
+        line_segment:
+          - [150, 180]
+          - [150, 440]
+        bidirectional: true
+        color: [255, 200, 0]
+    homography:
+      metric_width: 10.0
+      metric_height: 10.0
+      src_points:
+        - [120, 160]
+        - [520, 160]
+        - [580, 440]
+        - [60, 440]
+      dst_points:
+        - [0.0, 0.0]
+        - [10.0, 0.0]
+        - [10.0, 10.0]
+        - [0.0, 10.0]
+
+spatial_transitions:
+  - link_id: "link_cam01_exit_to_cam02_entrance"
+    source_camera: "cam_01"
+    source_zone: "Door Exit"
+    target_camera: "cam_02"
+    target_zone: "Door Entrance"
+    t_min: 2.0
+    t_max: 15.0
+    prior_boost: 0.35
+    bidirectional: true
+    active: true

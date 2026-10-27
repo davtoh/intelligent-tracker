@@ -19,7 +19,7 @@
 | 5 | Event Dispatching & Alerting System | ✅ **COMPLETE** |
 | 6 | Web Dashboard, Packaging & Edge Deployment | ✅ **COMPLETE** |
 | 7 | Multi-Camera VMS, Auto-Discovery & Video Source Manager | ✅ **COMPLETE** |
-| 8 | World Scenario Studio, Space Awareness & Homography BEV | ⬜ Next |
+| 8 | World Scenario Studio, Space Awareness & Homography BEV | ✅ **COMPLETE** |
 
 ---
 
@@ -423,6 +423,69 @@ powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unit
 
 ---
 
+## ✅ [Milestone 8] — World Scenario Studio, Space Awareness & Ground Plane Homography
+**Status: COMPLETE** — Verified: 187/187 tests pass in Python 3.12.10
+
+### What was accomplished
+
+**8a — Interactive In-Browser Scenario Studio (`dashboard/static/studio.js`):**
+- **Polygonal Zone Drawing**: Interactive vertex placement, rubberband lines, closure checks, dwell thresholds, capacity limits, category filters, and color pickers.
+- **Directional Tripwire Drawing**: Two-point line segments with orthogonal normal vectors (IN/OUT directional arrows), bidirectional toggling, and line crossing counters.
+- **Real-Time Hot Injection**: Synchronizes live scenario changes directly into active `StreamManager.analytics` pipelines without restarting streams or interrupting tracking.
+
+**8b — 4-Point Ground Plane Homography & 2D BEV Minimap (`intelligent_tracker/homography.py`):**
+- **Perspective Matrix Calibration**: 4-point perspective transform (`cv2.getPerspectiveTransform`) and pseudoinverse/analytical inversion mapping camera image coordinates $\leftrightarrow$ metric ground plane $(X, Y)$ in meters.
+- **Bottom-Center Contact Mapping**: Tracks mapped to ground plane via contact coordinate $(x + w/2, y + h)$.
+- **Tactical Bird's-Eye-View (BEV) Minimap**: Dark slate-themed 2D top-down minimap canvas rendering metric distance grids, transformed zone polygons, track markers, velocity vectors, and entity names.
+- **Picture-in-Picture (PiP) Stream & Image Endpoint**: Live minimap rendered in MJPEG stream PiP overlay and served via `GET /api/scenarios/bev/{camera_id}`.
+
+**8c — Cross-Camera Topological Space Awareness (`intelligent_tracker/topology.py`):**
+- **Domain Realization**: Concrete realization of `Scene`, `Area`, and `Line` abstractions from `intelligent_tracker.high_objects`.
+- **Spatial Transition Links**: Physical pathways between camera zones (`SpatialTransitionLink`) with configurable transit windows $[T_{min}, T_{max}]$, prior boosting score bonus, and bidirectional link mirroring.
+- **Predictive Spatial Priors (`ActiveSpatialPrior`)**: Zone exit events automatically spawn live predictive priors with transit window filtering.
+- **Bayesian Re-ID Prior Boosting (`intelligent_tracker/matcher.py`)**: Boosts candidate Re-ID similarity ($S_{final} = \min(1.0, S_{vis} + \text{prior\_boost})$) when appearing in target camera zones within predicted transit windows, eliminating identity swapping across cameras.
+
+**8d — Trajectory Journey Search & Video Exporter (`intelligent_tracker/journey.py`):**
+- **Multi-Camera Hop Segmentation**: Aggregates sightings from `TrackerDB` into discrete camera hops with dwell durations and transit delays between successive cameras.
+- **Narrative Synthesis**: Automatically formats human-readable journey descriptions (e.g. `10:02 CAM_01 (Door Exit) [10s] -> 10:04 CAM_02 (Door Entrance) [15s]`).
+- **One-Click MP4 Journey Video Export**: Slices recorded camera clips or synthesizes an animated tactical video summary with camera badges, timestamps, and bounding box highlights into a downloadable MP4 file (`POST /api/journey/export`).
+
+**8e — Floating Overlay Control Toolbar (`dashboard/static/index.html`, `dashboard/static/app.js`):**
+- Floating overlay controls on live monitor to independently toggle bounding boxes (`bboxes`), track IDs (`track_ids`), dwell timers (`dwell_timers`), velocity vectors (`velocity`), zones (`zones`), tripwires (`tripwires`), heatmap (`heatmap`), BEV minimap (`bev_minimap`), and HUD status bar (`hud_bar`).
+- REST endpoints `GET /api/cameras/{id}/overlays` and `POST /api/cameras/{id}/overlays` with client synchronization.
+
+**8f — Dual Persistence & Declarative Scenarios (`intelligent_tracker/scenarios.py`):**
+- Declarative YAML persistence in `configs/scenarios.yaml`.
+- Relational SQLite tables in `intelligent_tracker/database.py` (`spatial_zones`, `spatial_tripwires`, `spatial_transitions`, `homography_calibrations`).
+- High-level `ScenarioManager` orchestrating memory, SQLite, YAML, and active pipelines.
+
+### Verification & Test Suite
+- Full test suite: **187 tests passing (100% green)** in ~19.7s.
+- Milestone 8 dedicated test suites (31 new tests):
+  - `tests/test_homography.py`: **7 tests passing** (calibration, forward/inverse mapping, bottom-center contact point, polygon projection, BEV minimap, serialization).
+  - `tests/test_topology.py`: **8 tests passing** (bidirectional links, zone exit triggers, transit windows, expiration, weighted similarity boost, prior consumption, matcher integration).
+  - `tests/test_scenarios.py`: **5 tests passing** (zone/tripwire/homography CRUD, SQLite & YAML persistence, startup reload).
+  - `tests/test_journey.py`: **3 tests passing** (multi-camera journey reconstruction, transit delay calculation, MP4 video synthesis).
+  - `tests/test_scenario_api.py`: **7 tests passing** (FastAPI REST endpoints for scenarios, zones, tripwires, homography, BEV minimap, topology, journey search/export, overlay controls).
+- Sphinx documentation build: **Passed with 0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+- Verified commands:
+```powershell
+# 1. Run complete unit test suite (187 tests)
+$env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
+
+# 2. Run Milestone 8 dedicated test suites (31 tests)
+.\.venv\Scripts\python.exe -m unittest tests/test_homography.py
+.\.venv\Scripts\python.exe -m unittest tests/test_topology.py
+.\.venv\Scripts\python.exe -m unittest tests/test_scenarios.py
+.\.venv\Scripts\python.exe -m unittest tests/test_journey.py
+.\.venv\Scripts\python.exe -m unittest tests/test_scenario_api.py
+
+# 3. Build Sphinx documentation without warnings
+.\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+```
+
+---
+
 ## Dependency Graph
 
 ```
@@ -433,7 +496,7 @@ M1 (Env & Core) ✅
                     └── M5 (Alerting + Entity Triggers) ✅
                           └── M6 (Dashboard + Edge Deploy) ✅
                                 └── M7 (Multi-Camera VMS & Auto-Discovery) ✅
-                                      └── M8 (World Scenario Studio & Homography BEV) ⬜
+                                      └── M8 (World Scenario Studio & Homography BEV) ✅
 ```
 
 ---

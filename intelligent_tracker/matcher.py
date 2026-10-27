@@ -94,6 +94,8 @@ class GalleryMatcher:
         session_reid_threshold: float = 0.55,
         spatial_bonus_radius: float = 200.0,
         spatial_bonus_max_dt: float = 60.0,
+        topology: Optional[Any] = None,
+        camera_id: str = "cam_01",
     ):
         """
         :param db: TrackerDB database instance (optional, for persistent enrollment).
@@ -106,9 +108,13 @@ class GalleryMatcher:
         :param session_reid_threshold: Similarity + spatial threshold to re-link returning session entities.
         :param spatial_bonus_radius: Pixel radius for spatial exit proximity boost.
         :param spatial_bonus_max_dt: Max seconds elapsed since exit to receive spatial proximity boost.
+        :param topology: Optional CrossCameraTopology for multi-camera transition priors.
+        :param camera_id: Identifier of the camera stream associated with this matcher.
         """
         self.db = db
         self.extractor = extractor
+        self.topology = topology
+        self.camera_id = camera_id
         self.reid_threshold = float(reid_threshold)
         self.feature_history_len = int(feature_history_len)
         self.sighting_interval = float(sighting_interval)
@@ -187,6 +193,8 @@ class GalleryMatcher:
         :return: EntityIdentifiedEvent if newly identified, else None.
         """
         now = timestamp if timestamp is not None else time.time()
+        source = source or self.camera_id
+        zone_id = zone_id or getattr(track, "current_zone", "") or ""
         tid = track.track_id
 
         # Skip tracks that haven't met minimum hits or have invalid bbox
@@ -214,6 +222,24 @@ class GalleryMatcher:
         if self.gallery_size > 0:
             similarities = batch_cosine_similarity(self.gallery_matrix, query_vec)
             if similarities.size > 0:
+                # Apply cross-camera predictive spatial priors if topology is available
+                matched_priors = {}
+                if self.topology is not None:
+                    for g_idx, g_eid in enumerate(self.gallery_entity_ids):
+                        g_name = self.gallery_names[g_idx]
+                        orig_sim = float(similarities[g_idx])
+                        boosted_sim, prior = self.topology.compute_weighted_similarity(
+                            visual_similarity=orig_sim,
+                            candidate_entity_id=g_eid,
+                            candidate_name=g_name,
+                            target_camera=source,
+                            target_zone=zone_id,
+                            timestamp=now,
+                        )
+                        similarities[g_idx] = boosted_sim
+                        if prior is not None:
+                            matched_priors[g_idx] = prior
+
                 best_idx = int(np.argmax(similarities))
                 best_score = float(similarities[best_idx])
 
@@ -221,6 +247,10 @@ class GalleryMatcher:
                     entity_id = self.gallery_entity_ids[best_idx]
                     name = self.gallery_names[best_idx]
                     category = self.gallery_categories[best_idx]
+
+                    # Consume matching spatial prior if one was utilized
+                    if self.topology is not None and best_idx in matched_priors:
+                        self.topology.consume_prior(matched_priors[best_idx].prior_id)
 
                     # Decorate track object with Re-ID attributes
                     track.entity_id = entity_id
@@ -376,6 +406,7 @@ class GalleryMatcher:
         :return: List of EntityIdentifiedEvent for newly recognized tracks in this frame.
         """
         now = timestamp if timestamp is not None else time.time()
+        source = source or self.camera_id
         events = []
         self._active_tracks_cache = tracks
 

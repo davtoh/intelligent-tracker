@@ -61,6 +61,14 @@
         <span>Security Alerts</span>
         <span class="badge alert-count-badge" id="header-alert-badge">0</span>
       </button>
+      <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab">
+        <span class="tab-icon">📐</span>
+        <span>Scenario Studio</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab">
+        <span class="tab-icon">🚶</span>
+        <span>Journey Search</span>
+      </button>
     </nav>
 
     <!-- Header Telemetry Controls & VMS Actions -->
@@ -149,6 +157,55 @@
             </div>
             <div class="controls-hint">
               💡 <em>Click any detected bounding box directly on video to tag & enroll into Re-ID database.</em>
+            </div>
+          </div>
+
+          <!-- Floating Overlays Control Toolbar (Milestone 8) -->
+          <div class="floating-overlay-toolbar glass-panel">
+            <div class="overlay-toolbar-label">
+              <span>👁️ Video Overlays:</span>
+            </div>
+            <div class="overlay-toggles-row">
+              <label class="overlay-toggle-chip" title="Toggle Object Bounding Boxes">
+                <input type="checkbox" id="overlay-toggle-bboxes" checked />
+                <span>📦 Boxes</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Track IDs and Recognized Names">
+                <input type="checkbox" id="overlay-toggle-track_ids" checked />
+                <span>🏷️ IDs</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Zone Dwell Time Timers">
+                <input type="checkbox" id="overlay-toggle-dwell_timers" checked />
+                <span>⏱️ Dwell</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Kinematic Velocity Movement Vectors">
+                <input type="checkbox" id="overlay-toggle-velocity" checked />
+                <span>↗️ Velocity</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Spatial Polygonal Zones">
+                <input type="checkbox" id="overlay-toggle-zones" checked />
+                <span>🟢 Zones</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Directional Virtual Tripwires">
+                <input type="checkbox" id="overlay-toggle-tripwires" checked />
+                <span>⚡ Tripwires</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Real-Time Density Heatmap Overlay">
+                <input type="checkbox" id="overlay-toggle-heatmap" />
+                <span>🔥 Heatmap</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle 2D Bird's-Eye Minimap Picture-in-Picture">
+                <input type="checkbox" id="overlay-toggle-bev_minimap" />
+                <span>🗺️ BEV Minimap</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Top Status HUD Information Bar">
+                <input type="checkbox" id="overlay-toggle-hud_bar" checked />
+                <span>ℹ️ Top HUD</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Real-Time Toast Alert Notifications">
+                <input type="checkbox" id="overlay-toggle-toast_prompts" checked />
+                <span>🔔 Live Toasts</span>
+              </label>
             </div>
           </div>
         </div>
@@ -402,6 +459,122 @@
       </div>
     </section>
 
+    <!-- TAB 6: WORLD SCENARIO STUDIO & BEV MINIMAP (Milestone 8) -->
+    <section class="tab-pane" id="tab-studio" role="tabpanel">
+      <div class="studio-layout-grid">
+        <!-- Main Studio Drawing Stage -->
+        <div class="studio-main-col glass-panel">
+          <div class="studio-toolbar">
+            <div class="toolbar-group">
+              <span class="toolbar-title">🎨 Tools:</span>
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-zone" title="Draw Polygonal Zone (Click vertices, double click to close)">
+                🟢 Draw Zone
+              </button>
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-tripwire" title="Draw Virtual Tripwire Line">
+                ⚡ Draw Tripwire
+              </button>
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-homography" title="Calibrate 4-point Ground Plane Homography">
+                📐 Calibrate BEV (4 Pts)
+              </button>
+              <button class="btn btn-sm btn-outline" id="btn-studio-clear" title="Clear current points and exit mode">
+                ✕ Clear / Reset
+              </button>
+            </div>
+            <div class="studio-cam-select">
+              <label for="studio-camera-select">Channel:</label>
+              <select id="studio-camera-select" class="form-select-sm">
+                <option value="cam_01">cam_01</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Studio Status Notification Banner -->
+          <div class="studio-status-banner" id="studio-status-banner">
+            Click a tool above to start drawing zones, directional tripwires, or calibrating the ground plane homography.
+          </div>
+
+          <!-- Studio Interactive Viewport with Drawing Canvas -->
+          <div class="studio-canvas-container" id="studio-canvas-wrapper">
+            <img id="studio-live-img" src="/stream/cam_01" alt="Studio Feed" />
+            <canvas id="studio-drawing-canvas" width="640" height="480"></canvas>
+          </div>
+        </div>
+
+        <!-- Studio Sidebar: BEV Minimap, Scenarios & Cross-Camera Transitions -->
+        <aside class="sidebar-column studio-sidebar">
+          <!-- Top-Down Bird's-Eye-View (BEV) Minimap Card -->
+          <div class="glass-panel bev-minimap-card">
+            <div class="panel-header">
+              <h3>🗺️ 2D Top-Down Minimap (BEV)</h3>
+              <span class="badge" id="bev-metric-scale">Calibrated</span>
+            </div>
+            <div class="bev-canvas-wrapper">
+              <canvas id="bev-minimap-canvas" width="320" height="320"></canvas>
+            </div>
+            <div class="bev-legend">
+              <span class="legend-item"><span class="dot green"></span> Normal / VIP</span>
+              <span class="legend-item"><span class="dot red"></span> Restricted</span>
+              <span class="legend-item"><span class="arrow-icon">↗</span> Velocity</span>
+            </div>
+          </div>
+
+          <!-- Active Zones & Tripwires Card -->
+          <div class="glass-panel studio-scenarios-card">
+            <div class="panel-header">
+              <h3>Active Zones & Tripwires</h3>
+            </div>
+            <div class="studio-items-group">
+              <div class="group-subhead">Polygonal Zones</div>
+              <div id="studio-zones-list" class="studio-items-scroll">
+                <div class="empty-state">Loading zones...</div>
+              </div>
+
+              <div class="group-subhead" style="margin-top: 10px;">Tripwires</div>
+              <div id="studio-tripwires-list" class="studio-items-scroll">
+                <div class="empty-state">Loading tripwires...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cross-Camera Spatial Transition Links Card -->
+          <div class="glass-panel studio-topology-card">
+            <div class="panel-header">
+              <h3>Spatial Transitions</h3>
+              <button class="btn btn-xs btn-primary" id="btn-add-transition-link">+ Add Transition</button>
+            </div>
+            <div id="topology-links-list" class="topology-links-list">
+              <div class="empty-state">Loading spatial transition links...</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- TAB 7: TRAJECTORY JOURNEY SEARCH & VIDEO EXPORTER (Milestone 8) -->
+    <section class="tab-pane" id="tab-journey" role="tabpanel">
+      <div class="journey-wrapper">
+        <div class="glass-panel toolbar-panel">
+          <div class="toolbar-left">
+            <div class="search-box journey-search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="journey-search-query" placeholder="Enter Entity Name (e.g. Alice) or Track ID (e.g. 42)..." />
+            </div>
+            <button class="btn btn-primary" id="btn-journey-search">🔎 Search Journey</button>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-success" id="btn-journey-export">🎬 Export Journey MP4</button>
+          </div>
+        </div>
+
+        <div id="journey-export-status" class="journey-status-area"></div>
+
+        <!-- Trajectory Journey Results Container -->
+        <div id="journey-results-container" class="journey-results-container">
+          <div class="empty-state">Enter an entity name or track ID above to reconstruct their cross-camera trajectory journey.</div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- MODALS -->
@@ -626,5 +799,6 @@
   <script src="/static/app.js"></script>
   <script src="/static/camera_manager.js"></script>
   <script src="/static/video_scrubber.js"></script>
+  <script src="/static/studio.js"></script>
 </body>
 </html>

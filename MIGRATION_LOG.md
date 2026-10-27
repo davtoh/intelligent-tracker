@@ -837,8 +837,89 @@
 - If a new agent session starts:
   - Working directory: `c:\dev\projects\products\intelligent_tracker`
   - Active virtual environment: `.\.venv\` (Python 3.12.10 64-bit on Windows).
-  - Next Phase: Milestone 8: World Scenario Studio, Space Awareness & Ground Plane Homography (Bird's-Eye-View Minimap, cross-camera topological space awareness, trajectory journey search).
-  - Check `frontier_security_architecture.md` line 147 for Milestone 8 detailed specification.
+  - Next Phase: Milestone 8 is COMPLETE. All 8 modernization milestones from `milestone_plan.md` and `frontier_security_architecture.md` are fully achieved.
+
+---
+
+## [Milestone 8] - 2026-10-26 - World Scenario Studio, Space Awareness & Ground Plane Homography
+
+### 1. Objectives & Scope
+- Deliver interactive in-browser Scenario Studio for polygonal zone drawing and directional tripwires with IN/OUT normal vectors.
+- Implement 4-point ground plane perspective homography mapping camera contact points $(x+w/2, y+h)$ to metric top-down $(X, Y)$ coordinates.
+- Render tactical 2D Bird's-Eye-View (BEV) top-down minimap canvas with metric grids, projected zones, and velocity vectors.
+- Realize cross-camera topological space awareness (`Scene`, `Area`, `Line` domain abstractions) with transit time windows $[T_{min}, T_{max}]$ and Bayesian spatial prior boosting for Re-ID gallery matching.
+- Implement Trajectory Journey Search reconstructing multi-camera chronological hops with dwell and transit durations, and one-click MP4 journey video compilation.
+- Implement floating overlay control toolbar dynamically toggling bounding boxes, track IDs, dwell timers, velocity, zones, tripwires, heatmap, BEV minimap, and HUD status.
+- Support dual persistence: declarative YAML (`configs/scenarios.yaml`) and relational SQLite tables (`spatial_zones`, `spatial_tripwires`, `spatial_transitions`, `homography_calibrations`).
+
+### 2. Files Touched & Created
+- **Core Intelligence & Spatial Analytics:**
+  - `intelligent_tracker/homography.py` *(New)*: `GroundPlaneHomography` class with 4-point calibration (`cv2.getPerspectiveTransform`), forward/inverse perspective mapping, contact point $(x+w/2, y+h)$ tracking, polygon projection, 2D BEV minimap canvas rendering, and dictionary serialization.
+  - `intelligent_tracker/topology.py` *(New)*: `SpatialTransitionLink`, `ActiveSpatialPrior`, and `CrossCameraTopology` realizing multi-camera transition paths, transit time window filtering, zone exit event handlers, and Bayesian prior Re-ID boosting.
+  - `intelligent_tracker/journey.py` *(New)*: `JourneyHop`, `EntityJourney`, `TrajectoryJourneySearcher`, and `JourneyVideoExporter` for cross-camera chronological trajectory reconstruction, narrative formatting, and animated MP4 summary video generation.
+  - `intelligent_tracker/scenarios.py` *(New)*: `ScenarioManager` orchestrating memory, SQLite, and YAML configurations, with runtime hot-injection into active `StreamManager` pipelines.
+  - `intelligent_tracker/database.py` *(Modified)*: Added spatial tables in `_init_schema` and CRUD operations for zones, tripwires, spatial transitions, and homography calibrations.
+  - `intelligent_tracker/matcher.py` *(Modified)*: Integrated `CrossCameraTopology` with `compute_weighted_similarity`, camera ID tracking, and active prior consumption.
+  - `configs/scenarios.yaml` *(New)*: Declarative YAML scenario definitions for `cam_01` and `cam_02` with zones, tripwires, homography calibrations, and spatial transition links.
+- **Web Dashboard & VMS UI:**
+  - `dashboard/stream_manager.py` *(Modified)*: Integrated `self.homography`, `self.topology`, `self.overlays` flags, BEV minimap generation (`get_bev_minimap_jpeg`), PiP rendering in MJPEG stream, zone exit prior triggers, and ground coordinate telemetry.
+  - `dashboard/app.py` *(Modified)*: Added global `scenario_manager`, Pydantic models, and REST endpoints for scenarios, zones, tripwires, homography, BEV minimap, topology transitions, active priors, journey search, journey export, and overlay controls.
+  - `dashboard/static/studio.js` *(New)*: Interactive visual studio frontend with canvas drawing of polygonal zones, directional tripwires, 4-point homography calibration, live BEV minimap, topology links, and journey search/export.
+  - `dashboard/static/index.html` *(Modified)*: Added Studio and Journey navigation tabs, floating overlay control toolbar, Scenario Studio canvas section, and Trajectory Journey Search section.
+  - `dashboard/static/app.js` *(Modified)*: Updated navigation tab switching for Studio and Journey sections.
+  - `dashboard/static/styles.css` *(Modified)*: Added CSS styles for floating overlay toolbar, Scenario Studio canvas editor, BEV minimap panel, cards, and journey timeline.
+- **Unit & Integration Test Suites:**
+  - `tests/test_homography.py` *(New)*: 7 tests covering calibration, forward/inverse mapping, bottom-center contact point, polygon projection, BEV minimap, and serialization.
+  - `tests/test_topology.py` *(New)*: 8 tests covering bidirectional links, zone exit triggers, transit windows, expiration, similarity boosting, and `GalleryMatcher` integration.
+  - `tests/test_scenarios.py` *(New)*: 5 tests covering zone/tripwire/homography CRUD, SQLite & YAML persistence, and startup reload.
+  - `tests/test_journey.py` *(New)*: 3 tests covering multi-camera journey reconstruction, transit delay calculation, and MP4 video synthesis.
+  - `tests/test_scenario_api.py` *(New)*: 7 tests covering FastAPI REST endpoints for scenarios, zones, tripwires, homography, BEV minimap, topology, journey search/export, and overlays.
+- **Sphinx Documentation:**
+  - `documentation/scenario_studio.rst` *(New)*: Comprehensive documentation of Scenario Studio, Ground Plane Homography, BEV Minimap, Cross-Camera Topology, and Trajectory Journey Search.
+  - `documentation/index.rst` *(Modified)*: Added `scenario_studio` to master documentation toctree.
+
+### 3. Key Architectural Decisions
+- **Contact Point $(x + w/2, y + h)$ vs Centroid**: Foot contact point mapping to the ground plane provides physically accurate metric coordinates, avoiding severe altitude bias caused by camera pitch angle foreshortening.
+- **Dual Storage (YAML + SQLite)**: Declarative YAML file (`configs/scenarios.yaml`) allows Git versioning and infrastructure-as-code deployment, while SQLite `TrackerDB` provides relational indexing and high-concurrency ACID transactions for web studio operations.
+- **Bayesian Topological Prior Boosting**: Rather than relying purely on visual cosine similarity (which struggles with identical uniforms or low-resolution crops), spatial transit windows $[T_{min}, T_{max}]$ between camera zones dynamically boost candidate scores when appearing in physically expected locations, effectively eliminating cross-camera identity swapping.
+- **Zero-Downtime Hot Reloading**: Studio actions update active `StreamManager.analytics` in-memory structures immediately via thread-safe mutations without restarting video capture threads or interrupting tracking loops.
+
+### 4. State & Checkpoint
+- **Status:** Milestone 8 COMPLETE (100% Green Unit Tests)
+- **Automated Verification:**
+  - Ran `$env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests`
+  - Result: **Ran 187 tests in 19.708s — OK (0 failures, 0 errors)**.
+  - Sphinx Documentation: Built cleanly with **0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+
+### 5. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run complete automated unit test suite (187 tests)
+  $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
+
+  # 2. Run Milestone 8 dedicated test suites (31 tests)
+  .\.venv\Scripts\python.exe -m unittest tests/test_homography.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_topology.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_scenarios.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_journey.py
+  .\.venv\Scripts\python.exe -m unittest tests/test_scenario_api.py
+
+  # 3. Build Sphinx documentation with zero warnings
+  .\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+
+  # 4. Launch local Web Analytics & Scenario Studio server
+  .\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  # Open http://localhost:8000 (navigate to Scenario Studio and Trajectory Journey tabs)
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python -m unittest tests/test_homography.py tests/test_topology.py tests/test_scenarios.py tests/test_journey.py tests/test_scenario_api.py
+  python -m sphinx -W --keep-going documentation/ documentation/_build/html/
+  python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  ```
+
 
 
 

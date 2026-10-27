@@ -36,6 +36,8 @@ from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.reid import ReIDExtractorFactory
 from intelligent_tracker.matcher import GalleryMatcher
 from intelligent_tracker.events import setup_event_pipeline, EventBus, frame_to_base64, crop_to_base64
+from intelligent_tracker.homography import GroundPlaneHomography
+from intelligent_tracker.topology import CrossCameraTopology
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
@@ -98,6 +100,21 @@ class StreamManager:
         }
         self.draw_heatmap = False
         self.start_time = time.time()
+
+        # Milestone 8: Homography, Topology & Overlay Controls
+        self.homography = GroundPlaneHomography(camera_id=self.camera_id)
+        self.topology: Optional[CrossCameraTopology] = None
+        self.overlays: Dict[str, bool] = {
+            "bboxes": True,
+            "track_ids": True,
+            "dwell_timers": True,
+            "velocity": True,
+            "zones": True,
+            "tripwires": True,
+            "heatmap": False,
+            "bev_minimap": False,
+            "hud_bar": True,
+        }
 
         # WebSocket Subscribers: list of async queues or callback callables
         self._ws_subscribers: List[Any] = []
@@ -249,6 +266,30 @@ class StreamManager:
         ret, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
         return buf.tobytes() if ret else b""
 
+    def set_overlays(self, options: Dict[str, Any]) -> Dict[str, bool]:
+        """Update floating video overlay settings dynamically."""
+        with self._lock:
+            for k, v in options.items():
+                if k in self.overlays:
+                    self.overlays[k] = bool(v)
+            if "heatmap" in options:
+                self.draw_heatmap = bool(options["heatmap"])
+            return dict(self.overlays)
+
+    def get_overlays(self) -> Dict[str, bool]:
+        """Get current overlay visibility flags."""
+        with self._lock:
+            return dict(self.overlays)
+
+    def get_bev_minimap_jpeg(self) -> bytes:
+        """Render and encode real-time 2D Bird's-Eye-View (BEV) minimap image."""
+        with self._lock:
+            tracks = self.tracker.tracks if self.tracker and hasattr(self.tracker, "tracks") else {}
+            zones = self.analytics.zones if self.analytics else {}
+            bev = self.homography.render_bev_minimap(tracks, zones=zones)
+            ret, buf = cv2.imencode(".jpg", bev, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            return buf.tobytes() if ret else b""
+
     def start(self):
         """Start background processing loop."""
         with self._lock:
@@ -320,13 +361,31 @@ class StreamManager:
                 # 3. Spatial Analytics
                 if self.analytics:
                     try:
-                        self.analytics.update(tracks, frame_time=curr_t, current_frame=frame)
+                        analytics_res = self.analytics.update(tracks, frame_time=curr_t, current_frame=frame)
+                        # Milestone 8: Trigger Cross-Camera Topology Predictive Priors on Zone Exit
+                        if self.topology and analytics_res and "new_events" in analytics_res:
+                            for ev_d in analytics_res.get("new_events", []):
+                                if ev_d.get("event_type") == "zone" and ev_d.get("action") == "exit":
+                                    z_name = ev_d.get("zone_id")
+                                    tid = ev_d.get("track_id")
+                                    t_obj = tracks.get(tid)
+                                    ent_id = getattr(t_obj, "entity_id", None) if t_obj else None
+                                    ent_name = getattr(t_obj, "entity_name", getattr(t_obj, "identity_label", f"Track #{tid}")) if t_obj else f"Track #{tid}"
+                                    self.topology.record_zone_exit(
+                                        camera_id=self.camera_id,
+                                        zone_name=z_name,
+                                        entity_name=ent_name,
+                                        entity_id=ent_id,
+                                        timestamp=curr_t,
+                                    )
                     except Exception as e:
                         logger.debug("Analytics error: %s", e)
 
-                # 4. Re-ID Gallery Matching
+                # 4. Re-ID Gallery Matching (with Cross-Camera Topology Priors)
                 if self.gallery_matcher and tracks:
                     try:
+                        if self.topology and self.gallery_matcher.topology is None:
+                            self.gallery_matcher.topology = self.topology
                         identified = self.gallery_matcher.match_tracks(tracks, frame)
                         for ev in identified:
                             if self.event_bus:
@@ -334,19 +393,19 @@ class StreamManager:
                     except Exception as e:
                         logger.debug("Re-ID matching error: %s", e)
 
-                # 5. Render Annotated Frame
+                # 5. Render Annotated Frame with Customizable Overlay Flags
                 annotated = frame.copy()
                 h, w = annotated.shape[:2]
 
                 # Draw Heatmap if enabled
-                if self.draw_heatmap and self.analytics:
+                if (self.draw_heatmap or self.overlays.get("heatmap", False)) and self.analytics:
                     try:
                         annotated = self.analytics.draw_heatmap_overlay(annotated, alpha=0.55)
                     except Exception:
                         pass
 
                 # Draw Zones
-                if self.analytics:
+                if self.overlays.get("zones", True) and self.analytics:
                     for zone in self.analytics.zones.values():
                         pts = zone.polygon.reshape((-1, 1, 2)).astype(np.int32)
                         is_breached = getattr(zone, "_threshold_breached", False)
@@ -367,7 +426,8 @@ class StreamManager:
                         tag = f"{zone.name} [{zone.occupancy}{cap_text}]"
                         cv2.putText(annotated, tag, (cx - 30, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-                    # Draw Tripwires
+                # Draw Tripwires
+                if self.overlays.get("tripwires", True) and self.analytics:
                     for tw in self.analytics.tripwires.values():
                         p1, p2 = tw.line_segment
                         ip1 = (int(round(p1[0])), int(round(p1[1])))
@@ -377,7 +437,7 @@ class StreamManager:
                         tw_tag = f"{tw.name}: IN={tw.in_count} OUT={tw.out_count}"
                         cv2.putText(annotated, tw_tag, (mid[0] + 5, mid[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.45, tw.color, 1)
 
-                # Draw Tracks
+                # Draw Tracks (Bounding Boxes, Labels, Dwell Timers, Velocity Vectors)
                 for tid, trk in tracks.items():
                     bx, by, bw, bh = trk.bbox
                     color = (0, 255, 0)
@@ -388,16 +448,55 @@ class StreamManager:
                     elif trk.state == "predicting":
                         color = (255, 165, 0)
 
-                    cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), color, 2)
-                    name_disp = trk.entity_name or trk.identity_label or f"#{tid}"
-                    hud_text = f"{name_disp} ({trk.confidence:.2f})"
-                    cv2.putText(annotated, hud_text, (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                    # Bounding Box
+                    if self.overlays.get("bboxes", True):
+                        cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), color, 2)
+
+                    # Track Label & Dwell Timer
+                    if self.overlays.get("track_ids", True):
+                        name_disp = trk.entity_name or trk.identity_label or f"#{tid}"
+                        dwell_str = f" [{trk.dwell_time:.1f}s]" if self.overlays.get("dwell_timers", True) else ""
+                        hud_text = f"{name_disp} ({trk.confidence:.2f}){dwell_str}"
+                        cv2.putText(annotated, hud_text, (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
+                    # Velocity Vector
+                    if self.overlays.get("velocity", True):
+                        vx, vy = trk.velocity if hasattr(trk, "velocity") else (0.0, 0.0)
+                        if np.hypot(vx, vy) > 0.5:
+                            cx, cy = trk.centroid
+                            cv2.arrowedLine(
+                                annotated,
+                                (int(cx), int(cy)),
+                                (int(cx + vx * 3), int(cy + vy * 3)),
+                                (255, 255, 0),
+                                2,
+                                tipLength=0.3,
+                            )
 
                 # Top Status HUD bar
-                uptime = int(time.time() - self.start_time)
-                hud_summary = f"CAM: {self.camera_id} | FPS: {measured_fps:.1f} | TRACKS: {len(tracks)} | TIME: {uptime}s"
-                cv2.rectangle(annotated, (0, 0), (w, 24), (15, 23, 42), -1)
-                cv2.putText(annotated, hud_summary, (10, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 255), 1)
+                if self.overlays.get("hud_bar", True):
+                    uptime = int(time.time() - self.start_time)
+                    hud_summary = f"CAM: {self.camera_id} | FPS: {measured_fps:.1f} | TRACKS: {len(tracks)} | TIME: {uptime}s"
+                    cv2.rectangle(annotated, (0, 0), (w, 24), (15, 23, 42), -1)
+                    cv2.putText(annotated, hud_summary, (10, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 255), 1)
+
+                # BEV Minimap Picture-in-Picture (PiP) Overlay
+                if self.overlays.get("bev_minimap", False) and self.homography:
+                    try:
+                        pip_size = (160, 160)
+                        bev_small = self.homography.render_bev_minimap(
+                            tracks,
+                            zones=self.analytics.zones if self.analytics else None,
+                            canvas_size=pip_size,
+                            margin=16,
+                        )
+                        # Place in bottom-right corner
+                        px, py = w - pip_size[0] - 12, h - pip_size[1] - 12
+                        if px > 0 and py > 0:
+                            annotated[py:py + pip_size[1], px:px + pip_size[0]] = bev_small
+                            cv2.rectangle(annotated, (px, py), (px + pip_size[0], py + pip_size[1]), (0, 220, 255), 1)
+                    except Exception as e:
+                        logger.debug("BEV PiP overlay error: %s", e)
 
                 # Compress to JPEG
                 ret, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -406,7 +505,7 @@ class StreamManager:
                     with self._lock:
                         self._latest_jpeg = jpeg_bytes
 
-                # Build Telemetry
+                # Build Telemetry with Ground Coordinates
                 recent_alerts = []
                 if self.event_bus:
                     for ev in self.event_bus.get_recent_events(limit=8):
@@ -417,25 +516,33 @@ class StreamManager:
                         else:
                             recent_alerts.append({"event_type": getattr(ev, "event_type", "event")})
 
+                # Compute ground coordinates for active tracks
+                active_tracks_telemetry = []
+                for tid, trk in tracks.items():
+                    gx, gy = self.homography.track_to_ground(trk.bbox)
+                    active_tracks_telemetry.append({
+                        "id": tid,
+                        "bbox": [int(x) for x in trk.bbox],
+                        "centroid": [float(trk.centroid[0]), float(trk.centroid[1])],
+                        "ground_pos": [round(gx, 2), round(gy, 2)],
+                        "velocity": [round(float(trk.velocity[0]), 2), round(float(trk.velocity[1]), 2)],
+                        "label": trk.label,
+                        "confidence": round(float(trk.confidence), 2),
+                        "dwell_time": round(float(trk.dwell_time), 1),
+                        "entity_name": trk.entity_name,
+                        "category": getattr(trk, "category", "person"),
+                        "state": trk.state,
+                    })
+
                 telemetry = {
                     "camera_id": self.camera_id,
                     "status": "online",
                     "timestamp": curr_t,
                     "fps": round(measured_fps, 1),
                     "frame_count": frame_count,
-                    "active_tracks": [
-                        {
-                            "id": tid,
-                            "bbox": [int(x) for x in trk.bbox],
-                            "label": trk.label,
-                            "confidence": round(float(trk.confidence), 2),
-                            "dwell_time": round(float(trk.dwell_time), 1),
-                            "entity_name": trk.entity_name,
-                            "category": getattr(trk, "category", "person"),
-                            "state": trk.state,
-                        }
-                        for tid, trk in tracks.items()
-                    ],
+                    "homography_calibrated": self.homography.is_calibrated,
+                    "overlays": dict(self.overlays),
+                    "active_tracks": active_tracks_telemetry,
                     "zones": [
                         {
                             "name": z.name,

@@ -53,12 +53,16 @@ from intelligent_tracker.discovery import (
     build_preset_rtsp_url,
     CAMERA_PRESETS,
 )
+from intelligent_tracker.scenarios import ScenarioManager
+from intelligent_tracker.topology import SpatialTransitionLink
+from intelligent_tracker.journey import TrajectoryJourneySearcher, JourneyVideoExporter
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
-# Global CameraPool & StreamManager references
+# Global CameraPool, StreamManager & ScenarioManager references
 camera_pool: Optional[CameraPool] = None
 stream_manager: Optional[StreamManager] = None
+scenario_manager: Optional[ScenarioManager] = None
 
 
 def get_active_stream_manager(camera_id: Optional[str] = None) -> Optional[StreamManager]:
@@ -77,11 +81,20 @@ def get_active_stream_manager(camera_id: Optional[str] = None) -> Optional[Strea
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan context manager starting and stopping the CameraPool and pipelines."""
-    global stream_manager, camera_pool
-    logger.info("Initializing Intelligent Tracker CameraPool...")
+    """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
+    global stream_manager, camera_pool, scenario_manager
+    logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     camera_pool = CameraPool()
     stream_manager = camera_pool.primary_stream
+    scenario_manager = ScenarioManager()
+
+    # Apply loaded scenarios to active streams
+    if camera_pool:
+        for sm in camera_pool.streams.values():
+            scenario_manager.apply_to_stream_manager(sm)
+    elif stream_manager:
+        scenario_manager.apply_to_stream_manager(stream_manager)
+
     yield
     logger.info("Shutting down Intelligent Tracker CameraPool...")
     if camera_pool:
@@ -170,6 +183,65 @@ class CameraTestRequest(BaseModel):
     password: Optional[str] = ""
     channel: Optional[int] = 1
     stream: Optional[str] = "main"
+
+
+class ZoneCreateRequest(BaseModel):
+    camera_id: str = Field("cam_01", description="Camera channel identifier")
+    name: str = Field(..., min_length=1, description="Unique zone name")
+    polygon: List[List[float]] = Field(..., min_length=3, description="List of [x, y] coordinates")
+    category_filter: Optional[str] = Field("", description="Filter category (e.g. restricted, staff)")
+    dwell_threshold: Optional[float] = Field(5.0, description="Dwell threshold in seconds")
+    capacity_limit: Optional[int] = Field(None, description="Maximum occupant capacity limit")
+    color: Optional[List[int]] = Field([0, 200, 100], description="BGR or RGB color list")
+
+
+class TripwireCreateRequest(BaseModel):
+    camera_id: str = Field("cam_01", description="Camera channel identifier")
+    name: str = Field(..., min_length=1, description="Unique tripwire name")
+    line_segment: List[List[float]] = Field(..., min_length=2, description="Two points: [[x1, y1], [x2, y2]]")
+    bidirectional: Optional[bool] = Field(True, description="Detect crossing in both directions")
+    color: Optional[List[int]] = Field([0, 255, 255], description="BGR or RGB color list")
+
+
+class HomographyCalibrationRequest(BaseModel):
+    camera_id: str = Field("cam_01", description="Camera channel identifier")
+    src_points: List[List[float]] = Field(..., min_length=4, max_length=4, description="4 camera ground corners")
+    dst_points: Optional[List[List[float]]] = Field(None, description="4 ground metric points")
+    metric_width: Optional[float] = Field(10.0, description="Real world ground width in meters")
+    metric_height: Optional[float] = Field(10.0, description="Real world ground height in meters")
+
+
+class SpatialTransitionRequest(BaseModel):
+    link_id: Optional[str] = Field(None, description="Optional custom link ID")
+    source_camera: str = Field(..., description="Source camera ID")
+    source_zone: str = Field(..., description="Source zone name")
+    target_camera: str = Field(..., description="Target camera ID")
+    target_zone: str = Field(..., description="Target zone name")
+    t_min: Optional[float] = Field(2.0, description="Minimum expected transit time in seconds")
+    t_max: Optional[float] = Field(15.0, description="Maximum expected transit time in seconds")
+    prior_boost: Optional[float] = Field(0.35, description="Spatial predictive bonus to visual Re-ID score")
+    bidirectional: Optional[bool] = Field(False, description="Bidirectional transition")
+    active: Optional[bool] = Field(True, description="Whether link is active")
+
+
+class OverlayUpdateRequest(BaseModel):
+    bboxes: Optional[bool] = None
+    track_ids: Optional[bool] = None
+    dwell_timers: Optional[bool] = None
+    velocity: Optional[bool] = None
+    zones: Optional[bool] = None
+    tripwires: Optional[bool] = None
+    heatmap: Optional[bool] = None
+    bev_minimap: Optional[bool] = None
+    hud_bar: Optional[bool] = None
+
+
+class JourneyExportRequest(BaseModel):
+    entity_id: Optional[int] = None
+    entity_name: Optional[str] = None
+    track_id: Optional[int] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
 
 
 # -----------------------------------------------------------------------------
@@ -859,3 +931,387 @@ async def system_status():
             "event_bus_events": mgr.event_bus.published_count if mgr and mgr.event_bus else 0,
         },
     }
+
+
+# -----------------------------------------------------------------------------
+# REST API: Scenario Studio, Space Awareness & Homography (Milestone 8)
+# -----------------------------------------------------------------------------
+def _get_scenario_mgr() -> ScenarioManager:
+    global scenario_manager
+    if scenario_manager is None:
+        scenario_manager = ScenarioManager()
+    return scenario_manager
+
+
+@app.get("/api/scenarios")
+async def get_all_scenarios():
+    """Retrieve full scenario configuration across all cameras (zones, tripwires, homography, transitions)."""
+    sm = _get_scenario_mgr()
+    result = {
+        "version": "1.0",
+        "cameras": {},
+        "spatial_transitions": [l.to_dict() for l in sm.topology.list_links() if not l.link_id.endswith("_rev")],
+    }
+    for cam_id, c_data in sm.cameras.items():
+        result["cameras"][cam_id] = {
+            "zones": [
+                {
+                    "name": z.name,
+                    "polygon": z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon),
+                    "dwell_threshold": z.dwell_threshold,
+                    "capacity_limit": getattr(z, "capacity_limit", None),
+                    "category_filter": getattr(z, "category_filter", ""),
+                    "color": list(z.color),
+                }
+                for z in c_data["zones"].values()
+            ],
+            "tripwires": [
+                {
+                    "name": tw.name,
+                    "line_segment": [list(tw.line_segment[0]), list(tw.line_segment[1])],
+                    "bidirectional": tw.bidirectional,
+                    "color": list(tw.color),
+                }
+                for tw in c_data["tripwires"].values()
+            ],
+            "homography": c_data["homography"].to_dict(),
+        }
+    return result
+
+
+@app.get("/api/scenarios/{camera_id}")
+async def get_camera_scenario(camera_id: str):
+    """Retrieve scenario details for a specific camera channel."""
+    sm = _get_scenario_mgr()
+    c_data = sm._ensure_camera_entry(camera_id)
+    return {
+        "camera_id": camera_id,
+        "zones": [
+            {
+                "name": z.name,
+                "polygon": z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon),
+                "dwell_threshold": z.dwell_threshold,
+                "capacity_limit": getattr(z, "capacity_limit", None),
+                "category_filter": getattr(z, "category_filter", ""),
+                "color": list(z.color),
+            }
+            for z in c_data["zones"].values()
+        ],
+        "tripwires": [
+            {
+                "name": tw.name,
+                "line_segment": [list(tw.line_segment[0]), list(tw.line_segment[1])],
+                "bidirectional": tw.bidirectional,
+                "color": list(tw.color),
+            }
+            for tw in c_data["tripwires"].values()
+        ],
+        "homography": c_data["homography"].to_dict(),
+    }
+
+
+@app.post("/api/scenarios/zones")
+async def create_or_update_zone(req: ZoneCreateRequest):
+    """Create or update a polygonal zone for a camera, persisting to YAML & SQLite."""
+    sm = _get_scenario_mgr()
+    color_tuple = tuple(req.color) if req.color and len(req.color) >= 3 else (0, 200, 100)
+    zone = sm.save_zone(
+        camera_id=req.camera_id,
+        name=req.name,
+        polygon=req.polygon,
+        category_filter=req.category_filter or "",
+        dwell_threshold=req.dwell_threshold or 5.0,
+        capacity_limit=req.capacity_limit,
+        color=color_tuple,
+    )
+
+    # Hot reload into active stream manager if camera is active
+    mgr = get_active_stream_manager(req.camera_id)
+    if mgr and mgr.analytics:
+        mgr.analytics.add_zone(zone)
+
+    return {
+        "status": "success",
+        "zone": {
+            "camera_id": req.camera_id,
+            "name": zone.name,
+            "polygon": req.polygon,
+            "dwell_threshold": zone.dwell_threshold,
+            "capacity_limit": zone.capacity_limit,
+            "category_filter": getattr(zone, "category_filter", ""),
+            "color": list(zone.color),
+        },
+    }
+
+
+@app.delete("/api/scenarios/zones/{camera_id}/{zone_name}")
+async def delete_zone_route(camera_id: str, zone_name: str):
+    """Delete a zone from a camera, updating memory, YAML, and SQLite."""
+    sm = _get_scenario_mgr()
+    deleted = sm.delete_zone(camera_id, zone_name)
+
+    # Hot reload in active stream manager
+    mgr = get_active_stream_manager(camera_id)
+    if mgr and mgr.analytics and zone_name in mgr.analytics.zones:
+        del mgr.analytics.zones[zone_name]
+
+    return {"status": "success" if deleted else "not_found", "deleted": zone_name}
+
+
+@app.post("/api/scenarios/tripwires")
+async def create_or_update_tripwire(req: TripwireCreateRequest):
+    """Create or update a directional tripwire line for a camera."""
+    sm = _get_scenario_mgr()
+    color_tuple = tuple(req.color) if req.color and len(req.color) >= 3 else (0, 255, 255)
+    tw = sm.save_tripwire(
+        camera_id=req.camera_id,
+        name=req.name,
+        line_segment=req.line_segment,
+        bidirectional=req.bidirectional if req.bidirectional is not None else True,
+        color=color_tuple,
+    )
+
+    # Hot reload into active stream manager if camera is active
+    mgr = get_active_stream_manager(req.camera_id)
+    if mgr and mgr.analytics:
+        mgr.analytics.add_tripwire(tw)
+
+    return {
+        "status": "success",
+        "tripwire": {
+            "camera_id": req.camera_id,
+            "name": tw.name,
+            "line_segment": req.line_segment,
+            "bidirectional": tw.bidirectional,
+            "color": list(tw.color),
+        },
+    }
+
+
+@app.delete("/api/scenarios/tripwires/{camera_id}/{tripwire_name}")
+async def delete_tripwire_route(camera_id: str, tripwire_name: str):
+    """Delete a tripwire line from a camera."""
+    sm = _get_scenario_mgr()
+    deleted = sm.delete_tripwire(camera_id, tripwire_name)
+
+    mgr = get_active_stream_manager(camera_id)
+    if mgr and mgr.analytics and tripwire_name in mgr.analytics.tripwires:
+        del mgr.analytics.tripwires[tripwire_name]
+
+    return {"status": "success" if deleted else "not_found", "deleted": tripwire_name}
+
+
+@app.post("/api/scenarios/homography")
+async def save_homography_route(req: HomographyCalibrationRequest):
+    """Calibrate 4-point perspective ground plane homography matrix for camera."""
+    sm = _get_scenario_mgr()
+    try:
+        homo = sm.save_homography(
+            camera_id=req.camera_id,
+            src_points=req.src_points,
+            dst_points=req.dst_points,
+            metric_width=req.metric_width or 10.0,
+            metric_height=req.metric_height or 10.0,
+        )
+
+        # Apply to live stream manager if running
+        mgr = get_active_stream_manager(req.camera_id)
+        if mgr:
+            mgr.homography = homo
+
+        return {"status": "success", "homography": homo.to_dict()}
+    except Exception as e:
+        logger.error("Homography calibration failed: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/scenarios/homography/{camera_id}")
+async def get_homography_route(camera_id: str):
+    """Get ground plane homography calibration profile for a camera."""
+    sm = _get_scenario_mgr()
+    homo = sm.get_homography(camera_id)
+    return homo.to_dict()
+
+
+@app.delete("/api/scenarios/homography/{camera_id}")
+async def delete_homography_route(camera_id: str):
+    """Reset homography calibration for a camera channel."""
+    sm = _get_scenario_mgr()
+    c_entry = sm._ensure_camera_entry(camera_id)
+    c_entry["homography"] = GroundPlaneHomography(camera_id=camera_id)
+    if sm.db:
+        sm.db.delete_homography_calibration(camera_id)
+    sm.save_to_yaml()
+
+    mgr = get_active_stream_manager(camera_id)
+    if mgr:
+        mgr.homography = c_entry["homography"]
+
+    return {"status": "success", "deleted": camera_id}
+
+
+@app.get("/api/scenarios/bev/{camera_id}")
+async def get_bev_minimap_image(camera_id: str):
+    """Retrieve live 2D Bird's-Eye-View (BEV) top-down minimap image."""
+    mgr = get_active_stream_manager(camera_id)
+    if mgr:
+        jpeg_bytes = mgr.get_bev_minimap_jpeg()
+        return StreamingResponse(io.BytesIO(jpeg_bytes), media_type="image/jpeg")
+
+    sm = _get_scenario_mgr()
+    homo = sm.get_homography(camera_id)
+    c_entry = sm._ensure_camera_entry(camera_id)
+    bev_img = homo.render_bev_minimap({}, zones=c_entry["zones"])
+    ret, buf = cv2.imencode(".jpg", bev_img, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+# -----------------------------------------------------------------------------
+# REST API: Cross-Camera Topology
+# -----------------------------------------------------------------------------
+@app.get("/api/topology/transitions")
+async def list_spatial_transitions():
+    """List registered cross-camera spatial transition links."""
+    sm = _get_scenario_mgr()
+    return [l.to_dict() for l in sm.topology.list_links() if not l.link_id.endswith("_rev")]
+
+
+@app.post("/api/topology/transitions")
+async def create_spatial_transition(req: SpatialTransitionRequest):
+    """Define a predictive spatial transition link between camera zones."""
+    sm = _get_scenario_mgr()
+    link_id = req.link_id or f"link_{req.source_camera}_{req.source_zone}_to_{req.target_camera}_{req.target_zone}".replace(" ", "_").lower()
+    link = SpatialTransitionLink(
+        link_id=link_id,
+        source_camera=req.source_camera,
+        source_zone=req.source_zone,
+        target_camera=req.target_camera,
+        target_zone=req.target_zone,
+        t_min=req.t_min or 2.0,
+        t_max=req.t_max or 15.0,
+        prior_boost=req.prior_boost or 0.35,
+        bidirectional=bool(req.bidirectional),
+        active=bool(req.active),
+    )
+    sm.topology.add_link(link)
+    if sm.db:
+        sm.db.save_spatial_transition(
+            link_id=link.link_id,
+            source_camera=link.source_camera,
+            source_zone=link.source_zone,
+            target_camera=link.target_camera,
+            target_zone=link.target_zone,
+            t_min=link.t_min,
+            t_max=link.t_max,
+            prior_boost=link.prior_boost,
+            bidirectional=link.bidirectional,
+            active=link.active,
+        )
+    sm.save_to_yaml()
+    return {"status": "success", "link": link.to_dict()}
+
+
+@app.delete("/api/topology/transitions/{link_id}")
+async def delete_spatial_transition(link_id: str):
+    """Delete a spatial transition link by ID."""
+    sm = _get_scenario_mgr()
+    deleted = sm.topology.remove_link(link_id)
+    if sm.db:
+        db_del = sm.db.delete_spatial_transition(link_id)
+        deleted = deleted or db_del
+    if deleted:
+        sm.save_to_yaml()
+    return {"status": "success" if deleted else "not_found", "deleted": link_id}
+
+
+@app.get("/api/topology/priors")
+async def list_active_priors(camera_id: Optional[str] = None):
+    """List currently active predictive spatial priors within valid transit windows."""
+    sm = _get_scenario_mgr()
+    now = time.time()
+    priors = sm.topology.active_priors
+    out = []
+    for p in priors:
+        if not p.is_expired_at(now):
+            if not camera_id or p.target_camera == camera_id:
+                out.append(p.to_dict())
+    return out
+
+
+# -----------------------------------------------------------------------------
+# REST API: Trajectory Journey Search & Video Exporter
+# -----------------------------------------------------------------------------
+@app.get("/api/journey/search")
+async def search_trajectory_journey(
+    entity_id: Optional[int] = None,
+    entity_name: Optional[str] = None,
+    track_id: Optional[int] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+):
+    """Reconstruct an entity's complete chronological trajectory across multiple cameras."""
+    mgr = get_active_stream_manager()
+    db = mgr.db if (mgr and mgr.db) else TrackerDB()
+    searcher = TrajectoryJourneySearcher(db)
+    journey = searcher.search_journey(
+        entity_id=entity_id,
+        entity_name=entity_name,
+        track_id=track_id,
+        start_time=start_time,
+        end_time=end_time,
+    )
+    return journey.to_dict()
+
+
+@app.post("/api/journey/export")
+async def export_journey_video_route(req: JourneyExportRequest):
+    """Slices and concatenates cross-camera video segments into a downloadable MP4 journey file."""
+    mgr = get_active_stream_manager()
+    db = mgr.db if (mgr and mgr.db) else TrackerDB()
+    searcher = TrajectoryJourneySearcher(db)
+    journey = searcher.search_journey(
+        entity_id=req.entity_id,
+        entity_name=req.entity_name,
+        track_id=req.track_id,
+        start_time=req.start_time,
+        end_time=req.end_time,
+    )
+
+    if journey.total_hops == 0:
+        raise HTTPException(status_code=404, detail="No sightings found to generate journey video")
+
+    exporter = JourneyVideoExporter(output_dir=VIDEOS_DIR)
+    exported_file = exporter.export_journey_video(journey)
+    filename = os.path.basename(exported_file)
+
+    return {
+        "status": "success",
+        "journey": journey.to_dict(),
+        "video_file": filename,
+        "video_url": f"/videos/{filename}",
+    }
+
+
+# -----------------------------------------------------------------------------
+# REST API: Video Overlay Toolbar Controls
+# -----------------------------------------------------------------------------
+@app.get("/api/cameras/{camera_id}/overlays")
+async def get_camera_overlays(camera_id: str):
+    """Retrieve overlay visibility flags for a camera stream."""
+    mgr = get_active_stream_manager(camera_id)
+    if not mgr:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
+    return mgr.get_overlays()
+
+
+@app.post("/api/cameras/{camera_id}/overlays")
+async def update_camera_overlays(camera_id: str, req: OverlayUpdateRequest):
+    """Dynamically toggle bounding boxes, track IDs, dwell, velocity, zones, tripwires, heatmap, or BEV minimap."""
+    mgr = get_active_stream_manager(camera_id)
+    if not mgr:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
+
+    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    new_overlays = mgr.set_overlays(updates)
+    return {"status": "success", "camera_id": camera_id, "overlays": new_overlays}
+
