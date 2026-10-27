@@ -17,12 +17,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 WORKDIR /build
 
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefix=/install -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # ------------------------------------------------------------------------------
 # Runtime Stage
@@ -32,8 +35,7 @@ FROM python:3.12-slim-bookworm AS runtime
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/install/bin:$PATH" \
-    PYTHONPATH="/install/lib/python3.12/site-packages:$PYTHONPATH" \
+    PATH="/opt/venv/bin:$PATH" \
     MPLBACKEND="Agg"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -45,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /install /install
+COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
 RUN useradd -m -u 1000 tracker && \

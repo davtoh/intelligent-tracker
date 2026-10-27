@@ -27,6 +27,14 @@ Key Capabilities
 
 - **Edge AI Object Detection**: Native inference with **YOLOv8 Nano** and **YOLO11 Nano** via ONNX Runtime without heavy deep learning frameworks (no PyTorch/CUDA required on edge devices).
 - **Multi-Object Tracking (MOT)**: High-speed ``CentroidTracker`` (IoU and Euclidean distance matching) and pure NumPy ``SortTracker`` (2D Kalman filtering).
+- **Multi-Camera Edge VMS**: Dynamic RTSP camera pool management, 1x1 / 2x2 / 3x3 responsive grid views, synthetic stream emulation, and digital PTZ presets.
+- **Visual Scenario Studio**: In-browser drag-and-drop canvas for polygonal security zones, bidirectional tripwires, and live scenario rule editing.
+- **4-Point Planar Homography & BEV Minimap**: Interactive coordinate calibration mapping camera views to bird's-eye view (BEV) facility floorplans with real-time entity tracking.
+- **Cross-Camera Topology & Journey Search**: Spatial-temporal transition matrix linking multi-camera handoffs with automated multi-hop trajectory reconstruction.
+- **Universal Face & Artifact Intelligence**: ONNX YuNet face detection and dual-model feature extractor fusing facial biometric vectors and body Re-ID descriptors.
+- **Role-Based Spatial Access Control (RSAC)**: Time-of-day zone access schedules, category-based security permissions, entity-level overrides, and pet alarm suppression.
+- **Active Learning & Edge Review**: "Review & Learn" inbox with 1-click confirmation, reassignment, and automatic dataset harvesting.
+- **Adaptive Memory Management**: Locked anchor drift protection, bounded EMA updating, track occlusion reasoning, and descriptor version rollback.
 - **Retail & Security Analytics**: Polygonal Zone ROIs for occupancy counting, dwell time monitoring, and bidirectional Virtual Tripwires for entry/exit traffic tallying.
 - **Occupancy Heatmap Engine**: 2D spatial Gaussian density accumulation, continuous temporal decay, colormap overlays, and PNG/CSV exports.
 - **Declarative YAML Configuration**: Template-driven setup (``configs/demo.yaml``, ``configs/retail.yaml``) for cameras, zones, tripwires, and models.
@@ -234,37 +242,60 @@ All unit tests run via Python's standard ``unittest`` discovery:
 
 .. code-block:: powershell
 
-    # Run full test suite (115 tests, 100% green)
+    # Run complete test suite (209 unit and integration tests, 100% green)
     $env:MPLBACKEND="Agg"
     .\.venv\Scripts\python.exe -m unittest discover tests
 
-    # Run Milestone 6 Web Dashboard unit tests (10 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_dashboard.py
+    # Run Milestone 7 VMS and Camera Pool tests (13 tests)
+    .\.venv\Scripts\python.exe -m unittest tests/test_vms.py
 
-    # Run complete test suite (125 tests)
-    powershell -Command "$env:MPLBACKEND=\"Agg\"; .\.venv\Scripts\python.exe -m unittest discover tests"
+    # Run Milestone 8 Scenario Studio & Topology tests (34 tests)
+    .\.venv\Scripts\python.exe -m unittest tests/test_scenario_studio.py tests/test_topology.py
 
-Web Analytics Dashboard
------------------------
+    # Run Milestone 9 Artifact & Face Intelligence, RSAC & Active Learning tests (37 tests)
+    .\.venv\Scripts\python.exe -m unittest tests/test_artifact_and_face.py tests/test_active_learning.py
 
-Intelligent Tracker features a responsive real-time web monitoring platform built with **FastAPI**, **HTML5/Canvas**, **WebSockets**, and **Chart.js**:
+Web Analytics & Edge VMS Platform
+---------------------------------
 
-- **Live Multi-Camera Video Stream**: Low-latency MJPEG stream accessible via ``GET /stream/{camera_id}``.
-- **Interactive Click-to-Tag**: Hover over any live bounding box and click directly on the canvas to enroll identities with photo crops and Re-ID embeddings.
-- **Entity Gallery View**: Search registered staff, VIPs, customers, and restricted persons with thumbnails and signature counts.
-- **Sighting Timeline Player**: Search chronological appearance logs by entity, date, camera, and zone.
-- **Spatial Heatmap Overlay**: Live false-color density visualization toggled on the camera feed.
-- **Real-Time Security Alerts**: WebSockets telemetry feed emitting instant security event toasts.
+Intelligent Tracker features a high-performance, responsive Edge VMS and web monitoring platform built with **FastAPI**, **HTML5/Canvas**, **WebSockets**, and modern glassmorphic UI components:
+
+Multi-Camera Edge VMS (Milestone 7)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- **RTSP Camera Pool & Management**: Dynamically register, modify, and stream from IP cameras or synthetic RTSP emulation feeds via ``configs/cameras.json``.
+- **Multi-Grid Layouts**: Seamless 1x1 single camera, 2x2 multi-grid, and 3x3 multi-stream responsive monitoring matrix.
+- **Digital PTZ Controls**: Intuitive Pan, Tilt, and Zoom navigation presets directly from the canvas interface.
+- **Telemetry & Stream Health**: Real-time FPS, frame drop detection, and non-blocking reconnection monitors.
+
+Visual Scenario Studio & Spatial Homography (Milestone 8)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- **Interactive Scenario Studio**: In-browser canvas editor to draw, resize, and configure polygonal security zones and bidirectional tripwires.
+- **4-Point Planar Homography**: Perspective-to-orthographic matrix calibration transforming camera perspectives into top-down floorplan coordinates.
+- **Bird's-Eye View (BEV) Minimap**: Real-time 2D minimap projecting active entities onto a spatial facility canvas.
+- **Cross-Camera Topology Matrix**: Statistical spatial-temporal transition probabilities modeling entity handoffs across adjacent camera fields of view.
+- **Multi-Hop Journey Search**: Reconstruct and visually replay the complete chronological trajectory of any person across cameras and zones.
+
+Artifact & Face Intelligence, RSAC & Active Learning (Milestone 9)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- **Face Intelligence**: High-accuracy ONNX YuNet face detection coupled with a dual-model feature extractor fusing facial biometric vectors and body Re-ID descriptors.
+- **Universal Multi-Modal Enrollment**: Drag-and-drop crop photo upload or direct canvas bounding box click-to-enroll with category assignment (Staff, Visitor, VIP, Contractor, Restricted).
+- **Role-Based Spatial Access Control (RSAC)**: Time-of-day access schedules, zone authorization matrices, entity-level exemptions, and automated pet alarm suppression.
+- **Active Learning & Edge Review**: "Review & Learn" inbox with 1-click Confirm, Reassign, Enroll New Entity, or Dismiss false positives.
+- **Adaptive Memory Management**: Locked anchor drift protection, bounded exponential moving average (EMA) descriptor updates, occlusion reasoning, and instant descriptor rollback.
+
+Deployment & Docker Quickstart
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
     # Launch dashboard server locally
     python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000 --reload
 
-    # Or run complete edge stack with Docker Compose
-    docker compose up -d
+    # Run complete edge stack with Docker Compose
+    # NOTE: Always use --build when code or configurations have changed
+    docker compose up -d --build
 
-Open your browser at ``http://localhost:8000``.
+Open your browser at ``http://localhost:8000`` to access the live dashboard and VMS.
 
 Roadmap & Status
 ----------------
@@ -275,8 +306,11 @@ Roadmap & Status
 - [x] **Milestone 4**: Object Identity Gallery, Visual Re-ID & Sighting Database (SQLite DB, ONNX OSNet, HSV fallback, interactive tagging, batch indexer).
 - [x] **Milestone 5**: Event Dispatching & Alerting (Webhooks, Telegram bot, MQTT, quiet hours & rule engine).
 - [x] **Milestone 6**: Web Dashboard, Packaging & Edge Deployment (FastAPI, Docker, systemd, multi-arch, Sphinx 9, Coral Edge TPU).
+- [x] **Milestone 7**: Multi-Camera VMS Platform & Edge Camera Pool (RTSP camera pool, synthetic RTSP emulator, 2x2 multi-grid UI, PTZ digital pan-tilt-zoom, stream health monitor).
+- [x] **Milestone 8**: Visual Scenario Studio, Cross-Camera Topology & 4-Point Homography BEV Minimap (drag-and-drop zone/tripwire canvas editor, planar BEV homography, transition topology matrix, multi-hop journey search).
+- [x] **Milestone 9**: Universal Artifact & Face Intelligence, Active Learning & Adaptive Memory (YuNet face detector, dual-model Re-ID, RSAC scheduling & pet whitelist, "Review & Learn" inbox, locked reference anchors, bounded EMA, descriptor version rollback).
 
-See ``milestone_plan.md`` and ``TODO_MODERNIZATION.md`` for complete details.
+See ``milestone_plan.md`` and ``MIGRATION_LOG.md`` for complete architectural notes and historical records.
 
 Historical Showcase & Project Heritage
 --------------------------------------
