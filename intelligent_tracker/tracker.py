@@ -83,6 +83,75 @@ def greedy_assignment(cost_matrix: np.ndarray, max_cost: float = float("inf")) -
     return assignments
 
 
+def check_track_occlusions(
+    tracks: Dict[int, Any],
+    iou_threshold: float = 0.3,
+    separation_iou: float = 0.1,
+    timestamp: Optional[float] = None,
+) -> List[Tuple[int, int]]:
+    """
+    Evaluate pairwise track intersections to detect occlusion and clutter (Milestone 9).
+    When IoU > iou_threshold (0.3), marks intersecting tracks as 'is_cluttered = True'
+    to freeze Re-ID identity updates and prevent identity swapping.
+
+    :param tracks: Dictionary of active Track objects.
+    :param iou_threshold: IoU overlap threshold to trigger cluttered state.
+    :param separation_iou: IoU threshold below which clutter is cleared if distance is safe.
+    :param timestamp: Frame timestamp.
+    :return: List of overlapping track ID tuples [(t1, t2), ...].
+    """
+    now = timestamp if timestamp is not None else time.time()
+    tids = [tid for tid, trk in tracks.items() if getattr(trk, "hits", 0) >= 1 and getattr(trk, "missed_frames", 0) == 0]
+    n = len(tids)
+
+    newly_cluttered: Dict[int, int] = {}
+    cluttered_pairs: List[Tuple[int, int]] = []
+
+    for i in range(n):
+        tid1 = tids[i]
+        trk1 = tracks[tid1]
+        for j in range(i + 1, n):
+            tid2 = tids[j]
+            trk2 = tracks[tid2]
+
+            iou = compute_iou(trk1.bbox, trk2.bbox)
+            if iou > iou_threshold:
+                newly_cluttered[tid1] = tid2
+                newly_cluttered[tid2] = tid1
+                cluttered_pairs.append((tid1, tid2))
+
+    # Apply clutter flags and check physical separation
+    for tid in tids:
+        trk = tracks[tid]
+        if tid in newly_cluttered:
+            partner_id = newly_cluttered[tid]
+            if not getattr(trk, "is_cluttered", False):
+                trk.is_cluttered = True
+                trk.clutter_partner_id = partner_id
+                trk.clutter_start_time = now
+            else:
+                trk.clutter_partner_id = partner_id
+        else:
+            # Check if previously cluttered and now separated
+            if getattr(trk, "is_cluttered", False):
+                partner_id = getattr(trk, "clutter_partner_id", None)
+                if partner_id not in tracks or partner_id not in tids:
+                    trk.is_cluttered = False
+                    trk.clutter_partner_id = None
+                else:
+                    partner = tracks[partner_id]
+                    iou = compute_iou(trk.bbox, partner.bbox)
+                    dx = trk.centroid[0] - partner.centroid[0]
+                    dy = trk.centroid[1] - partner.centroid[1]
+                    dist = math.hypot(dx, dy)
+                    min_sep = max(trk.bbox[2], partner.bbox[2], trk.bbox[3], partner.bbox[3]) * 0.4
+                    if iou <= separation_iou and dist > min_sep:
+                        trk.is_cluttered = False
+                        trk.clutter_partner_id = None
+
+    return cluttered_pairs
+
+
 class Track:
     """
     Represents an individual tracked entity across multiple video frames.
@@ -97,6 +166,8 @@ class Track:
         confidence: float = 1.0,
         timestamp: Optional[float] = None,
         max_history: int = 60,
+        centroid: Optional[Tuple[float, float]] = None,
+        **kwargs,
     ):
         self.track_id = int(track_id)
         self.bbox = tuple(int(v) for v in bbox)
@@ -109,8 +180,11 @@ class Track:
         self.last_seen = now
 
         # Centroid (cx, cy)
-        cx = self.bbox[0] + self.bbox[2] / 2.0
-        cy = self.bbox[1] + self.bbox[3] / 2.0
+        if centroid is not None:
+            cx, cy = float(centroid[0]), float(centroid[1])
+        else:
+            cx = self.bbox[0] + self.bbox[2] / 2.0
+            cy = self.bbox[1] + self.bbox[3] / 2.0
         self.centroid = (cx, cy)
 
         # History queues
@@ -131,6 +205,11 @@ class Track:
         self.session_id: Optional[int] = None
         self.exit_point: Optional[Tuple[float, float]] = None
         self.exit_time: Optional[float] = None
+
+        # Occlusion reasoning & cluttered track freezing (Milestone 9)
+        self.is_cluttered: bool = False
+        self.clutter_partner_id: Optional[int] = None
+        self.clutter_start_time: Optional[float] = None
 
     def update(
         self,

@@ -920,6 +920,93 @@
   python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
   ```
 
+---
+
+## [Milestone 9] - 2026-10-26 - Artifact & Face Intelligence, Active Learning & Adaptive Memory
+
+### 1. Objectives & Scope
+- Deliver **Universal Artifact & Face Enrollment**: Freeze-frame video cropping, interactive canvas bounding box selection, custom category tagging (`person`, `family_car`, `delivery_truck`, `cleaning_crew`, `guard_dog`, `pet`, `vip`, `restricted`), security clearance roles, and dual-model feature extraction.
+- Implement **Role-Based Spatial Access Control (RSAC)**: Category whitelists and denials per zone, time-of-day / day-of-week active schedules, entity-level allow/deny overrides, and domestic pet perimeter intrusion alarm suppression.
+- Build **Human-in-the-Loop Active Learning ("Review & Learn" Inbox)**: Automatically queue ambiguous detections ($0.45 \le \text{similarity} < 0.70$) into a dedicated triage pane with 1-click operator actions: **Confirm (Ground Truth)**, **Reassign**, **Enroll as New Entity**, or **Dismiss**.
+- Implement **Locked Anchor Descriptors & Continuous Adaptive Memory**: Flag confirmed crops as immutable Locked Anchors, enable bounded Exponential Moving Average (EMA) continuous feature updating, occlusion reasoning (freezing Re-ID identity updates when tracks overlap with $\text{IoU} > 0.3$), and versioned descriptor snapshots with 1-click rollback.
+- Integrate full **REST API Surface & Glassmorphism Dashboard UI** (`dashboard/app.py`, `dashboard/static/review_and_rsac.js`, `dashboard/static/index.html`, `dashboard/static/styles.css`).
+- Build comprehensive unit test suite in `tests/test_rsac.py`, `tests/test_active_learning.py`, `tests/test_enrollment.py`, `tests/test_occlusion_and_ema.py`, `tests/test_m9_api.py` (22 new tests, 209 total passing).
+- Update Sphinx documentation with zero warnings.
+
+### 2. Files Touched & Created
+- **Detection, Re-ID & Enrollment:**
+  - `intelligent_tracker/detectors.py` *(Modified)*: Added `YuNetFaceDetector(BaseDetector)` utilizing OpenCV Zoo's ONNX face detection model (`models/face_detection_yunet_2023mar.onnx`). Registered with `DetectorFactory`.
+  - `intelligent_tracker/reid.py` *(Modified)*: Added `DualModelFeatureExtractor(BaseFeatureExtractor)` combining deep body/artifact appearance embeddings with localized facial biometric vectors into a single L2-normalized vector. Supported `bins` argument in `ColorHistogramExtractor`. Registered with `ReIDExtractorFactory`. Made `bbox` parameter optional in `BaseFeatureExtractor.extract`.
+  - `intelligent_tracker/enrollment.py` *(New)*: `UniversalEnrollmentManager` supporting freeze-frame crops, bboxes, base64 payloads, dual-model extraction, locked anchor marking, v1 descriptor snapshot creation, and gallery reload.
+  - `scripts/download_models.py` *(Modified)*: Added automated downloading and SHA-256 verification for `face_detection_yunet_2023mar.onnx` (`8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4`).
+- **Spatial Security & Active Learning:**
+  - `intelligent_tracker/rsac.py` *(New)*: `CustomCategory`, `RSACSchedule`, `RSACZoneRule`, `RSACDecision`, and `RSACManager` with schedule evaluation, category whitelists/denials, entity overrides, and pet alarm suppression.
+  - `intelligent_tracker/active_learning.py` *(New)*: `ActiveLearningManager` with candidate triage ($0.45 \le \text{sim} < 0.70$), debouncing, thumbnail cropping, event dispatching, and operator actions (`confirm_candidate`, `reassign_candidate`, `enroll_as_new`, `dismiss_candidate`), plus `maybe_queue_candidate` helper.
+  - `intelligent_tracker/events.py` *(Modified)*: Added `RSACViolationEvent`, `PetActivityEvent`, and `ReviewItemQueuedEvent`. Supported `capacity` kwarg in `EventBus.__init__`.
+  - `intelligent_tracker/tracker.py` *(Modified)*: Added track occlusion reasoning (`check_track_occlusions`), cluttered track state tracking (`is_cluttered`, `clutter_partner_id`), supported `centroid` kwarg in `Track.__init__`, and relaxed hits condition to active tracks with `hits >= 1`.
+  - `intelligent_tracker/matcher.py` *(Modified)*: Track occlusion Re-ID freezing during clutter, bounded EMA continuous updates, locked anchor drift protection against observation and smoothed vectors, and `max_drift_threshold` parameter support.
+  - `intelligent_tracker/analytics.py` *(Modified)*: Pet whitelist intrusion suppression emitting informational `PetActivityEvent`, and RSAC violation alarms emitting `RSACViolationEvent`.
+  - `intelligent_tracker/database.py` *(Modified)*: Added tables `descriptor_versions`, `review_queue`, `custom_categories`, `rsac_zone_rules`, `pet_whitelist`. Extended `entity_signatures` with `is_anchor` and `locked`. Added alias methods `add_entity_signature`, `update_entity_signature`, `get_entity_signatures`, and flexible `record_descriptor_version`, `get_descriptor_versions`, and `rollback_descriptor`. Added `PRAGMA wal_checkpoint(TRUNCATE)` in `TrackerDB.close()`.
+- **Multi-Camera VMS & Web Dashboard:**
+  - `dashboard/stream_manager.py` *(Modified)*: Initialized `RSACManager`, `ActiveLearningManager`, `UniversalEnrollmentManager`. Added RSAC category colors to track bounding boxes, clutter warning banners, and clutter fields to telemetry.
+  - `dashboard/camera_pool.py` *(Modified)*: Exposed `rsac_manager`, `active_learning`, `enrollment_manager` properties and `reload_all_galleries()`.
+  - `dashboard/app.py` *(Modified)*: Mounted `/crops` directory. Added Pydantic schemas and REST endpoints for freeze-frame, universal enrollment, review queue triage actions, RSAC categories and rules CRUD, pet whitelist, descriptor version history, and rollback. Fixed JSON serialization of embedding vectors.
+  - `dashboard/static/index.html` *(Modified)*: Added Review & Learn navigation tab, `✨ Enroll` header button, Review & Learn queue pane (`#tab-review`), Universal Freeze-Frame Enrollment modal (`#modal-universal-enrollment`), Descriptor Version History modal (`#modal-descriptor-versions`), Reassign modal (`#modal-review-reassign`), and Toast container (`#toast-container`).
+  - `dashboard/static/review_and_rsac.js` *(New)*: Client-side controller for active learning triage, interactive freeze-frame canvas bounding box selection, version history rollback, and WebSocket toast notifications.
+  - `dashboard/static/app.js` *(Modified)*: Tab switching hook for `tab-review`, version history trigger on entity cards in gallery, and WebSocket alert forwarding.
+  - `dashboard/static/styles.css` *(Modified)*: Glassmorphism styles for review cards, confidence meters, category badge pills (`family_car`, `delivery_truck`, `cleaning_crew`, `guard_dog`, `pet`, `vip`, `restricted`), version history timeline, and toast notifications.
+- **Unit & Integration Test Suites:**
+  - `tests/test_rsac.py` *(New)*: 6 tests covering custom categories, schedule evaluation, allow/deny rules, entity overrides, and pet suppression.
+  - `tests/test_active_learning.py` *(New)*: 5 tests covering candidate queueing, debouncing, confirm, reassign, enroll as new, and dismiss.
+  - `tests/test_enrollment.py` *(New)*: 3 tests covering image crop enrollment, frame + bbox enrollment, and DualModelFeatureExtractor fusion.
+  - `tests/test_occlusion_and_ema.py` *(New)*: 4 tests covering track occlusion IoU checks, clutter Re-ID freeze, bounded EMA adaptation, drift rejection, and version rollback.
+  - `tests/test_m9_api.py` *(New)*: 4 tests covering FastAPI REST endpoints for freeze-frame, universal enrollment, review queue actions, RSAC rules/categories CRUD, and pet whitelist.
+- **Documentation:**
+  - `documentation/artifact_and_face_intelligence.rst` *(New)*: Comprehensive Sphinx documentation for Milestone 9.
+  - `documentation/index.rst` *(Modified)*: Added `artifact_and_face_intelligence` to master documentation toctree.
+
+### 3. Key Architectural Decisions
+- **Dual-Model Embedding Fusion**: Artifact/body appearance (OSNet or color structure) and facial biometrics (YuNet) are fused into a single normalized vector. If a face is obscured or absent (e.g. vehicles, tools, packages, back-turned individuals), the facial subspace is cleanly zero-padded, maintaining dimensional consistency across all entities.
+- **Role-Based Spatial Access Control (RSAC)**: Separates identification from authorization. An individual can be positively identified as "Staff" but still generate a critical breach alarm if entering the "Vault" outside business hours or if explicitly denied by an entity override.
+- **Human-in-the-Loop Active Learning**: Instead of silently misidentifying individuals with ambiguous confidence ($0.45 \le \text{sim} < 0.70$), detections are debounced and routed to an operator triage queue. Operator confirmations create permanent ground-truth Locked Anchors that improve future recognition accuracy across all cameras.
+- **Locked Anchors & Bounded EMA Updates**: Ground-truth enrollment crops are permanently protected against model drift. Running centroids adapt to lighting and perspective changes via EMA ($\alpha = 0.05$), but updates are strictly rejected if similarity to any locked anchor drops below $0.65$.
+- **Track Occlusion Reasoning**: When bounding box $\text{IoU} > 0.3$, tracks are flagged as cluttered. Feature accumulation is held frozen during the interaction and only resumes after physical separation, preventing identity contamination and Re-ID swaps in crowded scenes.
+- **Descriptor Version Snapshots & Rollback**: Every identity modification is recorded as an immutable version snapshot in SQLite. If poor lighting or occlusion ever corrupts an entity's profile, the operator can roll back to any prior verified version in one click.
+
+### 4. State & Checkpoint
+- **Status:** Milestone 9 COMPLETE (100% Green Unit Tests)
+- **Automated Verification:**
+  - Full test suite: `$env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests`
+  - Result: **Ran 209 tests in 20.477s — OK (0 failures, 0 errors, 100% passing)**.
+  - Milestone 9 unit tests: `tests/test_rsac.py`, `tests/test_active_learning.py`, `tests/test_enrollment.py`, `tests/test_occlusion_and_ema.py`, `tests/test_m9_api.py` -> **22/22 OK (2.0s)**.
+  - Sphinx Documentation: Built cleanly with **0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+
+### 5. Verification Instructions
+- **Windows (PowerShell):**
+  ```powershell
+  # 1. Run complete automated unit test suite (209 tests)
+  $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
+
+  # 2. Run Milestone 9 dedicated test suites (22 tests)
+  $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest -v tests.test_rsac tests.test_active_learning tests.test_enrollment tests.test_occlusion_and_ema tests.test_m9_api
+
+  # 3. Build Sphinx documentation with zero warnings
+  .\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
+
+  # 4. Launch Web Analytics, VMS & Active Learning Dashboard
+  .\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  # Open http://localhost:8000 (navigate to Review & Learn tab or click '✨ Enroll')
+  ```
+- **Linux / Raspberry Pi OS / macOS:**
+  ```bash
+  source .venv/bin/activate
+  MPLBACKEND=Agg python -m unittest discover tests
+  python -m unittest -v tests.test_rsac tests.test_active_learning tests.test_enrollment tests.test_occlusion_and_ema tests.test_m9_api
+  python -m sphinx -W --keep-going documentation/ documentation/_build/html/
+  python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000
+  ```
+
+
 
 
 

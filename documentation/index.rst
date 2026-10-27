@@ -52,6 +52,7 @@ Documentation Contents
    dashboard
    vms
    scenario_studio
+   artifact_and_face_intelligence
    deployment
 
 Indices and tables

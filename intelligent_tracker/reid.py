@@ -102,15 +102,18 @@ class BaseFeatureExtractor(ABC):
     def extract(
         self,
         frame: np.ndarray,
-        bbox: Tuple[int, int, int, int],
+        bbox: Optional[Tuple[int, int, int, int]] = None,
     ) -> np.ndarray:
         """
-        Safely extract embedding from a bounding box within a frame.
+        Safely extract embedding from a bounding box within a frame, or direct crop if bbox is None.
 
-        :param frame: Full BGR frame as np.ndarray (H, W, 3).
-        :param bbox: (x, y, w, h) bounding box.
+        :param frame: Full BGR frame as np.ndarray (H, W, 3) or direct crop.
+        :param bbox: (x, y, w, h) bounding box, or None if frame is already a crop.
         :return: 1D float32 numpy array.
         """
+        if bbox is None:
+            return self.extract_crop(frame)
+
         ih, iw = frame.shape[:2]
         x, y, w, h = [int(v) for v in bbox]
 
@@ -150,13 +153,18 @@ class ColorHistogramExtractor(BaseFeatureExtractor):
         h_bins: int = 8,
         s_bins: int = 4,
         v_bins: int = 4,
+        bins: Optional[Tuple[int, int, int]] = None,
     ):
         """
         :param spatial_grid: (rows, cols) subdivision of the crop. Default: (3, 1) (3 vertical slices).
         :param h_bins: Number of bins for Hue channel [0, 180).
         :param s_bins: Number of bins for Saturation channel [0, 256).
         :param v_bins: Number of bins for Value channel [0, 256).
+        :param bins: Optional (h_bins, s_bins, v_bins) tuple shorthand.
         """
+        if bins is not None and len(bins) == 3:
+            h_bins, s_bins, v_bins = bins
+
         self.rows, self.cols = spatial_grid
         self.h_bins = int(h_bins)
         self.s_bins = int(s_bins)
@@ -407,6 +415,94 @@ class MockFeatureExtractor(BaseFeatureExtractor):
 
 
 # -----------------------------------------------------------------------------
+# Dual-Model Feature Extractor (Artifact Appearance + Face Intelligence)
+# -----------------------------------------------------------------------------
+
+class DualModelFeatureExtractor(BaseFeatureExtractor):
+    """
+    Dual-Model visual feature extractor combining deep artifact/body feature extraction
+    (OSNet / ColorHistogram) with localized facial biometric extraction (YuNet/FaceDetector).
+
+    When extracting an embedding from an entity crop:
+
+    1. Extracts primary visual embedding (body/artifact appearance).
+    2. Runs face detection across the crop using YuNetFaceDetector.
+    3. If a face is detected, extracts a localized face embedding from the face subcrop
+       and fuses it with the primary embedding.
+    4. If no face is present (e.g., vehicles, tools, pets, packages, obscured faces),
+       pads the face feature space cleanly, preserving dimensional consistency.
+    5. Returns unified L2-normalized feature embedding vector.
+    """
+
+    def __init__(
+        self,
+        primary_extractor: Optional[BaseFeatureExtractor] = None,
+        face_extractor: Optional[BaseFeatureExtractor] = None,
+        face_detector: Optional[Any] = None,
+        primary_model_path: Optional[str] = None,
+        face_model_path: Optional[str] = None,
+        fallback_to_color: bool = True,
+    ):
+        if primary_extractor is not None:
+            self.primary_extractor = primary_extractor
+        else:
+            try:
+                self.primary_extractor = OnnxReIDExtractor(
+                    model_path=primary_model_path,
+                    fallback_to_color=fallback_to_color,
+                )
+            except Exception:
+                self.primary_extractor = ColorHistogramExtractor()
+
+        if face_extractor is not None:
+            self.face_extractor = face_extractor
+        else:
+            # High-resolution spatial color descriptor for facial structure and tone
+            self.face_extractor = ColorHistogramExtractor(spatial_grid=(4, 4), h_bins=8, s_bins=4, v_bins=4)
+
+        if face_detector is not None:
+            self.face_detector = face_detector
+        else:
+            try:
+                from intelligent_tracker.detectors import YuNetFaceDetector
+                self.face_detector = YuNetFaceDetector(model_path=face_model_path)
+            except Exception:
+                self.face_detector = None
+
+        self._dim = self.primary_extractor.embedding_dim + self.face_extractor.embedding_dim
+
+    @property
+    def embedding_dim(self) -> int:
+        return self._dim
+
+    def extract_crop(self, crop: np.ndarray) -> np.ndarray:
+        if crop is None or getattr(crop, "size", 0) == 0:
+            return np.zeros(self._dim, dtype=np.float32)
+
+        # 1. Primary artifact / body visual embedding
+        primary_vec = self.primary_extractor.extract_crop(crop)
+
+        # 2. Localized face detection
+        face_vec = np.zeros(self.face_extractor.embedding_dim, dtype=np.float32)
+        if self.face_detector is not None:
+            try:
+                faces = self.face_detector.detect(crop)
+                if faces:
+                    # Select face with largest area
+                    best_face = max(faces, key=lambda f: f.bbox[2] * f.bbox[3])
+                    face_vec = self.face_extractor.extract(crop, best_face.bbox)
+            except Exception:
+                pass
+
+        # 3. Concatenate and L2 normalize
+        fused = np.concatenate([primary_vec, face_vec]).astype(np.float32)
+        norm = np.linalg.norm(fused)
+        if norm > 1e-7:
+            fused = fused / norm
+        return fused
+
+
+# -----------------------------------------------------------------------------
 # Factory Registry
 # -----------------------------------------------------------------------------
 
@@ -418,6 +514,8 @@ class ReIDExtractorFactory:
         "hsv": ColorHistogramExtractor,
         "onnx": OnnxReIDExtractor,
         "mock": MockFeatureExtractor,
+        "dual": DualModelFeatureExtractor,
+        "dual_model": DualModelFeatureExtractor,
     }
 
     @classmethod
@@ -430,7 +528,7 @@ class ReIDExtractorFactory:
         """
         Instantiate feature extractor by name.
 
-        :param name: 'color', 'hsv', 'onnx', or 'mock'.
+        :param name: 'color', 'hsv', 'onnx', 'mock', 'dual', or 'dual_model'.
         """
         key = name.lower().strip()
         if key not in cls._registry:
@@ -438,3 +536,4 @@ class ReIDExtractorFactory:
                 "Unknown Re-ID extractor '{}'. Available: {}".format(name, list(cls._registry.keys()))
             )
         return cls._registry[key](**kwargs)
+

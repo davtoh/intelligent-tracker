@@ -101,6 +101,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (targetTabId === 'tab-journey') {
       // Focus search input
       document.getElementById('journey-search-query')?.focus();
+    } else if (targetTabId === 'tab-review') {
+      if (window.ReviewAndRSAC) window.ReviewAndRSAC.loadQueue('pending');
     }
   }
 
@@ -240,10 +242,13 @@ document.addEventListener('DOMContentLoaded', () => {
       updateTrafficChart(totalCrossed);
     }
 
-    // Recent Alerts Mini Feed
+    // Recent Alerts Mini Feed & Milestone 9 Toast Dispatcher
     if (data.recent_alerts && liveAlertsFeed) {
       renderMiniAlerts(data.recent_alerts);
       if (alertBadge) alertBadge.textContent = data.recent_alerts.length;
+      if (window.ReviewAndRSAC && typeof window.ReviewAndRSAC.checkAlertEvents === 'function') {
+        window.ReviewAndRSAC.checkAlertEvents(data.recent_alerts);
+      }
     }
 
     // Update Interactive Canvas
@@ -579,7 +584,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <span>Signatures: <strong>${ent.signature_count || 0}</strong></span>
           </div>
           <div class="entity-actions">
-            <button class="btn btn-xs btn-outline btn-view-sightings" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}">View Sightings</button>
+            <button class="btn btn-xs btn-outline btn-view-sightings" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}">Sightings</button>
+            <button class="btn btn-xs btn-outline btn-view-versions" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}" title="Descriptor Version History & Rollback">⏳ Versions</button>
             <button class="btn btn-xs btn-outline btn-delete-entity" data-id="${ent.id}" style="color: #ef4444;">Delete</button>
           </div>
         </div>
@@ -593,6 +599,16 @@ document.addEventListener('DOMContentLoaded', () => {
         switchTab('tab-timeline');
         timelineSelectEntity.value = entId;
         loadSightings();
+      });
+    });
+
+    document.querySelectorAll('.btn-view-versions').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const entId = btn.getAttribute('data-id');
+        const entName = btn.getAttribute('data-name');
+        if (window.ReviewAndRSAC && typeof window.ReviewAndRSAC.openVersionsModal === 'function') {
+          window.ReviewAndRSAC.openVersionsModal(entId, entName);
+        }
       });
     });
 

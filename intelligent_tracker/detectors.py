@@ -6,6 +6,7 @@
 import os
 import abc
 from collections import deque, namedtuple
+from typing import List, Tuple, Optional, Any, Dict
 
 # import third party modules
 #from RRtoolbox.lib.plotter import fastplt  # DEBUG
@@ -18,7 +19,7 @@ import cv2
 # special variables
 __all__ = [
     'Detection', 'BaseDetector', 'Detector', 'DetectorFactory',
-    'HaarCascadeDetector', 'FaceDetector', 'EyeDetector', 'ColorDetector',
+    'HaarCascadeDetector', 'FaceDetector', 'YuNetFaceDetector', 'EyeDetector', 'ColorDetector',
     'MockDetector', 'OnnxDetector', 'EdgeTpuDetector', 'COCO_CLASSES', 'Object'
 ]
 __author__ = "David Toro"
@@ -537,6 +538,100 @@ class FaceDetector(HaarCascadeDetector):
 Detector.register_detector(FaceDetector)
 
 
+class YuNetFaceDetector(BaseDetector):
+    """
+    ONNX-based YuNet face detector utilizing OpenCV's cv2.FaceDetectorYN.
+    Provides sub-millisecond, highly robust face localization with facial landmark awareness.
+    Automatically cascades to HaarCascadeDetector if the ONNX model file or FaceDetectorYN
+    is unavailable in the runtime environment.
+    """
+
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        conf_threshold: float = 0.6,
+        nms_threshold: float = 0.3,
+        top_k: int = 5000,
+        **kwargs,
+    ):
+        super().__init__()
+        self.conf_threshold = float(conf_threshold)
+        self.nms_threshold = float(nms_threshold)
+        self.top_k = int(top_k)
+        self._detector = None
+        self._fallback = None
+
+        resolved = self._resolve_model_path(model_path)
+        if resolved and hasattr(cv2, "FaceDetectorYN"):
+            try:
+                self._detector = cv2.FaceDetectorYN.create(
+                    model=resolved,
+                    config="",
+                    input_size=(320, 320),
+                    score_threshold=self.conf_threshold,
+                    nms_threshold=self.nms_threshold,
+                    top_k=self.top_k,
+                )
+                self.model_path = resolved
+            except Exception:
+                self._detector = None
+
+        if self._detector is None:
+            self._fallback = FaceDetector(**kwargs)
+            self.model_path = getattr(self._fallback, "cascade_path", "haar_fallback")
+
+    @staticmethod
+    def _resolve_model_path(path: Optional[str]) -> Optional[str]:
+        if path and os.path.isfile(path):
+            return os.path.abspath(path)
+        candidates = [
+            "models/face_detection_yunet_2023mar.onnx",
+            "models/yunet.onnx",
+            os.path.join(os.path.dirname(__file__), "..", "models", "face_detection_yunet_2023mar.onnx"),
+            os.path.join(os.path.dirname(__file__), "..", "models", "yunet.onnx"),
+        ]
+        for c in candidates:
+            if c and os.path.isfile(c):
+                return os.path.abspath(c)
+        return None
+
+    def detect(self, frame: np.ndarray) -> List[Detection]:
+        if frame is None or getattr(frame, "size", 0) == 0:
+            return []
+
+        if self._detector is not None:
+            h, w = frame.shape[:2]
+            if w < 2 or h < 2:
+                return []
+            self._detector.setInputSize((w, h))
+            ret, faces = self._detector.detect(frame)
+            if faces is None or len(faces) == 0:
+                return []
+
+            results = []
+            for face in faces:
+                bx, by, bw, bh = int(face[0]), int(face[1]), int(face[2]), int(face[3])
+                score = float(face[-1])
+                # Clamp coordinates to frame boundaries
+                bx = max(0, min(bx, w - 1))
+                by = max(0, min(by, h - 1))
+                bw = max(1, min(bw, w - bx))
+                bh = max(1, min(bh, h - by))
+
+                results.append(Detection(
+                    bbox=(bx, by, bw, bh),
+                    class_id=0,
+                    confidence=score,
+                    label="face",
+                ))
+            return results
+
+        if self._fallback is not None:
+            return self._fallback.detect(frame)
+
+        return []
+
+
 
 class PeopleDetector(Detector):
     pass
@@ -1022,6 +1117,9 @@ DetectorFactory.register('haarcascade', HaarCascadeDetector)
 DetectorFactory.register('haarcascadedetector', HaarCascadeDetector)
 DetectorFactory.register('face', FaceDetector)
 DetectorFactory.register('facedetector', FaceDetector)
+DetectorFactory.register('yunet', YuNetFaceDetector)
+DetectorFactory.register('face_yunet', YuNetFaceDetector)
+DetectorFactory.register('yunetdetector', YuNetFaceDetector)
 DetectorFactory.register('eye', EyeDetector)
 DetectorFactory.register('eyedetector', EyeDetector)
 DetectorFactory.register('color', ColorDetector)

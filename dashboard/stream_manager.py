@@ -38,6 +38,9 @@ from intelligent_tracker.matcher import GalleryMatcher
 from intelligent_tracker.events import setup_event_pipeline, EventBus, frame_to_base64, crop_to_base64
 from intelligent_tracker.homography import GroundPlaneHomography
 from intelligent_tracker.topology import CrossCameraTopology
+from intelligent_tracker.rsac import RSACManager
+from intelligent_tracker.active_learning import ActiveLearningManager
+from intelligent_tracker.enrollment import UniversalEnrollmentManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
@@ -79,6 +82,9 @@ class StreamManager:
         self.analytics: Optional[AnalyticsEngine] = None
         self.reid_extractor = None
         self.gallery_matcher: Optional[GalleryMatcher] = None
+        self.rsac_manager: Optional[RSACManager] = None
+        self.active_learning: Optional[ActiveLearningManager] = None
+        self.enrollment_manager: Optional[UniversalEnrollmentManager] = None
         self.event_bus: Optional[EventBus] = None
         self.event_pipeline = None
 
@@ -101,7 +107,7 @@ class StreamManager:
         self.draw_heatmap = False
         self.start_time = time.time()
 
-        # Milestone 8: Homography, Topology & Overlay Controls
+        # Milestone 8 & 9: Homography, Topology, RSAC & Overlay Controls
         self.homography = GroundPlaneHomography(camera_id=self.camera_id)
         self.topology: Optional[CrossCameraTopology] = None
         self.overlays: Dict[str, bool] = {
@@ -114,6 +120,7 @@ class StreamManager:
             "heatmap": False,
             "bev_minimap": False,
             "hud_bar": True,
+            "clutter": True,
         }
 
         # WebSocket Subscribers: list of async queues or callback callables
@@ -255,6 +262,34 @@ class StreamManager:
         if self.event_bus is None:
             self.event_bus = EventBus(capacity=500)
             self.analytics.event_bus = self.event_bus
+
+        # RSAC Manager & Analytics integration (Milestone 9)
+        if self.db:
+            try:
+                self.rsac_manager = RSACManager(db=self.db)
+                if self.analytics:
+                    self.analytics.rsac_manager = self.rsac_manager
+            except Exception as e:
+                logger.warning("RSACManager initialization warning: %s", e)
+
+        # Active Learning & Universal Enrollment (Milestone 9)
+        if self.db:
+            try:
+                self.active_learning = ActiveLearningManager(
+                    db=self.db,
+                    matcher=self.gallery_matcher,
+                    event_bus=self.event_bus,
+                )
+                if self.gallery_matcher:
+                    self.gallery_matcher.active_learning = self.active_learning
+
+                self.enrollment_manager = UniversalEnrollmentManager(
+                    db=self.db,
+                    extractor=self.reid_extractor,
+                    matcher=self.gallery_matcher,
+                )
+            except Exception as e:
+                logger.warning("ActiveLearning / Enrollment initialization warning: %s", e)
 
         # Default synthetic placeholder image
         self._latest_jpeg = self._create_placeholder_jpeg("Camera Initializing...")
@@ -441,6 +476,14 @@ class StreamManager:
                 for tid, trk in tracks.items():
                     bx, by, bw, bh = trk.bbox
                     color = (0, 255, 0)
+                    cat_id = getattr(trk, "category", "person")
+                    if self.rsac_manager:
+                        cat_obj = self.rsac_manager.get_category(cat_id)
+                        if cat_obj and cat_obj.color:
+                            hex_c = cat_obj.color.lstrip("#")
+                            if len(hex_c) == 6:
+                                r, g, b = int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
+                                color = (b, g, r)
                     if hasattr(trk, "category") and trk.category == "restricted":
                         color = (0, 0, 255)
                     elif hasattr(trk, "category") and trk.category == "vip":
@@ -451,6 +494,12 @@ class StreamManager:
                     # Bounding Box
                     if self.overlays.get("bboxes", True):
                         cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), color, 2)
+
+                    # Clutter / Interacting warning banner
+                    if getattr(trk, "is_cluttered", False) and self.overlays.get("clutter", True):
+                        partner_info = f" with #{trk.clutter_partner_id}" if getattr(trk, "clutter_partner_id", None) else ""
+                        clutter_tag = f"[CLUTTER{partner_info}]"
+                        cv2.putText(annotated, clutter_tag, (bx, by + bh + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 140, 255), 2)
 
                     # Track Label & Dwell Timer
                     if self.overlays.get("track_ids", True):
@@ -531,6 +580,8 @@ class StreamManager:
                         "dwell_time": round(float(trk.dwell_time), 1),
                         "entity_name": trk.entity_name,
                         "category": getattr(trk, "category", "person"),
+                        "is_cluttered": bool(getattr(trk, "is_cluttered", False)),
+                        "clutter_partner_id": getattr(trk, "clutter_partner_id", None),
                         "state": trk.state,
                     })
 

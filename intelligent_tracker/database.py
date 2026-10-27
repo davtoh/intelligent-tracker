@@ -94,6 +94,8 @@ class TrackerDB:
                         entity_id INTEGER NOT NULL,
                         embedding BLOB NOT NULL,
                         crop_path TEXT DEFAULT '',
+                        is_anchor INTEGER DEFAULT 0,
+                        locked INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
                     );
@@ -179,7 +181,120 @@ class TrackerDB:
                     );
                 """)
 
-                # 8. Indexes for rapid lookups
+                # 8. Descriptor Version History table (Locked Anchors & Memory Rollback)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS descriptor_versions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        entity_id INTEGER NOT NULL,
+                        version_num INTEGER NOT NULL,
+                        embedding BLOB NOT NULL,
+                        crop_path TEXT DEFAULT '',
+                        source TEXT DEFAULT 'manual_enrollment',
+                        notes TEXT DEFAULT '',
+                        is_anchor INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+                    );
+                """)
+
+                # 9. Active Learning Review Queue table ("Review & Learn" Inbox)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS review_queue (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        camera_id TEXT NOT NULL,
+                        track_id INTEGER NOT NULL,
+                        crop_path TEXT NOT NULL,
+                        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        suggested_entity_id INTEGER,
+                        suggested_name TEXT DEFAULT '',
+                        suggested_category TEXT DEFAULT '',
+                        similarity REAL DEFAULT 0.0,
+                        status TEXT DEFAULT 'pending',
+                        reviewed_at TIMESTAMP,
+                        reviewed_by TEXT DEFAULT 'operator'
+                    );
+                """)
+
+                # 10. Role-Based Custom Categories table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS custom_categories (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        color TEXT DEFAULT '#3B82F6',
+                        badge_icon TEXT DEFAULT '',
+                        description TEXT DEFAULT '',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
+                # 11. RSAC Zone Rules table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS rsac_zone_rules (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        camera_id TEXT NOT NULL,
+                        zone_id TEXT NOT NULL,
+                        allowed_categories_json TEXT DEFAULT '[]',
+                        denied_categories_json TEXT DEFAULT '[]',
+                        schedules_json TEXT DEFAULT '[]',
+                        entity_overrides_json TEXT DEFAULT '{}',
+                        alarm_on_breach INTEGER DEFAULT 1,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(camera_id, zone_id)
+                    );
+                """)
+
+                # 12. Pet Whitelist table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS pet_whitelist (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        category_or_label TEXT UNIQUE NOT NULL,
+                        notes TEXT DEFAULT '',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
+                # Safe column additions for existing entity_signatures tables
+                for col_def in ("is_anchor INTEGER DEFAULT 0", "locked INTEGER DEFAULT 0"):
+                    try:
+                        cursor.execute(f"ALTER TABLE entity_signatures ADD COLUMN {col_def};")
+                    except sqlite3.OperationalError:
+                        pass
+
+                try:
+                    cursor.execute("ALTER TABLE descriptor_versions ADD COLUMN is_anchor INTEGER DEFAULT 0;")
+                except sqlite3.OperationalError:
+                    pass
+
+                # Seed default custom categories
+                default_cats = [
+                    ("person", "Person", "#3B82F6", "user", "General human person"),
+                    ("family_car", "Family Car", "#10B981", "car", "Whitelisted resident family vehicle"),
+                    ("delivery_truck", "Delivery Truck", "#F59E0B", "truck", "Courier or logistics vehicle"),
+                    ("cleaning_crew", "Cleaning Crew", "#8B5CF6", "sparkles", "Authorized maintenance crew"),
+                    ("guard_dog", "Guard Dog", "#EC4899", "shield", "Authorized security canine"),
+                    ("pet", "Household Pet", "#06B6D4", "paw", "Whitelisted domestic pet"),
+                    ("vip", "VIP Resident", "#6366F1", "star", "High priority resident or guest"),
+                    ("restricted", "Restricted / Watchlist", "#EF4444", "alert-triangle", "Watchlist or unauthorized presence"),
+                ]
+                cursor.executemany(
+                    "INSERT OR IGNORE INTO custom_categories (id, name, color, badge_icon, description) VALUES (?, ?, ?, ?, ?)",
+                    default_cats,
+                )
+
+                # Seed default pet whitelist
+                default_pets = [
+                    ("dog", "Canine family pet"),
+                    ("cat", "Feline family pet"),
+                    ("pet", "Generic domestic pet"),
+                    ("guard_dog", "Trained security or family guard dog"),
+                ]
+                cursor.executemany(
+                    "INSERT OR IGNORE INTO pet_whitelist (category_or_label, notes) VALUES (?, ?)",
+                    default_pets,
+                )
+
+                # 13. Indexes for rapid lookups
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_sightings_entity_ts
                     ON sightings(entity_id, timestamp);
@@ -203,6 +318,18 @@ class TrackerDB:
                 cursor.execute("""
                     CREATE INDEX IF NOT EXISTS idx_spatial_tripwires_cam
                     ON spatial_tripwires(camera_id);
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_desc_versions_entity
+                    ON descriptor_versions(entity_id, version_num);
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_review_queue_status
+                    ON review_queue(status, timestamp);
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_rsac_zone_rules_cam
+                    ON rsac_zone_rules(camera_id, zone_id);
                 """)
 
                 self._conn.commit()
@@ -374,6 +501,8 @@ class TrackerDB:
         entity_id: int,
         embedding: np.ndarray,
         crop_path: str = "",
+        is_anchor: int = 0,
+        locked: int = 0,
     ) -> int:
         """
         Add a feature signature embedding for an entity.
@@ -381,6 +510,8 @@ class TrackerDB:
         :param entity_id: Target entity ID.
         :param embedding: 1D NumPy float vector representing the visual embedding.
         :param crop_path: Optional path to saved cropped thumbnail image.
+        :param is_anchor: If 1, marks as ground-truth Locked Anchor never modified by continuous learning.
+        :param locked: If 1, prevents automatic eviction.
         :return: Created signature ID.
         """
         blob = self.serialize_embedding(embedding)
@@ -391,27 +522,97 @@ class TrackerDB:
             try:
                 cursor.execute(
                     """
-                    INSERT INTO entity_signatures (entity_id, embedding, crop_path, created_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO entity_signatures (entity_id, embedding, crop_path, is_anchor, locked, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (entity_id, blob, crop_path.strip(), now),
+                    (entity_id, blob, crop_path.strip(), int(is_anchor), int(locked), now),
                 )
+                sig_id = cursor.lastrowid
                 self._conn.commit()
-                return cursor.lastrowid
+                return sig_id
             finally:
                 cursor.close()
 
-    def get_signatures(self, entity_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Retrieve signatures, optionally filtered for a specific entity.
+    def add_entity_signature(
+        self,
+        entity_id: int,
+        embedding: Optional[np.ndarray] = None,
+        feature_vector: Optional[np.ndarray] = None,
+        crop_path: str = "",
+        is_anchor: int = 0,
+        locked: int = 0,
+    ) -> int:
+        """Alias for add_signature accepting either feature_vector or embedding."""
+        vec = feature_vector if feature_vector is not None else embedding
+        if vec is None:
+            raise ValueError("Must provide feature_vector or embedding")
+        return self.add_signature(
+            entity_id=entity_id,
+            embedding=vec,
+            crop_path=crop_path,
+            is_anchor=is_anchor,
+            locked=locked,
+        )
 
+    def update_entity_signature(
+        self,
+        signature_id: int,
+        embedding: Optional[np.ndarray] = None,
+        feature_vector: Optional[np.ndarray] = None,
+        crop_path: Optional[str] = None,
+    ) -> bool:
+        """Update existing signature feature vector or crop path."""
+        vec = feature_vector if feature_vector is not None else embedding
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                updates = ["created_at = ?"]
+                params: List[Any] = [now]
+                if vec is not None:
+                    updates.append("embedding = ?")
+                    params.append(self.serialize_embedding(vec))
+                if crop_path is not None:
+                    updates.append("crop_path = ?")
+                    params.append(crop_path.strip())
+                params.append(signature_id)
+                cur.execute(f"UPDATE entity_signatures SET {', '.join(updates)} WHERE id = ?", params)
+                self._conn.commit()
+                return cur.rowcount > 0
+            finally:
+                cur.close()
+
+    def get_entity_signatures(
+        self,
+        entity_id: int,
+        anchors_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve signatures for an entity with feature_vector alias."""
+        return self.get_signatures(entity_id=entity_id, anchors_only=anchors_only)
+
+    def get_signatures(
+        self,
+        entity_id: Optional[int] = None,
+        anchors_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve signatures, optionally filtered for a specific entity or locked anchors.
+
+        :param entity_id: Optional entity ID filter.
+        :param anchors_only: If True, only returns locked ground-truth anchors.
         :return: List of dicts with deserialized `embedding` arrays.
         """
-        query = "SELECT id, entity_id, embedding, crop_path, created_at FROM entity_signatures"
+        query = "SELECT id, entity_id, embedding, crop_path, is_anchor, locked, created_at FROM entity_signatures"
+        conditions = []
         params = []
         if entity_id is not None:
-            query += " WHERE entity_id = ?"
+            conditions.append("entity_id = ?")
             params.append(entity_id)
+        if anchors_only:
+            conditions.append("is_anchor = 1")
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY id ASC"
 
         with self._lock:
@@ -422,6 +623,7 @@ class TrackerDB:
                 for row in cursor.fetchall():
                     item = dict(row)
                     item["embedding"] = self.deserialize_embedding(item["embedding"])
+                    item["feature_vector"] = item["embedding"]
                     results.append(item)
                 return results
             finally:
@@ -675,6 +877,7 @@ class TrackerDB:
         notes: str = "",
         extractor: Optional[Any] = None,
         save_crop_dir: Optional[str] = "data/crops",
+        is_anchor: bool = True,
     ) -> Dict[str, Any]:
         """
         Convenience method to register an entity, extract its visual crop,
@@ -688,6 +891,7 @@ class TrackerDB:
         :param notes: Metadata notes.
         :param extractor: BaseFeatureExtractor instance (optional if embedding provided).
         :param save_crop_dir: Directory where thumbnail crop image should be saved.
+        :param is_anchor: If True, marks signature as a ground-truth Locked Anchor.
         :return: Created entity info dict with signature_id and crop_path.
         """
         crop_path = ""
@@ -732,6 +936,8 @@ class TrackerDB:
                 entity_id=entity_id,
                 embedding=computed_embedding,
                 crop_path=crop_path,
+                is_anchor=1 if is_anchor else 0,
+                locked=1 if is_anchor else 0,
             )
 
         entity_data = self.get_entity(entity_id) or {}
@@ -1037,6 +1243,425 @@ class TrackerDB:
                 cur.close()
 
     # -------------------------------------------------------------------------
+    # Descriptor Versions & Memory Rollback (Milestone 9)
+    # -------------------------------------------------------------------------
+
+    def record_descriptor_version(
+        self,
+        entity_id: int,
+        embedding: Optional[np.ndarray] = None,
+        feature_vector: Optional[np.ndarray] = None,
+        crop_path: str = "",
+        source: str = "manual_enrollment",
+        notes: str = "",
+        version: Optional[int] = None,
+        version_num: Optional[int] = None,
+        update_reason: str = "",
+        is_anchor: int = 0,
+        **kwargs,
+    ) -> int:
+        """
+        Record a descriptor version snapshot for historical rollback and drift monitoring.
+
+        :param entity_id: Entity ID.
+        :param embedding: Feature vector (or feature_vector).
+        :param crop_path: Optional path to thumbnail crop.
+        :param source: 'manual_enrollment', 'active_learning', 'ema_update', 'rollback'.
+        :param notes: Metadata or operator notes.
+        :param version: Explicit version number (optional).
+        :param update_reason: Optional alias for notes/source.
+        :param is_anchor: Ground truth locked anchor indicator.
+        :return: Created version ID.
+        """
+        vec = feature_vector if feature_vector is not None else embedding
+        if vec is None:
+            vec = np.zeros(16, dtype=np.float32)
+        blob = self.serialize_embedding(vec)
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+
+        ver = version if version is not None else version_num
+        reason = update_reason or notes or source
+        src = source if (source != "manual_enrollment" or not update_reason) else update_reason
+
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                if ver is None:
+                    cur.execute("SELECT COALESCE(MAX(version_num), 0) FROM descriptor_versions WHERE entity_id = ?", (entity_id,))
+                    max_ver = cur.fetchone()[0]
+                    ver = max_ver + 1
+
+                cur.execute(
+                    """
+                    INSERT INTO descriptor_versions (entity_id, version_num, embedding, crop_path, source, notes, is_anchor, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (entity_id, ver, blob, crop_path.strip(), src.strip(), reason.strip(), int(is_anchor), now),
+                )
+                self._conn.commit()
+                return cur.lastrowid
+            finally:
+                cur.close()
+
+    def get_descriptor_versions(self, entity_id: int) -> List[Dict[str, Any]]:
+        """Retrieve historical descriptor versions for an entity, sorted descending by version."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    "SELECT id, entity_id, version_num, embedding, crop_path, source, notes, is_anchor, created_at "
+                    "FROM descriptor_versions WHERE entity_id = ? ORDER BY version_num DESC",
+                    (entity_id,),
+                )
+                results = []
+                for row in cur.fetchall():
+                    item = dict(row)
+                    item["version"] = item["version_num"]
+                    item["embedding"] = self.deserialize_embedding(item["embedding"])
+                    item["feature_vector"] = item["embedding"]
+                    item["update_reason"] = item["notes"] or item["source"]
+                    results.append(item)
+                return results
+            finally:
+                cur.close()
+
+    def rollback_descriptor(self, entity_id: int, version: Optional[int] = None, version_num: Optional[int] = None) -> bool:
+        """
+        Rollback an entity's active descriptor signature to an earlier historical version.
+
+        :param entity_id: Target entity ID.
+        :param version: Version number to restore (alias version_num).
+        :return: True if successfully restored.
+        """
+        ver = version if version is not None else version_num
+        if ver is None:
+            return False
+
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    "SELECT embedding, crop_path FROM descriptor_versions WHERE entity_id = ? AND version_num = ?",
+                    (entity_id, ver),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+
+                blob = row["embedding"]
+                crop_path = row["crop_path"]
+
+                # Check if non-anchor signature exists to update
+                cur.execute(
+                    "SELECT id FROM entity_signatures WHERE entity_id = ? AND is_anchor = 0 ORDER BY id DESC LIMIT 1",
+                    (entity_id,),
+                )
+                dyn_sig = cur.fetchone()
+                if dyn_sig:
+                    cur.execute(
+                        "UPDATE entity_signatures SET embedding = ?, crop_path = ?, created_at = ? WHERE id = ?",
+                        (blob, crop_path, now, dyn_sig[0]),
+                    )
+                else:
+                    # Update all or insert rolled back signature
+                    cur.execute(
+                        "UPDATE entity_signatures SET embedding = ?, crop_path = ?, created_at = ? WHERE entity_id = ?",
+                        (blob, crop_path, now, entity_id),
+                    )
+
+                # Record rollback event in version history
+                cur.execute("SELECT COALESCE(MAX(version_num), 0) FROM descriptor_versions WHERE entity_id = ?", (entity_id,))
+                max_ver = cur.fetchone()[0]
+                cur.execute(
+                    """
+                    INSERT INTO descriptor_versions (entity_id, version_num, embedding, crop_path, source, notes, is_anchor, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (entity_id, max_ver + 1, blob, crop_path, f"rollback_to_v{ver}", f"Restored signature from v{ver}", 0, now),
+                )
+                self._conn.commit()
+                return True
+            finally:
+                cur.close()
+
+    # -------------------------------------------------------------------------
+    # Active Learning "Review & Learn" Inbox (Milestone 9)
+    # -------------------------------------------------------------------------
+
+    def add_review_item(
+        self,
+        camera_id: str,
+        track_id: int,
+        crop_path: str,
+        suggested_entity_id: Optional[int] = None,
+        suggested_name: str = "",
+        suggested_category: str = "",
+        similarity: float = 0.0,
+        status: str = "pending",
+        **kwargs,
+    ) -> int:
+        """Add an ambiguous detection to the active learning review queue."""
+        if "similarity_score" in kwargs:
+            similarity = kwargs["similarity_score"]
+        if "matched_entity_id" in kwargs and suggested_entity_id is None:
+            suggested_entity_id = kwargs["matched_entity_id"]
+        if "matched_entity_name" in kwargs and not suggested_name:
+            suggested_name = kwargs["matched_entity_name"]
+        if "matched_category" in kwargs and not suggested_category:
+            suggested_category = kwargs["matched_category"]
+
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO review_queue (camera_id, track_id, crop_path, timestamp, suggested_entity_id, suggested_name, suggested_category, similarity, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (camera_id, track_id, crop_path.strip(), now, suggested_entity_id, suggested_name.strip(), suggested_category.strip(), float(similarity), status.strip()),
+                )
+                self._conn.commit()
+                return cur.lastrowid
+            finally:
+                cur.close()
+
+    def list_review_items(self, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """List active learning review items, optionally filtered by status."""
+        query = "SELECT * FROM review_queue"
+        params = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status.strip())
+        query += " ORDER BY id DESC"
+        if limit > 0:
+            query += " LIMIT ?"
+            params.append(int(limit))
+
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(query, params)
+                return [dict(r) for r in cur.fetchall()]
+            finally:
+                cur.close()
+
+    def get_review_item(self, review_id: int) -> Optional[Dict[str, Any]]:
+        """Retrieve single review queue item by ID."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("SELECT * FROM review_queue WHERE id = ?", (review_id,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+            finally:
+                cur.close()
+
+    def update_review_status(self, review_id: int, status: str, reviewed_by: str = "operator") -> bool:
+        """Update status of a review queue candidate ('confirmed', 'reassigned', 'enrolled_new', 'dismissed')."""
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    "UPDATE review_queue SET status = ?, reviewed_at = ?, reviewed_by = ? WHERE id = ?",
+                    (status.strip(), now, reviewed_by.strip(), review_id),
+                )
+                self._conn.commit()
+                return cur.rowcount > 0
+            finally:
+                cur.close()
+
+    # -------------------------------------------------------------------------
+    # Role-Based Spatial Access Control (RSAC) & Custom Categories (Milestone 9)
+    # -------------------------------------------------------------------------
+
+    def get_custom_categories(self) -> List[Dict[str, Any]]:
+        """List all registered custom categories with color badges."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("SELECT * FROM custom_categories ORDER BY id ASC")
+                return [dict(r) for r in cur.fetchall()]
+            finally:
+                cur.close()
+
+    def set_custom_category(
+        self,
+        cat_id: str,
+        name: str,
+        color: str = "#3B82F6",
+        description: str = "",
+        badge_icon: str = "",
+    ) -> bool:
+        """Register or update custom category badge."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO custom_categories (id, name, color, badge_icon, description)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        color = excluded.color,
+                        badge_icon = excluded.badge_icon,
+                        description = excluded.description
+                    """,
+                    (cat_id.strip().lower(), name.strip(), color.strip(), badge_icon.strip(), description.strip()),
+                )
+                self._conn.commit()
+                return True
+            finally:
+                cur.close()
+
+    def delete_custom_category(self, cat_id: str) -> bool:
+        """Delete custom category."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("DELETE FROM custom_categories WHERE id = ?", (cat_id.strip().lower(),))
+                self._conn.commit()
+                return cur.rowcount > 0
+            finally:
+                cur.close()
+
+    def get_rsac_rules(self, camera_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List RSAC zone permission rules, optionally filtered by camera."""
+        query = "SELECT * FROM rsac_zone_rules"
+        params = []
+        if camera_id:
+            query += " WHERE camera_id = ?"
+            params.append(camera_id)
+        query += " ORDER BY camera_id, zone_id ASC"
+
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(query, params)
+                results = []
+                for r in cur.fetchall():
+                    d = dict(r)
+                    d["allowed_categories"] = json.loads(d["allowed_categories_json"])
+                    d["denied_categories"] = json.loads(d["denied_categories_json"])
+                    d["schedules"] = json.loads(d["schedules_json"])
+                    d["entity_overrides"] = json.loads(d["entity_overrides_json"])
+                    d["alarm_on_breach"] = bool(d["alarm_on_breach"])
+                    results.append(d)
+                return results
+            finally:
+                cur.close()
+
+    def get_rsac_rule(self, camera_id: str, zone_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve single RSAC rule for a camera zone."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("SELECT * FROM rsac_zone_rules WHERE camera_id = ? AND zone_id = ?", (camera_id, zone_id))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                d = dict(row)
+                d["allowed_categories"] = json.loads(d["allowed_categories_json"])
+                d["denied_categories"] = json.loads(d["denied_categories_json"])
+                d["schedules"] = json.loads(d["schedules_json"])
+                d["entity_overrides"] = json.loads(d["entity_overrides_json"])
+                d["alarm_on_breach"] = bool(d["alarm_on_breach"])
+                return d
+            finally:
+                cur.close()
+
+    def set_rsac_rule(
+        self,
+        camera_id: str,
+        zone_id: str,
+        allowed_categories: List[str],
+        denied_categories: Optional[List[str]] = None,
+        schedules: Optional[List[Dict[str, Any]]] = None,
+        entity_overrides: Optional[Dict[str, str]] = None,
+        alarm_on_breach: bool = True,
+    ) -> bool:
+        """Create or update RSAC permissions for a zone."""
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        allowed_json = json.dumps(allowed_categories or [])
+        denied_json = json.dumps(denied_categories or [])
+        schedules_json = json.dumps(schedules or [])
+        overrides_json = json.dumps(entity_overrides or {})
+
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO rsac_zone_rules (camera_id, zone_id, allowed_categories_json, denied_categories_json, schedules_json, entity_overrides_json, alarm_on_breach, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(camera_id, zone_id) DO UPDATE SET
+                        allowed_categories_json = excluded.allowed_categories_json,
+                        denied_categories_json = excluded.denied_categories_json,
+                        schedules_json = excluded.schedules_json,
+                        entity_overrides_json = excluded.entity_overrides_json,
+                        alarm_on_breach = excluded.alarm_on_breach,
+                        updated_at = excluded.updated_at
+                    """,
+                    (camera_id, zone_id, allowed_json, denied_json, schedules_json, overrides_json, 1 if alarm_on_breach else 0, now, now),
+                )
+                self._conn.commit()
+                return True
+            finally:
+                cur.close()
+
+    def delete_rsac_rule(self, camera_id: str, zone_id: str) -> bool:
+        """Delete RSAC rule for a zone."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("DELETE FROM rsac_zone_rules WHERE camera_id = ? AND zone_id = ?", (camera_id, zone_id))
+                self._conn.commit()
+                return cur.rowcount > 0
+            finally:
+                cur.close()
+
+    # -------------------------------------------------------------------------
+    # Pet Whitelist Management (Milestone 9)
+    # -------------------------------------------------------------------------
+
+    def get_pet_whitelist(self) -> List[str]:
+        """List all whitelisted pet labels and categories."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("SELECT category_or_label FROM pet_whitelist ORDER BY id ASC")
+                return [r[0] for r in cur.fetchall()]
+            finally:
+                cur.close()
+
+    def add_pet_whitelist(self, label: str, notes: str = "") -> bool:
+        """Add label or category to pet whitelist."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    "INSERT OR IGNORE INTO pet_whitelist (category_or_label, notes) VALUES (?, ?)",
+                    (label.strip().lower(), notes.strip()),
+                )
+                self._conn.commit()
+                return cur.rowcount > 0
+            finally:
+                cur.close()
+
+    def remove_pet_whitelist(self, label: str) -> bool:
+        """Remove label from pet whitelist."""
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                cur.execute("DELETE FROM pet_whitelist WHERE category_or_label = ?", (label.strip().lower(),))
+                self._conn.commit()
+                return cur.rowcount > 0
+            finally:
+                cur.close()
+
+    # -------------------------------------------------------------------------
     # Context Manager & Lifecycle
     # -------------------------------------------------------------------------
 
@@ -1044,6 +1669,10 @@ class TrackerDB:
         """Close SQLite database connection."""
         with self._lock:
             if hasattr(self, "_conn") and self._conn is not None:
+                try:
+                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                except Exception:
+                    pass
                 try:
                     self._conn.close()
                 except Exception:

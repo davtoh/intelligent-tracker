@@ -249,6 +249,47 @@ class RestrictedEntityAlert(BaseEvent):
     message: str = ""
 
 
+@dataclass
+class RSACViolationEvent(BaseEvent):
+    """Alert emitted when an entity breaches Role-Based Spatial Access Control permissions."""
+    event_type: str = "rsac_violation"
+    zone_id: str = ""
+    track_id: int = 0
+    entity_id: Optional[int] = None
+    entity_name: Optional[str] = None
+    entity_category: Optional[str] = None
+    reason: str = "Unauthorized category or schedule violation"
+    severity: str = "warning"  # "warning", "critical"
+    message: str = ""
+
+
+@dataclass
+class PetActivityEvent(BaseEvent):
+    """Informational event emitted on whitelisted domestic pet presence (suppressing alarms)."""
+    event_type: str = "pet_activity"
+    zone_id: str = ""
+    track_id: int = 0
+    entity_id: Optional[int] = None
+    entity_name: Optional[str] = "Pet"
+    entity_category: str = "pet"
+    severity: str = "info"
+    message: str = "Harmless domestic pet activity recorded; perimeter alarm suppressed"
+
+
+@dataclass
+class ReviewItemQueuedEvent(BaseEvent):
+    """Notification emitted when an ambiguous detection is queued into Review & Learn."""
+    event_type: str = "review_item_queued"
+    review_id: int = 0
+    track_id: int = 0
+    crop_path: str = ""
+    suggested_entity_id: Optional[int] = None
+    suggested_name: str = ""
+    suggested_category: str = ""
+    similarity: float = 0.0
+    severity: str = "info"
+
+
 # ==============================================================================
 # 3. Centralized Event Bus (Pub/Sub with Async Queue)
 # ==============================================================================
@@ -265,11 +306,14 @@ class EventBus:
     - Error isolation: handler exceptions are captured without blocking other handlers.
     """
 
-    def __init__(self, history_limit: int = 500):
+    def __init__(self, history_limit: int = 500, capacity: Optional[int] = None):
         try:
             import queue
         except ImportError:
             import Queue as queue
+
+        if capacity is not None:
+            history_limit = capacity
 
         self._queue = queue.Queue()
         self._subscribers: List[Tuple[Callable[[BaseEvent], Any], Optional[Callable[[BaseEvent], bool]], Optional[Type]]] = []

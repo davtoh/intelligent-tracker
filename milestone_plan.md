@@ -20,6 +20,7 @@
 | 6 | Web Dashboard, Packaging & Edge Deployment | ✅ **COMPLETE** |
 | 7 | Multi-Camera VMS, Auto-Discovery & Video Source Manager | ✅ **COMPLETE** |
 | 8 | World Scenario Studio, Space Awareness & Homography BEV | ✅ **COMPLETE** |
+| 9 | Artifact & Face Intelligence, Active Learning & Adaptive Memory | ✅ **COMPLETE** |
 
 ---
 
@@ -486,6 +487,66 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 
 ---
 
+## ✅ [Milestone 9] — Artifact & Face Intelligence, Active Learning & Adaptive Memory (COMPLETE)
+**Status: COMPLETE** — Verified: 209/209 tests passing (100% green across all unit and integration tests)
+
+### What was accomplished
+
+**9a — Universal Artifact & Face Enrollment (`intelligent_tracker/enrollment.py`, `intelligent_tracker/detectors.py`, `intelligent_tracker/reid.py`):**
+- **YuNet Face Detector (`YuNetFaceDetector`)**: Integrated OpenCV Zoo's lightweight YuNet ONNX face detection model (`models/face_detection_yunet_2023mar.onnx`) supporting micro-face localization. Registered with `DetectorFactory`.
+- **Dual-Model Feature Extractor (`DualModelFeatureExtractor`)**: Fuses artifact/body deep Re-ID appearance vectors with localized facial biometric embeddings, maintaining strict L2 normalization. Registered with `ReIDExtractorFactory`.
+- **Universal Enrollment Manager (`UniversalEnrollmentManager`)**: Universal enrollment for any real-world entity (humans, vehicles, delivery vans, guard dogs, domestic pets, tools, packages) via freeze-frame crop, base64 payload, or frame + bbox.
+- **Initial Locked Anchor Snapshot**: Automatically marks ground-truth enrollment crops as immutable Locked Anchors and records initial descriptor version 1 in SQLite database.
+
+**9b — Role-Based Spatial Access Control (RSAC) & Pet Whitelisting (`intelligent_tracker/rsac.py`, `intelligent_tracker/analytics.py`):**
+- **Custom Semantic Categories**: Dynamic categories with customizable color badges (`person`, `family_car`, `delivery_truck`, `cleaning_crew`, `guard_dog`, `pet`, `vip`, `restricted`).
+- **Zone Permission Matrix**: Evaluation of allowed and denied categories per zone with schedule evaluation (24/7 wildcard, weekday business hours, etc.).
+- **Entity Overrides**: Specific entity-level access grants or denials overriding general category rules.
+- **Pet Alarm Suppression**: Perimeter tripwires and intrusion zones automatically suppress breach alarms for whitelisted domestic pet categories or labels, routing informational `PetActivityEvent` alerts instead of critical breach alarms.
+
+**9c — Human-in-the-Loop Active Learning ("Review & Learn" Inbox) (`intelligent_tracker/active_learning.py`):**
+- **Ambiguous Candidate Triage**: Detections with similarity in the uncertainty band $[0.45, 0.70)$ are intercepted, debounced, cropped, and saved to `data/crops/review_*.jpg`.
+- **Event Bus Dispatching**: Emits `ReviewItemQueuedEvent` over WebSocket channels to live dashboard operators.
+- **Operator 1-Click Triage Actions**:
+  - `confirm_candidate`: Confirms match as ground truth and enrolls candidate crop as a **Locked Anchor**.
+  - `reassign_candidate`: Reassigns candidate crop to a different chosen entity as a Locked Anchor.
+  - `enroll_as_new`: Registers candidate crop as a newly created entity with initial version 1 snapshot.
+  - `dismiss_candidate`: Rejects candidate without altering gallery or models.
+
+**9d — Locked Anchors, Bounded EMA Updates & Versioned Memory Rollback (`intelligent_tracker/tracker.py`, `intelligent_tracker/matcher.py`, `intelligent_tracker/database.py`):**
+- **Track Occlusion Reasoning (`check_track_occlusions`)**: Pairwise track IoU checks flag overlapping tracks ($\text{IoU} > 0.3$) with `is_cluttered = True`. Re-ID feature accumulation is frozen during clutter to prevent identity swaps.
+- **Bounded EMA Adaptation**: Running descriptor centroids are updated continuously via Exponential Moving Average ($\alpha = 0.05$) only when observation similarity and resulting smoothed centroid remain bounded against ground-truth Locked Anchors ($\cos(\mathbf{c}, \mathbf{a}) \ge 0.65$).
+- **Descriptor Version History & Rollback**: Complete snapshot history in SQLite `descriptor_versions`. 1-click rollback via `db.rollback_descriptor` and REST API.
+
+**9e — REST API & Glassmorphism Dashboard UI (`dashboard/app.py`, `dashboard/static/`):**
+- **REST API Endpoints**:
+  - `GET /api/cameras/{id}/freeze_frame`
+  - `POST /api/enroll`
+  - `GET /api/active-learning/queue` & `GET /api/active-learning/{id}`
+  - `POST /api/active-learning/{id}/confirm`, `reassign`, `enroll-new`, `dismiss`
+  - `GET /api/rsac/categories`, `POST /api/rsac/categories`, `DELETE /api/rsac/categories/{id}`
+  - `GET /api/rsac/rules`, `POST /api/rsac/rules`, `DELETE /api/rsac/rules`
+  - `GET /api/pets/whitelist`, `POST /api/pets/whitelist`, `DELETE /api/pets/whitelist/{label}`
+  - `GET /api/entities/{id}/versions`
+  - `POST /api/entities/{id}/rollback/{version}`
+- **Web UI (`dashboard/static/index.html`, `review_and_rsac.js`, `styles.css`)**:
+  - Review & Learn triage inbox tab with confidence meters and thumbnail comparison cards.
+  - Interactive freeze-frame canvas bounding box selection modal with category badge picker.
+  - Version History & Rollback modal with chronological snapshot timeline.
+  - Category badge pill styles and live toast notification prompts.
+
+### Verification & Test Suite
+- Full test suite: **209 tests passing (100% green)** across all unit and integration tests.
+- Milestone 9 dedicated test suites (22 new tests):
+  - `tests/test_rsac.py`: **6 tests passing** (categories, schedule active checks, allow/deny rules, entity overrides, pet suppression).
+  - `tests/test_active_learning.py`: **5 tests passing** (queue triage, debouncing, confirm, reassign, enroll as new, dismiss).
+  - `tests/test_enrollment.py`: **3 tests passing** (crop enrollment, frame + bbox enrollment, DualModelFeatureExtractor fusion).
+  - `tests/test_occlusion_and_ema.py`: **4 tests passing** (track occlusion IoU checks, clutter Re-ID freeze, bounded EMA adaptation, drift rejection, version rollback).
+  - `tests/test_m9_api.py`: **4 tests passing** (FastAPI endpoints for freeze-frame, universal enrollment, review queue actions, RSAC rules/categories CRUD, pet whitelist).
+- Sphinx documentation build: **Passed with 0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+
+---
+
 ## Dependency Graph
 
 ```
@@ -497,6 +558,7 @@ M1 (Env & Core) ✅
                           └── M6 (Dashboard + Edge Deploy) ✅
                                 └── M7 (Multi-Camera VMS & Auto-Discovery) ✅
                                       └── M8 (World Scenario Studio & Homography BEV) ✅
+                                            └── M9 (Artifact & Face Intelligence, Active Learning & Adaptive Memory) ✅
 ```
 
 ---

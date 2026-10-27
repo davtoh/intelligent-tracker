@@ -255,10 +255,14 @@ class AnalyticsEngine:
         heatmap_decay: Optional[float] = 0.998,
         event_bus: Optional[Any] = None,
         camera_id: str = "cam_01",
+        rsac_manager: Optional[Any] = None,
+        pet_whitelist: Optional[Any] = None,
     ):
         self.width, self.height = resolution
         self.event_bus = event_bus
         self.camera_id = str(camera_id)
+        self.rsac_manager = rsac_manager
+        self.pet_whitelist = set(s.lower().strip() for s in pet_whitelist) if pet_whitelist else None
         self.zones: Dict[str, ZoneROI] = {}
         self.tripwires: Dict[str, Tripwire] = {}
 
@@ -360,6 +364,64 @@ class AnalyticsEngine:
                                 timestamp=now,
                             )
                             self.event_bus.publish(bus_ev)
+
+                            # 2a. RSAC & Pet Whitelist evaluation (Milestone 9)
+                            trk_cat = getattr(trk, "entity_category", getattr(trk, "label", "object")) if trk else "object"
+                            trk_eid = getattr(trk, "entity_id", None) if trk else None
+
+                            if self.rsac_manager is not None:
+                                decision = self.rsac_manager.evaluate_access(
+                                    camera_id=self.camera_id,
+                                    zone_id=z_ev.zone_id,
+                                    entity_category=trk_cat,
+                                    entity_id=trk_eid,
+                                    timestamp=now,
+                                )
+                                if decision.is_pet_suppressed:
+                                    from intelligent_tracker.events import PetActivityEvent
+                                    pet_ev = PetActivityEvent(
+                                        camera_id=self.camera_id,
+                                        zone_id=z_ev.zone_id,
+                                        track_id=z_ev.track_id,
+                                        entity_id=trk_eid,
+                                        entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", "Pet")),
+                                        entity_category=trk_cat,
+                                        timestamp=now,
+                                    )
+                                    new_events.append(pet_ev)
+                                    self.events.append(pet_ev)
+                                    self.event_bus.publish(pet_ev)
+                                elif not decision.allowed and z_ev.event_type in ("enter", "dwell"):
+                                    from intelligent_tracker.events import RSACViolationEvent
+                                    rsac_ev = RSACViolationEvent(
+                                        camera_id=self.camera_id,
+                                        zone_id=z_ev.zone_id,
+                                        track_id=z_ev.track_id,
+                                        entity_id=trk_eid,
+                                        entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", None)),
+                                        entity_category=trk_cat,
+                                        reason=decision.reason,
+                                        severity=decision.severity,
+                                        message=decision.reason,
+                                        timestamp=now,
+                                    )
+                                    new_events.append(rsac_ev)
+                                    self.events.append(rsac_ev)
+                                    self.event_bus.publish(rsac_ev)
+                            elif self.pet_whitelist and trk_cat.lower().strip() in self.pet_whitelist:
+                                from intelligent_tracker.events import PetActivityEvent
+                                pet_ev = PetActivityEvent(
+                                    camera_id=self.camera_id,
+                                    zone_id=z_ev.zone_id,
+                                    track_id=z_ev.track_id,
+                                    entity_id=trk_eid,
+                                    entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", "Pet")),
+                                    entity_category=trk_cat,
+                                    timestamp=now,
+                                )
+                                new_events.append(pet_ev)
+                                self.events.append(pet_ev)
+                                self.event_bus.publish(pet_ev)
                     except Exception as ex:
                         pass
 

@@ -69,10 +69,18 @@
         <span class="tab-icon">🚶</span>
         <span>Journey Search</span>
       </button>
+      <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab">
+        <span class="tab-icon">🧠</span>
+        <span>Review & Learn</span>
+        <span class="badge review-count-badge" id="header-review-badge" style="display:none;">0</span>
+      </button>
     </nav>
 
     <!-- Header Telemetry Controls & VMS Actions -->
     <div class="header-right">
+      <button class="btn btn-sm btn-primary header-action-btn" id="btn-open-enrollment" title="Universal Freeze-Frame Artifact & Face Enrollment">
+        ✨ Enroll
+      </button>
       <button class="btn btn-sm btn-outline header-action-btn" id="btn-manage-cameras" title="Camera Auto-Discovery & Stream Manager">
         📹 Cameras
       </button>
@@ -575,6 +583,35 @@
       </div>
     </section>
 
+    <!-- TAB 8: REVIEW & LEARN ACTIVE LEARNING INBOX (Milestone 9) -->
+    <section class="tab-pane" id="tab-review" role="tabpanel">
+      <div class="review-wrapper">
+        <div class="glass-panel toolbar-panel">
+          <div class="toolbar-left">
+            <h3 style="margin: 0; font-size: 16px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+              <span>🧠 Review & Learn Inbox</span>
+              <span class="badge" id="review-inbox-counter">0 Candidates</span>
+            </h3>
+            <div class="filter-group" style="display: flex; gap: 6px; margin-left: 20px;">
+              <button class="btn btn-xs btn-outline review-filter-btn active" data-status="pending">Pending</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="confirmed">Confirmed</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="reassigned">Reassigned</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="enrolled_new">New Enrolled</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="dismissed">Dismissed</button>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-sm btn-outline" id="btn-refresh-review-queue">🔄 Refresh Queue</button>
+          </div>
+        </div>
+
+        <!-- Review Grid Container -->
+        <div id="review-queue-container" class="review-queue-grid">
+          <div class="empty-state">No pending review candidates in queue. Borderline detections (0.45 &lt; sim &lt; 0.70) are automatically routed here for human-in-the-loop verification.</div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- MODALS -->
@@ -795,10 +832,153 @@
     </div>
   </div>
 
+  <!-- Modal 5: Universal Artifact & Face Enrollment (Milestone 9) -->
+  <div class="modal-backdrop" id="modal-universal-enrollment" style="display: none;">
+    <div class="modal-card glass-panel modal-lg">
+      <div class="modal-header">
+        <h3>✨ Universal Artifact & Face Enrollment</h3>
+        <button class="modal-close-btn" id="modal-enroll-close">&times;</button>
+      </div>
+      <div class="modal-body-grid">
+        <!-- Left: Interactive Freeze-Frame Canvas / Image Upload -->
+        <div class="modal-left-col">
+          <div class="section-subhead">
+            <h4>Freeze-Frame Bounding Box Selector</h4>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" class="btn btn-xs btn-outline" id="btn-capture-freeze">📷 Grab Frame</button>
+              <button type="button" class="btn btn-xs btn-outline" id="btn-upload-enroll-crop">📁 Upload</button>
+              <input type="file" id="enroll-file-input" accept="image/*" style="display: none;" />
+            </div>
+          </div>
+          <div class="enroll-canvas-wrapper" style="position: relative; background: #0b0f19; border-radius: 6px; overflow: hidden; min-height: 240px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle);">
+            <canvas id="enroll-bbox-canvas" style="max-width: 100%; height: auto; cursor: crosshair; display: none;"></canvas>
+            <div id="enroll-canvas-placeholder" style="color: #64748b; font-size: 13px; text-align: center; padding: 24px;">
+              Click <strong>"Grab Frame"</strong> to freeze live camera stream and drag a bounding box around any human face, person, vehicle, or artifact.
+            </div>
+          </div>
+          <div id="enroll-crop-preview-box" style="margin-top: 10px; display: none; align-items: center; gap: 12px; background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3);">
+            <img id="enroll-crop-preview-img" src="" alt="Selected Crop" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #06b6d4;" />
+            <div style="font-size: 12px; color: #94a3b8;">
+              <span id="enroll-crop-meta" style="color: #06b6d4; font-weight: 600;">Crop Region Selected</span><br>
+              Dual-Model Biometric Extraction (YuNet ONNX Face + Deep Re-ID) will generate a versioned descriptor.
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Enrollment Details Form -->
+        <div class="modal-right-col">
+          <div class="section-subhead">
+            <h4>Entity Profile & Clearances</h4>
+          </div>
+          <form id="universal-enrollment-form">
+            <div class="form-group">
+              <label for="enroll-name-input">Entity Full Name / Artifact Label *</label>
+              <input type="text" id="enroll-name-input" class="form-input" placeholder="e.g. Dr. Jane Foster, Delivery Van #4, Security Guard Max" required />
+            </div>
+
+            <div class="form-group">
+              <label for="enroll-category-select">Semantic Category Badge *</label>
+              <select id="enroll-category-select" class="form-input">
+                <option value="person">Person</option>
+                <option value="family_car">Family Car</option>
+                <option value="delivery_truck">Delivery Truck</option>
+                <option value="cleaning_crew">Cleaning Crew</option>
+                <option value="guard_dog">Guard Dog</option>
+                <option value="pet">Household Pet</option>
+                <option value="vip">VIP Resident</option>
+                <option value="restricted">Restricted / Watchlist</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="enroll-role-input">Security Role / Clearance</label>
+                <input type="text" id="enroll-role-input" class="form-input" placeholder="e.g. resident, courier, maintenance" />
+              </div>
+              <div class="form-group col-6">
+                <label for="enroll-camera-select">Camera Source</label>
+                <select id="enroll-camera-select" class="form-input">
+                  <option value="cam_01">cam_01</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
+                <input type="checkbox" id="enroll-locked-anchor-cb" checked style="accent-color: #06b6d4;" />
+                <span><strong>Lock as Ground Truth Anchor</strong> (Protects against adaptive drift)</span>
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label for="enroll-notes-input">Notes & Access Permissions</label>
+              <textarea id="enroll-notes-input" class="form-input" rows="2" placeholder="Vehicle license plate, access schedule, or security notes..."></textarea>
+            </div>
+
+            <div class="modal-footer" style="margin-top: 15px;">
+              <button type="button" class="btn btn-outline" id="modal-enroll-cancel">Cancel</button>
+              <button type="submit" class="btn btn-primary" id="btn-submit-enrollment">✨ Enroll & Lock Anchor</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 6: Descriptor Version History & Rollback (Milestone 9) -->
+  <div class="modal-backdrop" id="modal-descriptor-versions" style="display: none;">
+    <div class="modal-card glass-panel modal-lg">
+      <div class="modal-header">
+        <h3 id="versions-modal-title">⏳ Descriptor Version Snapshots & Memory Rollback</h3>
+        <button class="modal-close-btn" id="modal-versions-close">&times;</button>
+      </div>
+      <div class="versions-modal-body" style="padding: 16px 24px;">
+        <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px;">
+          Chronological audit trail of adaptive visual feature descriptors. If appearance drift or misidentification occurs, 
+          click <strong>"Rollback"</strong> to restore an earlier verified descriptor state.
+        </p>
+        <div id="versions-timeline-container" class="versions-timeline-container" style="max-height: 420px; overflow-y: auto;">
+          <div class="empty-state">Loading version history...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 7: Review Item Reassign Modal (Milestone 9) -->
+  <div class="modal-backdrop" id="modal-review-reassign" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>🟨 Reassign Candidate to Entity</h3>
+        <button class="modal-close-btn" id="modal-reassign-close">&times;</button>
+      </div>
+      <form id="review-reassign-form">
+        <input type="hidden" id="reassign-item-id" />
+        <div class="form-group">
+          <label for="reassign-entity-select">Target Enrolled Entity *</label>
+          <select id="reassign-entity-select" class="form-input" required>
+            <option value="">Select target entity...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="reassign-notes-input">Correction Reason / Operator Notes</label>
+          <input type="text" id="reassign-notes-input" class="form-input" placeholder="e.g. Corrected mistaken identity, appearance variation" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-reassign-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-reassign">Save Reassignment & Lock</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container (Milestone 9) -->
+  <div id="toast-container" class="toast-container"></div>
+
   <!-- JavaScript Modules -->
   <script src="/static/app.js"></script>
   <script src="/static/camera_manager.js"></script>
   <script src="/static/video_scrubber.js"></script>
   <script src="/static/studio.js"></script>
+  <script src="/static/review_and_rsac.js"></script>
 </body>
 </html>

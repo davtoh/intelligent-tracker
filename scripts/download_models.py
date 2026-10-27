@@ -47,7 +47,23 @@ MODELS = {
         "size_bytes": 907169,
         "description": "OSNet x0.25 lightweight visual Re-ID embedding model (~907 KB)",
     },
+    "yunet": {
+        "filename": "face_detection_yunet_2023mar.onnx",
+        "urls": [
+            "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
+        ],
+        "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+        "size_bytes": 232589,
+        "description": "YuNet ONNX high-speed lightweight face detector model (~232 KB)",
+    },
 }
+
+try:
+    import ssl
+    import certifi
+    _SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    _SSL_CONTEXT = None
 
 
 def compute_sha256(filepath):
@@ -77,7 +93,10 @@ def download_file(urls, destination, expected_sha256=None, expected_size=None):
         print("[INFO] Attempting download from: {}".format(url))
         try:
             req = urllib_request.Request(url, headers={"User-Agent": "Mozilla/5.0 (IntelligentTracker/2.0)"})
-            with urllib_request.urlopen(req, timeout=60) as response:
+            open_kwargs = {"timeout": 60}
+            if _SSL_CONTEXT is not None:
+                open_kwargs["context"] = _SSL_CONTEXT
+            with urllib_request.urlopen(req, **open_kwargs) as response:
                 total_size = response.headers.get("Content-Length")
                 total_size = int(total_size) if total_size and total_size.isdigit() else expected_size
                 downloaded = 0

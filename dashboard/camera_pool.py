@@ -65,6 +65,33 @@ class CameraPool:
                 return next(iter(self.streams.values()))
             return None
 
+    @property
+    def rsac_manager(self) -> Optional[Any]:
+        """Returns the primary stream's RSACManager."""
+        sm = self.primary_stream
+        return sm.rsac_manager if sm else None
+
+    @property
+    def active_learning(self) -> Optional[Any]:
+        """Returns the primary stream's ActiveLearningManager."""
+        sm = self.primary_stream
+        return sm.active_learning if sm else None
+
+    @property
+    def enrollment_manager(self) -> Optional[Any]:
+        """Returns the primary stream's UniversalEnrollmentManager."""
+        sm = self.primary_stream
+        return sm.enrollment_manager if sm else None
+
+    def reload_all_galleries(self):
+        """Reload Re-ID galleries and RSAC policies across all active streams."""
+        with self._lock:
+            for sm in self.streams.values():
+                if sm.gallery_matcher:
+                    sm.gallery_matcher.reload_gallery()
+                if sm.rsac_manager:
+                    sm.rsac_manager.reload()
+
     def load_cameras(self):
         """
         Loads saved camera configurations from `configs/cameras.json`.
