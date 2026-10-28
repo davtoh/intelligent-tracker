@@ -37,6 +37,12 @@
   const btnAddAsCamera = document.getElementById('btn-video-add-camera');
   const btnAnalyzeVideo = document.getElementById('btn-video-analyze');
   const batchReportContainer = document.getElementById('video-batch-report-container');
+  const selectTabPolicy = document.getElementById('scrubber-tab-policy');
+
+  // Tab-Switching Lifecycle & Resource Policy State
+  let tabPolicy = localStorage.getItem('intelligent_tracker_tab_policy') || 'auto-resume';
+  let wasPlayingBeforeTabSwitch = false;
+  let savedTimeBeforeTabSwitch = 0;
 
   function init() {
     bindEvents();
@@ -44,6 +50,14 @@
   }
 
   function bindEvents() {
+    if (selectTabPolicy) {
+      selectTabPolicy.value = tabPolicy;
+      selectTabPolicy.addEventListener('change', (e) => {
+        tabPolicy = e.target.value;
+        localStorage.setItem('intelligent_tracker_tab_policy', tabPolicy);
+      });
+    }
+
     if (btnUploadVideo && videoFileInput) {
       btnUploadVideo.addEventListener('click', () => videoFileInput.click());
       videoFileInput.addEventListener('change', uploadSelectedVideo);
@@ -52,6 +66,16 @@
     if (videoPlayer) {
       videoPlayer.addEventListener('timeupdate', updateTimeline);
       videoPlayer.addEventListener('loadedmetadata', onVideoLoaded);
+      videoPlayer.addEventListener('play', () => {
+        if (btnPlayPause && !videoPlayer.paused) btnPlayPause.textContent = '⏸ Pause';
+      });
+      videoPlayer.addEventListener('pause', () => {
+        if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+      });
+      videoPlayer.addEventListener('ended', () => {
+        if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+      });
+      videoPlayer.addEventListener('error', handleVideoPlayerError);
     }
 
     if (btnPlayPause) {
@@ -103,6 +127,84 @@
     }
   }
 
+  function handleVideoPlayerError() {
+    const err = videoPlayer?.error;
+    let msg = 'Browser error playing video recording.';
+    if (err && err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+      msg = `Codec not supported natively by browser (e.g. HEVC/H.265). Convert to standard H.264 MP4 for instant browser playback.`;
+    }
+    showCodecNotice(msg, currentVideoFilename);
+  }
+
+  function showCodecNotice(message, filename) {
+    let notice = document.getElementById('scrubber-codec-notice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'scrubber-codec-notice';
+      notice.className = 'codec-notice-banner glass-panel';
+      const viewport = document.querySelector('.scrubber-viewport');
+      if (viewport && viewport.parentNode) {
+        viewport.parentNode.insertBefore(notice, viewport);
+      }
+    }
+    notice.style.display = 'flex';
+    notice.style.alignItems = 'center';
+    notice.style.justifyContent = 'space-between';
+    notice.style.padding = '10px 14px';
+    notice.style.marginBottom = '12px';
+    notice.style.borderRadius = '8px';
+    notice.style.background = 'rgba(245, 158, 11, 0.12)';
+    notice.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+    notice.style.fontSize = '0.85rem';
+    notice.innerHTML = `
+      <div style="flex:1; padding-right: 10px;">
+        <span style="color:#f59e0b; font-weight:600;">⚠️ Codec Compatibility:</span> ${escapeHtml(message)}
+      </div>
+      ${filename ? `<button class="btn btn-xs btn-primary btn-notice-convert" data-filename="${escapeHtml(filename)}">⚡ Convert to H.264</button>` : ''}
+    `;
+
+    notice.querySelector('.btn-notice-convert')?.addEventListener('click', () => {
+      if (filename) transcodeVideo(filename);
+    });
+  }
+
+  function hideCodecNotice() {
+    const notice = document.getElementById('scrubber-codec-notice');
+    if (notice) notice.style.display = 'none';
+  }
+
+  async function transcodeVideo(filename) {
+    if (!filename) return;
+    const btns = document.querySelectorAll(`.btn-transcode-video[data-filename="${CSS.escape(filename)}"], .btn-notice-convert[data-filename="${CSS.escape(filename)}"]`);
+    btns.forEach(b => {
+      b.disabled = true;
+      b.textContent = '⏳ Converting...';
+    });
+    showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`);
+
+    try {
+      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode`, {
+        method: 'POST'
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        hideCodecNotice();
+        await loadVideosList();
+        loadVideoIntoPlayer(data.video_url, data.output_filename, true, 'h264');
+      } else {
+        const err = await resp.json();
+        alert(`Transcoding failed: ${err.detail || 'Error'}`);
+      }
+    } catch (e) {
+      alert(`Error during transcoding: ${e.message}`);
+    } finally {
+      btns.forEach(b => {
+        b.disabled = false;
+        b.textContent = '⚡ Convert';
+      });
+    }
+  }
+
   async function loadVideosList() {
     if (!videoFilesList) return;
     try {
@@ -114,26 +216,47 @@
         return;
       }
 
-      videoFilesList.innerHTML = files.map(file => `
+      videoFilesList.innerHTML = files.map(file => {
+        const isH264 = file.web_compatible;
+        const codecBadge = isH264
+          ? `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.4);">H.264</span>`
+          : `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(245,158,11,0.2); color:#f59e0b; border:1px solid rgba(245,158,11,0.4);">${escapeHtml((file.codec || 'HEVC').toUpperCase())}</span>`;
+
+        const convertBtn = !isH264
+          ? `<button class="btn btn-xs btn-outline btn-transcode-video" data-filename="${escapeHtml(file.filename)}" title="Convert to browser-compatible H.264 MP4">⚡ Convert</button>`
+          : '';
+
+        return `
         <div class="video-file-card glass-panel ${file.filename === currentVideoFilename ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}">
           <div class="video-file-icon">📼</div>
           <div class="video-file-meta">
-            <div class="video-filename">${escapeHtml(file.filename)}</div>
-            <div class="video-filesize">${file.size_mb} MB</div>
+            <div class="video-filename" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename)}</div>
+            <div class="video-filesize">${file.size_mb} MB • ${codecBadge} ${file.resolution ? `• ${file.resolution}` : ''}</div>
           </div>
           <div class="video-file-actions">
-            <button class="btn btn-xs btn-primary btn-select-video" data-url="${escapeHtml(file.video_url)}" data-filename="${escapeHtml(file.filename)}">▶ Load</button>
+            ${convertBtn}
+            <button class="btn btn-xs btn-primary btn-select-video" data-url="${escapeHtml(file.video_url)}" data-filename="${escapeHtml(file.filename)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec)}">▶ Load</button>
             <button class="btn btn-xs btn-outline btn-del-video" data-filename="${escapeHtml(file.filename)}">🗑️</button>
           </div>
         </div>
-      `).join('');
+      `;}).join('');
 
       videoFilesList.querySelectorAll('.btn-select-video').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           const url = btn.getAttribute('data-url');
           const fn = btn.getAttribute('data-filename');
-          loadVideoIntoPlayer(url, fn);
+          const web = btn.getAttribute('data-web') === 'true';
+          const codec = btn.getAttribute('data-codec');
+          loadVideoIntoPlayer(url, fn, web, codec);
+        });
+      });
+
+      videoFilesList.querySelectorAll('.btn-transcode-video').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const fn = btn.getAttribute('data-filename');
+          transcodeVideo(fn);
         });
       });
 
@@ -148,9 +271,10 @@
         });
       });
 
-      // Auto-load first video if none selected
+      // Auto-load first preferred video if none selected
       if (!currentVideoFilename && files.length > 0) {
-        loadVideoIntoPlayer(files[0].video_url, files[0].filename);
+        const preferred = files.find(f => f.web_compatible) || files[0];
+        loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec);
       }
 
     } catch (e) {
@@ -158,10 +282,21 @@
     }
   }
 
-  function loadVideoIntoPlayer(url, filename) {
+  function loadVideoIntoPlayer(url, filename, isWebCompatible, codec) {
     if (!videoPlayer) return;
     currentVideoUrl = url;
     currentVideoFilename = filename;
+
+    // Explicitly pause and reset playback state to eliminate event race conditions
+    try {
+      videoPlayer.pause();
+    } catch (_) {}
+    videoPlayer.currentTime = 0;
+
+    // Reset button state and timeline on new load
+    if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+    if (timelineSlider) timelineSlider.value = 0;
+    hideCodecNotice();
 
     videoPlayer.src = url;
     videoPlayer.load();
@@ -169,6 +304,10 @@
     document.getElementById('scrubber-loaded-title').textContent = `Loaded: ${filename}`;
     if (btnAddAsCamera) btnAddAsCamera.disabled = false;
     if (btnAnalyzeVideo) btnAnalyzeVideo.disabled = false;
+
+    if (isWebCompatible === false) {
+      showCodecNotice(`This video is encoded with '${(codec || 'HEVC').toUpperCase()}' which may not play in standard browsers without conversion.`, filename);
+    }
 
     // Highlight card
     document.querySelectorAll('.video-file-card').forEach(c => {
@@ -207,15 +346,52 @@
     }
   }
 
-  function togglePlayPause() {
+  async function togglePlayPause() {
     if (!videoPlayer) return;
     if (videoPlayer.paused) {
-      videoPlayer.play();
-      btnPlayPause.textContent = '⏸ Pause';
+      try {
+        await videoPlayer.play();
+        if (btnPlayPause) btnPlayPause.textContent = '⏸ Pause';
+      } catch (err) {
+        console.warn('Playback error or policy prevention:', err);
+        if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+      }
     } else {
       videoPlayer.pause();
-      btnPlayPause.textContent = '▶ Play';
+      if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
     }
+  }
+
+  function onTabLeave() {
+    if (!videoPlayer) return;
+    wasPlayingBeforeTabSwitch = !videoPlayer.paused;
+    savedTimeBeforeTabSwitch = videoPlayer.currentTime;
+    if (!videoPlayer.paused) {
+      videoPlayer.pause();
+      if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+    }
+  }
+
+  function onTabEnter() {
+    if (!videoPlayer) return;
+    if (tabPolicy === 'reset') {
+      videoPlayer.currentTime = 0;
+      if (timelineSlider) timelineSlider.value = 0;
+      updateTimeline();
+      if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+    } else if (tabPolicy === 'auto-resume') {
+      if (wasPlayingBeforeTabSwitch) {
+        videoPlayer.currentTime = savedTimeBeforeTabSwitch;
+        videoPlayer.play().then(() => {
+          if (btnPlayPause) btnPlayPause.textContent = '⏸ Pause';
+        }).catch(() => {
+          if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+        });
+      }
+    } else if (tabPolicy === 'keep-paused') {
+      if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
+    }
+    wasPlayingBeforeTabSwitch = false;
   }
 
   function stepFrame(frameDelta) {
@@ -339,6 +515,14 @@
   window.VideoScrubber = {
     init: init,
     loadVideosList: loadVideosList,
+    onTabLeave: onTabLeave,
+    onTabEnter: onTabEnter,
+    getTabPolicy: () => tabPolicy,
+    setTabPolicy: (p) => {
+      tabPolicy = p;
+      if (selectTabPolicy) selectTabPolicy.value = p;
+      localStorage.setItem('intelligent_tracker_tab_policy', p);
+    }
   };
 
   if (document.readyState === 'loading') {

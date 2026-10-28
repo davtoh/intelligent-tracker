@@ -127,8 +127,30 @@ class StreamManager:
         self._ws_subscribers: List[Any] = []
         self._ws_lock = threading.Lock()
 
+        # Active Subscribers Tracking & Smart Hibernation
+        self._subscriber_count = 0
+        self._subscriber_lock = threading.Lock()
+
         # Initialize Subsystems
         self._init_subsystems()
+
+    def add_subscriber(self) -> int:
+        """Register an active client subscriber (MJPEG stream or WebSocket)."""
+        with self._subscriber_lock:
+            self._subscriber_count += 1
+            return self._subscriber_count
+
+    def remove_subscriber(self) -> int:
+        """Unregister an active client subscriber."""
+        with self._subscriber_lock:
+            self._subscriber_count = max(0, self._subscriber_count - 1)
+            return self._subscriber_count
+
+    @property
+    def subscriber_count(self) -> int:
+        """Current number of active subscribers."""
+        with self._subscriber_lock:
+            return self._subscriber_count
 
     @property
     def is_running(self) -> bool:
@@ -176,6 +198,10 @@ class StreamManager:
 
         # VideoSource
         fps_target = float(video_cfg.get("framerate", 30))
+        is_file_source = False
+        if isinstance(source, str) and (os.path.exists(source) or source.lower().endswith((".mp4", ".avi", ".mkv", ".mov"))):
+            is_file_source = True
+
         self.video_source = VideoSource(
             source=source,
             buffer_size=int(video_cfg.get("buffer_size", 1)),
@@ -183,6 +209,7 @@ class StreamManager:
             fps_limit=fps_target,
             width=res_w,
             height=res_h,
+            loop_video=is_file_source or bool(video_cfg.get("loop", True)),
         )
 
         # Detector
@@ -359,10 +386,23 @@ class StreamManager:
 
         with self.video_source as vs:
             while self._running:
+                # Smart Hibernation: if no active viewers are connected and we have processed
+                # at least one frame (to initialize telemetry & preview), sleep to conserve CPU.
+                if self.subscriber_count <= 0 and frame_count > 0:
+                    time.sleep(0.1)
+                    continue
+
                 ret, frame = vs.read(timeout=1.0)
                 if not ret or frame is None:
                     time.sleep(0.02)
                     continue
+
+                # Protect downstream pipelines, browser rendering, and network from oversized frames
+                max_dim = 1280
+                h, w = frame.shape[:2]
+                if w > max_dim or h > max_dim:
+                    scale = max_dim / float(max(w, h))
+                    frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
                 frame_count += 1
                 curr_t = time.time()
@@ -441,7 +481,7 @@ class StreamManager:
 
                 # Draw Zones
                 if self.overlays.get("zones", True) and self.analytics:
-                    for zone in self.analytics.zones.values():
+                    for zone in list(self.analytics.zones.values()):
                         pts = zone.polygon.reshape((-1, 1, 2)).astype(np.int32)
                         is_breached = getattr(zone, "_threshold_breached", False)
                         z_col = (0, 0, 255) if is_breached else zone.color
@@ -463,7 +503,7 @@ class StreamManager:
 
                 # Draw Tripwires
                 if self.overlays.get("tripwires", True) and self.analytics:
-                    for tw in self.analytics.tripwires.values():
+                    for tw in list(self.analytics.tripwires.values()):
                         p1, p2 = tw.line_segment
                         ip1 = (int(round(p1[0])), int(round(p1[1])))
                         ip2 = (int(round(p2[0])), int(round(p2[1])))
@@ -473,7 +513,7 @@ class StreamManager:
                         cv2.putText(annotated, tw_tag, (mid[0] + 5, mid[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.45, tw.color, 1)
 
                 # Draw Tracks (Bounding Boxes, Labels, Dwell Timers, Velocity Vectors)
-                for tid, trk in tracks.items():
+                for tid, trk in list(tracks.items()):
                     bx, by, bw, bh = trk.bbox
                     color = (0, 255, 0)
                     cat_id = getattr(trk, "category", "person")
@@ -590,6 +630,7 @@ class StreamManager:
                     "status": "online",
                     "timestamp": curr_t,
                     "fps": round(measured_fps, 1),
+                    "resolution": f"{frame.shape[1]}x{frame.shape[0]}",
                     "frame_count": frame_count,
                     "homography_calibrated": self.homography.is_calibrated,
                     "overlays": dict(self.overlays),
@@ -603,7 +644,7 @@ class StreamManager:
                             "is_breached": getattr(z, "_threshold_breached", False),
                             "polygon": z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon),
                         }
-                        for z in (self.analytics.zones.values() if self.analytics else [])
+                        for z in (list(self.analytics.zones.values()) if self.analytics else [])
                     ],
                     "tripwires": [
                         {
@@ -612,7 +653,7 @@ class StreamManager:
                             "out_count": tw.out_count,
                             "line": list(tw.line_segment),
                         }
-                        for tw in (self.analytics.tripwires.values() if self.analytics else [])
+                        for tw in (list(self.analytics.tripwires.values()) if self.analytics else [])
                     ],
                     "recent_alerts": recent_alerts,
                 }
@@ -640,16 +681,19 @@ class StreamManager:
                     dead.append(sub)
             for d in dead:
                 self._ws_subscribers.remove(d)
+                self.remove_subscriber()
 
     def register_ws_subscriber(self, sub: Any):
         with self._ws_lock:
             if sub not in self._ws_subscribers:
                 self._ws_subscribers.append(sub)
+                self.add_subscriber()
 
     def unregister_ws_subscriber(self, sub: Any):
         with self._ws_lock:
             if sub in self._ws_subscribers:
                 self._ws_subscribers.remove(sub)
+                self.remove_subscriber()
 
     def get_latest_frame_jpeg(self, camera_id: Optional[str] = None) -> bytes:
         with self._lock:

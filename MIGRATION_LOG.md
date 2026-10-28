@@ -1014,3 +1014,55 @@
 
 
 
+
+
+---
+
+## Milestone 9.1: StreamManager Thread-Safety, Video Studio Fitting & Smart Docker Hibernation
+
+### 1. Overview & Problem Diagnosis
+During Phase 1B browser and container runtime audit, 4 interrelated operational issues were diagnosed and resolved:
+1. **Camera Initializing Freeze on `cam_01` (Synthetic)**:
+   - *Symptom*: Live Monitor permanently displayed "Camera Initializing...".
+   - *Root Cause*: `StreamManagerWorker` crashed on startup with `RuntimeError: dictionary changed size during iteration` when iterating over `self.analytics.zones.values()` without snapshot shielding while startup scenarios dynamically populated zones.
+2. **Video Studio Frame Overflow**:
+   - *Symptom*: Videos in Video Studio exceeded the playback card frame, breaking bounds and triggering outer window scrollbars.
+   - *Root Cause*: Grid column blow-out due to missing `min-width: 0` on `.video-player-card`, lack of `position: relative` on `.scrubber-viewport`, and insufficient vertical height budget (`calc(100vh - 280px)` didn't account for header, margins, and scrubber toolbar).
+3. **Play/Pause Button State Desync on Load**:
+   - *Symptom*: Switching videos via the "Load" button left the button displaying "Pause" even though the new video was paused at frame 0.
+   - *Root Cause*: Missing explicit pause lifecycle in `loadVideoIntoPlayer()`, allowing asynchronous media promise resolution and out-of-order `play` events to re-toggle button text.
+4. **Severe Docker CPU & Network Drain (336% CPU / 128 Threads)**:
+   - *Symptom*: `intelligent-tracker-dashboard` was consuming 300%+ CPU and transferring gigabytes of background video data.
+   - *Root Cause*: Background video streams (`vid_*`) decoded 2K/4K HEVC frames at 30+ FPS non-stop even when zero clients were subscribed or viewing.
+
+### 2. Files Touched
+- `dashboard/stream_manager.py`:
+  - Protected all zone and tripwire iterations with `list(...)` snapshots.
+  - Implemented thread-safe `_subscriber_count`, `add_subscriber()`, `remove_subscriber()`, and `subscriber_count`.
+  - Added Smart Hibernation in `_worker_loop`: idle-sleeps (`time.sleep(0.1)`) when `subscriber_count == 0` after initial frame generation, instantly resuming upon viewer connection.
+- `dashboard/app.py`:
+  - Hooked `add_subscriber()` / `remove_subscriber()` into `/stream/{camera_id}` MJPEG streaming generator and `/ws/{camera_id}` WebSocket lifecycles.
+- `dashboard/static/styles.css`:
+  - Added `min-width: 0` to `.video-player-card` and `minmax(0, 1fr)` to `.scrubber-grid`.
+  - Adjusted `.scrubber-viewport` height budget to `max-height: min(calc(100vh - 350px), 62vh)` with `position: relative` and containment styling.
+  - Added styles for `.scrubber-tab-policy-group` dropdown in the controls row.
+- `dashboard/static/index.html`:
+  - Added tab-switching policy dropdown (`Auto-Pause & Resume`, `Pause & Hold`, `Pause & Reset`) to the Video Studio controls row.
+- `dashboard/static/video_scrubber.js`:
+  - Explicitly invokes `videoPlayer.pause()`, resets `videoPlayer.currentTime = 0`, and syncs `btnPlayPause.textContent = '▶ Play'` in `loadVideoIntoPlayer()`.
+  - Added `onTabLeave()` and `onTabEnter()` lifecycle methods handling user-selected tab policy.
+  - Persisted user preference in `localStorage`.
+- `dashboard/static/app.js`:
+  - Hooked `switchTab()` to trigger `VideoScrubber.onTabLeave()` / `VideoScrubber.onTabEnter()`.
+  - Automatically disconnects/restores `live-stream-img.src` when switching away from `tab-live` to trigger Docker backend Smart Hibernation.
+  - Added Page Visibility API handler (`document.addEventListener('visibilitychange')`) to pause/resume playback on window minimize/restore.
+
+### 3. Verification & Metrics
+- **Automated Unit Tests**: Ran 209 unit tests via `.venv\Scripts\python.exe -m unittest discover tests` -> **209/209 OK (100% green)**.
+- **Docker Resource Audit**: Ran `docker_audit.py` -> Container CPU dropped from **336.20% down to ~30%**; thread count dropped from **128 down to 79-81**; zero Tracebacks/Errors.
+- **Headless Chrome CDP Audit**:
+  - Ran `cdp_inspect.py` -> Verified `cam_01` synthetic feed is streaming properly (`naturalWidth: 640`, `naturalHeight: 480`).
+  - Verified Video Studio video fits completely inside `.scrubber-viewport` without overflow (`video_studio_verified.jpg`).
+  - Verified clicking "Load" switches videos, pauses at 0:00, and displays "▶ Play" (`pausedAfterLoad: true`, `textAfterLoad: '▶ Play'`).
+  - Verified all 3 tab-switching policies (`auto-resume`, `keep-paused`, `reset`) activate and persist correctly.
+- **Documentation**: Built Sphinx documentation cleanly with **0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).

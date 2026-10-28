@@ -76,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabPanes = document.querySelectorAll('.tab-pane');
 
   function switchTab(targetTabId) {
+    const previousTab = state.activeTab;
     state.activeTab = targetTabId;
     navTabs.forEach(tab => {
       const isTarget = tab.getAttribute('data-tab') === targetTabId;
@@ -85,8 +86,30 @@ document.addEventListener('DOMContentLoaded', () => {
       pane.classList.toggle('active', pane.id === targetTabId);
     });
 
-    if (targetTabId === 'tab-videos') {
-      if (window.VideoScrubber) window.VideoScrubber.loadVideosList();
+    // Resource Hibernation: Handle leaving previous tab
+    if (previousTab === 'tab-videos' && targetTabId !== 'tab-videos') {
+      if (window.VideoScrubber && typeof window.VideoScrubber.onTabLeave === 'function') {
+        window.VideoScrubber.onTabLeave();
+      }
+    } else if (previousTab === 'tab-live' && targetTabId !== 'tab-live') {
+      if (videoImg && videoImg.src) {
+        videoImg.dataset.activeStreamSrc = videoImg.src;
+        videoImg.src = '';
+      }
+    }
+
+    // Resource Activation: Handle entering target tab
+    if (targetTabId === 'tab-live') {
+      if (videoImg && videoImg.dataset.activeStreamSrc && !videoImg.src) {
+        videoImg.src = videoImg.dataset.activeStreamSrc;
+      }
+    } else if (targetTabId === 'tab-videos') {
+      if (window.VideoScrubber) {
+        window.VideoScrubber.loadVideosList();
+        if (typeof window.VideoScrubber.onTabEnter === 'function') {
+          window.VideoScrubber.onTabEnter();
+        }
+      }
     } else if (targetTabId === 'tab-gallery') {
       loadGallery();
     } else if (targetTabId === 'tab-timeline') {
@@ -105,6 +128,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.ReviewAndRSAC) window.ReviewAndRSAC.loadQueue('pending');
     }
   }
+
+  // Page Visibility API support: pause/resume when window or browser tab is hidden/restored
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (state.activeTab === 'tab-videos' && window.VideoScrubber) {
+        window.VideoScrubber.onTabLeave();
+      }
+    } else {
+      if (state.activeTab === 'tab-videos' && window.VideoScrubber) {
+        window.VideoScrubber.onTabEnter();
+      }
+    }
+  });
 
   navTabs.forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab')));
@@ -177,17 +213,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // =========================================================================
   // WebSocket Connection
-  // =========================================================================
-  function initWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/cam_01`;
+  let activeCameraId = 'cam_01';
+  let wsReconnectTimer = null;
 
-    state.ws = new WebSocket(wsUrl);
+  // =========================================================================
+  // WebSocket Connection & Telemetry Gateway
+  // =========================================================================
+  function initWebSocket(camId) {
+    if (camId) activeCameraId = camId;
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(activeCameraId)}`;
+
+    if (state.ws) {
+      state.ws.onclose = null;
+      state.ws.onerror = null;
+      try { state.ws.close(); } catch (e) {}
+    }
+
+    try {
+      state.ws = new WebSocket(wsUrl);
+    } catch (e) {
+      console.warn('WebSocket init error:', e);
+      return;
+    }
 
     state.ws.onopen = () => {
       state.wsConnected = true;
       connStatusPill.className = 'connection-status-pill online';
-      connStatusText.textContent = 'Connected';
+      connStatusText.textContent = `Connected (${activeCameraId})`;
     };
 
     state.ws.onmessage = (event) => {
@@ -203,12 +260,18 @@ document.addEventListener('DOMContentLoaded', () => {
       state.wsConnected = false;
       connStatusPill.className = 'connection-status-pill offline';
       connStatusText.textContent = 'Reconnecting...';
-      setTimeout(initWebSocket, 2000);
+      wsReconnectTimer = setTimeout(() => initWebSocket(activeCameraId), 2000);
     };
 
     state.ws.onerror = () => {
       state.ws?.close();
     };
+  }
+
+  function switchCamera(camId) {
+    if (!camId || camId === activeCameraId) return;
+    activeCameraId = camId;
+    initWebSocket(camId);
   }
 
   // =========================================================================
@@ -221,6 +284,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Header FPS
     if (data.fps !== undefined) {
       headerFps.textContent = data.fps.toFixed(1);
+    }
+
+    // Update Stream Resolution Badge if present
+    const resBadge = document.getElementById('stream-res-badge');
+    if (resBadge && data.resolution) {
+      resBadge.textContent = data.resolution;
     }
 
     // Active Tracks Count
@@ -333,6 +402,10 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.width = videoImg.clientWidth;
         canvas.height = videoImg.clientHeight;
       }
+      canvas.style.top = videoImg.offsetTop + 'px';
+      canvas.style.left = videoImg.offsetLeft + 'px';
+      canvas.style.width = videoImg.clientWidth + 'px';
+      canvas.style.height = videoImg.clientHeight + 'px';
     }
   }
 
@@ -487,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
           track_id: trackId,
           bbox: bbox,
           notes: notes,
-          camera_id: 'cam_01',
+          camera_id: activeCameraId || 'cam_01',
         }),
       });
 
@@ -851,4 +924,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize
   initWebSocket();
   window.addEventListener('resize', syncCanvasSize);
+
+  // Global interface for multi-camera orchestration
+  window.App = {
+    switchCamera: switchCamera,
+    getActiveCameraId: () => activeCameraId,
+  };
 });

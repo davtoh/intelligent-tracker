@@ -409,7 +409,8 @@ class VideoSource:
         """Worker thread that continuously polls frames, buffers them, and safely owns capture cleanup."""
         reconnect_attempts = 0
         consecutive_empty = 0
-        min_frame_time = (1.0 / self.fps_limit) if self.fps_limit else 0.0
+        effective_fps = self.fps_limit or (self.source_fps if self.source_fps > 0 else 30.0)
+        min_frame_time = (1.0 / effective_fps) if (self.is_file or self.fps_limit) else 0.0
 
         try:
             while self._running:
@@ -434,36 +435,51 @@ class VideoSource:
 
                 if not ret or frame is None:
                     if self.is_file and self.loop_video:
-                        # Rewind video file
+                        # Rewind video file seamlessly
                         self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        continue
-
-                    if self.is_webcam:
+                        ret, frame = self._cap.read()
+                        if not ret or frame is None:
+                            try:
+                                self._cap.release()
+                            except Exception:
+                                pass
+                            if self._open_capture():
+                                ret, frame = self._cap.read()
+                        if not ret or frame is None:
+                            time.sleep(0.02)
+                            continue
+                    elif self.is_webcam:
                         # Transient webcam frame miss: retry multiple times before tearing down hardware
                         consecutive_empty += 1
                         if consecutive_empty < 15:
                             time.sleep(0.02)
                             continue
 
-                    self._is_connected = False
-                    if self.auto_reconnect and not self.is_file:
-                        reconnect_attempts += 1
-                        self._reconnections += 1
-                        time.sleep(self.reconnect_delay)
-                        if self._cap:
-                            try:
-                                self._cap.release()
-                            except Exception:
-                                pass
-                            self._cap = None
-                        if sys.platform.startswith("win"):
-                            time.sleep(0.3)
-                        self._open_capture()
-                        continue
-                    else:
-                        break
+                    if not ret or frame is None:
+                        self._is_connected = False
+                        if self.auto_reconnect and not self.is_file:
+                            reconnect_attempts += 1
+                            self._reconnections += 1
+                            time.sleep(self.reconnect_delay)
+                            if self._cap:
+                                try:
+                                    self._cap.release()
+                                except Exception:
+                                    pass
+                                self._cap = None
+                            if sys.platform.startswith("win"):
+                                time.sleep(0.3)
+                            self._open_capture()
+                            continue
+                        else:
+                            break
 
                 consecutive_empty = 0
+
+                # Optional target resolution resize for oversized video files/streams
+                if self.target_width and self.target_height and frame is not None:
+                    if frame.shape[1] != self.target_width or frame.shape[0] != self.target_height:
+                        frame = cv2.resize(frame, (self.target_width, self.target_height), interpolation=cv2.INTER_AREA)
 
                 # Signal readiness on the very first frame
                 if not self._first_frame_read:

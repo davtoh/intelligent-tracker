@@ -427,6 +427,9 @@
       if (cameraSelectDropdown) {
         cameraSelectDropdown.value = cam.id;
       }
+      if (window.App && typeof window.App.switchCamera === 'function') {
+        window.App.switchCamera(cam.id);
+      }
     }
     setGridMode('1x1');
   }

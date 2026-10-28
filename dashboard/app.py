@@ -388,14 +388,18 @@ async def get_live_stream(camera_id: str):
         raise HTTPException(status_code=503, detail=f"Stream for camera '{camera_id}' not initialized")
 
     async def frame_generator():
-        while True:
-            jpeg_bytes = mgr.get_latest_frame_jpeg()
-            if jpeg_bytes:
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
-                )
-            await asyncio.sleep(0.04)  # ~25 FPS
+        mgr.add_subscriber()
+        try:
+            while True:
+                jpeg_bytes = mgr.get_latest_frame_jpeg()
+                if jpeg_bytes:
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
+                    )
+                await asyncio.sleep(0.04)  # ~25 FPS
+        finally:
+            mgr.remove_subscriber()
 
     return StreamingResponse(
         frame_generator(),
@@ -613,6 +617,67 @@ async def toggle_camera_stream(camera_id: str, enabled: Optional[bool] = None):
     return {"status": "success", "camera_id": camera_id, "enabled": new_state}
 
 
+def _probe_video_file(path: str) -> Dict[str, Any]:
+    """Inspect video file metadata and codec via ffprobe or cv2."""
+    meta = {
+        "codec": "unknown",
+        "web_compatible": False,
+        "width": 0,
+        "height": 0,
+        "fps": 0.0,
+        "duration": 0.0,
+        "frames": 0,
+    }
+    # 1. Try ffprobe for accurate codec identification (HEVC, H264, etc.)
+    try:
+        import subprocess, json
+        cmd = [
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_streams", "-show_format", path
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=3.0)
+        if res.returncode == 0:
+            data = json.loads(res.stdout)
+            for s in data.get("streams", []):
+                if s.get("codec_type") == "video":
+                    codec = s.get("codec_name", "").lower()
+                    meta["codec"] = codec
+                    meta["width"] = int(s.get("width", 0))
+                    meta["height"] = int(s.get("height", 0))
+                    meta["web_compatible"] = codec in ("h264", "avc1", "vp8", "vp9", "av1")
+                    dur = s.get("duration") or data.get("format", {}).get("duration", 0)
+                    meta["duration"] = round(float(dur), 2)
+                    r_fps = s.get("r_frame_rate", "0/1")
+                    if "/" in r_fps:
+                        num, den = r_fps.split("/")
+                        meta["fps"] = round(float(num) / float(den), 2) if float(den) > 0 else 0.0
+                    return meta
+    except Exception:
+        pass
+
+    # 2. Fallback to OpenCV VideoCapture
+    try:
+        cap = cv2.VideoCapture(path)
+        if cap.isOpened():
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = float(cap.get(cv2.CAP_PROP_FPS))
+            count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
+            tag = "".join([chr((fourcc >> 8 * i) & 0xFF) for i in range(4)]).lower()
+            cap.release()
+            meta["width"] = w
+            meta["height"] = h
+            meta["fps"] = round(fps, 2) if fps > 0 else 30.0
+            meta["frames"] = count
+            meta["duration"] = round(count / fps, 2) if (fps > 0 and count > 0) else 0.0
+            meta["codec"] = tag if tag.strip() else "unknown"
+            meta["web_compatible"] = tag in ("avc1", "h264") or path.lower().endswith(("_h264.mp4",))
+    except Exception:
+        pass
+    return meta
+
+
 # -----------------------------------------------------------------------------
 # REST API: Local Video Files & Scrubber
 # -----------------------------------------------------------------------------
@@ -625,6 +690,7 @@ async def list_videos():
             if f.lower().endswith((".mp4", ".avi", ".mkv", ".mov")):
                 full = os.path.join(VIDEOS_DIR, f)
                 stat = os.stat(full)
+                probe = _probe_video_file(full)
                 files.append({
                     "filename": f,
                     "path": full,
@@ -632,12 +698,17 @@ async def list_videos():
                     "size_mb": round(stat.st_size / (1024 * 1024), 2),
                     "modified": stat.st_mtime,
                     "video_url": f"/videos/{f}",
+                    "codec": probe.get("codec", "unknown"),
+                    "web_compatible": probe.get("web_compatible", False),
+                    "resolution": f"{probe.get('width', 0)}x{probe.get('height', 0)}" if probe.get("width") else "unknown",
+                    "duration": probe.get("duration", 0),
+                    "fps": probe.get("fps", 0),
                 })
     return files
 
 
 @app.post("/api/videos/upload")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(file: UploadFile = File(...), auto_transcode: bool = Query(False)):
     """Upload a video recording (.mp4, .avi, .mkv, .mov) into data/videos/."""
     valid_exts = (".mp4", ".avi", ".mkv", ".mov")
     ext = os.path.splitext(file.filename)[1].lower()
@@ -651,6 +722,30 @@ async def upload_video(file: UploadFile = File(...)):
         content = await file.read()
         buffer.write(content)
 
+    probe = _probe_video_file(dest_path)
+    is_web = probe.get("web_compatible", False)
+
+    if auto_transcode and not is_web:
+        base_name, _ = os.path.splitext(safe_name)
+        transcoded_name = f"{base_name}_h264.mp4"
+        transcoded_path = os.path.join(VIDEOS_DIR, transcoded_name)
+        try:
+            import subprocess
+            cmd = [
+                "ffmpeg", "-y", "-i", dest_path,
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-vf", "scale='min(1920,iw)':-2",
+                "-c:a", "aac", "-movflags", "+faststart",
+                transcoded_path
+            ]
+            res = subprocess.run(cmd, capture_output=True, timeout=120.0)
+            if res.returncode == 0:
+                safe_name = transcoded_name
+                dest_path = transcoded_path
+                probe = _probe_video_file(dest_path)
+        except Exception as e:
+            logger.warning("Auto-transcode failed: %s", e)
+
     stat = os.stat(dest_path)
     return {
         "status": "success",
@@ -659,6 +754,56 @@ async def upload_video(file: UploadFile = File(...)):
         "size_bytes": stat.st_size,
         "size_mb": round(stat.st_size / (1024 * 1024), 2),
         "video_url": f"/videos/{safe_name}",
+        "codec": probe.get("codec", "unknown"),
+        "web_compatible": probe.get("web_compatible", False),
+    }
+
+
+@app.post("/api/videos/{filename}/transcode")
+async def transcode_video(filename: str, target_resolution: Optional[str] = "1080p"):
+    """
+    Transcodes a video recording (e.g. HEVC/H.265 or AVI) to web-optimized H.264 MP4.
+    """
+    safe_name = os.path.basename(filename)
+    path = os.path.join(VIDEOS_DIR, safe_name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    base_name, _ = os.path.splitext(safe_name)
+    output_filename = f"{base_name}_h264.mp4"
+    output_path = os.path.join(VIDEOS_DIR, output_filename)
+
+    scale_filter = "scale='min(1920,iw)':-2"
+    if target_resolution == "720p":
+        scale_filter = "scale='min(1280,iw)':-2"
+
+    import subprocess
+    cmd = [
+        "ffmpeg", "-y", "-i", path,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-vf", scale_filter,
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        output_path
+    ]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300.0)
+        if proc.returncode != 0:
+            logger.error("Transcode failed for %s: %s", safe_name, proc.stderr)
+            raise HTTPException(status_code=500, detail=f"Transcoding failed: {proc.stderr[-300:]}")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Transcoding timed out on large file.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    stat = os.stat(output_path)
+    return {
+        "status": "success",
+        "original_filename": safe_name,
+        "output_filename": output_filename,
+        "video_url": f"/videos/{output_filename}",
+        "size_mb": round(stat.st_size / (1024 * 1024), 2),
     }
 
 
@@ -724,8 +869,8 @@ async def analyze_video(filename: str, sample_rate: int = 1):
     return {"status": "success", "report": report}
 
 
-@app.get("/videos/{filename}")
-async def serve_video_stream(filename: str):
+@app.api_route("/videos/{filename}", methods=["GET", "HEAD"])
+async def serve_video_stream(filename: str, request: Request):
     """Serve local video recording supporting HTML5 video scrubber seeking."""
     safe_name = os.path.basename(filename)
     path = os.path.join(VIDEOS_DIR, safe_name)

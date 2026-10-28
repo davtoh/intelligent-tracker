@@ -144,14 +144,27 @@ class TestVmsApi(unittest.TestCase):
         self.assertEqual(upload_resp.status_code, 200)
         upload_data = upload_resp.json()
         self.assertEqual(upload_data["filename"], "perimeter_test.mp4")
+        self.assertIn("web_compatible", upload_data)
 
-        # 2. List Videos
+        # 2. List Videos & Verify Codec Probing
         list_resp = self.client.get("/api/videos")
         self.assertEqual(list_resp.status_code, 200)
         videos = list_resp.json()
-        self.assertTrue(any(v["filename"] == "perimeter_test.mp4" for v in videos))
+        target_video = next((v for v in videos if v["filename"] == "perimeter_test.mp4"), None)
+        self.assertIsNotNone(target_video)
+        self.assertIn("codec", target_video)
+        self.assertIn("web_compatible", target_video)
 
-        # 3. Add Video As Active Camera
+        # 3. Verify HEAD request support for HTML5 video element preflight
+        head_resp = self.client.head("/videos/perimeter_test.mp4")
+        self.assertEqual(head_resp.status_code, 200)
+        self.assertEqual(head_resp.headers["content-type"], "video/mp4")
+
+        # 4. Transcode 404 test
+        missing_transcode = self.client.post("/api/videos/non_existent.mp4/transcode")
+        self.assertEqual(missing_transcode.status_code, 404)
+
+        # 5. Add Video As Active Camera
         add_cam_resp = self.client.post("/api/videos/perimeter_test.mp4/add_as_camera")
         self.assertEqual(add_cam_resp.status_code, 200)
         cam_id = add_cam_resp.json()["camera_id"]
@@ -160,7 +173,7 @@ class TestVmsApi(unittest.TestCase):
         # Clean up added camera
         self.pool.remove_camera(cam_id)
 
-        # 4. Delete Video
+        # 6. Delete Video
         del_resp = self.client.delete("/api/videos/perimeter_test.mp4")
         self.assertEqual(del_resp.status_code, 200)
 

@@ -70,3 +70,6 @@ crops/
 *.db
 *.sqlite3
 *.zip
+
+# Runtime dynamic camera configuration
+configs/cameras.json
