@@ -21,6 +21,7 @@
 | 7 | Multi-Camera VMS, Auto-Discovery & Video Source Manager | ✅ **COMPLETE** |
 | 8 | World Scenario Studio, Space Awareness & Homography BEV | ✅ **COMPLETE** |
 | 9 | Artifact & Face Intelligence, Active Learning & Adaptive Memory | ✅ **COMPLETE** |
+| 10 | VMS Dashboard Responsive Redesign, Ergonomics & Enterprise Hub Integration Readiness | 🟡 **PLANNED** |
 
 ---
 
@@ -547,6 +548,52 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 
 ---
 
+## 🟡 [Milestone 10] — VMS Dashboard Responsive Redesign, Ergonomics & Enterprise Hub Integration Readiness
+**Status: PLANNED (Specification & Alignment Complete)**
+
+### Objectives & Deliverables
+
+1. **10a: Standardized Responsive Dialog Architecture & Scroll Containment**
+   - Constrain `.modal-card` to `max-height: min(88dvh, 800px); display: flex; flex-direction: column`.
+   - Add `.modal-body-scroll` internal scroll container with CSS scroll chaining containment (`overscroll-behavior: contain`).
+   - Sticky `.modal-footer` guaranteeing action buttons remain visible.
+   - Refactor `#modal-camera-manager`, `#modal-universal-enrollment`, `#modal-backup-manager`, `#modal-descriptor-versions`, and `#modal-review-reassign`.
+   - Single-column responsive layout for modal grids on screens <800px.
+
+2. **10b: In-Page Modal Forms & Modern Toast System (Eliminate `prompt()` / `alert()`)**
+   - Replace sequential browser `prompt()` and `confirm()` alert chains in Scenario Studio and Review & Learn with dedicated in-page modal dialog forms:
+     - `#modal-studio-zone`: Zone name, category filter, dwell threshold, capacity limit.
+     - `#modal-studio-tripwire`: Tripwire name, bidirectional detection mode.
+     - `#modal-studio-homography`: Ground plane metric width and height (meters).
+     - `#modal-studio-transition`: Source/target cameras, zones, transit time ranges, and spatial prior boost.
+     - `#modal-quick-enroll-entity`: Entity name and category picker.
+   - Implement non-blocking toast notification system (`showToast()`) replacing all intrusive browser `alert()` popups.
+
+3. **10c: Responsive Global Navigation & Header (Desktop, Tablet, Mobile)**
+   - Add auto-scrolling horizontal navigation tab pill container with smooth snap scrolling.
+   - Off-canvas slide-out navigation drawer (`#mobile-nav-drawer`) with hamburger toggle button (`#btn-mobile-menu`) for viewports <1024px.
+   - Responsive breakpoints for all tab panes: stack sidebars and optimize media card viewports.
+
+4. **10d: Foolproof Stream Reconnection & Unified VMS Player Architecture**
+   - Fix Live Monitor image restoration bug: eliminate `img.src = ''` (which resolves to document URL), detach stream via neutral standby SVG poster, and reconnect with cache-buster `?t=${Date.now()}`.
+   - Add unified player HUD overlay for Live Monitor matching Video Studio (Live pulse badge, stream pause/resume button, snapshot, aspect ratio selector, fullscreen, and resolution/bitrate telemetry).
+
+5. **10e: Bidirectional URL Hash Routing**
+   - Lightweight client-side hash router supporting `#live`, `#videos`, `#gallery`, `#timeline`, `#analytics`, `#alerts`, `#studio`, `#journey`, `#review`.
+   - Support modal sub-routes: `#cameras`, `#enroll`, `#backup`, `#versions`.
+   - Full browser Back and Forward navigation (`popstate` and `hashchange`).
+
+6. **10f: Enterprise Hub Integration Readiness (Milestone 16d / Phase E5 Alignment)**
+   - **HMAC-SHA256 Webhook Signing:** Update `intelligent_tracker.events.WebhookDispatcher` to accept `secret_key` and compute `X-Tracker-Signature` over payload bytes, including ISO-8601 UTC timestamp and `snapshot_base64`.
+   - **HTTP Telemetry REST Endpoint:** Expose `GET /api/cameras/{camera_id}/telemetry` in `dashboard/app.py` returning active tracks, bounding boxes, and zone occupancy for central Hub HTML5 Canvas overlays.
+   - **Offline-First SQLite Cache Tables:** Add `tracker_sync_state`, `local_whitelist`, and `offline_access_queue` to `intelligent_tracker.database.TrackerDB` conforming to `INTELLIGENT_TRACKER_OFFLINE_DB_SPEC.md`.
+
+7. **10g: Automated Quality & Regression Tests**
+   - Add `tests/test_dashboard_ui.py` testing HTML structure, modal scroll containment, API responses, and static asset integrity.
+   - Run CDP layout audit via `cdp_inspect.py` in headless mode across desktop (1440x900), tablet (768x1024), and mobile (390x844) asserting `scrollWidth <= viewportWidth`.
+
+---
+
 ## Dependency Graph
 
 ```
@@ -558,7 +605,8 @@ M1 (Env & Core) ✅
                           └── M6 (Dashboard + Edge Deploy) ✅
                                 └── M7 (Multi-Camera VMS & Auto-Discovery) ✅
                                       └── M8 (World Scenario Studio & Homography BEV) ✅
-                                            └── M9 (Artifact & Face Intelligence, Active Learning & Adaptive Memory) ✅
+                                            └── M9 (Artifact & Face Intelligence, Active Learning) ✅
+                                                  └── M10 (VMS Dashboard Responsive Redesign & Hub Integration) 🟡
 ```
 
 ---

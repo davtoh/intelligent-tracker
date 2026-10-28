@@ -55,6 +55,12 @@ Documentation Contents
    artifact_and_face_intelligence
    deployment
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Enterprise Cloud Integration:
+
+   enterprise_hub_integration
+
 Indices and tables
 ==================
 

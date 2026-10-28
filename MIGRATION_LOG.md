@@ -1066,3 +1066,35 @@ During Phase 1B browser and container runtime audit, 4 interrelated operational 
   - Verified clicking "Load" switches videos, pauses at 0:00, and displays "▶ Play" (`pausedAfterLoad: true`, `textAfterLoad: '▶ Play'`).
   - Verified all 3 tab-switching policies (`auto-resume`, `keep-paused`, `reset`) activate and persist correctly.
 - **Documentation**: Built Sphinx documentation cleanly with **0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+
+---
+
+## [Milestone 10] - 2026-10-28 - VMS Dashboard Responsive Redesign, Ergonomics & Enterprise Hub Integration Readiness
+
+### 1. Objectives & Scope
+- Comprehensive empirical audit and redesign of the VMS Dashboard web application (`dashboard/static/`):
+  1. **Responsiveness & Horizontal Overflow**: Diagnose and eliminate 1729px horizontal viewport overflow on desktop/tablets/mobile; add mobile slide-out navigation drawer (<1024px) with smooth snap-scrolling tab pill bar.
+  2. **Dialog & Modal Scroll Containment**: Constrain `.modal-card` to `max-height: min(88dvh, 800px)` with internal `.modal-body-scroll` container and `overscroll-behavior: contain`. Fix form clipping in "Multi-Camera VMS & Device Auto-Discovery" dialog.
+  3. **Ergonomics & In-Page Modal Forms**: Eliminate cumbersome sequential browser `prompt()` and `confirm()` alert chains in Scenario Studio and Review & Learn, replacing them with dedicated in-page modal dialog forms (Zone, Tripwire, Homography, Spatial Transitions, Quick-Enroll) and non-blocking toast notifications (`showToast()`).
+  4. **Live Monitor Stream Reconnect**: Fix broken image bug caused by `img.src = ''` resolving to document URL; detach stream via standby SVG poster and reconnect with cache-buster `?t=${Date.now()}` on tab return.
+  5. **Unified VMS Player Architecture**: Add modern Live Player HUD matching Video Studio (live status badge, stream pause/resume button, snapshot, fullscreen, telemetry HUD).
+  6. **Bidirectional URL Hash Routing**: Client-side hash routing supporting `#live`, `#videos`, `#gallery`, `#timeline`, `#analytics`, `#alerts`, `#studio`, `#journey`, `#review`, and modal sub-routes `#cameras`, `#enroll`, `#backup`, `#versions` with full browser Back/Forward navigation (`popstate`/`hashchange`).
+  7. **Enterprise Hub Integration Alignment (Milestone 16d / Phase E5)**:
+     - Edge-to-Hub Security Webhook HMAC-SHA256 signing (`X-Tracker-Signature`).
+     - REST Telemetry snapshot endpoint `GET /api/cameras/{camera_id}/telemetry` for Hub HTML5 Canvas overlays.
+     - Offline SQLite cache schema (`tracker_sync_state`, `local_whitelist`, `offline_access_queue`) per `INTELLIGENT_TRACKER_OFFLINE_DB_SPEC.md`.
+  8. **Automated Layout & Regression Tests**: Add `tests/test_dashboard_ui.py` and automated headless Chrome CDP layout verification across desktop, tablet, and mobile presets.
+
+### 2. Files Touched / Created
+- `milestone_plan.md`: Added Milestone 10 specification, deliverable breakdown, and updated dependency graph.
+- `MIGRATION_LOG.md`: Recorded Milestone 10 architecture decisions, empirical findings, and integration alignment.
+- `documentation/enterprise_hub_integration.rst`: Authored comprehensive Sphinx documentation detailing Edge-to-Hub protocols, HMAC-SHA256 webhooks, zero-copy video streaming, telemetry endpoints, and offline cache synchronization.
+- `documentation/index.rst`: Registered `enterprise_hub_integration` in master documentation toctree.
+- `davtoh/enterprise-website` repository (`INTELLIGENT_TRACKER_INTEGRATION_PLAN.md`): Synchronized Phase E3 telemetry contract and added Phase E5 tracking Edge Node Milestone 10 alignment.
+
+### 3. State & Checkpoint
+- **Status:** Milestone 10 Alignment & Specification COMPLETE (Ready for execution).
+- **Unit Test Suite:** 209 tests passing (100% green).
+- **Sphinx Documentation:** Built successfully with **0 warnings** (`sphinx -W --keep-going documentation/ documentation/_build/html/`).
+- **Next Phase:** Execute implementation slices 1 through 5 in clean conversation context.
+
