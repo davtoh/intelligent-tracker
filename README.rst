@@ -319,27 +319,27 @@ Intelligent Tracker was initially developed to bring automated tracking, keypoin
 
 Below is an archive demonstration from the original tracking engine in action, illustrating object acquisition, trajectory vector calculation, contour hull smoothing, and boundary persistence across consecutive video frames:
 
-.. figure:: https://github.com/davtoh/intelligent-tracker/blob/master/documentation/_static/Scene1_f1.jpg
+.. figure:: https://github.com/davtoh/intelligent-tracker/blob/main/documentation/_static/Scene1_f1.jpg
     :align: center
     :scale: 25%
     :alt: Initial object acquisition and scene calibration (Frame 1)
 
-.. figure:: https://github.com/davtoh/intelligent-tracker/blob/master/documentation/_static/Scene1_f2.jpg
+.. figure:: https://github.com/davtoh/intelligent-tracker/blob/main/documentation/_static/Scene1_f2.jpg
     :align: center
     :scale: 25%
     :alt: Trajectory vector calculation and position history (Frame 2)
 
-.. figure:: https://github.com/davtoh/intelligent-tracker/blob/master/documentation/_static/Scene1_f3.jpg
+.. figure:: https://github.com/davtoh/intelligent-tracker/blob/main/documentation/_static/Scene1_f3.jpg
     :align: center
     :scale: 25%
     :alt: Centroid tracking and contour hull smoothing (Frame 3)
 
-.. figure:: https://github.com/davtoh/intelligent-tracker/blob/master/documentation/_static/Scene1_f4.jpg
+.. figure:: https://github.com/davtoh/intelligent-tracker/blob/main/documentation/_static/Scene1_f4.jpg
     :align: center
     :scale: 25%
     :alt: Multi-point tracking across scene space (Frame 4)
 
-.. figure:: https://github.com/davtoh/intelligent-tracker/blob/master/documentation/_static/Scene1_f5.jpg
+.. figure:: https://github.com/davtoh/intelligent-tracker/blob/main/documentation/_static/Scene1_f5.jpg
     :align: center
     :scale: 25%
     :alt: Persistent track state and boundary verification (Frame 5)
@@ -352,6 +352,6 @@ Contact & License
 - Project: https://github.com/davtoh/intelligent-tracker
 - License: `GPL v3 Licence`_
 
-.. _`GPL v3 Licence`: https://github.com/davtoh/intelligent-tracker/blob/master/LICENSE.rst
-.. _`OpenCV linux installation`: https://github.com/davtoh/intelligent-tracker/blob/master/install_opencv.sh
+.. _`GPL v3 Licence`: https://github.com/davtoh/intelligent-tracker/blob/main/LICENSE.rst
+.. _`OpenCV linux installation`: https://github.com/davtoh/intelligent-tracker/blob/main/install_opencv.sh
 
