@@ -579,6 +579,39 @@ async def get_camera_info(camera_id: str):
     }
 
 
+@app.get("/api/cameras/{camera_id}/telemetry")
+async def get_camera_telemetry_snapshot(camera_id: str):
+    """
+    Retrieve real-time telemetry snapshot (bounding boxes, tracking states, zones, tripwires)
+    for central Enterprise Cloud Hub canvas overlay proxying.
+    """
+    global camera_pool, stream_manager
+    mgr = None
+    if camera_pool:
+        if camera_id in camera_pool.camera_configs or camera_id in camera_pool.streams:
+            mgr = camera_pool.get_stream(camera_id)
+    if not mgr and stream_manager and stream_manager.camera_id == camera_id:
+        mgr = stream_manager
+
+    if not mgr:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
+
+    telemetry = mgr.get_latest_telemetry()
+    res_str = "640x480"
+    if mgr.video_source and hasattr(mgr.video_source, "width") and hasattr(mgr.video_source, "height"):
+        res_str = f"{mgr.video_source.width}x{mgr.video_source.height}"
+
+    return {
+        "camera_id": camera_id,
+        "status": telemetry.get("status", "online"),
+        "fps": round(float(telemetry.get("fps", 0.0)), 1),
+        "resolution": res_str,
+        "active_tracks": telemetry.get("active_tracks", []),
+        "zones": telemetry.get("zones", []),
+        "tripwires": telemetry.get("tripwires", []),
+    }
+
+
 @app.put("/api/cameras/{camera_id}")
 async def update_camera(camera_id: str, req: CameraUpdateRequest):
     """Update camera configuration dynamically without restarting server."""

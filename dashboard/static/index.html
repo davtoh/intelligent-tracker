@@ -15,6 +15,11 @@
   <!-- Header & Navigation -->
   <header class="app-header">
     <div class="header-left">
+      <button class="hamburger-btn" id="btn-mobile-menu" aria-label="Toggle navigation menu" title="Toggle Navigation Menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
       <div class="logo-group">
         <div class="logo-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -34,47 +39,49 @@
       </div>
     </div>
 
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs" role="tablist">
-      <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab">
-        <span class="tab-icon">📹</span>
-        <span>Live Monitor</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab">
-        <span class="tab-icon">📼</span>
-        <span>Video Studio</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab">
-        <span class="tab-icon">👥</span>
-        <span>Entity Gallery</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab">
-        <span class="tab-icon">⏱️</span>
-        <span>Sighting Timeline</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab">
-        <span class="tab-icon">📊</span>
-        <span>Analytics & Heatmap</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab">
-        <span class="tab-icon">🚨</span>
-        <span>Security Alerts</span>
-        <span class="badge alert-count-badge" id="header-alert-badge">0</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab">
-        <span class="tab-icon">📐</span>
-        <span>Scenario Studio</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab">
-        <span class="tab-icon">🚶</span>
-        <span>Journey Search</span>
-      </button>
-      <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab">
-        <span class="tab-icon">🧠</span>
-        <span>Review & Learn</span>
-        <span class="badge review-count-badge" id="header-review-badge" style="display:none;">0</span>
-      </button>
-    </nav>
+    <!-- Navigation Tabs Wrapper (Responsive Horizontal Auto-Scroll with Scroll Snap) -->
+    <div class="nav-tabs-wrapper" id="nav-tabs-wrapper">
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab">
+          <span class="tab-icon">📹</span>
+          <span>Live Monitor</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab">
+          <span class="tab-icon">📼</span>
+          <span>Video Studio</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab">
+          <span class="tab-icon">👥</span>
+          <span>Entity Gallery</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab">
+          <span class="tab-icon">⏱️</span>
+          <span>Sighting Timeline</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab">
+          <span class="tab-icon">📊</span>
+          <span>Analytics & Heatmap</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab">
+          <span class="tab-icon">🚨</span>
+          <span>Security Alerts</span>
+          <span class="badge alert-count-badge" id="header-alert-badge">0</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab">
+          <span class="tab-icon">📐</span>
+          <span>Scenario Studio</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab">
+          <span class="tab-icon">🚶</span>
+          <span>Journey Search</span>
+        </button>
+        <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab">
+          <span class="tab-icon">🧠</span>
+          <span>Review & Learn</span>
+          <span class="badge review-count-badge" id="header-review-badge" style="display:none;">0</span>
+        </button>
+      </nav>
+    </div>
 
     <!-- Header Telemetry Controls & VMS Actions -->
     <div class="header-right">
@@ -153,18 +160,33 @@
           <!-- Multi-Camera Grid Container (2x2, 3x3 mode) -->
           <div id="multi-grid-container" class="multi-camera-grid" style="display: none;"></div>
 
-          <!-- Video Control Bar -->
-          <div class="video-controls-bar">
-            <div class="controls-left">
-              <button class="btn btn-sm btn-primary" id="btn-quick-tag">
-                🏷️ Click-to-Tag Active Track
+          <!-- Live Player HUD Toolbar (Milestone 10) -->
+          <div class="live-player-hud glass-panel">
+            <div class="hud-left">
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-stream-pause-play" title="Pause / Resume Live MJPEG Feed">
+                <span class="hud-icon" id="stream-pause-icon">⏸️</span>
+                <span id="stream-pause-text">Pause Feed</span>
               </button>
-              <button class="btn btn-sm btn-secondary" id="btn-snapshot-save">
-                📸 Save Snapshot
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-stream-reconnect" title="Force Stream Reconnect">
+                🔄 Reconnect
               </button>
+              <span class="stream-status-badge online" id="live-stream-status-badge">
+                <span class="pulse-dot"></span> <span id="live-stream-status-text">LIVE</span>
+              </span>
             </div>
-            <div class="controls-hint">
-              💡 <em>Click any detected bounding box directly on video to tag & enroll into Re-ID database.</em>
+            <div class="hud-center">
+              <span class="stream-telemetry-text" id="stream-telemetry-hud">CAM_01 • 640x480 • 0.0 FPS</span>
+            </div>
+            <div class="hud-right">
+              <button class="btn btn-sm btn-primary hud-btn" id="btn-quick-tag" title="Click-to-Tag detected track directly on feed">
+                🏷️ Click-to-Tag
+              </button>
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-snapshot-save" title="Save Instant Evidence Snapshot">
+                📸 Snapshot
+              </button>
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-fullscreen-toggle" title="Toggle Fullscreen">
+                ⛶ Fullscreen
+              </button>
             </div>
           </div>
 
@@ -635,24 +657,26 @@
         <input type="hidden" id="tag-track-id" />
         <input type="hidden" id="tag-bbox-val" />
 
-        <div class="form-group">
-          <label for="tag-name-input">Full Name / Label *</label>
-          <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. John Doe (VIP), Guard #1" required />
-        </div>
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="tag-name-input">Full Name / Label *</label>
+            <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. John Doe (VIP), Guard #1" required />
+          </div>
 
-        <div class="form-group">
-          <label for="tag-category-select">Security Category *</label>
-          <select id="tag-category-select" class="form-input">
-            <option value="person">Standard Customer / Guest</option>
-            <option value="staff">Staff Member</option>
-            <option value="vip">VIP Guest</option>
-            <option value="restricted">Restricted / Blacklisted Entity</option>
-          </select>
-        </div>
+          <div class="form-group">
+            <label for="tag-category-select">Security Category *</label>
+            <select id="tag-category-select" class="form-input">
+              <option value="person">Standard Customer / Guest</option>
+              <option value="staff">Staff Member</option>
+              <option value="vip">VIP Guest</option>
+              <option value="restricted">Restricted / Blacklisted Entity</option>
+            </select>
+          </div>
 
-        <div class="form-group">
-          <label for="tag-notes-input">Security Notes</label>
-          <textarea id="tag-notes-input" class="form-input" rows="2" placeholder="Badge number, clearance details, or reason for restriction..."></textarea>
+          <div class="form-group">
+            <label for="tag-notes-input">Security Notes</label>
+            <textarea id="tag-notes-input" class="form-input" rows="2" placeholder="Badge number, clearance details, or reason for restriction..."></textarea>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -670,9 +694,12 @@
         <h3 id="snapshot-modal-title">📷 Visual Evidence Snapshot</h3>
         <button class="modal-close-btn" id="modal-snapshot-close">&times;</button>
       </div>
-      <div class="snapshot-modal-body">
+      <div class="modal-body-scroll snapshot-modal-body">
         <img id="snapshot-modal-img" src="" alt="Alert Snapshot" />
         <div class="snapshot-modal-meta" id="snapshot-modal-meta"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-snapshot-view').style.display='none'">Close</button>
       </div>
     </div>
   </div>
@@ -684,124 +711,125 @@
         <h3>📹 Multi-Camera VMS & Device Auto-Discovery</h3>
         <button class="modal-close-btn" id="modal-cam-close">&times;</button>
       </div>
-      <div class="modal-body-grid">
-        <!-- Left: Active Cameras & Auto-Discovery Scanner -->
-        <div class="modal-left-col">
-          <div class="section-subhead">
-            <h4>Active Camera Channels</h4>
-            <span class="badge">Hot-Swappable</span>
-          </div>
-          <div class="table-responsive" style="max-height: 220px;">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Source</th>
-                  <th>Status</th>
-                  <th>Toggle</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="active-cameras-table-body">
-                <tr><td colspan="6" class="text-center">Loading cameras...</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="section-subhead" style="margin-top: 16px;">
-            <h4>Hardware & LAN Auto-Discovery</h4>
-            <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
-          </div>
-          <div class="discovered-devices-list" id="discovered-devices-list">
-            <div class="empty-state">Click "Scan for Devices" to probe USB and ONVIF LAN cameras.</div>
-          </div>
-        </div>
-
-        <!-- Right: Add / Configure Camera Form & Connection Tester -->
-        <div class="modal-right-col">
-          <div class="section-subhead">
-            <h4>Add / Configure Camera</h4>
-          </div>
-          <form id="camera-config-form">
-            <div class="form-row">
-              <div class="form-group col-6">
-                <label for="cam-id-input">Camera ID *</label>
-                <input type="text" id="cam-id-input" class="form-input" placeholder="e.g. cam_02" required />
-              </div>
-              <div class="form-group col-6">
-                <label for="cam-name-input">Display Label *</label>
-                <input type="text" id="cam-name-input" class="form-input" placeholder="e.g. Warehouse North" required />
-              </div>
+      <div class="modal-body-scroll">
+        <div class="modal-body-grid">
+          <!-- Left: Active Cameras & Auto-Discovery Scanner -->
+          <div class="modal-left-col">
+            <div class="section-subhead">
+              <h4>Active Camera Channels</h4>
+              <span class="badge">Hot-Swappable</span>
+            </div>
+            <div class="table-responsive" style="max-height: 220px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Toggle</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="active-cameras-table-body">
+                  <tr><td colspan="6" class="text-center">Loading cameras...</td></tr>
+                </tbody>
+              </table>
             </div>
 
-            <div class="form-group">
-              <label for="cam-preset-select">Vendor RTSP Preset Builder</label>
-              <select id="cam-preset-select" class="form-input">
-                <option value="hikvision">Hikvision NVR / IP Camera</option>
-                <option value="tapo">TP-Link Tapo (C200 / C310 / C500)</option>
-                <option value="ezviz">EZVIZ Security Camera</option>
-                <option value="dahua">Dahua / Imou IP Camera</option>
-                <option value="generic">Generic RTSP / NVR Stream</option>
-              </select>
+            <div class="section-subhead" style="margin-top: 16px;">
+              <h4>Hardware & LAN Auto-Discovery</h4>
+              <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
             </div>
-
-            <div class="form-row">
-              <div class="form-group col-8">
-                <label for="cam-ip-input">Camera IP / Hostname</label>
-                <input type="text" id="cam-ip-input" class="form-input" placeholder="192.168.1.100" />
-              </div>
-              <div class="form-group col-4">
-                <label for="cam-port-input">Port</label>
-                <input type="number" id="cam-port-input" class="form-input" value="554" />
-              </div>
+            <div class="discovered-devices-list" id="discovered-devices-list">
+              <div class="empty-state">Click "Scan for Devices" to probe USB and ONVIF LAN cameras.</div>
             </div>
+          </div>
 
-            <div class="form-row">
-              <div class="form-group col-6">
-                <label for="cam-user-input">Username</label>
-                <input type="text" id="cam-user-input" class="form-input" placeholder="admin" />
-              </div>
-              <div class="form-group col-6">
-                <label for="cam-pass-input">Password / Code</label>
-                <input type="password" id="cam-pass-input" class="form-input" placeholder="Password" />
-              </div>
+          <!-- Right: Add / Configure Camera Form & Connection Tester -->
+          <div class="modal-right-col">
+            <div class="section-subhead">
+              <h4>Add / Configure Camera</h4>
             </div>
-
-            <div class="form-row">
-              <div class="form-group col-6">
-                <label for="cam-channel-input">Channel</label>
-                <input type="number" id="cam-channel-input" class="form-input" value="1" min="1" max="64" />
+            <form id="camera-config-form">
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cam-id-input">Camera ID *</label>
+                  <input type="text" id="cam-id-input" class="form-input" placeholder="e.g. cam_02" required />
+                </div>
+                <div class="form-group col-6">
+                  <label for="cam-name-input">Display Label *</label>
+                  <input type="text" id="cam-name-input" class="form-input" placeholder="e.g. Warehouse North" required />
+                </div>
               </div>
-              <div class="form-group col-6">
-                <label for="cam-stream-select">Stream Type</label>
-                <select id="cam-stream-select" class="form-input">
-                  <option value="main">Main Stream (High Def)</option>
-                  <option value="sub">Sub Stream (Low Latency)</option>
+
+              <div class="form-group">
+                <label for="cam-preset-select">Vendor RTSP Preset Builder</label>
+                <select id="cam-preset-select" class="form-input">
+                  <option value="hikvision">Hikvision NVR / IP Camera</option>
+                  <option value="tapo">TP-Link Tapo (C200 / C310 / C500)</option>
+                  <option value="ezviz">EZVIZ Security Camera</option>
+                  <option value="dahua">Dahua / Imou IP Camera</option>
+                  <option value="generic">Generic RTSP / NVR Stream</option>
                 </select>
               </div>
-            </div>
 
-            <div class="form-group">
-              <label for="cam-source-input">Resolved Stream URI / Device Source *</label>
-              <input type="text" id="cam-source-input" class="form-input" placeholder="rtsp://... or 0 for USB" required />
-            </div>
-
-            <!-- Live Snapshot Connection Preview Box -->
-            <div class="connection-test-box glass-panel">
-              <div class="test-box-header">
-                <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test Connection</button>
-                <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify source.</span>
+              <div class="form-row">
+                <div class="form-group col-8">
+                  <label for="cam-ip-input">Camera IP / Hostname</label>
+                  <input type="text" id="cam-ip-input" class="form-input" placeholder="192.168.1.100" />
+                </div>
+                <div class="form-group col-4">
+                  <label for="cam-port-input">Port</label>
+                  <input type="number" id="cam-port-input" class="form-input" value="554" />
+                </div>
               </div>
-              <img id="test-preview-img" src="" alt="Test Snapshot" style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
-            </div>
 
-            <div class="modal-footer" style="margin-top: 15px;">
-              <button type="button" class="btn btn-outline" id="modal-cam-cancel" onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
-              <button type="submit" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to VMS</button>
-            </div>
-          </form>
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cam-user-input">Username</label>
+                  <input type="text" id="cam-user-input" class="form-input" placeholder="admin" />
+                </div>
+                <div class="form-group col-6">
+                  <label for="cam-pass-input">Password / Code</label>
+                  <input type="password" id="cam-pass-input" class="form-input" placeholder="Password" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cam-channel-input">Channel</label>
+                  <input type="number" id="cam-channel-input" class="form-input" value="1" min="1" max="64" />
+                </div>
+                <div class="form-group col-6">
+                  <label for="cam-stream-select">Stream Type</label>
+                  <select id="cam-stream-select" class="form-input">
+                    <option value="main">Main Stream (High Def)</option>
+                    <option value="sub">Sub Stream (Low Latency)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cam-source-input">Resolved Stream URI / Device Source *</label>
+                <input type="text" id="cam-source-input" class="form-input" placeholder="rtsp://... or 0 for USB" required />
+              </div>
+
+              <!-- Live Snapshot Connection Preview Box -->
+              <div class="connection-test-box glass-panel">
+                <div class="test-box-header">
+                  <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test Connection</button>
+                  <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify source.</span>
+                </div>
+                <img id="test-preview-img" src="" alt="Test Snapshot" style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
+              </div>
+            </form>
+          </div>
         </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="modal-cam-cancel" onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
+        <button type="submit" form="camera-config-form" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to VMS</button>
       </div>
     </div>
   </div>
@@ -813,7 +841,7 @@
         <h3>💾 System State Persistence & Backup Migration</h3>
         <button class="modal-close-btn" id="modal-backup-close">&times;</button>
       </div>
-      <div class="backup-modal-body">
+      <div class="modal-body-scroll backup-modal-body">
         <p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;">
           Create a full portable snapshot of your entire security system including SQLite database (<code>tracker.db</code>), 
           enrolled identities, thumbnail signatures, camera topologies, and alerting rules.
@@ -837,6 +865,9 @@
           </div>
         </div>
       </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-backup-manager').style.display='none'">Close</button>
+      </div>
     </div>
   </div>
 
@@ -847,88 +878,89 @@
         <h3>✨ Universal Artifact & Face Enrollment</h3>
         <button class="modal-close-btn" id="modal-enroll-close">&times;</button>
       </div>
-      <div class="modal-body-grid">
-        <!-- Left: Interactive Freeze-Frame Canvas / Image Upload -->
-        <div class="modal-left-col">
-          <div class="section-subhead">
-            <h4>Freeze-Frame Bounding Box Selector</h4>
-            <div style="display: flex; gap: 6px;">
-              <button type="button" class="btn btn-xs btn-outline" id="btn-capture-freeze">📷 Grab Frame</button>
-              <button type="button" class="btn btn-xs btn-outline" id="btn-upload-enroll-crop">📁 Upload</button>
-              <input type="file" id="enroll-file-input" accept="image/*" style="display: none;" />
-            </div>
-          </div>
-          <div class="enroll-canvas-wrapper" style="position: relative; background: #0b0f19; border-radius: 6px; overflow: hidden; min-height: 240px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle);">
-            <canvas id="enroll-bbox-canvas" style="max-width: 100%; height: auto; cursor: crosshair; display: none;"></canvas>
-            <div id="enroll-canvas-placeholder" style="color: #64748b; font-size: 13px; text-align: center; padding: 24px;">
-              Click <strong>"Grab Frame"</strong> to freeze live camera stream and drag a bounding box around any human face, person, vehicle, or artifact.
-            </div>
-          </div>
-          <div id="enroll-crop-preview-box" style="margin-top: 10px; display: none; align-items: center; gap: 12px; background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3);">
-            <img id="enroll-crop-preview-img" src="" alt="Selected Crop" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #06b6d4;" />
-            <div style="font-size: 12px; color: #94a3b8;">
-              <span id="enroll-crop-meta" style="color: #06b6d4; font-weight: 600;">Crop Region Selected</span><br>
-              Dual-Model Biometric Extraction (YuNet ONNX Face + Deep Re-ID) will generate a versioned descriptor.
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Enrollment Details Form -->
-        <div class="modal-right-col">
-          <div class="section-subhead">
-            <h4>Entity Profile & Clearances</h4>
-          </div>
-          <form id="universal-enrollment-form">
-            <div class="form-group">
-              <label for="enroll-name-input">Entity Full Name / Artifact Label *</label>
-              <input type="text" id="enroll-name-input" class="form-input" placeholder="e.g. Dr. Jane Foster, Delivery Van #4, Security Guard Max" required />
-            </div>
-
-            <div class="form-group">
-              <label for="enroll-category-select">Semantic Category Badge *</label>
-              <select id="enroll-category-select" class="form-input">
-                <option value="person">Person</option>
-                <option value="family_car">Family Car</option>
-                <option value="delivery_truck">Delivery Truck</option>
-                <option value="cleaning_crew">Cleaning Crew</option>
-                <option value="guard_dog">Guard Dog</option>
-                <option value="pet">Household Pet</option>
-                <option value="vip">VIP Resident</option>
-                <option value="restricted">Restricted / Watchlist</option>
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group col-6">
-                <label for="enroll-role-input">Security Role / Clearance</label>
-                <input type="text" id="enroll-role-input" class="form-input" placeholder="e.g. resident, courier, maintenance" />
+      <div class="modal-body-scroll">
+        <div class="modal-body-grid">
+          <!-- Left: Interactive Freeze-Frame Canvas / Image Upload -->
+          <div class="modal-left-col">
+            <div class="section-subhead">
+              <h4>Freeze-Frame Bounding Box Selector</h4>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-xs btn-outline" id="btn-capture-freeze">📷 Grab Frame</button>
+                <button type="button" class="btn btn-xs btn-outline" id="btn-upload-enroll-crop">📁 Upload</button>
+                <input type="file" id="enroll-file-input" accept="image/*" style="display: none;" />
               </div>
-              <div class="form-group col-6">
-                <label for="enroll-camera-select">Camera Source</label>
-                <select id="enroll-camera-select" class="form-input">
-                  <option value="cam_01">cam_01</option>
+            </div>
+            <div class="enroll-canvas-wrapper" style="position: relative; background: #0b0f19; border-radius: 6px; overflow: hidden; min-height: 240px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle);">
+              <canvas id="enroll-bbox-canvas" style="max-width: 100%; height: auto; cursor: crosshair; display: none;"></canvas>
+              <div id="enroll-canvas-placeholder" style="color: #64748b; font-size: 13px; text-align: center; padding: 24px;">
+                Click <strong>"Grab Frame"</strong> to freeze live camera stream and drag a bounding box around any human face, person, vehicle, or artifact.
+              </div>
+            </div>
+            <div id="enroll-crop-preview-box" style="margin-top: 10px; display: none; align-items: center; gap: 12px; background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3);">
+              <img id="enroll-crop-preview-img" src="" alt="Selected Crop" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #06b6d4;" />
+              <div style="font-size: 12px; color: #94a3b8;">
+                <span id="enroll-crop-meta" style="color: #06b6d4; font-weight: 600;">Crop Region Selected</span><br>
+                Dual-Model Biometric Extraction (YuNet ONNX Face + Deep Re-ID) will generate a versioned descriptor.
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Enrollment Details Form -->
+          <div class="modal-right-col">
+            <div class="section-subhead">
+              <h4>Entity Profile & Clearances</h4>
+            </div>
+            <form id="universal-enrollment-form">
+              <div class="form-group">
+                <label for="enroll-name-input">Entity Full Name / Artifact Label *</label>
+                <input type="text" id="enroll-name-input" class="form-input" placeholder="e.g. Dr. Jane Foster, Delivery Van #4, Security Guard Max" required />
+              </div>
+
+              <div class="form-group">
+                <label for="enroll-category-select">Semantic Category Badge *</label>
+                <select id="enroll-category-select" class="form-input">
+                  <option value="person">Person</option>
+                  <option value="family_car">Family Car</option>
+                  <option value="delivery_truck">Delivery Truck</option>
+                  <option value="cleaning_crew">Cleaning Crew</option>
+                  <option value="guard_dog">Guard Dog</option>
+                  <option value="pet">Household Pet</option>
+                  <option value="vip">VIP Resident</option>
+                  <option value="restricted">Restricted / Watchlist</option>
                 </select>
               </div>
-            </div>
 
-            <div class="form-group">
-              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
-                <input type="checkbox" id="enroll-locked-anchor-cb" checked style="accent-color: #06b6d4;" />
-                <span><strong>Lock as Ground Truth Anchor</strong> (Protects against adaptive drift)</span>
-              </label>
-            </div>
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="enroll-role-input">Security Role / Clearance</label>
+                  <input type="text" id="enroll-role-input" class="form-input" placeholder="e.g. resident, courier, maintenance" />
+                </div>
+                <div class="form-group col-6">
+                  <label for="enroll-camera-select">Camera Source</label>
+                  <select id="enroll-camera-select" class="form-input">
+                    <option value="cam_01">cam_01</option>
+                  </select>
+                </div>
+              </div>
 
-            <div class="form-group">
-              <label for="enroll-notes-input">Notes & Access Permissions</label>
-              <textarea id="enroll-notes-input" class="form-input" rows="2" placeholder="Vehicle license plate, access schedule, or security notes..."></textarea>
-            </div>
+              <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
+                  <input type="checkbox" id="enroll-locked-anchor-cb" checked style="accent-color: #06b6d4;" />
+                  <span><strong>Lock as Ground Truth Anchor</strong> (Protects against adaptive drift)</span>
+                </label>
+              </div>
 
-            <div class="modal-footer" style="margin-top: 15px;">
-              <button type="button" class="btn btn-outline" id="modal-enroll-cancel">Cancel</button>
-              <button type="submit" class="btn btn-primary" id="btn-submit-enrollment">✨ Enroll & Lock Anchor</button>
-            </div>
-          </form>
+              <div class="form-group">
+                <label for="enroll-notes-input">Notes & Access Permissions</label>
+                <textarea id="enroll-notes-input" class="form-input" rows="2" placeholder="Vehicle license plate, access schedule, or security notes..."></textarea>
+              </div>
+            </form>
+          </div>
         </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="modal-enroll-cancel">Cancel</button>
+        <button type="submit" form="universal-enrollment-form" class="btn btn-primary" id="btn-submit-enrollment">✨ Enroll & Lock Anchor</button>
       </div>
     </div>
   </div>
@@ -940,7 +972,7 @@
         <h3 id="versions-modal-title">⏳ Descriptor Version Snapshots & Memory Rollback</h3>
         <button class="modal-close-btn" id="modal-versions-close">&times;</button>
       </div>
-      <div class="versions-modal-body" style="padding: 16px 24px;">
+      <div class="modal-body-scroll versions-modal-body" style="padding: 16px 24px;">
         <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px;">
           Chronological audit trail of adaptive visual feature descriptors. If appearance drift or misidentification occurs, 
           click <strong>"Rollback"</strong> to restore an earlier verified descriptor state.
@@ -948,6 +980,9 @@
         <div id="versions-timeline-container" class="versions-timeline-container" style="max-height: 420px; overflow-y: auto;">
           <div class="empty-state">Loading version history...</div>
         </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-descriptor-versions').style.display='none'">Close</button>
       </div>
     </div>
   </div>
@@ -961,15 +996,17 @@
       </div>
       <form id="review-reassign-form">
         <input type="hidden" id="reassign-item-id" />
-        <div class="form-group">
-          <label for="reassign-entity-select">Target Enrolled Entity *</label>
-          <select id="reassign-entity-select" class="form-input" required>
-            <option value="">Select target entity...</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="reassign-notes-input">Correction Reason / Operator Notes</label>
-          <input type="text" id="reassign-notes-input" class="form-input" placeholder="e.g. Corrected mistaken identity, appearance variation" />
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="reassign-entity-select">Target Enrolled Entity *</label>
+            <select id="reassign-entity-select" class="form-input" required>
+              <option value="">Select target entity...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="reassign-notes-input">Correction Reason / Operator Notes</label>
+            <input type="text" id="reassign-notes-input" class="form-input" placeholder="e.g. Corrected mistaken identity, appearance variation" />
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" id="modal-reassign-cancel">Cancel</button>
@@ -979,7 +1016,248 @@
     </div>
   </div>
 
-  <!-- Toast Notification Container (Milestone 9) -->
+  <!-- Modal 8: Scenario Studio Spatial Zone Builder (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-zone" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>🟢 Spatial Zone Builder</h3>
+        <button class="modal-close-btn" id="modal-zone-close">&times;</button>
+      </div>
+      <form id="studio-zone-form">
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="modal-zone-name-input">Zone Name *</label>
+            <input type="text" id="modal-zone-name-input" class="form-input" placeholder="e.g. Vault Perimeter, Door Exit" required />
+          </div>
+          <div class="form-group">
+            <label for="modal-zone-category-select">Category Filter</label>
+            <select id="modal-zone-category-select" class="form-input">
+              <option value="">All Categories (Unfiltered)</option>
+              <option value="person">Person</option>
+              <option value="vehicle">Vehicle</option>
+              <option value="staff">Staff Member</option>
+              <option value="vip">VIP Resident</option>
+              <option value="restricted">Restricted / Watchlist</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-zone-dwell-input">Dwell Threshold (s)</label>
+              <input type="number" id="modal-zone-dwell-input" class="form-input" value="5.0" min="0.5" step="0.5" />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-zone-capacity-input">Capacity Limit</label>
+              <input type="number" id="modal-zone-capacity-input" class="form-input" placeholder="0 = Unlimited" min="0" value="0" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-zone-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-zone-save">💾 Save Zone</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 9: Scenario Studio Tripwire Builder (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-tripwire" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>⚡ Directional Tripwire Builder</h3>
+        <button class="modal-close-btn" id="modal-tripwire-close">&times;</button>
+      </div>
+      <form id="studio-tripwire-form">
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="modal-tripwire-name-input">Tripwire Name *</label>
+            <input type="text" id="modal-tripwire-name-input" class="form-input" placeholder="e.g. Entrance Line, Hallway A" required />
+          </div>
+          <div class="form-group">
+            <label for="modal-tripwire-bidir-select">Detection Crossing Direction</label>
+            <select id="modal-tripwire-bidir-select" class="form-input">
+              <option value="1">Bidirectional (Detect Both IN & OUT)</option>
+              <option value="0">One-Way (Point A to Point B only)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-tripwire-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-tripwire-save">⚡ Save Tripwire</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 10: Scenario Studio Ground Plane Homography Calibration (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-homography" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>📐 Ground Plane Homography Calibration</h3>
+        <button class="modal-close-btn" id="modal-homography-close">&times;</button>
+      </div>
+      <form id="studio-homography-form">
+        <div class="modal-body-scroll">
+          <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
+            Specify real-world ground metric dimensions for the selected 4-corner quadrangle.
+          </p>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-homography-width-input">Ground Width (m) *</label>
+              <input type="number" id="modal-homography-width-input" class="form-input" value="10.0" min="0.5" step="0.1" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-homography-height-input">Ground Height (m) *</label>
+              <input type="number" id="modal-homography-height-input" class="form-input" value="10.0" min="0.5" step="0.1" required />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-homography-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-homography-save">📐 Calibrate Ground Plane</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 11: Cross-Camera Spatial Transition Link (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-transition" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>🔗 Cross-Camera Spatial Transition Link</h3>
+        <button class="modal-close-btn" id="modal-transition-close">&times;</button>
+      </div>
+      <form id="studio-transition-form">
+        <div class="modal-body-scroll">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-trans-src-cam-input">Source Camera ID *</label>
+              <input type="text" id="modal-trans-src-cam-input" class="form-input" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-trans-src-zone-input">Source Zone Name *</label>
+              <input type="text" id="modal-trans-src-zone-input" class="form-input" placeholder="e.g. Door Exit" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-trans-tgt-cam-input">Target Camera ID *</label>
+              <input type="text" id="modal-trans-tgt-cam-input" class="form-input" placeholder="e.g. cam_02" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-trans-tgt-zone-input">Target Zone Name *</label>
+              <input type="text" id="modal-trans-tgt-zone-input" class="form-input" placeholder="e.g. Door Entrance" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-trans-tmin-input">Min Transit Time (s)</label>
+              <input type="number" id="modal-trans-tmin-input" class="form-input" value="2.0" min="0.1" step="0.5" />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-trans-tmax-input">Max Transit Time (s)</label>
+              <input type="number" id="modal-trans-tmax-input" class="form-input" value="15.0" min="1.0" step="0.5" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="modal-trans-boost-input">Spatial Prior Bonus (0.1 to 0.5)</label>
+            <input type="number" id="modal-trans-boost-input" class="form-input" value="0.35" min="0.05" max="0.9" step="0.05" />
+          </div>
+          <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
+              <input type="checkbox" id="modal-trans-bidir-cb" style="accent-color: #06b6d4;" />
+              <span>Make transition link bidirectional</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-transition-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-transition-save">🔗 Create Transition Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 12: Review & Learn Quick Entity Enrollment (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-quick-enroll-entity" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>✨ Quick Entity Enrollment</h3>
+        <button class="modal-close-btn" id="modal-quick-enroll-close">&times;</button>
+      </div>
+      <form id="quick-enroll-form">
+        <input type="hidden" id="quick-enroll-item-id" />
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="quick-enroll-name-input">Full Entity Name *</label>
+            <input type="text" id="quick-enroll-name-input" class="form-input" placeholder="e.g. John Doe, Delivery Van #3" required />
+          </div>
+          <div class="form-group">
+            <label for="quick-enroll-category-select">Semantic Category</label>
+            <select id="quick-enroll-category-select" class="form-input">
+              <option value="person">Person</option>
+              <option value="staff">Staff Member</option>
+              <option value="vip">VIP Resident</option>
+              <option value="restricted">Restricted / Watchlist</option>
+              <option value="pet">Household Pet</option>
+              <option value="family_car">Family Car</option>
+              <option value="delivery_truck">Delivery Truck</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-quick-enroll-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-quick-enroll-save">✨ Enroll Entity</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Mobile Slide-out Drawer (<1024px) (Slice 2) -->
+  <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop" style="display: none;"></div>
+  <aside class="mobile-nav-drawer" id="mobile-nav-drawer" aria-hidden="true">
+    <div class="drawer-header">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+            <circle cx="12" cy="12" r="3" fill="#06b6d4"></circle>
+          </svg>
+        </div>
+        <span class="brand-title">INTELLIGENT TRACKER</span>
+      </div>
+      <button class="drawer-close-btn" id="btn-close-drawer" aria-label="Close menu">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <nav class="drawer-nav" role="tablist">
+        <button class="drawer-tab active" data-tab="tab-live"><span class="tab-icon">📹</span><span>Live Monitor</span></button>
+        <button class="drawer-tab" data-tab="tab-videos"><span class="tab-icon">📼</span><span>Video Studio</span></button>
+        <button class="drawer-tab" data-tab="tab-gallery"><span class="tab-icon">👥</span><span>Entity Gallery</span></button>
+        <button class="drawer-tab" data-tab="tab-timeline"><span class="tab-icon">⏱️</span><span>Sighting Timeline</span></button>
+        <button class="drawer-tab" data-tab="tab-analytics"><span class="tab-icon">📊</span><span>Analytics & Heatmap</span></button>
+        <button class="drawer-tab" data-tab="tab-alerts"><span class="tab-icon">🚨</span><span>Security Alerts</span><span class="badge" id="drawer-alert-badge">0</span></button>
+        <button class="drawer-tab" data-tab="tab-studio"><span class="tab-icon">📐</span><span>Scenario Studio</span></button>
+        <button class="drawer-tab" data-tab="tab-journey"><span class="tab-icon">🚶</span><span>Journey Search</span></button>
+        <button class="drawer-tab" data-tab="tab-review"><span class="tab-icon">🧠</span><span>Review & Learn</span><span class="badge" id="drawer-review-badge" style="display:none;">0</span></button>
+      </nav>
+      <div class="drawer-actions">
+        <button class="btn btn-primary btn-block" id="drawer-btn-enroll">✨ Enroll Entity</button>
+        <button class="btn btn-outline btn-block" id="drawer-btn-cameras">📹 Manage Cameras</button>
+        <button class="btn btn-outline btn-block" id="drawer-btn-backup">💾 System Backup</button>
+      </div>
+      <div class="drawer-footer">
+        <div class="telemetry-pill">
+          <span class="telemetry-label">FPS:</span>
+          <span class="telemetry-val" id="drawer-fps-val">--</span>
+        </div>
+        <div class="connection-status-pill online" id="drawer-connection-status-pill">
+          <span class="status-indicator"></span>
+          <span>Online</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Toast Notification Container (Milestone 9 & 10) -->
   <div id="toast-container" class="toast-container"></div>
 
   <!-- JavaScript Modules -->

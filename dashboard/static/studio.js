@@ -34,6 +34,14 @@
     bevCtx: null,
   };
 
+  function showToast(title, body, type = 'info') {
+    if (typeof window.showToast === 'function') {
+      window.showToast(title, body, type);
+    } else {
+      console.warn(`[${type.toUpperCase()}] ${title}: ${body}`);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Initialization
   // ---------------------------------------------------------------------------
@@ -123,7 +131,7 @@
       if (studioState.points.length >= 3) {
         openZoneModal(studioState.points);
       } else {
-        alert('A polygonal zone requires at least 3 vertices.');
+        showToast('Validation Error', 'A polygonal zone requires at least 3 vertices.', 'warning');
       }
     }
   }
@@ -262,10 +270,11 @@
       });
       if (res.ok) {
         updateStudioStatus(`Zone '${zoneData.name}' saved successfully.`);
+        if (window.showToast) window.showToast('Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'success');
         loadCameraScenario(zoneData.camera_id);
       }
     } catch (err) {
-      alert(`Error saving zone: ${err.message}`);
+      showToast('Error saving zone', err.message, 'error');
     }
   }
 
@@ -277,10 +286,11 @@
       });
       if (res.ok) {
         updateStudioStatus(`Deleted zone '${zone_name}'.`);
+        showToast('Zone Deleted', `Zone '${zone_name}' removed.`, 'info');
         loadCameraScenario(camera_id);
       }
     } catch (err) {
-      alert(`Error deleting zone: ${err.message}`);
+      showToast('Error deleting zone', err.message, 'error');
     }
   }
 
@@ -293,10 +303,11 @@
       });
       if (res.ok) {
         updateStudioStatus(`Tripwire '${tripwireData.name}' saved successfully.`);
+        showToast('Tripwire Saved', `Directional tripwire '${tripwireData.name}' saved.`, 'success');
         loadCameraScenario(tripwireData.camera_id);
       }
     } catch (err) {
-      alert(`Error saving tripwire: ${err.message}`);
+      showToast('Error saving tripwire', err.message, 'error');
     }
   }
 
@@ -308,10 +319,11 @@
       });
       if (res.ok) {
         updateStudioStatus(`Deleted tripwire '${tripwire_name}'.`);
+        showToast('Tripwire Deleted', `Tripwire '${tripwire_name}' removed.`, 'info');
         loadCameraScenario(camera_id);
       }
     } catch (err) {
-      alert(`Error deleting tripwire: ${err.message}`);
+      showToast('Error deleting tripwire', err.message, 'error');
     }
   }
 
@@ -326,10 +338,11 @@
         const result = await res.json();
         studioState.homography = result.homography;
         updateStudioStatus(`Homography calibrated for ${data.camera_id} (${data.metric_width}m x ${data.metric_height}m).`);
+        showToast('Calibration Saved', `Homography calibrated for ${data.camera_id}.`, 'success');
         renderBEVMinimap();
       }
     } catch (err) {
-      alert(`Error calibrating homography: ${err.message}`);
+      showToast('Calibration Error', err.message, 'error');
     }
   }
 
@@ -356,10 +369,11 @@
       });
       if (res.ok) {
         updateStudioStatus(`Transition link '${linkData.source_camera}[${linkData.source_zone}] -> ${linkData.target_camera}[${linkData.target_zone}]' active.`);
+        showToast('Transition Saved', 'Spatial transition link established.', 'success');
         loadTopologyLinks();
       }
     } catch (err) {
-      alert(`Error creating spatial transition: ${err.message}`);
+      showToast('Transition Error', err.message, 'error');
     }
   }
 
@@ -370,10 +384,11 @@
         method: 'DELETE',
       });
       if (res.ok) {
+        showToast('Transition Removed', `Link '${linkId}' deleted.`, 'info');
         loadTopologyLinks();
       }
     } catch (err) {
-      alert(`Error removing transition link: ${err.message}`);
+      showToast('Transition Delete Error', err.message, 'error');
     }
   }
 
@@ -720,112 +735,172 @@
     if (btnAddLink) {
       btnAddLink.addEventListener('click', openTransitionLinkModal);
     }
+
+    initStudioModals();
   }
 
-  function setStudioMode(mode) {
-    studioState.mode = mode;
-    studioState.points = [];
-    drawStudioOverlay();
+  // ---------------------------------------------------------------------------
+  // Dedicated In-Page Modal Dialog Forms (Slice 1B - No Browser Prompts)
+  // ---------------------------------------------------------------------------
+  let pendingZonePolygon = null;
+  let pendingTripwirePoints = null;
+  let pendingHomographyPoints = null;
+  let studioModalsInitialized = false;
 
-    document.querySelectorAll('.studio-tool-btn').forEach((b) => b.classList.remove('active'));
-    if (mode === 'draw_zone') document.getElementById('btn-mode-draw-zone')?.classList.add('active');
-    if (mode === 'draw_tripwire') document.getElementById('btn-mode-draw-tripwire')?.classList.add('active');
-    if (mode === 'calibrate_homography') document.getElementById('btn-mode-homography')?.classList.add('active');
+  function initStudioModals() {
+    if (studioModalsInitialized) return;
+    studioModalsInitialized = true;
 
-    const descriptions = {
-      idle: 'Click a tool to draw zones, tripwires or calibrate BEV.',
-      draw_zone: 'Click directly on video to place polygon vertices. Double click to finish.',
-      draw_tripwire: 'Click start point and end point to draw directional tripwire.',
-      calibrate_homography: 'Click 4 ground plane corners: (1) Top-Left, (2) Top-Right, (3) Bottom-Right, (4) Bottom-Left.',
+    // 1. Zone Builder Modal
+    const modalZone = document.getElementById('modal-studio-zone');
+    const formZone = document.getElementById('studio-zone-form');
+    const closeZone = () => {
+      if (modalZone) modalZone.style.display = 'none';
+      pendingZonePolygon = null;
+      setStudioMode('idle');
     };
-    updateStudioStatus(descriptions[mode] || '');
-  }
+    document.getElementById('modal-zone-close')?.addEventListener('click', closeZone);
+    document.getElementById('modal-zone-cancel')?.addEventListener('click', closeZone);
+    if (formZone) {
+      formZone.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!pendingZonePolygon) return closeZone();
+        const name = (document.getElementById('modal-zone-name-input')?.value || '').trim();
+        const cat = (document.getElementById('modal-zone-category-select')?.value || '').trim();
+        const dwell = parseFloat(document.getElementById('modal-zone-dwell-input')?.value || '5.0') || 5.0;
+        const capVal = parseInt(document.getElementById('modal-zone-capacity-input')?.value || '0', 10);
+        const capacity = capVal > 0 ? capVal : null;
 
-  function updateStudioStatus(text) {
-    const el = document.getElementById('studio-status-banner');
-    if (el) el.textContent = text;
+        saveZone({
+          camera_id: studioState.activeCamera,
+          name: name,
+          polygon: pendingZonePolygon,
+          category_filter: cat,
+          dwell_threshold: dwell,
+          capacity_limit: capacity,
+          color: [0, 200, 100],
+        });
+        closeZone();
+      });
+    }
+
+    // 2. Tripwire Builder Modal
+    const modalTripwire = document.getElementById('modal-studio-tripwire');
+    const formTripwire = document.getElementById('studio-tripwire-form');
+    const closeTripwire = () => {
+      if (modalTripwire) modalTripwire.style.display = 'none';
+      pendingTripwirePoints = null;
+      setStudioMode('idle');
+    };
+    document.getElementById('modal-tripwire-close')?.addEventListener('click', closeTripwire);
+    document.getElementById('modal-tripwire-cancel')?.addEventListener('click', closeTripwire);
+    if (formTripwire) {
+      formTripwire.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!pendingTripwirePoints) return closeTripwire();
+        const name = (document.getElementById('modal-tripwire-name-input')?.value || '').trim();
+        const bidir = document.getElementById('modal-tripwire-bidir-select')?.value === '1';
+
+        saveTripwire({
+          camera_id: studioState.activeCamera,
+          name: name,
+          line_segment: pendingTripwirePoints,
+          bidirectional: bidir,
+          color: [0, 255, 255],
+        });
+        closeTripwire();
+      });
+    }
+
+    // 3. Homography Calibration Modal
+    const modalHomography = document.getElementById('modal-studio-homography');
+    const formHomography = document.getElementById('studio-homography-form');
+    const closeHomography = () => {
+      if (modalHomography) modalHomography.style.display = 'none';
+      pendingHomographyPoints = null;
+      setStudioMode('idle');
+    };
+    document.getElementById('modal-homography-close')?.addEventListener('click', closeHomography);
+    document.getElementById('modal-homography-cancel')?.addEventListener('click', closeHomography);
+    if (formHomography) {
+      formHomography.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!pendingHomographyPoints) return closeHomography();
+        const w = parseFloat(document.getElementById('modal-homography-width-input')?.value || '10.0') || 10.0;
+        const h = parseFloat(document.getElementById('modal-homography-height-input')?.value || '10.0') || 10.0;
+
+        saveHomographyCalibration({
+          camera_id: studioState.activeCamera,
+          src_points: pendingHomographyPoints,
+          metric_width: w,
+          metric_height: h,
+        });
+        closeHomography();
+      });
+    }
+
+    // 4. Spatial Transition Modal
+    const modalTransition = document.getElementById('modal-studio-transition');
+    const formTransition = document.getElementById('studio-transition-form');
+    const closeTransition = () => {
+      if (modalTransition) modalTransition.style.display = 'none';
+    };
+    document.getElementById('modal-transition-close')?.addEventListener('click', closeTransition);
+    document.getElementById('modal-transition-cancel')?.addEventListener('click', closeTransition);
+    if (formTransition) {
+      formTransition.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const srcCam = (document.getElementById('modal-trans-src-cam-input')?.value || '').trim();
+        const srcZone = (document.getElementById('modal-trans-src-zone-input')?.value || '').trim();
+        const tgtCam = (document.getElementById('modal-trans-tgt-cam-input')?.value || '').trim();
+        const tgtZone = (document.getElementById('modal-trans-tgt-zone-input')?.value || '').trim();
+        const tMin = parseFloat(document.getElementById('modal-trans-tmin-input')?.value || '2.0') || 2.0;
+        const tMax = parseFloat(document.getElementById('modal-trans-tmax-input')?.value || '15.0') || 15.0;
+        const boost = parseFloat(document.getElementById('modal-trans-boost-input')?.value || '0.35') || 0.35;
+        const bidir = !!document.getElementById('modal-trans-bidir-cb')?.checked;
+
+        saveTopologyLink({
+          source_camera: srcCam,
+          source_zone: srcZone,
+          target_camera: tgtCam,
+          target_zone: tgtZone,
+          t_min: tMin,
+          t_max: tMax,
+          prior_boost: boost,
+          bidirectional: bidir,
+        });
+        closeTransition();
+      });
+    }
   }
 
   function openZoneModal(polygon) {
-    const name = prompt('Enter Zone Name (e.g., Vault Perimeter, Door Exit):', `zone_${Date.now() % 1000}`);
-    if (!name) {
-      setStudioMode('idle');
-      return;
-    }
-    const cat = prompt('Category Filter (leave blank for all, or restricted, staff, vip):', '');
-    const dwell = parseFloat(prompt('Dwell Threshold in seconds (default: 5.0):', '5.0')) || 5.0;
-    const capacity = parseInt(prompt('Max Capacity limit (optional, 0 for none):', '0'), 10) || null;
-
-    saveZone({
-      camera_id: studioState.activeCamera,
-      name: name.trim(),
-      polygon: polygon,
-      category_filter: (cat || '').trim(),
-      dwell_threshold: dwell,
-      capacity_limit: capacity,
-      color: [0, 200, 100],
-    });
-
-    setStudioMode('idle');
+    pendingZonePolygon = polygon;
+    const nameInput = document.getElementById('modal-zone-name-input');
+    if (nameInput) nameInput.value = `zone_${Date.now() % 1000}`;
+    const modal = document.getElementById('modal-studio-zone');
+    if (modal) modal.style.display = 'flex';
   }
 
   function openTripwireModal(points) {
-    const name = prompt('Enter Tripwire Name (e.g., Entrance Line, Hallway A):', `tw_${Date.now() % 1000}`);
-    if (!name) {
-      setStudioMode('idle');
-      return;
-    }
-    const bidir = confirm('Is crossing detection bidirectional (IN & OUT)? OK=Yes, Cancel=One-way');
-
-    saveTripwire({
-      camera_id: studioState.activeCamera,
-      name: name.trim(),
-      line_segment: points,
-      bidirectional: bidir,
-      color: [0, 255, 255],
-    });
-
-    setStudioMode('idle');
+    pendingTripwirePoints = points;
+    const nameInput = document.getElementById('modal-tripwire-name-input');
+    if (nameInput) nameInput.value = `tw_${Date.now() % 1000}`;
+    const modal = document.getElementById('modal-studio-tripwire');
+    if (modal) modal.style.display = 'flex';
   }
 
   function openHomographyModal(points) {
-    const w = parseFloat(prompt('Enter real-world ground plane WIDTH in meters:', '10.0')) || 10.0;
-    const h = parseFloat(prompt('Enter real-world ground plane HEIGHT in meters:', '10.0')) || 10.0;
-
-    saveHomographyCalibration({
-      camera_id: studioState.activeCamera,
-      src_points: points,
-      metric_width: w,
-      metric_height: h,
-    });
-
-    setStudioMode('idle');
+    pendingHomographyPoints = points;
+    const modal = document.getElementById('modal-studio-homography');
+    if (modal) modal.style.display = 'flex';
   }
 
   function openTransitionLinkModal() {
-    const srcCam = prompt('Source Camera ID (e.g. cam_01):', studioState.activeCamera);
-    if (!srcCam) return;
-    const srcZone = prompt('Source Zone Name (e.g. Door Exit):', 'Door Exit');
-    if (!srcZone) return;
-    const tgtCam = prompt('Target Camera ID (e.g. cam_02):', 'cam_02');
-    if (!tgtCam) return;
-    const tgtZone = prompt('Target Zone Name (e.g. Door Entrance):', 'Door Entrance');
-    if (!tgtZone) return;
-    const tMin = parseFloat(prompt('Minimum transit time (seconds, e.g. 2.0):', '2.0')) || 2.0;
-    const tMax = parseFloat(prompt('Maximum transit time (seconds, e.g. 15.0):', '15.0')) || 15.0;
-    const boost = parseFloat(prompt('Spatial Prior score bonus (0.1 to 0.5, e.g. 0.35):', '0.35')) || 0.35;
-    const bidir = confirm('Make transition bidirectional?');
-
-    saveTopologyLink({
-      source_camera: srcCam.trim(),
-      source_zone: srcZone.trim(),
-      target_camera: tgtCam.trim(),
-      target_zone: tgtZone.trim(),
-      t_min: tMin,
-      t_max: tMax,
-      prior_boost: boost,
-      bidirectional: bidir,
-    });
+    const srcCamInput = document.getElementById('modal-trans-src-cam-input');
+    if (srcCamInput) srcCamInput.value = studioState.activeCamera;
+    const modal = document.getElementById('modal-studio-transition');
+    if (modal) modal.style.display = 'flex';
   }
 
   function renderScenarioListUI() {

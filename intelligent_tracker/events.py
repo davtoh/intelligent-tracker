@@ -26,9 +26,11 @@ import uuid
 import base64
 import logging
 import threading
+import hmac
+import hashlib
 from collections import deque
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timezone
 from typing import List, Dict, Tuple, Optional, Any, Union, Callable, Set, Type
 
 import cv2
@@ -473,6 +475,7 @@ class WebhookDispatcher:
         self,
         url: str,
         auth_header: Optional[Union[str, Dict[str, str]]] = None,
+        secret_key: Optional[str] = None,
         timeout: float = 5.0,
         max_retries: int = 3,
         backoff_factor: float = 0.5,
@@ -483,6 +486,7 @@ class WebhookDispatcher:
     ):
         self.url = str(url)
         self.auth_header = auth_header
+        self.secret_key = str(secret_key) if secret_key else None
         self.timeout = float(timeout)
         self.max_retries = max(1, int(max_retries))
         self.backoff_factor = float(backoff_factor)
@@ -499,13 +503,23 @@ class WebhookDispatcher:
         self.history: List[Dict[str, Any]] = []
 
     def build_payload(self, event: BaseEvent) -> Dict[str, Any]:
-        """Construct standard JSON webhook payload."""
+        """Construct standard JSON webhook payload with ISO-8601 UTC timestamp."""
+        ts = event.timestamp
+        if isinstance(ts, (int, float)):
+            try:
+                iso_ts = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                iso_ts = str(ts)
+        else:
+            iso_ts = str(ts)
+
         base_dict = event.to_dict(include_snapshot=False)
         payload = {
             "camera_id": event.camera_id,
             "event_id": event.event_id,
             "event_type": event.event_type,
-            "timestamp": event.timestamp,
+            "timestamp": iso_ts,
+            "timestamp_epoch": event.timestamp,
             "zone_id": getattr(event, "zone_id", None),
             "entity_id": getattr(event, "entity_id", None),
             "entity_name": getattr(event, "entity_name", getattr(event, "name", None)),
@@ -514,16 +528,21 @@ class WebhookDispatcher:
         }
         if self.include_snapshot and event.snapshot_base64:
             payload["snapshot"] = event.snapshot_base64
+            payload["snapshot_base64"] = event.snapshot_base64
 
         return payload
 
-    def _prepare_headers(self) -> Dict[str, str]:
-        """Prepare request headers including authentication."""
+    def _prepare_headers(self, json_data: Optional[bytes] = None) -> Dict[str, str]:
+        """Prepare request headers including authentication and HMAC-SHA256 signature."""
         h = {
             "Content-Type": "application/json",
             "User-Agent": "IntelligentTracker-Webhook/1.0",
         }
         h.update(self.custom_headers)
+
+        if self.secret_key and json_data is not None:
+            sig = hmac.new(self.secret_key.encode("utf-8"), json_data, hashlib.sha256).hexdigest()
+            h["X-Tracker-Signature"] = sig
 
         if self.auth_header:
             if isinstance(self.auth_header, dict):
@@ -546,8 +565,8 @@ class WebhookDispatcher:
             return False
 
         payload = self.build_payload(event)
-        headers = self._prepare_headers()
         json_data = json.dumps(payload).encode("utf-8")
+        headers = self._prepare_headers(json_data=json_data)
 
         for attempt in range(1, self.max_retries + 1):
             try:

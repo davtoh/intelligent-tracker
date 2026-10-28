@@ -70,18 +70,193 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalSnapshotClose = document.getElementById('modal-snapshot-close');
 
   // =========================================================================
-  // Tab Navigation
+  // Modern Toast Notification Dispatcher (Milestone 10)
+  // =========================================================================
+  function showToast(titleOrMsg, bodyOrType = 'info', type = 'info', actionText = null, onAction = null) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    let title = 'NOTIFICATION';
+    let body = '';
+    let toastType = 'info';
+
+    const validTypes = ['info', 'success', 'warning', 'error', 'alert', 'review'];
+    if (typeof bodyOrType === 'string' && validTypes.includes(bodyOrType.toLowerCase())) {
+      toastType = bodyOrType.toLowerCase();
+      body = String(titleOrMsg || '');
+      title = toastType === 'success' ? 'Success' : (toastType === 'error' ? 'Error' : 'Notification');
+    } else if (bodyOrType !== undefined && bodyOrType !== null) {
+      title = String(titleOrMsg || 'Notification');
+      body = String(bodyOrType || '');
+      toastType = (type && validTypes.includes(type.toLowerCase())) ? type.toLowerCase() : 'info';
+    } else {
+      body = String(titleOrMsg || '');
+      toastType = 'info';
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast-message ${toastType}`;
+
+    let actionHtml = '';
+    if (actionText && typeof onAction === 'function') {
+      actionHtml = `<div class="toast-action">${escapeHtml(actionText)}</div>`;
+    }
+
+    toast.innerHTML = `
+      <div class="toast-header">
+        <span class="toast-title">${escapeHtml(title)}</span>
+        <button class="toast-close" aria-label="Close notification">&times;</button>
+      </div>
+      <div class="toast-body">${escapeHtml(body)}</div>
+      ${actionHtml}
+    `;
+
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+      toast.remove();
+    });
+
+    if (actionText && typeof onAction === 'function') {
+      toast.querySelector('.toast-action').addEventListener('click', () => {
+        onAction();
+        toast.remove();
+      });
+    }
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+      if (toast.parentElement) toast.remove();
+    }, 4500);
+  }
+
+  window.showToast = showToast;
+
+  // =========================================================================
+  // Stream Lifecycle & Standby Poster Manager (Milestone 10)
+  // =========================================================================
+  const STANDBY_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="640" height="480" fill="%230b0f19"/><circle cx="320" cy="240" r="48" fill="%231e293b"/><path d="M305 215 L345 240 L305 265 Z" fill="%2306b6d4"/><text x="320" y="320" font-family="sans-serif" font-size="14" fill="%2364748b" text-anchor="middle">Live Stream Paused / Standby</text></svg>';
+
+  let streamPaused = false;
+  let streamRetryTimer = null;
+
+  function setStreamStatus(status) {
+    const badge = document.getElementById('live-stream-status-badge');
+    const badgeText = document.getElementById('live-stream-status-text');
+    if (!badge || !badgeText) return;
+    badge.className = `stream-status-badge ${status}`;
+    if (status === 'online') {
+      badgeText.textContent = 'LIVE';
+    } else if (status === 'paused') {
+      badgeText.textContent = 'PAUSED';
+    } else if (status === 'reconnecting') {
+      badgeText.textContent = 'RECONNECTING...';
+    }
+  }
+
+  function detachLiveStream() {
+    if (!videoImg) return;
+    if (videoImg.src && !videoImg.src.startsWith('data:image/svg+xml')) {
+      videoImg.dataset.activeStreamSrc = videoImg.src.split('?')[0];
+    }
+    videoImg.src = STANDBY_POSTER_SVG;
+    setStreamStatus('paused');
+  }
+
+  function attachLiveStream(forceReconnect = false) {
+    if (!videoImg || streamPaused) return;
+    if (streamRetryTimer) {
+      clearTimeout(streamRetryTimer);
+      streamRetryTimer = null;
+    }
+    const baseSrc = videoImg.dataset.activeStreamSrc || `/stream/${activeCameraId || 'cam_01'}`;
+    const cleanBase = baseSrc.split('?')[0];
+    videoImg.src = `${cleanBase}?t=${Date.now()}`;
+    setStreamStatus('online');
+  }
+
+  if (videoImg) {
+    videoImg.onerror = () => {
+      if (state.activeTab === 'tab-live' && !streamPaused) {
+        setStreamStatus('reconnecting');
+        if (!streamRetryTimer) {
+          streamRetryTimer = setTimeout(() => {
+            streamRetryTimer = null;
+            attachLiveStream(true);
+          }, 2000);
+        }
+      }
+    };
+  }
+
+  // Live Player HUD Toolbar Buttons
+  const btnStreamPause = document.getElementById('btn-stream-pause-play');
+  const streamPauseIcon = document.getElementById('stream-pause-icon');
+  const streamPauseText = document.getElementById('stream-pause-text');
+  const btnStreamReconnect = document.getElementById('btn-stream-reconnect');
+  const btnFullscreenToggle = document.getElementById('btn-fullscreen-toggle');
+
+  if (btnStreamPause) {
+    btnStreamPause.addEventListener('click', () => {
+      streamPaused = !streamPaused;
+      if (streamPaused) {
+        detachLiveStream();
+        if (streamPauseIcon) streamPauseIcon.textContent = '▶️';
+        if (streamPauseText) streamPauseText.textContent = 'Resume Feed';
+        showToast('Stream Paused', 'Live stream paused on demand.', 'info');
+      } else {
+        if (streamPauseIcon) streamPauseIcon.textContent = '⏸️';
+        if (streamPauseText) streamPauseText.textContent = 'Pause Feed';
+        attachLiveStream(true);
+        showToast('Stream Resumed', 'Live stream reconnected.', 'success');
+      }
+    });
+  }
+
+  if (btnStreamReconnect) {
+    btnStreamReconnect.addEventListener('click', () => {
+      streamPaused = false;
+      if (streamPauseIcon) streamPauseIcon.textContent = '⏸️';
+      if (streamPauseText) streamPauseText.textContent = 'Pause Feed';
+      attachLiveStream(true);
+      showToast('Reconnecting...', 'Refreshed stream connection with server.', 'info');
+    });
+  }
+
+  if (btnFullscreenToggle) {
+    btnFullscreenToggle.addEventListener('click', () => {
+      const container = document.getElementById('video-wrapper');
+      if (!document.fullscreenElement) {
+        (container || videoImg).requestFullscreen?.();
+      } else {
+        document.exitFullscreen?.();
+      }
+    });
+  }
+
+  // =========================================================================
+  // Tab Navigation & Hash Routing
   // =========================================================================
   const navTabs = document.querySelectorAll('.nav-tab');
+  const drawerTabs = document.querySelectorAll('.drawer-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
 
-  function switchTab(targetTabId) {
+  function switchTab(targetTabId, updateHash = true) {
     const previousTab = state.activeTab;
     state.activeTab = targetTabId;
+
     navTabs.forEach(tab => {
       const isTarget = tab.getAttribute('data-tab') === targetTabId;
       tab.classList.toggle('active', isTarget);
+      if (isTarget) {
+        // Auto-scroll active tab into view in scrollable nav bar
+        tab.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
     });
+
+    drawerTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.getAttribute('data-tab') === targetTabId);
+    });
+
     tabPanes.forEach(pane => {
       pane.classList.toggle('active', pane.id === targetTabId);
     });
@@ -92,16 +267,13 @@ document.addEventListener('DOMContentLoaded', () => {
         window.VideoScrubber.onTabLeave();
       }
     } else if (previousTab === 'tab-live' && targetTabId !== 'tab-live') {
-      if (videoImg && videoImg.src) {
-        videoImg.dataset.activeStreamSrc = videoImg.src;
-        videoImg.src = '';
-      }
+      detachLiveStream();
     }
 
     // Resource Activation: Handle entering target tab
     if (targetTabId === 'tab-live') {
-      if (videoImg && videoImg.dataset.activeStreamSrc && !videoImg.src) {
-        videoImg.src = videoImg.dataset.activeStreamSrc;
+      if (!streamPaused) {
+        attachLiveStream(true);
       }
     } else if (targetTabId === 'tab-videos') {
       if (window.VideoScrubber) {
@@ -122,22 +294,83 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (targetTabId === 'tab-studio') {
       if (window.Studio) window.Studio.renderBEV();
     } else if (targetTabId === 'tab-journey') {
-      // Focus search input
       document.getElementById('journey-search-query')?.focus();
     } else if (targetTabId === 'tab-review') {
       if (window.ReviewAndRSAC) window.ReviewAndRSAC.loadQueue('pending');
     }
+
+    if (updateHash) {
+      const cleanHash = '#' + targetTabId.replace('tab-', '');
+      if (window.location.hash !== cleanHash) {
+        history.pushState(null, '', cleanHash);
+      }
+    }
   }
+
+  // Mobile Slide-out Drawer Controls
+  const btnMobileMenu = document.getElementById('btn-mobile-menu');
+  const btnCloseDrawer = document.getElementById('btn-close-drawer');
+  const drawer = document.getElementById('mobile-nav-drawer');
+  const drawerBackdrop = document.getElementById('mobile-drawer-backdrop');
+
+  function openDrawer() {
+    if (drawer) drawer.classList.add('open');
+    if (drawerBackdrop) drawerBackdrop.style.display = 'block';
+  }
+
+  function closeDrawer() {
+    if (drawer) drawer.classList.remove('open');
+    if (drawerBackdrop) drawerBackdrop.style.display = 'none';
+  }
+
+  if (btnMobileMenu) btnMobileMenu.addEventListener('click', openDrawer);
+  if (btnCloseDrawer) btnCloseDrawer.addEventListener('click', closeDrawer);
+  if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeDrawer);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeDrawer();
+      document.querySelectorAll('.modal-backdrop').forEach(m => m.style.display = 'none');
+    }
+  });
+
+  drawerTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      switchTab(tab.getAttribute('data-tab'));
+      closeDrawer();
+    });
+  });
+
+  // Drawer Action Buttons
+  document.getElementById('drawer-btn-enroll')?.addEventListener('click', () => {
+    closeDrawer();
+    const m = document.getElementById('modal-universal-enrollment');
+    if (m) m.style.display = 'flex';
+  });
+  document.getElementById('drawer-btn-cameras')?.addEventListener('click', () => {
+    closeDrawer();
+    const m = document.getElementById('modal-camera-manager');
+    if (m) m.style.display = 'flex';
+  });
+  document.getElementById('drawer-btn-backup')?.addEventListener('click', () => {
+    closeDrawer();
+    const m = document.getElementById('modal-backup-manager');
+    if (m) m.style.display = 'flex';
+  });
 
   // Page Visibility API support: pause/resume when window or browser tab is hidden/restored
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (state.activeTab === 'tab-videos' && window.VideoScrubber) {
         window.VideoScrubber.onTabLeave();
+      } else if (state.activeTab === 'tab-live') {
+        detachLiveStream();
       }
     } else {
       if (state.activeTab === 'tab-videos' && window.VideoScrubber) {
         window.VideoScrubber.onTabEnter();
+      } else if (state.activeTab === 'tab-live') {
+        if (!streamPaused) attachLiveStream(true);
       }
     }
   });
@@ -145,6 +378,39 @@ document.addEventListener('DOMContentLoaded', () => {
   navTabs.forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab')));
   });
+
+  // Bidirectional URL Hash Routing
+  function handleHashRoute() {
+    const raw = (window.location.hash || '').replace('#', '').trim().toLowerCase();
+    if (!raw) return;
+
+    if (raw === 'cameras') {
+      const m = document.getElementById('modal-camera-manager');
+      if (m) m.style.display = 'flex';
+      return;
+    } else if (raw === 'enroll') {
+      const m = document.getElementById('modal-universal-enrollment');
+      if (m) m.style.display = 'flex';
+      return;
+    } else if (raw === 'backup') {
+      const m = document.getElementById('modal-backup-manager');
+      if (m) m.style.display = 'flex';
+      return;
+    } else if (raw === 'versions') {
+      const m = document.getElementById('modal-descriptor-versions');
+      if (m) m.style.display = 'flex';
+      return;
+    }
+
+    const tabId = 'tab-' + raw;
+    const tabEl = document.getElementById(tabId);
+    if (tabEl) {
+      switchTab(tabId, false);
+    }
+  }
+
+  window.addEventListener('hashchange', handleHashRoute);
+  window.addEventListener('popstate', handleHashRoute);
 
   document.getElementById('view-all-alerts-link')?.addEventListener('click', () => {
     switchTab('tab-alerts');
@@ -195,8 +461,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (resp.ok) {
           const res = await resp.json();
           backupImportStatus.innerHTML = `<span style="color:#10b981;">✓ Successfully restored ${res.details.restored_files_count} files!</span>`;
+          showToast('Restore Complete', 'System snapshot restored successfully! Reloading...', 'success');
           setTimeout(() => {
-            alert('System snapshot restored successfully! Reloading dashboard...');
             window.location.reload();
           }, 1200);
         } else {
@@ -570,10 +836,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       closeTagModal();
-      // Show notification toast
-      alert(`Successfully enrolled "${name}" as ${category.toUpperCase()} into the Re-ID Gallery!`);
+      showToast('Entity Enrolled', `Successfully enrolled "${name}" as ${category.toUpperCase()} into Re-ID Gallery!`, 'success');
     } catch (err) {
-      alert(`Error enrolling entity: ${err.message}`);
+      showToast('Enrollment Failed', err.message, 'error');
     }
   });
 
@@ -924,6 +1189,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize
   initWebSocket();
   window.addEventListener('resize', syncCanvasSize);
+  if (window.location.hash) {
+    handleHashRoute();
+  }
 
   // Global interface for multi-camera orchestration
   window.App = {

@@ -41,6 +41,9 @@
 
   // Toast Notification System
   function showToast(title, body, type = 'info', actionText = null, onAction = null) {
+    if (window.showToast) {
+      return window.showToast(title, body, type, actionText, onAction);
+    }
     const container = document.getElementById('toast-container');
     if (!container) return;
 
@@ -223,7 +226,7 @@
       showToast('Candidate Confirmed', `Locked as ground truth anchor for ${data.entity_name || 'entity'}.`, 'success');
       loadReviewQueue(state.currentReviewStatus);
     } catch (err) {
-      alert(`Error confirming candidate: ${err.message}`);
+      showToast('Confirmation Error', err.message, 'error');
     }
   }
 
@@ -238,31 +241,68 @@
       showToast('Candidate Dismissed', 'Review item dismissed without modifying gallery.', 'info');
       loadReviewQueue(state.currentReviewStatus);
     } catch (err) {
-      alert(`Error dismissing candidate: ${err.message}`);
+      showToast('Dismissal Error', err.message, 'error');
     }
   }
 
-  async function enrollNewFromReview(itemId) {
-    const name = prompt('Enter full name for new entity:');
-    if (!name || !name.trim()) return;
+  function enrollNewFromReview(itemId) {
+    const modal = document.getElementById('modal-quick-enroll-entity');
+    const inputId = document.getElementById('quick-enroll-item-id');
+    const inputName = document.getElementById('quick-enroll-name-input');
+    if (inputId) inputId.value = itemId;
+    if (inputName) {
+      inputName.value = '';
+      setTimeout(() => inputName.focus(), 60);
+    }
+    if (modal) modal.style.display = 'flex';
+  }
 
-    try {
-      const res = await fetch(`/api/active-learning/${itemId}/enroll-new`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          category: 'person',
-          security_role: 'resident',
-          notes: 'Enrolled via Active Learning Review Queue',
-        }),
+  function initQuickEnrollModal() {
+    const modal = document.getElementById('modal-quick-enroll-entity');
+    const form = document.getElementById('quick-enroll-form');
+    const closeBtn = document.getElementById('modal-quick-enroll-close');
+    const cancelBtn = document.getElementById('modal-quick-enroll-cancel');
+
+    const closeModal = () => {
+      if (modal) modal.style.display = 'none';
+      if (form) form.reset();
+    };
+
+    closeBtn?.addEventListener('click', closeModal);
+    cancelBtn?.addEventListener('click', closeModal);
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const itemId = document.getElementById('quick-enroll-item-id')?.value;
+        const name = (document.getElementById('quick-enroll-name-input')?.value || '').trim();
+        const category = document.getElementById('quick-enroll-category-select')?.value || 'person';
+
+        if (!name) {
+          showToast('Validation Required', 'Please enter a name for the entity.', 'warning');
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/active-learning/${itemId}/enroll-new`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: name,
+              category: category,
+              security_role: 'resident',
+              notes: 'Enrolled via Active Learning Review Queue',
+            }),
+          });
+          if (!res.ok) throw new Error('Enroll new failed');
+          const data = await res.json();
+          closeModal();
+          showToast('Entity Enrolled', `Registered "${name}" (ID #${data.entity_id}) with initial signature locked!`, 'success');
+          loadReviewQueue(state.currentReviewStatus);
+        } catch (err) {
+          showToast('Enrollment Error', err.message, 'error');
+        }
       });
-      if (!res.ok) throw new Error('Enroll new failed');
-      const data = await res.json();
-      showToast('Entity Enrolled', `Registered "${name}" (ID #${data.entity_id}) with initial signature locked!`, 'success');
-      loadReviewQueue(state.currentReviewStatus);
-    } catch (err) {
-      alert(`Error enrolling new entity: ${err.message}`);
     }
   }
 
@@ -312,7 +352,7 @@
         const notes = document.getElementById('reassign-notes-input').value;
 
         if (!targetEntityId) {
-          alert('Please select a target entity');
+          showToast('Selection Required', 'Please select a target entity.', 'warning');
           return;
         }
 
@@ -330,7 +370,7 @@
           showToast('Reassignment Saved', 'Signature assigned as locked anchor to target entity.', 'success');
           loadReviewQueue(state.currentReviewStatus);
         } catch (err) {
-          alert(`Error saving reassignment: ${err.message}`);
+          showToast('Reassignment Error', err.message, 'error');
         }
       });
     }
@@ -536,12 +576,12 @@
         const notes = document.getElementById('enroll-notes-input').value.trim();
 
         if (!name) {
-          alert('Please enter an entity name.');
+          showToast('Validation Required', 'Please enter an entity name.', 'warning');
           return;
         }
 
         if (!state.selectedCropBase64 && !state.selectedBbox) {
-          alert('Please drag a bounding box on the freeze-frame image to select the entity crop.');
+          showToast('Selection Required', 'Please drag a bounding box on the freeze-frame image to select the entity crop.', 'warning');
           return;
         }
 
@@ -586,7 +626,7 @@
             window.loadGallery();
           }
         } catch (err) {
-          alert(`Enrollment failed: ${err.message}`);
+          showToast('Enrollment Failed', err.message, 'error');
         } finally {
           submitBtn.disabled = false;
           submitBtn.textContent = '✨ Enroll & Lock Anchor';
@@ -675,7 +715,7 @@
       showToast('Descriptor Rolled Back', `Entity descriptor restored to verified snapshot v${version}!`, 'success');
       if (typeof window.loadGallery === 'function') window.loadGallery();
     } catch (err) {
-      alert(`Rollback failed: ${err.message}`);
+      showToast('Rollback Failed', err.message, 'error');
     }
   }
 
@@ -743,6 +783,7 @@
     initUniversalEnrollment();
     initReassignModal();
     initVersionsModal();
+    initQuickEnrollModal();
 
     // Review status filters
     document.querySelectorAll('.review-filter-btn').forEach(btn => {

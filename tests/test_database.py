@@ -229,6 +229,81 @@ class TestTrackerDB(unittest.TestCase):
         sightings = self.db.get_sightings(limit=0)
         self.assertEqual(len(sightings), 40)
 
+    def test_offline_cache_sync_state(self):
+        """Test tracker_sync_state persistence and ETag tracking."""
+        # Initial lookup returns None
+        self.assertIsNone(self.db.get_sync_state("whitelist"))
+
+        # Update sync checkpoint
+        success = self.db.update_sync_state(
+            sync_key="whitelist",
+            last_etag="W/'etag_12345'",
+            active_whitelist_count=25,
+            status="synced",
+            metadata={"hub_site_id": 42},
+        )
+        self.assertTrue(success)
+
+        state = self.db.get_sync_state("whitelist")
+        self.assertIsNotNone(state)
+        self.assertEqual(state["last_etag"], "W/'etag_12345'")
+        self.assertEqual(state["active_whitelist_count"], 25)
+        self.assertEqual(state["status"], "synced")
+        self.assertEqual(state["metadata"].get("hub_site_id"), 42)
+
+    def test_offline_whitelist_crud(self):
+        """Test local whitelist upsert, retrieval, listing, and deletion."""
+        vec = np.ones(512, dtype=np.float32) * 0.5
+        row_id = self.db.upsert_whitelist_entry(
+            credential_id="cred_001",
+            entity_name="Alice Smith",
+            clearance_tier="VIP",
+            plate_number="ABC-123",
+            embedding=vec,
+            is_banned=False,
+        )
+        self.assertGreater(row_id, 0)
+
+        entry = self.db.get_whitelist_entry("cred_001")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["entity_name"], "Alice Smith")
+        self.assertEqual(entry["clearance_tier"], "VIP")
+        self.assertEqual(entry["plate_number"], "ABC123")
+        self.assertIn("embedding_array", entry)
+        self.assertEqual(len(entry["embedding_array"]), 512)
+
+        # Filter by tier
+        vips = self.db.list_whitelist(clearance_tier="VIP")
+        self.assertEqual(len(vips), 1)
+
+        # Delete entry
+        deleted = self.db.delete_whitelist_entry("cred_001")
+        self.assertTrue(deleted)
+        self.assertIsNone(self.db.get_whitelist_entry("cred_001"))
+
+    def test_offline_access_queue(self):
+        """Test queuing and flushing offline access logs."""
+        q_id = self.db.enqueue_offline_access(
+            event_uuid="evt_gate_001",
+            camera_id="cam_01",
+            access_granted=True,
+            credential_id="cred_001",
+            direction="in",
+            decision_reason="whitelist_match",
+        )
+        self.assertGreater(q_id, 0)
+
+        pending = self.db.get_pending_offline_access(limit=10)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["event_uuid"], "evt_gate_001")
+        self.assertEqual(pending[0]["synced"], 0)
+
+        synced_count = self.db.mark_offline_access_synced(["evt_gate_001"])
+        self.assertEqual(synced_count, 1)
+
+        pending_after = self.db.get_pending_offline_access(limit=10)
+        self.assertEqual(len(pending_after), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

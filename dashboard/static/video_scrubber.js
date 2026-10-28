@@ -44,6 +44,14 @@
   let wasPlayingBeforeTabSwitch = false;
   let savedTimeBeforeTabSwitch = 0;
 
+  function showToast(message, type = 'info') {
+    if (typeof window.showToast === 'function') {
+      window.showToast(message, type);
+    } else {
+      alert(message);
+    }
+  }
+
   function init() {
     bindEvents();
     loadVideosList();
@@ -193,10 +201,10 @@
         loadVideoIntoPlayer(data.video_url, data.output_filename, true, 'h264');
       } else {
         const err = await resp.json();
-        alert(`Transcoding failed: ${err.detail || 'Error'}`);
+        showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
       }
     } catch (e) {
-      alert(`Error during transcoding: ${e.message}`);
+      showToast(`Error during transcoding: ${e.message}`, 'error');
     } finally {
       btns.forEach(b => {
         b.disabled = false;
@@ -439,16 +447,16 @@
       });
       if (resp.ok) {
         const data = await resp.json();
-        alert(`Video successfully added as active stream '${data.camera_id}'!`);
+        showToast(`Video successfully added as active stream '${data.camera_id}'!`, 'success');
         if (window.CameraManager) {
           await window.CameraManager.refreshCameras();
           window.CameraManager.focusCamera(data.camera_id);
         }
       } else {
-        alert('Failed to add video as camera.');
+        showToast('Failed to add video as camera.', 'error');
       }
     } catch (e) {
-      alert(`Error: ${e.message}`);
+      showToast(`Error: ${e.message}`, 'error');
     }
   }
 

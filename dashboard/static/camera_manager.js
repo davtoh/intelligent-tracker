@@ -48,6 +48,14 @@
   const selectCamStream = document.getElementById('cam-stream-select');
   const inputCamSource = document.getElementById('cam-source-input');
 
+  function showToast(message, type = 'info') {
+    if (typeof window.showToast === 'function') {
+      window.showToast(message, type);
+    } else {
+      alert(message);
+    }
+  }
+
   // Initialize
   async function init() {
     bindEvents();
@@ -195,7 +203,7 @@
   async function testConnection() {
     const source = (inputCamSource ? inputCamSource.value : '').trim();
     if (!source) {
-      alert('Please enter a source (RTSP URL, USB index, or video file) to test.');
+      showToast('Please enter a source (RTSP URL, USB index, or video file) to test.', 'warning');
       return;
     }
 
@@ -378,7 +386,7 @@
     const source = inputCamSource.value.trim();
 
     if (!id || !name || !source) {
-      alert('Please fill Camera ID, Name, and Video Source.');
+      showToast('Please fill Camera ID, Name, and Video Source.', 'warning');
       return;
     }
 
@@ -400,16 +408,16 @@
       });
 
       if (resp.ok) {
-        alert(`Camera '${name}' added successfully!`);
+        showToast(`Camera '${name}' added successfully!`, 'success');
         closeModal();
         await refreshCameras();
         focusCamera(id);
       } else {
         const err = await resp.json();
-        alert(`Failed to save camera: ${err.detail || 'Unknown error'}`);
+        showToast(`Failed to save camera: ${err.detail || 'Unknown error'}`, 'error');
       }
     } catch (err) {
-      alert(`Error saving camera: ${err.message}`);
+      showToast(`Error saving camera: ${err.message}`, 'error');
     }
   }
 

@@ -20,6 +20,8 @@ import json
 import socket
 import unittest
 import threading
+import hmac
+import hashlib
 from datetime import datetime, time as dtime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -77,6 +79,7 @@ class WebhookTestServerHandler(BaseHTTPRequestHandler):
             "path": self.path,
             "headers": {k.lower(): v for k, v in self.headers.items()},
             "body": json.loads(body.decode("utf-8")),
+            "raw_body": body,
         })
 
         self.send_response(200)
@@ -373,6 +376,25 @@ class TestWebhookDispatcher(unittest.TestCase):
         sent2 = dispatcher.send(ev_send)
         self.assertTrue(sent2)
         self.assertEqual(len(self.server.httpd.received_requests), 1)
+
+    def test_webhook_hmac_signature(self):
+        secret = "enterprise_shared_secret_987"
+        dispatcher = WebhookDispatcher(
+            url=self.server.url,
+            secret_key=secret,
+        )
+        ev = IntrusionAlert(zone_id="vault", track_id=7, message="Breach detected")
+        success = dispatcher.send(ev)
+        self.assertTrue(success)
+        self.assertEqual(len(self.server.httpd.received_requests), 1)
+        req = self.server.httpd.received_requests[0]
+        self.assertIn("x-tracker-signature", req["headers"])
+
+        # Validate signature
+        expected_sig = hmac.new(secret.encode("utf-8"), req["raw_body"], hashlib.sha256).hexdigest()
+        self.assertEqual(req["headers"]["x-tracker-signature"], expected_sig)
+        self.assertIn("timestamp", req["body"])
+        self.assertIn("timestamp_epoch", req["body"])
 
 
 class TestTelegramDispatcher(unittest.TestCase):

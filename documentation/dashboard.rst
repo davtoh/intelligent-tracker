@@ -59,12 +59,10 @@ REST & WebSocket API Reference
 Streaming Endpoints
 ~~~~~~~~~~~~~~~~~~~
 
-.. http:get:: /stream/{camera_id}
-
+``GET /stream/{camera_id}``
    Yields live multipart MJPEG video stream: ``multipart/x-mixed-replace; boundary=frame``.
 
-.. http:websocket:: /ws/{camera_id}
-
+``WebSocket /ws/{camera_id}``
    Bidirectional WebSocket connection pushing real-time telemetry JSON packets:
 
    .. code-block:: json
@@ -107,6 +105,7 @@ REST API Endpoints
 ~~~~~~~~~~~~~~~~~~
 
 - ``GET /cameras``: Returns list of configured camera feeds and online statuses.
+- ``GET /api/cameras/{camera_id}/telemetry``: Returns real-time bounding boxes, active tracks, zones, tripwires, resolution, and FPS for Cloud Hub canvas overlay proxying.
 - ``GET /zones``: Returns configured zones with current occupancy and capacity limits.
 - ``GET /analytics/heatmap``: Returns accumulated spatial heatmap as JPEG image or JSON density matrix.
 - ``POST /analytics/heatmap/toggle``: Toggles heatmap overlay on live stream.
@@ -118,6 +117,49 @@ REST API Endpoints
 - ``GET /events``: Retrieve recent security and tracking alerts from EventBus.
 - ``POST /tag``: Interactive click-to-tag bounding box endpoint.
 - ``GET /status``: System hardware telemetry (CPU %, RAM %, active pipeline FPS, memory).
+
+Modernized Responsive UI & Ergonomics (Milestone 10)
+----------------------------------------------------
+
+1. **Responsive Dialog Architecture & Scroll Containment**:
+   All dialogs (Camera Manager, Universal Enrollment, Backup/Restore, Descriptor Versions, Review Reassign, Scenario Studio modals) follow strict viewport containment with ``max-height: min(88dvh, 800px)``, ``.modal-body-scroll`` with ``overscroll-behavior: contain``, and sticky footers with HTML5 ``form`` submission bindings.
+
+2. **Stream Lifecycle & Standby Poster**:
+   Stream detachment replaces active MJPEG streams with a standalone SVG standby poster (preventing broken image glyphs and infinite download loops), and reattaches seamlessly with cache-busting timestamps (``?t=${Date.now()}``).
+
+3. **Bidirectional URL Hash Routing**:
+   Direct deep-linking and browser navigation history support for all 9 core tabs (``#live``, ``#videos``, ``#gallery``, ``#timeline``, ``#analytics``, ``#alerts``, ``#studio``, ``#journey``, ``#review``) and modal subroutes (``#cameras``, ``#enroll``, ``#backup``, ``#versions``).
+
+4. **Structured In-Page Modal Forms & Toast Notifications**:
+   Eliminated blocking ``prompt()`` and sequential ``confirm()`` chains in Scenario Studio and Review & Learn, replacing them with dedicated modal forms for Zones, Directional Tripwires, Homography Calibration, Spatial Topology Transitions, and Quick-Enrollment. Replaced blocking ``alert()`` popups with non-intrusive toast notifications.
+
+Scenario Combinations Matrix
+----------------------------
+
+.. list-table::
+   :widths: 22 18 25 35
+   :header-rows: 1
+
+   * - Scenario / Objective
+     - Mode / Inputs
+     - Key Parameters
+     - Exact Runnable Command
+   * - Interactive Local VMS
+     - Web UI + synthetic stream
+     - ``--source synthetic``
+     - ``python main.py --source synthetic --port 8000``
+   * - Standalone ASGI Server
+     - FastAPI Uvicorn
+     - ``--host 0.0.0.0 --port 8000``
+     - ``python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000``
+   * - Automated UI Regression
+     - Headless TestClient
+     - ``tests/test_dashboard_ui.py``
+     - ``python -m unittest tests.test_dashboard_ui``
+   * - Viewport Layout Audit
+     - Headless CDP Chrome
+     - ``--audit-layout --window-size 768x1024``
+     - ``python scripts/cdp_inspect.py --url http://127.0.0.1:8000 --audit-layout --headless --window-size 768x1024``
 
 Quickstart
 ----------
