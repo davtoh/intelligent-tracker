@@ -30,3 +30,9 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
   .\.venv\Scripts\python.exe -m sphinx -W --keep-going documentation/ documentation/_build/html/
   ```
 - Maintain `milestone_plan.md` and `MIGRATION_LOG.md` with detailed records of code changes, architectural decisions, and verification results.
+
+## 5. Frontend, CSS & Specificity Standards
+- **Strict Avoidance of `!important`**: Never use `!important` in production stylesheets. `!important` breaks the natural CSS cascade, prevents responsive theme overrides, breaks fullscreen pseudo-classes (`:fullscreen`), and creates compounding specificity debt that downstream components cannot override.
+- **Natural Specificity Hierarchy**: Structure selectors using clean structural cascading (e.g. `.video-card:fullscreen .video-container`), pseudo-classes (`:fullscreen`, `:hover`, `:focus-visible`), or CSS custom properties (variables) rather than brute-forcing specificity with `!important`.
+- **Contained Overflow & Text Truncation**: All flexible headers, labels, and title spans must specify `min-width: 0`, `overflow: hidden`, and `text-overflow: ellipsis` along with descriptive `title` attributes to prevent unbounded string expansion from blowing out parent grid or flex layouts.
+
