@@ -827,8 +827,8 @@
   - Removed `six>=1.10.0` and `future>=0.16.0` from `requirements.txt`.
   - Updated `setup.py` classifiers to target modern Python 3.10, 3.11, and 3.12.
 - **Rules & Governance Established:**
-  - Workspace rule active: [`.agents/rules/modernization_and_decrufting.md`](file:///c:/dev/projects/products/intelligent_tracker/.agents/rules/modernization_and_decrufting.md)
-  - Universal repository agent guidelines: [`AGENTS.md`](file:///c:/dev/projects/products/intelligent_tracker/AGENTS.md)
+  - Workspace rule active: [`.agents/rules/modernization_and_decrufting.md`](.agents/rules/modernization_and_decrufting.md)
+  - Universal repository agent guidelines: [`AGENTS.md`](AGENTS.md)
 - **Verification Results:**
   - Unit Tests: 156 / 156 tests passing (100% green).
   - Documentation: Sphinx documentation built with 0 warnings.
@@ -1193,3 +1193,46 @@ During Phase 1B browser and container runtime audit, 4 interrelated operational 
 - **Unit Tests**: 218 tests passing in 23.725s (100% green).
 - **Documentation**: Sphinx build succeeded with 0 warnings.
 
+
+
+---
+
+## [Milestone 10] - 2026-10-29 - Process Lifecycle Management, Zero-Load Hibernation & Runtime Diagnostics
+
+### 1. Objectives & Scope
+- Resolve critical container CPU leak (270% CPU across 130 threads) caused by silent Uvicorn disconnects, unmanaged MJPEG generator tasks, and monotonic subscriber counter drift.
+- Implement deep hardware and video capture hibernation in `VideoSource` (`pause()` and `resume()`) to drop OpenCV frame decoding to 0.0 FPS when no active viewers are present.
+- Create a self-healing, TTL-leased subscriber registry (`_subscribers: Dict[str, float]`) in `StreamManager` with auto-eviction of stale client leases after 3.0 seconds of inactivity.
+- Implement async disconnect detection (`await request.is_disconnected()`) in `dashboard/app.py` `/stream/{camera_id}` with guaranteed cleanup in `finally:`.
+- Add clean unload lifecycle handlers (`beforeunload`, `pagehide`) in frontend JavaScript (`app.js` and `camera_manager.js`) to tear down MJPEG streams and WebSocket connections on tab close or background switch.
+- Modernize `docker-compose.yml` to put standalone headless `tracker` worker behind `profiles: ["worker"]` and disable spurious HTTP healthchecks.
+- Enrich `scripts/diagnostics.py` with runtime Docker container stats, active stream states, and zombie task detection flags (`--runtime`, `--hardware`, `--url`).
+- Build cross-platform CLI tool `scripts/stream_ctl.py` for operators (`list`, `stats`, `evict`, `prune`, `history`, `metrics`).
+- Create `intelligent_tracker/lifecycle.py` (`StreamLifecycleManager`) with background telemetry sampling daemon persisting metrics to SQLite (`TrackerDB` tables `system_resource_metrics` and `stream_lifecycle_events`).
+- Expose Superuser Admin REST APIs:
+  - `GET /api/system/processes`: Full thread, PID, memory, and stream state breakdown.
+  - `POST /api/system/streams/{camera_id}/evict`: Force-evict subscriber leases and trigger immediate hibernation.
+  - `POST /api/system/hibernate_all`: Force-hibernate any idle channels.
+  - `GET /api/system/metrics`: Historical resource usage time-series.
+  - `GET /api/system/events`: Historical stream lifecycle audit trail.
+
+### 2. Files Touched / Created
+- `intelligent_tracker/video.py`: Added thread-safe `pause()`, `resume()`, `is_paused`, and updated `_capture_worker` and `stop()`.
+- `dashboard/stream_manager.py`: Implemented leased subscriber registry, TTL auto-pruning, deep hibernation state transitions, and unified `_subscriber_lock`.
+- `dashboard/app.py`: Added `Request` async disconnect guard in `get_live_stream`, integrated `StreamLifecycleManager`, and added admin REST APIs.
+- `dashboard/static/app.js`: Added `beforeunload` and `pagehide` listeners to detach live streams on navigation.
+- `dashboard/static/camera_manager.js`: Detached background grid images in 1x1 mode to prevent background stream holding.
+- `docker-compose.yml`: Added `profiles: ["worker"]` and `healthcheck: disable: true` to `tracker` service.
+- `intelligent_tracker/database.py`: Created tables `system_resource_metrics` and `stream_lifecycle_events` and data access methods.
+- `intelligent_tracker/lifecycle.py`: Created `StreamLifecycleManager` with telemetry sampling daemon.
+- `scripts/diagnostics.py`: Enriched with runtime process, Docker container, and stream hibernation checks.
+- `scripts/stream_ctl.py`: Created terminal CLI controller for stream and process lifecycle management.
+- `tests/test_hibernation.py`: Added 5 unit tests for VideoSource pause/resume and leased subscriber registry.
+- `tests/test_lifecycle.py`: Added 6 unit tests for StreamLifecycleManager and admin REST APIs.
+
+### 3. Empirical Verification & Performance Metrics
+- **Container CPU**: Dropped from **267.31%** down to **0.66%** in Docker stats when idle (over 400x reduction).
+- **Stream State**: 4 inactive camera feeds verified at 0.0 FPS in deep hibernation; primary feed hibernates cleanly upon disconnect or eviction.
+- **Eviction Test**: `python scripts/stream_ctl.py evict cam_01` successfully evicted leases, forced state transition to `HIBERNATING`, and recorded audit event.
+- **Full Test Suite**: 223 out of 223 unit and integration tests passing (100% green).
+- **Documentation**: Sphinx build verified with 0 warnings.

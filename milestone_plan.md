@@ -594,6 +594,23 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 
 ---
 
+
+
+---
+
+## ✅ [Milestone 11] — Process Lifecycle Management, Zero-Load Hibernation & Runtime Diagnostics (COMPLETE)
+**Status: COMPLETE** — Verified: 223/223 tests pass in Python 3.12.10 (Docker CPU: 0.66%)
+**Scope:** Deep capture hibernation (`VideoSource.pause/resume`), self-healing leased subscriber registry (`StreamManager`), async disconnect detection (`Request.is_disconnected()`), enriched hardware & container runtime diagnostics (`scripts/diagnostics.py`), terminal stream controller (`scripts/stream_ctl.py`), SQLite resource telemetry persistence (`system_resource_metrics`, `stream_lifecycle_events`), and Superuser Admin REST APIs.
+
+### Deliverables Completed:
+1. **Deep Capture Hibernation (`intelligent_tracker/video.py`):** Added thread-safe `pause()` and `resume()` pausing OpenCV video decoding during stream hibernation to eliminate background frame processing.
+2. **Leased Subscriber Registry (`dashboard/stream_manager.py`):** Self-healing registry with 3.0s lease TTL, auto-eviction of stale connections, and unified lock synchronization (`_subscriber_lock`).
+3. **Async Disconnect Guard (`dashboard/app.py`):** Streaming generator detects client TCP disconnect immediately, terminating background tasks and preventing orphan loops.
+4. **Enriched Diagnostics (`scripts/diagnostics.py`):** Added `--runtime` flag inspecting live Docker container CPU/RAM/PIDs, active stream states, and zombie task detection.
+5. **Terminal Controller (`scripts/stream_ctl.py`):** CLI management commands: `list`, `stats`, `evict`, `prune`, `history`, `metrics`.
+6. **Lifecycle Manager & Persistence (`intelligent_tracker/lifecycle.py` & `database.py`):** Background sampler recording CPU, RAM, and stream counts every 15s to SQLite tables `system_resource_metrics` and `stream_lifecycle_events`.
+7. **Admin REST APIs (`dashboard/app.py`):** Superuser endpoints `/api/system/processes`, `/api/system/streams/{id}/evict`, `/api/system/hibernate_all`, `/api/system/metrics`, and `/api/system/events`.
+
 ## Dependency Graph
 
 ```
@@ -606,7 +623,8 @@ M1 (Env & Core) ✅
                                 └── M7 (Multi-Camera VMS & Auto-Discovery) ✅
                                       └── M8 (World Scenario Studio & Homography BEV) ✅
                                             └── M9 (Artifact & Face Intelligence, Active Learning) ✅
-                                                  └── M10 (VMS Dashboard Responsive Redesign & Hub Integration) 🟡
+                                                  └── M10 (VMS Dashboard Responsive Redesign & Hub Integration) ✅
+                                                        └── M11 (Process Lifecycle Management & Zero-Load Hibernation) ✅
 ```
 
 ---
