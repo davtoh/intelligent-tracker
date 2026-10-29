@@ -458,7 +458,8 @@
 
     if (currentGridMode === '1x1') {
       multiGridContainer.style.display = 'none';
-      singleVideoWrapper.style.display = 'block';
+      singleVideoWrapper.style.display = 'flex';
+      window.dispatchEvent(new Event('resize'));
     } else {
       singleVideoWrapper.style.display = 'none';
       multiGridContainer.style.display = 'grid';

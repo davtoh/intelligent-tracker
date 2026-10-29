@@ -1117,3 +1117,26 @@ During Phase 1B browser and container runtime audit, 4 interrelated operational 
 - **Enterprise Hub Integration Alignment:** Fully verified against `INTELLIGENT_TRACKER_INTEGRATION_PLAN.md` Phase E5.
 
 
+
+
+---
+
+## [2026-10-28] - Viewport Sizing, Interactive Canvas Alignment & Multi-Grid Fullscreen Modernization
+
+### 1. Objectives & Scope
+- Resolve issue where 1x1 camera feed was constrained to intrinsic 640x480 dimensions instead of filling `.video-container`.
+- Fix `#interactive-canvas` inline dimension and offset overrides, achieving mathematical coordinate alignment over the active video frame.
+- Restore flexbox centering in `camera_manager.js` when switching between 1x1 and multi-camera grids.
+- Add CSS `:fullscreen` rules and universal `toggleFullscreen()` controller supporting both 1x1 and 2x2/3x3 multi-grid layouts with `ResizeObserver` reactivity.
+
+### 2. Files Modified
+- `dashboard/static/styles.css`: Updated `#live-stream-img` to `width: 100%; height: 100%; object-fit: contain;`. Added `:fullscreen` overrides for `.video-container` and `.multi-camera-grid`.
+- `dashboard/static/app.js`: Refactored `syncCanvasSize()` with pillarbox/letterbox aspect-ratio math; updated tooltip positioning to respect canvas offset; implemented unified `toggleFullscreen()`; registered `ResizeObserver` on container and stream image; bound `fullscreenchange` listener on `document`.
+- `dashboard/static/camera_manager.js`: Set `singleVideoWrapper.style.display = 'flex'` on 1x1 grid switch and dispatched resize event.
+
+### 3. Empirical Verification
+- **Unit Tests**: Full test suite passing (218 tests in 23.058s, 100% green).
+- **Headless CDP Layout Audit (`scripts/cdp_inspect.py`)**:
+  - 1x1 Mode: `#video-wrapper` 979x551, `#live-stream-img` 977x549 (fully expanded), `#interactive-canvas` 732x549 centered at x=165 with exact 4:3 parity.
+  - Multi-Grid Switch: Clean transition to 2x2 (`#multi-grid-container` 979x551, 4 tiles rendering with `object-fit: cover`), and back to 1x1 (`display: flex`).
+  - Fullscreen Target: Confirmed polymorphic resolution (`video-wrapper` in 1x1, `multi-grid-container` in 2x2).

@@ -222,16 +222,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (btnFullscreenToggle) {
-    btnFullscreenToggle.addEventListener('click', () => {
-      const container = document.getElementById('video-wrapper');
-      if (!document.fullscreenElement) {
-        (container || videoImg).requestFullscreen?.();
-      } else {
-        document.exitFullscreen?.();
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      const multiGrid = document.getElementById('multi-grid-container');
+      const singleWrapper = document.getElementById('video-wrapper');
+      const isGrid = multiGrid && window.getComputedStyle(multiGrid).display !== 'none';
+      const target = isGrid ? multiGrid : (singleWrapper || videoImg);
+      if (target) {
+        target.requestFullscreen?.().catch(err => console.error('Fullscreen request failed:', err));
       }
-    });
+    } else {
+      document.exitFullscreen?.().catch(err => console.error('Exit fullscreen failed:', err));
+    }
   }
+
+  if (btnFullscreenToggle) {
+    btnFullscreenToggle.addEventListener('click', toggleFullscreen);
+  }
+
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = !!document.fullscreenElement;
+    const fsBtn = document.getElementById('fullscreen-btn');
+    const hudFsBtn = document.getElementById('btn-fullscreen-toggle');
+    if (fsBtn) fsBtn.innerHTML = isFs ? '🗗 Exit Fullscreen' : '⛶ Fullscreen';
+    if (hudFsBtn) hudFsBtn.innerHTML = isFs ? '🗗 Exit Fullscreen' : '⛶ Fullscreen';
+    setTimeout(syncCanvasSize, 50);
+    setTimeout(syncCanvasSize, 200);
+  });
 
   // =========================================================================
   // Tab Navigation & Hash Routing
@@ -663,16 +680,47 @@ document.addEventListener('DOMContentLoaded', () => {
   // Interactive Click-to-Tag Overlay Canvas
   // =========================================================================
   function syncCanvasSize() {
-    if (videoImg.clientWidth && videoImg.clientHeight) {
-      if (canvas.width !== videoImg.clientWidth || canvas.height !== videoImg.clientHeight) {
-        canvas.width = videoImg.clientWidth;
-        canvas.height = videoImg.clientHeight;
-      }
-      canvas.style.top = videoImg.offsetTop + 'px';
-      canvas.style.left = videoImg.offsetLeft + 'px';
-      canvas.style.width = videoImg.clientWidth + 'px';
-      canvas.style.height = videoImg.clientHeight + 'px';
+    if (!videoImg || !canvas) return;
+    const imgW = videoImg.clientWidth;
+    const imgH = videoImg.clientHeight;
+    if (!imgW || !imgH) return;
+
+    // Use natural image dimensions or fallback to standard 640x480 aspect ratio
+    const natW = videoImg.naturalWidth || 640;
+    const natH = videoImg.naturalHeight || 480;
+    const imgRatio = natW / natH;
+    const elemRatio = imgW / imgH;
+
+    let renderW, renderH, offsetX, offsetY;
+    if (elemRatio > imgRatio) {
+      // Element is wider than video stream: pillarbox (black bars on left/right)
+      renderH = imgH;
+      renderW = renderH * imgRatio;
+      offsetX = (imgW - renderW) / 2;
+      offsetY = 0;
+    } else {
+      // Element is taller than video stream: letterbox (black bars on top/bottom)
+      renderW = imgW;
+      renderH = renderW / imgRatio;
+      offsetX = 0;
+      offsetY = (imgH - renderH) / 2;
     }
+
+    const left = (videoImg.offsetLeft || 0) + offsetX;
+    const top = (videoImg.offsetTop || 0) + offsetY;
+
+    const pixelW = Math.round(renderW);
+    const pixelH = Math.round(renderH);
+
+    if (canvas.width !== pixelW || canvas.height !== pixelH) {
+      canvas.width = pixelW;
+      canvas.height = pixelH;
+    }
+
+    canvas.style.left = `${left}px`;
+    canvas.style.top = `${top}px`;
+    canvas.style.width = `${renderW}px`;
+    canvas.style.height = `${renderH}px`;
   }
 
   function drawInteractiveOverlay() {
@@ -740,8 +788,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const y = by * scaleY;
 
       trackTooltip.style.display = 'block';
-      trackTooltip.style.left = `${Math.min(canvas.width - 180, Math.max(10, x))}px`;
-      trackTooltip.style.top = `${Math.max(10, y - 70)}px`;
+      const cLeft = parseFloat(canvas.style.left) || canvas.offsetLeft || 0;
+      const cTop = parseFloat(canvas.style.top) || canvas.offsetTop || 0;
+      trackTooltip.style.left = `${Math.min(cLeft + canvas.width - 180, Math.max(cLeft + 10, cLeft + x))}px`;
+      trackTooltip.style.top = `${Math.max(cTop + 10, cTop + y - 70)}px`;
 
       tooltipTitle.textContent = found.entity_name || `Track #${found.id}`;
       tooltipBody.textContent = `Conf: ${(found.confidence * 100).toFixed(0)}% | Dwell: ${found.dwell_time}s | State: ${found.state}`;
@@ -858,14 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Fullscreen Button
-  document.getElementById('fullscreen-btn')?.addEventListener('click', () => {
-    const wrapper = document.getElementById('video-wrapper');
-    if (!document.fullscreenElement) {
-      wrapper.requestFullscreen().catch(err => console.error(err));
-    } else {
-      document.exitFullscreen();
-    }
-  });
+  document.getElementById('fullscreen-btn')?.addEventListener('click', toggleFullscreen);
 
   // Save Snapshot Button
   document.getElementById('btn-snapshot-save')?.addEventListener('click', () => {
@@ -1189,6 +1232,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize
   initWebSocket();
   window.addEventListener('resize', syncCanvasSize);
+  videoImg?.addEventListener('load', syncCanvasSize);
+  if (window.ResizeObserver && videoImg) {
+    const ro = new ResizeObserver(() => {
+      syncCanvasSize();
+      drawInteractiveOverlay();
+    });
+    ro.observe(videoImg);
+    const wrapper = document.getElementById('video-wrapper');
+    if (wrapper) ro.observe(wrapper);
+  }
   if (window.location.hash) {
     handleHashRoute();
   }
