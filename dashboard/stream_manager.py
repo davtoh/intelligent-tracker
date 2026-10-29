@@ -233,8 +233,10 @@ class StreamManager:
 
         # Analytics Engine
         heatmap_cfg = analytics_cfg.get("heatmap", {})
+        active_w = getattr(self.video_source, "width", res_w)
+        active_h = getattr(self.video_source, "height", res_h)
         self.analytics = AnalyticsEngine(
-            resolution=(res_w, res_h),
+            resolution=(active_w, active_h),
             heatmap_enabled=bool(heatmap_cfg.get("enabled", True)),
             heatmap_decay=float(heatmap_cfg.get("decay", 0.998)) if heatmap_cfg.get("decay") else None,
             camera_id=self.camera_id,

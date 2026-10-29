@@ -430,7 +430,9 @@
         liveStreamImg.src = `/stream/${cam.id}`;
       }
       if (streamTitle) {
-        streamTitle.textContent = `Camera Feed: ${cam.name.toUpperCase()} (${cam.id})`;
+        const fullTitle = `Camera Feed: ${cam.name.toUpperCase()} (${cam.id})`;
+        streamTitle.textContent = fullTitle;
+        streamTitle.title = fullTitle;
       }
       if (cameraSelectDropdown) {
         cameraSelectDropdown.value = cam.id;

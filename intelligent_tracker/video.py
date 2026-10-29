@@ -356,9 +356,28 @@ class VideoSource:
             h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = float(self._cap.get(cv2.CAP_PROP_FPS))
 
-            if w > 0:
+            if w > 0 and h > 0:
                 self.width = w
-            if h > 0:
+                self.height = h
+                if self.target_width and self.target_height:
+                    src_ratio = w / float(h)
+                    target_ratio = self.target_width / float(self.target_height)
+                    if src_ratio >= target_ratio:
+                        # Width-constrained: preserve width, scale height proportionally
+                        adj_w = self.target_width
+                        adj_h = int(round(self.target_width / src_ratio))
+                    else:
+                        # Height-constrained: preserve height, scale width proportionally
+                        adj_h = self.target_height
+                        adj_w = int(round(self.target_height * src_ratio))
+                    # Ensure even dimensions for codecs and downstream inference models
+                    self.target_width = adj_w if adj_w % 2 == 0 else adj_w - 1
+                    self.target_height = adj_h if adj_h % 2 == 0 else adj_h - 1
+                    self.width = self.target_width
+                    self.height = self.target_height
+            elif w > 0:
+                self.width = w
+            elif h > 0:
                 self.height = h
             if fps > 0 and not np.isnan(fps):
                 self.source_fps = fps

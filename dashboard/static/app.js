@@ -224,10 +224,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
-      const multiGrid = document.getElementById('multi-grid-container');
-      const singleWrapper = document.getElementById('video-wrapper');
-      const isGrid = multiGrid && window.getComputedStyle(multiGrid).display !== 'none';
-      const target = isGrid ? multiGrid : (singleWrapper || videoImg);
+      // Fullscreen the entire live video card so 1x1 <-> 2x2/3x3 switching happens seamlessly inside fullscreen
+      const videoCard = document.getElementById('live-video-card') || document.querySelector('.video-card');
+      const target = videoCard || document.getElementById('video-wrapper') || videoImg;
       if (target) {
         target.requestFullscreen?.().catch(err => console.error('Fullscreen request failed:', err));
       }

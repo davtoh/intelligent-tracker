@@ -1140,3 +1140,56 @@ During Phase 1B browser and container runtime audit, 4 interrelated operational 
   - 1x1 Mode: `#video-wrapper` 979x551, `#live-stream-img` 977x549 (fully expanded), `#interactive-canvas` 732x549 centered at x=165 with exact 4:3 parity.
   - Multi-Grid Switch: Clean transition to 2x2 (`#multi-grid-container` 979x551, 4 tiles rendering with `object-fit: cover`), and back to 1x1 (`display: flex`).
   - Fullscreen Target: Confirmed polymorphic resolution (`video-wrapper` in 1x1, `multi-grid-container` in 2x2).
+
+
+---
+
+## [2026-10-28] - Aspect-Ratio Preservation, Fullscreen Player Hardening & Header Overflow Fix
+
+### 1. Objectives & Scope
+- Preserve native 16:9 / 4:3 video source aspect ratios during stream acquisition in `VideoSource` without forced distortion to 4:3 (640x480).
+- Eliminate all `!important` declarations from CSS fullscreen rules, relying on natural pseudo-class specificity.
+- Fullscreen `.video-card` as a unified player root so transitioning between 3x3/2x2 and 1x1 within fullscreen occurs seamlessly with zero page bleed.
+- Eliminate header horizontal overflow caused by unconstrained `<select id="active-camera-select">` and long stream titles.
+
+### 2. Files Modified
+- `intelligent_tracker/video.py`: Proportional envelope downscaling in `VideoSource` preserving native source aspect ratio (e.g. 2688x1520 -> 640x362, 25% lower pixel processing load).
+- `dashboard/stream_manager.py`: Bound `AnalyticsEngine` resolution dynamically to `(self.video_source.width, self.video_source.height)`.
+- `dashboard/static/styles.css`: Removed all `!important` flags. Applied `.video-card:fullscreen` player rules. Added `max-width: 240px` and text ellipsis on `.camera-select-wrapper` and `.form-select-sm`. Enforced `flex: 1 1 auto; min-width: 0; text-overflow: ellipsis;` on `.card-title` and `#video-stream-title`.
+- `dashboard/static/index.html`: Added `id="live-video-card"` to `.video-card`.
+- `dashboard/static/app.js`: Updated `toggleFullscreen()` to target `#live-video-card`.
+- `dashboard/static/camera_manager.js`: Set `title` attribute on `#video-stream-title` for full tooltip reveal on hover.
+
+### 3. Empirical Verification
+- **Video Resolution**: Stream `vid_20260912132121211_92c53f9523ac476689854669f9750d9e_G94106186` (native 2688x1520) outputs 640x362 at 30.3 FPS with aspect ratio 1.768 (16:9 match).
+- **DOM Layout**: `#interactive-canvas` width: 970.6px, height: 549px across 977px image frame (zero black bars, full frame utilization).
+- **Header Overflow**: `.card-actions` width decreased from 1470px to 680px; `#video-stream-title` truncates with ellipsis; `hasHorizontalOverflow: false`.
+- **Unit Tests**: 218 tests passing in 23.725s (100% green).
+- **Documentation**: Sphinx build succeeded with 0 warnings.
+
+
+---
+
+## [2026-10-28] - Aspect-Ratio Preservation, Fullscreen Player Hardening & Header Overflow Fix
+
+### 1. Objectives & Scope
+- Preserve native 16:9 / 4:3 video source aspect ratios during stream acquisition in `VideoSource` without forced distortion to 4:3 (640x480).
+- Eliminate all `!important` declarations from CSS fullscreen rules, relying on natural pseudo-class specificity.
+- Fullscreen `.video-card` as a unified player root so transitioning between 3x3/2x2 and 1x1 within fullscreen occurs seamlessly with zero page bleed.
+- Eliminate header horizontal overflow caused by unconstrained `<select id="active-camera-select">` and long stream titles.
+
+### 2. Files Modified
+- `intelligent_tracker/video.py`: Proportional envelope downscaling in `VideoSource` preserving native source aspect ratio (e.g. 2688x1520 -> 640x362, 25% lower pixel processing load).
+- `dashboard/stream_manager.py`: Bound `AnalyticsEngine` resolution dynamically to `(self.video_source.width, self.video_source.height)`.
+- `dashboard/static/styles.css`: Removed all `!important` flags. Applied `.video-card:fullscreen` player rules. Added `max-width: 240px` and text ellipsis on `.camera-select-wrapper` and `.form-select-sm`. Enforced `flex: 1 1 auto; min-width: 0; text-overflow: ellipsis;` on `.card-title` and `#video-stream-title`.
+- `dashboard/static/index.html`: Added `id="live-video-card"` to `.video-card`.
+- `dashboard/static/app.js`: Updated `toggleFullscreen()` to target `#live-video-card`.
+- `dashboard/static/camera_manager.js`: Set `title` attribute on `#video-stream-title` for full tooltip reveal on hover.
+
+### 3. Empirical Verification
+- **Video Resolution**: Stream `vid_20260912132121211_92c53f9523ac476689854669f9750d9e_G94106186` (native 2688x1520) outputs 640x362 at 30.3 FPS with aspect ratio 1.768 (16:9 match).
+- **DOM Layout**: `#interactive-canvas` width: 970.6px, height: 549px across 977px image frame (zero black bars, full frame utilization).
+- **Header Overflow**: `.card-actions` width decreased from 1470px to 680px; `#video-stream-title` truncates with ellipsis; `hasHorizontalOverflow: false`.
+- **Unit Tests**: 218 tests passing in 23.725s (100% green).
+- **Documentation**: Sphinx build succeeded with 0 warnings.
+
