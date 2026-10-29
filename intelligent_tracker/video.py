@@ -260,6 +260,9 @@ class VideoSource:
         self._cap = None
         self._thread = None
         self._running = False
+        self._is_paused = False
+        self._pause_event = threading.Event()
+        self._pause_event.set()
         self._ready_event = threading.Event()
         self._first_frame_read = False
         self._lock = threading.Lock()
@@ -400,6 +403,8 @@ class VideoSource:
                 raise RuntimeError("Could not open video source: {}".format(self.source))
 
             self._running = True
+            self._is_paused = False
+            self._pause_event.set()
             self._first_frame_read = False
             self._ready_event.clear()
             self._start_time = time.time()
@@ -433,6 +438,10 @@ class VideoSource:
 
         try:
             while self._running:
+                if self._is_paused:
+                    self._pause_event.wait(timeout=0.25)
+                    continue
+
                 loop_start = time.time()
 
                 if not self._cap or not self._cap.isOpened():
@@ -591,11 +600,32 @@ class VideoSource:
             "uptime_seconds": round(uptime, 1),
         }
 
+    def pause(self):
+        """Pause capture worker thread during stream hibernation to conserve CPU."""
+        with self._lock:
+            self._is_paused = True
+            self._pause_event.clear()
+            logger.debug("VideoSource '%s': Paused (hibernating).", self.source)
+
+    def resume(self):
+        """Resume capture worker thread immediately from hibernation."""
+        with self._lock:
+            self._is_paused = False
+            self._pause_event.set()
+            logger.debug("VideoSource '%s': Resumed from hibernation.", self.source)
+
+    @property
+    def is_paused(self) -> bool:
+        """Returns True if the video capture is currently hibernated."""
+        return self._is_paused
+
     def stop(self):
         """Stop background worker and release camera hardware cleanly without cross-thread races."""
         if not self._running and self._cap is None:
             return
         self._running = False
+        self._is_paused = False
+        self._pause_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
             self._thread = None

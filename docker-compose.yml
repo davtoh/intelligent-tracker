@@ -38,6 +38,10 @@ services:
       dockerfile: Dockerfile
     container_name: intelligent-tracker-core
     restart: unless-stopped
+    profiles:
+      - worker
+    healthcheck:
+      disable: true
     command: ["python", "main.py", "--config", "configs/alert_demo.yaml", "--headless", "--frames", "0"]
     environment:
       - TRACKER_CONFIG=configs/alert_demo.yaml

@@ -13,6 +13,7 @@ import sys
 import time
 import io
 import json
+import uuid
 import base64
 import logging
 import threading
@@ -123,34 +124,58 @@ class StreamManager:
             "clutter": True,
         }
 
-        # WebSocket Subscribers: list of async queues or callback callables
+        # WebSocket Subscribers & Active Subscribers Tracking (Self-Healing Leased Registry)
         self._ws_subscribers: List[Any] = []
-        self._ws_lock = threading.Lock()
-
-        # Active Subscribers Tracking & Smart Hibernation
-        self._subscriber_count = 0
+        self._subscribers: Dict[str, float] = {}
         self._subscriber_lock = threading.Lock()
+        self._is_hibernating = False
 
         # Initialize Subsystems
         self._init_subsystems()
 
-    def add_subscriber(self) -> int:
-        """Register an active client subscriber (MJPEG stream or WebSocket)."""
+    def add_subscriber(self, sub_id: Optional[str] = None) -> str:
+        """Register an active client subscriber (MJPEG stream or WebSocket) with a leased token."""
+        token = str(sub_id) if sub_id else uuid.uuid4().hex
+        now = time.time()
         with self._subscriber_lock:
-            self._subscriber_count += 1
-            return self._subscriber_count
+            self._subscribers[token] = now
+        if self.video_source and hasattr(self.video_source, "resume"):
+            self.video_source.resume()
+        return token
 
-    def remove_subscriber(self) -> int:
-        """Unregister an active client subscriber."""
+    def heartbeat_subscriber(self, sub_id: str) -> None:
+        """Update last-seen timestamp for an active leased subscriber."""
         with self._subscriber_lock:
-            self._subscriber_count = max(0, self._subscriber_count - 1)
-            return self._subscriber_count
+            if sub_id in self._subscribers:
+                self._subscribers[sub_id] = time.time()
+
+    def remove_subscriber(self, sub_id: Optional[str] = None) -> int:
+        """Unregister an active client subscriber by token or pop one."""
+        with self._subscriber_lock:
+            if sub_id:
+                self._subscribers.pop(str(sub_id), None)
+            elif self._subscribers:
+                self._subscribers.pop(next(iter(self._subscribers)))
+            return self._active_subscriber_count_unlocked()
+
+    def _active_subscriber_count_unlocked(self) -> int:
+        """Internal helper to prune expired subscriber leases and count active viewers."""
+        now = time.time()
+        expired = [sid for sid, last_seen in self._subscribers.items() if (now - last_seen) > 3.0]
+        for sid in expired:
+            self._subscribers.pop(sid, None)
+        return len(self._subscribers) + len(self._ws_subscribers)
 
     @property
     def subscriber_count(self) -> int:
-        """Current number of active subscribers."""
+        """Current number of active, non-expired subscribers."""
         with self._subscriber_lock:
-            return self._subscriber_count
+            return self._active_subscriber_count_unlocked()
+
+    @property
+    def is_hibernating(self) -> bool:
+        """Returns True if the stream is currently hibernating due to zero subscribers."""
+        return self._is_hibernating
 
     @property
     def is_running(self) -> bool:
@@ -391,8 +416,24 @@ class StreamManager:
                 # Smart Hibernation: if no active viewers are connected and we have processed
                 # at least one frame (to initialize telemetry & preview), sleep to conserve CPU.
                 if self.subscriber_count <= 0 and frame_count > 0:
-                    time.sleep(0.1)
+                    if not self._is_hibernating:
+                        self._is_hibernating = True
+                        if hasattr(vs, "pause"):
+                            vs.pause()
+                        with self._lock:
+                            if self._latest_telemetry:
+                                self._latest_telemetry["fps"] = 0.0
+                                self._latest_telemetry["status"] = "hibernating"
+                    time.sleep(0.2)
                     continue
+
+                if self._is_hibernating:
+                    self._is_hibernating = False
+                    if hasattr(vs, "resume"):
+                        vs.resume()
+                    with self._lock:
+                        if self._latest_telemetry:
+                            self._latest_telemetry["status"] = "online"
 
                 ret, frame = vs.read(timeout=1.0)
                 if not ret or frame is None:
@@ -671,31 +712,34 @@ class StreamManager:
 
     def _broadcast_telemetry(self, telemetry: Dict[str, Any]):
         """Distribute telemetry to registered async queues."""
-        with self._ws_lock:
-            dead = []
-            for sub in self._ws_subscribers:
-                try:
-                    if hasattr(sub, "put_nowait"):
-                        sub.put_nowait(telemetry)
-                    elif callable(sub):
-                        sub(telemetry)
-                except Exception:
-                    dead.append(sub)
-            for d in dead:
-                self._ws_subscribers.remove(d)
-                self.remove_subscriber()
+        with self._subscriber_lock:
+            subs = list(self._ws_subscribers)
+        dead = []
+        for sub in subs:
+            try:
+                if hasattr(sub, "put_nowait"):
+                    sub.put_nowait(telemetry)
+                elif callable(sub):
+                    sub(telemetry)
+            except Exception:
+                dead.append(sub)
+        if dead:
+            with self._subscriber_lock:
+                for d in dead:
+                    if d in self._ws_subscribers:
+                        self._ws_subscribers.remove(d)
 
     def register_ws_subscriber(self, sub: Any):
-        with self._ws_lock:
+        with self._subscriber_lock:
             if sub not in self._ws_subscribers:
                 self._ws_subscribers.append(sub)
-                self.add_subscriber()
+        if self.video_source and hasattr(self.video_source, "resume"):
+            self.video_source.resume()
 
     def unregister_ws_subscriber(self, sub: Any):
-        with self._ws_lock:
+        with self._subscriber_lock:
             if sub in self._ws_subscribers:
                 self._ws_subscribers.remove(sub)
-                self.remove_subscriber()
 
     def get_latest_frame_jpeg(self, camera_id: Optional[str] = None) -> bytes:
         with self._lock:

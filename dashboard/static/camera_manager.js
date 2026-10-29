@@ -460,6 +460,7 @@
 
     if (currentGridMode === '1x1') {
       multiGridContainer.style.display = 'none';
+      multiGridContainer.innerHTML = ''; // Detach background grid streams to enable hibernation
       singleVideoWrapper.style.display = 'flex';
       window.dispatchEvent(new Event('resize'));
     } else {
@@ -506,6 +507,13 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+
+  window.addEventListener('beforeunload', () => {
+    if (multiGridContainer) multiGridContainer.innerHTML = '';
+  });
+  window.addEventListener('pagehide', () => {
+    if (multiGridContainer) multiGridContainer.innerHTML = '';
+  });
 
   // Export module to global window
   window.CameraManager = {

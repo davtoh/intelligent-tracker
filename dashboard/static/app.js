@@ -1245,6 +1245,16 @@ document.addEventListener('DOMContentLoaded', () => {
     handleHashRoute();
   }
 
+  // Resource Safety: Clean disconnect on page unload or background switch
+  const cleanupLiveResources = () => {
+    detachLiveStream();
+    if (ws) {
+      try { ws.close(); } catch (_) {}
+    }
+  };
+  window.addEventListener('beforeunload', cleanupLiveResources);
+  window.addEventListener('pagehide', cleanupLiveResources);
+
   // Global interface for multi-camera orchestration
   window.App = {
     switchCamera: switchCamera,

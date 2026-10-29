@@ -26,6 +26,7 @@ import os
 import sys
 import time
 import io
+import uuid
 import shutil
 import tempfile
 import asyncio
@@ -61,6 +62,7 @@ from intelligent_tracker.journey import TrajectoryJourneySearcher, JourneyVideoE
 from intelligent_tracker.rsac import RSACManager, CustomCategory, RSACZoneRule, RSACSchedule
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
+from intelligent_tracker.lifecycle import StreamLifecycleManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
@@ -68,6 +70,17 @@ logger = logging.getLogger("intelligent_tracker.dashboard")
 camera_pool: Optional[CameraPool] = None
 stream_manager: Optional[StreamManager] = None
 scenario_manager: Optional[ScenarioManager] = None
+lifecycle_manager: Optional[StreamLifecycleManager] = None
+
+
+def get_lifecycle_manager() -> StreamLifecycleManager:
+    global lifecycle_manager, camera_pool, stream_manager
+    if lifecycle_manager is None:
+        db = stream_manager.db if stream_manager else None
+        lifecycle_manager = StreamLifecycleManager(db=db, camera_pool=camera_pool, autostart_sampler=False)
+    if camera_pool and lifecycle_manager.camera_pool is None:
+        lifecycle_manager.set_camera_pool(camera_pool)
+    return lifecycle_manager
 
 
 def get_active_stream_manager(camera_id: Optional[str] = None) -> Optional[StreamManager]:
@@ -141,6 +154,8 @@ async def lifespan(app: FastAPI):
     camera_pool = CameraPool()
     stream_manager = camera_pool.primary_stream
     scenario_manager = ScenarioManager()
+    db = stream_manager.db if stream_manager else None
+    lifecycle_manager = StreamLifecycleManager(db=db, camera_pool=camera_pool)
 
     # Apply loaded scenarios to active streams
     if camera_pool:
@@ -151,6 +166,8 @@ async def lifespan(app: FastAPI):
 
     yield
     logger.info("Shutting down Intelligent Tracker CameraPool...")
+    if lifecycle_manager:
+        lifecycle_manager.stop_sampler()
     if camera_pool:
         camera_pool.stop_all()
     elif stream_manager:
@@ -378,7 +395,7 @@ async def serve_index():
 # Video Streaming & WebSockets
 # -----------------------------------------------------------------------------
 @app.get("/stream/{camera_id}")
-async def get_live_stream(camera_id: str):
+async def get_live_stream(camera_id: str, request: Request):
     """
     Live MJPEG video streaming endpoint for a specific camera channel.
     Compatible with standard <img> tags: `<img src="/stream/cam_01" />`.
@@ -387,10 +404,15 @@ async def get_live_stream(camera_id: str):
     if not mgr:
         raise HTTPException(status_code=503, detail=f"Stream for camera '{camera_id}' not initialized")
 
+    sub_id = uuid.uuid4().hex
+
     async def frame_generator():
-        mgr.add_subscriber()
+        mgr.add_subscriber(sub_id)
         try:
             while True:
+                if await request.is_disconnected():
+                    break
+                mgr.heartbeat_subscriber(sub_id)
                 jpeg_bytes = mgr.get_latest_frame_jpeg()
                 if jpeg_bytes:
                     yield (
@@ -398,8 +420,10 @@ async def get_live_stream(camera_id: str):
                         b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
                     )
                 await asyncio.sleep(0.04)  # ~25 FPS
+        except (asyncio.CancelledError, GeneratorExit):
+            pass
         finally:
-            mgr.remove_subscriber()
+            mgr.remove_subscriber(sub_id)
 
     return StreamingResponse(
         frame_generator(),
@@ -1884,3 +1908,44 @@ async def rollback_entity_descriptor(entity_id: int, version: int, req: Rollback
         "notes": req.notes,
     }
 
+
+
+# -----------------------------------------------------------------------------
+# REST API: System Lifecycle, Process Diagnostics & Eviction
+# -----------------------------------------------------------------------------
+@app.get("/api/system/processes")
+async def get_system_processes():
+    """Diagnostic overview of background workers, threads, PIDs, and stream hibernation states."""
+    lm = get_lifecycle_manager()
+    return lm.get_diagnostics()
+
+
+@app.post("/api/system/streams/{camera_id}/evict")
+async def evict_stream_subscribers(camera_id: str, reason: Optional[str] = Query("Admin eviction")):
+    """Forcibly evict all active subscriber leases for a camera, putting it immediately into hibernation."""
+    lm = get_lifecycle_manager()
+    res = lm.evict_subscribers(camera_id, reason=reason)
+    if not res.get("success"):
+        raise HTTPException(status_code=404, detail=res.get("error", "Failed to evict stream"))
+    return res
+
+
+@app.post("/api/system/hibernate_all")
+async def hibernate_all_idle():
+    """Audit all streams and force-hibernate any channel with zero active viewers."""
+    lm = get_lifecycle_manager()
+    return lm.hibernate_all_idle()
+
+
+@app.get("/api/system/metrics")
+async def get_system_metrics_history(limit: int = Query(100, ge=1, le=1000)):
+    """Retrieve historical time-series resource usage (CPU, RAM, stream count) for charting."""
+    lm = get_lifecycle_manager()
+    return lm.get_metrics_history(limit=limit)
+
+
+@app.get("/api/system/events")
+async def get_system_lifecycle_events(camera_id: Optional[str] = None, limit: int = Query(50, ge=1, le=500)):
+    """Retrieve historical stream lifecycle audit trail (START, HIBERNATE, RESUME, EVICT)."""
+    lm = get_lifecycle_manager()
+    return lm.get_lifecycle_history(camera_id=camera_id, limit=limit)
