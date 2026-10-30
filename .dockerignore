@@ -1,0 +1,73 @@
+# ==============================================================================
+# Intelligent Tracker - Docker Build Context Ignore (.dockerignore)
+# Prevents sending unnecessary virtual environments, git history, and local
+# temporary files to the Docker daemon during build (reducing context from ~1GB to ~5MB).
+# ==============================================================================
+
+# Virtual Environments (Build uses multi-stage /opt/venv from requirements.txt)
+.venv/
+venv/
+env/
+ENV/
+lib/
+lib64/
+
+# Git Metadata & Repository Configs
+.git/
+.gitignore
+.gitattributes
+
+# Python Bytecode, Caches & Wheels
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+develop-eggs/
+eggs/
+parts/
+wheels/
+.Python
+
+# Testing & Coverage Artifacts
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Documentation Build Outputs
+documentation/_build/
+_build/
+
+# IDEs & Developer Configs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local Logs & OS Metadata
+*.log
+.DS_Store
+Thumbs.db
+
+# Temporary Data, Scratch Scripts & Video Exports
+scratch/
+crops/
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.zip
+*.tar.gz
+
+# Local SQLite Runtime Databases (Persisted via Docker volumes)
+data/*.db
+data/*.sqlite3
+data/*.csv
+data/*.json
+
+# Keep baseline configs and models available if needed
+!configs/
