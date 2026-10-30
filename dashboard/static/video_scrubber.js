@@ -461,53 +461,8 @@
   }
 
   async function runBatchAnalytics() {
-    if (!currentVideoFilename) return;
-    btnAnalyzeVideo.disabled = true;
-    btnAnalyzeVideo.textContent = '⏳ Processing Analytics...';
-    batchReportContainer.innerHTML = '<div class="empty-state">Running Edge AI detector and Re-ID indexer on recording...</div>';
-
-    try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(currentVideoFilename)}/analyze?sample_rate=1`, {
-        method: 'POST'
-      });
-      const data = await resp.json();
-
-      if (data.status === 'success') {
-        const rep = data.report || {};
-        batchReportContainer.innerHTML = `
-          <div class="batch-report-card glass-panel">
-            <h4>📊 Occurrence Indexing Report (${escapeHtml(currentVideoFilename)})</h4>
-            <div class="kpi-row" style="margin-top: 10px;">
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Frames Processed</div>
-                <div class="kpi-value cyan">${rep.frames_processed || 0}</div>
-              </div>
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Detections</div>
-                <div class="kpi-value green">${rep.total_detections || 0}</div>
-              </div>
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Sightings Recorded</div>
-                <div class="kpi-value cyan">${rep.total_sightings || 0}</div>
-              </div>
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Unique Entities</div>
-                <div class="kpi-value green">${rep.unique_entities_identified || 0}</div>
-              </div>
-            </div>
-            <div style="margin-top: 12px; font-size: 13px; color: #94a3b8;">
-              Audit records cataloged in <code>TrackerDB</code>. View complete results in <strong>Sighting Timeline</strong> tab.
-            </div>
-          </div>
-        `;
-      } else {
-        batchReportContainer.innerHTML = `<div class="empty-state" style="color:#ef4444;">Analysis failed: ${data.detail || 'Error'}</div>`;
-      }
-    } catch (e) {
-      batchReportContainer.innerHTML = `<div class="empty-state" style="color:#ef4444;">Request error: ${e.message}</div>`;
-    } finally {
-      btnAnalyzeVideo.disabled = false;
-      btnAnalyzeVideo.textContent = '⚡ Run Batch Occurrence Report';
+    if (window.TrackerApp.BatchAnalytics) {
+      await window.TrackerApp.BatchAnalytics.run(currentVideoFilename, btnAnalyzeVideo, batchReportContainer);
     }
   }
 

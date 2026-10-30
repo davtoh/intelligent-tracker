@@ -1,0 +1,382 @@
+/* ==========================================================================
+   Intelligent Tracker - Scenario Studio, Overlays, BEV Minimap & RSAC Review
+   Architecture: ITCSS - Studio & Biometrics
+   ========================================================================== */
+
+/* Floating Overlays Toolbar */
+.floating-overlay-toolbar {
+  margin-top: 10px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--border-subtle);
+}
+
+.overlay-toolbar-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cyan);
+  white-space: nowrap;
+}
+
+.overlay-toggles-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.overlay-toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: rgba(30, 41, 59, 0.6);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.overlay-toggle-chip:hover {
+  background: rgba(51, 65, 85, 0.8);
+  color: var(--text-main);
+}
+
+.overlay-toggle-chip input[type="checkbox"] {
+  accent-color: var(--cyan);
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Scenario Studio Layout */
+.studio-layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+}
+
+.studio-main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.studio-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.studio-toolbar .toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Active state formatted cleanly without !important using natural cascading */
+.studio-toolbar .studio-tool-btn.active,
+.btn.studio-tool-btn.active {
+  background: var(--cyan);
+  color: #000;
+  border-color: var(--cyan);
+  font-weight: 600;
+}
+
+.studio-status-banner {
+  padding: 8px 12px;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  border-radius: var(--radius-sm);
+  color: #38bdf8;
+  font-size: 0.82rem;
+}
+
+.studio-canvas-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 520px;
+  background: #000;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.studio-canvas-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+#studio-drawing-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* BEV Minimap Card */
+.bev-minimap-card {
+  padding: 14px;
+}
+
+.bev-canvas-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+}
+
+#bev-minimap-canvas {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: #0f172a;
+}
+
+.bev-legend {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+}
+
+.bev-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bev-legend .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.bev-legend .dot.green {
+  background: #22c55e;
+}
+
+.bev-legend .dot.red {
+  background: #ef4444;
+}
+
+/* Studio Scenario Lists */
+.studio-items-group .group-subhead {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.studio-items-scroll {
+  max-height: 130px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+
+.studio-item-card .item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.studio-item-card .color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.studio-item-card .item-sub {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+
+/* Topology Links List */
+.topology-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.topology-link-card {
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topology-link-card .link-flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.topology-link-card .cam-badge {
+  background: rgba(6, 182, 212, 0.2);
+  color: var(--cyan);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
+
+.topology-link-card .zone-badge {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+}
+
+.topology-link-card .arrow {
+  color: #facc15;
+}
+
+.topology-link-card .link-timing {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Trajectory Journey Search & Narrative Styles */
+.journey-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.journey-search-box {
+  min-width: 380px;
+}
+
+.journey-summary-card {
+  padding: 16px;
+  border-left: 3px solid var(--cyan);
+}
+
+.journey-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.journey-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.journey-narrative {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.journey-hops-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.transit-connector {
+  display: flex;
+  justify-content: center;
+  position: relative;
+  padding: 6px 0;
+}
+
+.transit-connector span {
+  font-size: 0.75rem;
+  color: #facc15;
+  background: rgba(30, 41, 59, 0.9);
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px dashed rgba(250, 204, 21, 0.5);
+}
+
+.hop-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+}
+
+.hop-num {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--cyan);
+  min-width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(6, 182, 212, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hop-details {
+  flex: 1;
+}
+
+.hop-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.hop-time {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.hop-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.hop-thumb img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+

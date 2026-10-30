@@ -113,11 +113,21 @@ class TestDashboardUI(unittest.TestCase):
         """Verify static CSS and JS assets are served with HTTP 200 and contain expected modernization symbols."""
         css_res = self.client.get("/static/styles.css")
         self.assertEqual(css_res.status_code, 200)
-        css = css_res.text
-        self.assertIn(".live-player-hud", css)
-        self.assertIn(".nav-tabs-wrapper", css)
-        self.assertIn(".mobile-nav-drawer", css)
-        self.assertIn(".modal-body-scroll", css)
+        self.assertIn('css/player.css', css_res.text)
+        self.assertIn('css/layout.css', css_res.text)
+
+        # Verify modular component stylesheets are served and contain modernization classes
+        player_css = self.client.get("/static/css/player.css").text
+        self.assertIn(".live-player-hud", player_css)
+
+        layout_css = self.client.get("/static/css/layout.css").text
+        self.assertIn(".nav-tabs-wrapper", layout_css)
+
+        responsive_css = self.client.get("/static/css/responsive.css").text
+        self.assertIn(".mobile-nav-drawer", responsive_css)
+
+        modals_css = self.client.get("/static/css/modals.css").text
+        self.assertIn(".modal-body-scroll", modals_css)
 
         js_res = self.client.get("/static/app.js")
         self.assertEqual(js_res.status_code, 200)
@@ -126,6 +136,11 @@ class TestDashboardUI(unittest.TestCase):
         self.assertIn("STANDBY_POSTER_SVG", js)
         self.assertIn("detachLiveStream", js)
         self.assertIn("attachLiveStream", js)
+
+        # Verify modular feature JS assets are also served with HTTP 200
+        live_js = self.client.get("/static/js/features/live_player.js")
+        self.assertEqual(live_js.status_code, 200)
+        self.assertIn("attachLiveStream", live_js.text)
 
     def test_rest_telemetry_snapshot_endpoint(self):
         """Verify GET /api/cameras/{camera_id}/telemetry endpoint contract for Enterprise Hub canvas overlay."""

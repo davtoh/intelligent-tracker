@@ -28,6 +28,10 @@ try:
 except ImportError:
     yaml = None
 
+from dashboard.services.stream_subscribers import StreamSubscriberRegistry
+from dashboard.services.frame_overlay import FrameOverlayRenderer
+from dashboard.services.entity_tagger import EntityTaggerService
+
 from intelligent_tracker.video import VideoSource, resolve_camera_source
 from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.tracker import TrackerFactory
@@ -125,57 +129,62 @@ class StreamManager:
         }
 
         # WebSocket Subscribers & Active Subscribers Tracking (Self-Healing Leased Registry)
-        self._ws_subscribers: List[Any] = []
-        self._subscribers: Dict[str, float] = {}
-        self._subscriber_lock = threading.Lock()
-        self._is_hibernating = False
+        self._subscriber_registry = StreamSubscriberRegistry(
+            resume_callback=self._resume_video_source,
+            lease_ttl=3.0,
+        )
+        self._overlay_renderer = FrameOverlayRenderer()
+        # Aliases for backward compatibility
+        self._subscribers = self._subscriber_registry._subscribers
+        self._ws_subscribers = self._subscriber_registry._ws_subscribers
+        self._subscriber_lock = self._subscriber_registry._lock
 
         # Initialize Subsystems
         self._init_subsystems()
 
-    def add_subscriber(self, sub_id: Optional[str] = None) -> str:
-        """Register an active client subscriber (MJPEG stream or WebSocket) with a leased token."""
-        token = str(sub_id) if sub_id else uuid.uuid4().hex
-        now = time.time()
-        with self._subscriber_lock:
-            self._subscribers[token] = now
+    def _resume_video_source(self) -> None:
+        """Callback to resume video capture when subscribers reconnect."""
         if self.video_source and hasattr(self.video_source, "resume"):
             self.video_source.resume()
-        return token
+
+    def add_subscriber(self, sub_id: Optional[str] = None) -> str:
+        """Register an active client subscriber (MJPEG stream or WebSocket) with a leased token."""
+        return self._subscriber_registry.add_subscriber(sub_id)
 
     def heartbeat_subscriber(self, sub_id: str) -> None:
         """Update last-seen timestamp for an active leased subscriber."""
-        with self._subscriber_lock:
-            if sub_id in self._subscribers:
-                self._subscribers[sub_id] = time.time()
+        self._subscriber_registry.heartbeat_subscriber(sub_id)
 
     def remove_subscriber(self, sub_id: Optional[str] = None) -> int:
         """Unregister an active client subscriber by token or pop one."""
-        with self._subscriber_lock:
-            if sub_id:
-                self._subscribers.pop(str(sub_id), None)
-            elif self._subscribers:
-                self._subscribers.pop(next(iter(self._subscribers)))
-            return self._active_subscriber_count_unlocked()
+        return self._subscriber_registry.remove_subscriber(sub_id)
 
     def _active_subscriber_count_unlocked(self) -> int:
         """Internal helper to prune expired subscriber leases and count active viewers."""
-        now = time.time()
-        expired = [sid for sid, last_seen in self._subscribers.items() if (now - last_seen) > 3.0]
-        for sid in expired:
-            self._subscribers.pop(sid, None)
-        return len(self._subscribers) + len(self._ws_subscribers)
+        return self._subscriber_registry._active_subscriber_count_unlocked()
 
     @property
     def subscriber_count(self) -> int:
         """Current number of active, non-expired subscribers."""
-        with self._subscriber_lock:
-            return self._active_subscriber_count_unlocked()
+        return self._subscriber_registry.subscriber_count
 
     @property
     def is_hibernating(self) -> bool:
         """Returns True if the stream is currently hibernating due to zero subscribers."""
-        return self._is_hibernating
+        return self._subscriber_registry.is_hibernating
+
+    @is_hibernating.setter
+    def is_hibernating(self, val: bool) -> None:
+        self._subscriber_registry.is_hibernating = val
+
+    @property
+    def _is_hibernating(self) -> bool:
+        """Alias for backward compatibility."""
+        return self._subscriber_registry.is_hibernating
+
+    @_is_hibernating.setter
+    def _is_hibernating(self, val: bool) -> None:
+        self._subscriber_registry.is_hibernating = val
 
     @property
     def is_running(self) -> bool:
@@ -511,124 +520,19 @@ class StreamManager:
                     except Exception as e:
                         logger.debug("Re-ID matching error: %s", e)
 
-                # 5. Render Annotated Frame with Customizable Overlay Flags
-                annotated = frame.copy()
-                h, w = annotated.shape[:2]
-
-                # Draw Heatmap if enabled
-                if (self.draw_heatmap or self.overlays.get("heatmap", False)) and self.analytics:
-                    try:
-                        annotated = self.analytics.draw_heatmap_overlay(annotated, alpha=0.55)
-                    except Exception:
-                        pass
-
-                # Draw Zones
-                if self.overlays.get("zones", True) and self.analytics:
-                    for zone in list(self.analytics.zones.values()):
-                        pts = zone.polygon.reshape((-1, 1, 2)).astype(np.int32)
-                        is_breached = getattr(zone, "_threshold_breached", False)
-                        z_col = (0, 0, 255) if is_breached else zone.color
-                        # Semi-transparent fill
-                        overlay = annotated.copy()
-                        cv2.fillPoly(overlay, [pts], z_col)
-                        cv2.addWeighted(overlay, 0.25, annotated, 0.75, 0, annotated)
-                        cv2.polylines(annotated, [pts], True, z_col, 2)
-                        # Label
-                        M = cv2.moments(pts)
-                        if M["m00"] != 0:
-                            cx = int(M["m10"] / M["m00"])
-                            cy = int(M["m01"] / M["m00"])
-                        else:
-                            cx, cy = pts[0][0][0], pts[0][0][1]
-                        cap_text = f"/{zone.capacity_limit}" if getattr(zone, "capacity_limit", None) else ""
-                        tag = f"{zone.name} [{zone.occupancy}{cap_text}]"
-                        cv2.putText(annotated, tag, (cx - 30, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
-                # Draw Tripwires
-                if self.overlays.get("tripwires", True) and self.analytics:
-                    for tw in list(self.analytics.tripwires.values()):
-                        p1, p2 = tw.line_segment
-                        ip1 = (int(round(p1[0])), int(round(p1[1])))
-                        ip2 = (int(round(p2[0])), int(round(p2[1])))
-                        cv2.line(annotated, ip1, ip2, tw.color, 2)
-                        mid = ((ip1[0] + ip2[0]) // 2, (ip1[1] + ip2[1]) // 2)
-                        tw_tag = f"{tw.name}: IN={tw.in_count} OUT={tw.out_count}"
-                        cv2.putText(annotated, tw_tag, (mid[0] + 5, mid[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.45, tw.color, 1)
-
-                # Draw Tracks (Bounding Boxes, Labels, Dwell Timers, Velocity Vectors)
-                for tid, trk in list(tracks.items()):
-                    bx, by, bw, bh = trk.bbox
-                    color = (0, 255, 0)
-                    cat_id = getattr(trk, "category", "person")
-                    if self.rsac_manager:
-                        cat_obj = self.rsac_manager.get_category(cat_id)
-                        if cat_obj and cat_obj.color:
-                            hex_c = cat_obj.color.lstrip("#")
-                            if len(hex_c) == 6:
-                                r, g, b = int(hex_c[0:2], 16), int(hex_c[2:4], 16), int(hex_c[4:6], 16)
-                                color = (b, g, r)
-                    if hasattr(trk, "category") and trk.category == "restricted":
-                        color = (0, 0, 255)
-                    elif hasattr(trk, "category") and trk.category == "vip":
-                        color = (0, 215, 255)
-                    elif trk.state == "predicting":
-                        color = (255, 165, 0)
-
-                    # Bounding Box
-                    if self.overlays.get("bboxes", True):
-                        cv2.rectangle(annotated, (bx, by), (bx + bw, by + bh), color, 2)
-
-                    # Clutter / Interacting warning banner
-                    if getattr(trk, "is_cluttered", False) and self.overlays.get("clutter", True):
-                        partner_info = f" with #{trk.clutter_partner_id}" if getattr(trk, "clutter_partner_id", None) else ""
-                        clutter_tag = f"[CLUTTER{partner_info}]"
-                        cv2.putText(annotated, clutter_tag, (bx, by + bh + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 140, 255), 2)
-
-                    # Track Label & Dwell Timer
-                    if self.overlays.get("track_ids", True):
-                        name_disp = trk.entity_name or trk.identity_label or f"#{tid}"
-                        dwell_str = f" [{trk.dwell_time:.1f}s]" if self.overlays.get("dwell_timers", True) else ""
-                        hud_text = f"{name_disp} ({trk.confidence:.2f}){dwell_str}"
-                        cv2.putText(annotated, hud_text, (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-
-                    # Velocity Vector
-                    if self.overlays.get("velocity", True):
-                        vx, vy = trk.velocity if hasattr(trk, "velocity") else (0.0, 0.0)
-                        if np.hypot(vx, vy) > 0.5:
-                            cx, cy = trk.centroid
-                            cv2.arrowedLine(
-                                annotated,
-                                (int(cx), int(cy)),
-                                (int(cx + vx * 3), int(cy + vy * 3)),
-                                (255, 255, 0),
-                                2,
-                                tipLength=0.3,
-                            )
-
-                # Top Status HUD bar
-                if self.overlays.get("hud_bar", True):
-                    uptime = int(time.time() - self.start_time)
-                    hud_summary = f"CAM: {self.camera_id} | FPS: {measured_fps:.1f} | TRACKS: {len(tracks)} | TIME: {uptime}s"
-                    cv2.rectangle(annotated, (0, 0), (w, 24), (15, 23, 42), -1)
-                    cv2.putText(annotated, hud_summary, (10, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 255), 1)
-
-                # BEV Minimap Picture-in-Picture (PiP) Overlay
-                if self.overlays.get("bev_minimap", False) and self.homography:
-                    try:
-                        pip_size = (160, 160)
-                        bev_small = self.homography.render_bev_minimap(
-                            tracks,
-                            zones=self.analytics.zones if self.analytics else None,
-                            canvas_size=pip_size,
-                            margin=16,
-                        )
-                        # Place in bottom-right corner
-                        px, py = w - pip_size[0] - 12, h - pip_size[1] - 12
-                        if px > 0 and py > 0:
-                            annotated[py:py + pip_size[1], px:px + pip_size[0]] = bev_small
-                            cv2.rectangle(annotated, (px, py), (px + pip_size[0], py + pip_size[1]), (0, 220, 255), 1)
-                    except Exception as e:
-                        logger.debug("BEV PiP overlay error: %s", e)
+                # 5. Render Annotated Frame with Customizable Overlay Flags via FrameOverlayRenderer
+                annotated = self._overlay_renderer.render(
+                    frame=frame,
+                    tracks=tracks,
+                    overlays=self.overlays,
+                    analytics=self.analytics,
+                    draw_heatmap=self.draw_heatmap,
+                    rsac_manager=self.rsac_manager,
+                    homography=self.homography,
+                    camera_id=self.camera_id,
+                    measured_fps=measured_fps,
+                    start_time=self.start_time,
+                )
 
                 # Compress to JPEG
                 ret, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -712,34 +616,13 @@ class StreamManager:
 
     def _broadcast_telemetry(self, telemetry: Dict[str, Any]):
         """Distribute telemetry to registered async queues."""
-        with self._subscriber_lock:
-            subs = list(self._ws_subscribers)
-        dead = []
-        for sub in subs:
-            try:
-                if hasattr(sub, "put_nowait"):
-                    sub.put_nowait(telemetry)
-                elif callable(sub):
-                    sub(telemetry)
-            except Exception:
-                dead.append(sub)
-        if dead:
-            with self._subscriber_lock:
-                for d in dead:
-                    if d in self._ws_subscribers:
-                        self._ws_subscribers.remove(d)
+        self._subscriber_registry.broadcast_telemetry(telemetry)
 
     def register_ws_subscriber(self, sub: Any):
-        with self._subscriber_lock:
-            if sub not in self._ws_subscribers:
-                self._ws_subscribers.append(sub)
-        if self.video_source and hasattr(self.video_source, "resume"):
-            self.video_source.resume()
+        self._subscriber_registry.register_ws_subscriber(sub)
 
     def unregister_ws_subscriber(self, sub: Any):
-        with self._subscriber_lock:
-            if sub in self._ws_subscribers:
-                self._ws_subscribers.remove(sub)
+        self._subscriber_registry.unregister_ws_subscriber(sub)
 
     def get_latest_frame_jpeg(self, camera_id: Optional[str] = None) -> bytes:
         with self._lock:
@@ -776,105 +659,22 @@ class StreamManager:
         notes: str = "",
     ) -> Dict[str, Any]:
         """
-        Interactive click-to-tag bounding box capability:
-        Extracts crop from current frame, generates Re-ID embedding, registers into SQLite database,
-        and links live track identity.
+        Interactive click-to-tag bounding box capability.
+        Delegates to EntityTaggerService for Re-ID visual registration.
         """
-        if not self.db:
-            raise RuntimeError("Database not available")
-
         with self._lock:
-            raw_frame = None
-            if self._latest_raw_frame is not None:
-                raw_frame = self._latest_raw_frame.copy()
+            raw_frame = self._latest_raw_frame.copy() if self._latest_raw_frame is not None else None
 
-        if raw_frame is None:
-            raise RuntimeError("No video frame available to extract visual signature")
-
-        # Resolve bounding box
-        target_bbox = None
-        if bbox and len(bbox) == 4:
-            target_bbox = bbox
-        elif track_id is not None and self.tracker:
-            for tid, trk in self.tracker.tracks.items():
-                if tid == track_id:
-                    target_bbox = list(trk.bbox)
-                    break
-
-        if not target_bbox:
-            # Fallback center crop if bbox not provided
-            h, w = raw_frame.shape[:2]
-            target_bbox = [w // 4, h // 4, w // 2, h // 2]
-
-        bx, by, bw, bh = [int(v) for v in target_bbox]
-        h, w = raw_frame.shape[:2]
-        x1 = max(0, min(w - 1, bx))
-        y1 = max(0, min(h - 1, by))
-        x2 = max(x1 + 1, min(w, bx + bw))
-        y2 = max(y1 + 1, min(h, by + bh))
-        crop = raw_frame[y1:y2, x1:x2]
-
-        # Check or add entity
-        existing = self.db.get_entity_by_name(entity_name)
-        if existing:
-            entity_id = existing["id"]
-            if category:
-                self.db.update_entity(entity_id, category=category, notes=notes)
-        else:
-            entity_id = self.db.add_entity(name=entity_name, category=category, notes=notes)
-
-        # Generate Re-ID Embedding
-        emb = None
-        if self.reid_extractor and crop.size > 0:
-            try:
-                emb = self.reid_extractor.extract_crop(crop)
-            except Exception as e:
-                logger.warning("Failed to compute Re-ID embedding for tag: %s", e)
-
-        if emb is None or not isinstance(emb, np.ndarray):
-            # Synthetic 128-dim embedding fallback
-            vec = np.random.randn(128).astype(np.float32)
-            emb = vec / (np.linalg.norm(vec) + 1e-7)
-
-        # Save thumbnail crop
-        crop_rel_path = f"data/crops/{entity_name.lower().replace(' ', '_')}_{int(time.time())}.jpg"
-        abs_crop_path = os.path.abspath(crop_rel_path)
-        os.makedirs(os.path.dirname(abs_crop_path), exist_ok=True)
-        cv2.imwrite(abs_crop_path, crop)
-
-        sig_id = self.db.add_signature(entity_id=entity_id, embedding=emb, crop_path=crop_rel_path)
-
-        # Record immediate sighting
-        self.db.record_sighting(
-            entity_id=entity_id,
-            track_id=track_id or 0,
-            source=self.camera_id,
-            zone_id="manual_tag",
-            bbox=f"{bx},{by},{bw},{bh}",
-            confidence=1.0,
-            snapshot_path=crop_rel_path,
+        return EntityTaggerService.tag_entity(
+            raw_frame=raw_frame,
+            db=self.db,
+            entity_name=entity_name,
+            category=category,
+            track_id=track_id,
+            bbox=bbox,
+            notes=notes,
+            camera_id=self.camera_id,
+            tracker=self.tracker,
+            reid_extractor=self.reid_extractor,
+            gallery_matcher=self.gallery_matcher,
         )
-
-        # Update in-memory tracker track
-        if track_id is not None and self.tracker:
-            for tid, trk in self.tracker.tracks.items():
-                if tid == track_id:
-                    trk.entity_name = entity_name
-                    trk.category = category
-                    break
-
-        # Refresh gallery
-        if self.gallery_matcher:
-            try:
-                self.gallery_matcher.refresh_gallery()
-            except Exception:
-                pass
-
-        logger.info("Successfully tagged entity '%s' (ID #%d, sig #%d)", entity_name, entity_id, sig_id)
-        return {
-            "entity_id": entity_id,
-            "name": entity_name,
-            "category": category,
-            "signature_id": sig_id,
-            "crop_path": crop_rel_path,
-        }

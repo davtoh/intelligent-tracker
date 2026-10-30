@@ -1260,11 +1260,27 @@
   <!-- Toast Notification Container (Milestone 9 & 10) -->
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- JavaScript Modules -->
-  <script src="/static/app.js"></script>
+  <!-- JavaScript Core & Feature Modules (Milestone 11 Decoupled Architecture) -->
+  <script src="/static/js/core/utils.js"></script>
+  <script src="/static/js/core/event_bus.js"></script>
+  <script src="/static/js/features/tag_modal.js"></script>
+  <script src="/static/js/features/live_player.js"></script>
+  <script src="/static/js/features/gallery.js"></script>
+  <script src="/static/js/features/timeline.js"></script>
+  <script src="/static/js/features/analytics_charts.js"></script>
+  <script src="/static/js/features/multi_grid.js"></script>
+  <script src="/static/js/features/batch_analytics.js"></script>
+  <script src="/static/js/features/bev_minimap.js"></script>
+  <script src="/static/js/features/topology.js"></script>
+  <script src="/static/js/features/scenario_modals.js"></script>
+  <script src="/static/js/features/enrollment.js"></script>
+  <script src="/static/js/features/rsac_versions.js"></script>
+
+  <!-- JavaScript Coordinators & Controllers -->
   <script src="/static/camera_manager.js"></script>
   <script src="/static/video_scrubber.js"></script>
   <script src="/static/studio.js"></script>
   <script src="/static/review_and_rsac.js"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

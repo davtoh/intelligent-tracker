@@ -1,0 +1,324 @@
+/* ==========================================================================
+   Intelligent Tracker - Gallery, Timeline, Heatmap & Alerts Table Views
+   Architecture: ITCSS - Domain Views
+   ========================================================================== */
+
+/* Tab 2: Entity Gallery View */
+.gallery-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.toolbar-panel {
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  width: 280px;
+}
+
+.search-box input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  width: 100%;
+  margin-left: 8px;
+}
+
+.filter-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.filter-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filter-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.filter-pill.active {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.entity-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.entity-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px -10px rgba(6, 182, 212, 0.3);
+}
+
+.entity-card-top {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.entity-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: #1e293b;
+  border: 2px solid var(--border-subtle);
+}
+
+.entity-meta {
+  flex: 1;
+}
+
+.entity-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.entity-stats {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.entity-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* Tab 3: Sighting Timeline */
+.timeline-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.filter-item select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.timeline-stream-container {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.timeline-stream {
+  position: relative;
+  padding-left: 32px;
+}
+
+.timeline-stream::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 11px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--cyan), var(--indigo), rgba(255, 255, 255, 0.05));
+}
+
+.timeline-node {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -32px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+  border: 2px solid var(--bg-base);
+}
+
+.timeline-card {
+  padding: 14px 18px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.timeline-thumbnail {
+  width: 70px;
+  height: 70px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.timeline-thumbnail:hover {
+  transform: scale(1.08);
+  border-color: var(--cyan);
+}
+
+.timeline-content {
+  flex: 1;
+}
+
+.timeline-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.timeline-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* Tab 4: Analytics & Heatmap View */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.chart-card,
+.heatmap-card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-wrapper {
+  position: relative;
+  height: 380px;
+  width: 100%;
+}
+
+.heatmap-viewport {
+  width: 100%;
+  background: #020617;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+}
+
+#static-heatmap-img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+/* Tab 5: Security Alerts Table */
+.alerts-table-card {
+  padding: 20px;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.data-table th {
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.data-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+}
+
+.data-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-main);
+}
+

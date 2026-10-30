@@ -421,99 +421,24 @@
     }
   }
 
-  // Focus single camera (1x1 mode)
   function focusCamera(cameraId) {
-    focusedCameraId = cameraId;
-    const cam = activeCameras.find(c => c.id === cameraId) || activeCameras[0];
-    if (cam) {
-      if (liveStreamImg) {
-        liveStreamImg.src = `/stream/${cam.id}`;
-      }
-      if (streamTitle) {
-        const fullTitle = `Camera Feed: ${cam.name.toUpperCase()} (${cam.id})`;
-        streamTitle.textContent = fullTitle;
-        streamTitle.title = fullTitle;
-      }
-      if (cameraSelectDropdown) {
-        cameraSelectDropdown.value = cam.id;
-      }
-      if (window.App && typeof window.App.switchCamera === 'function') {
-        window.App.switchCamera(cam.id);
-      }
+    if (window.TrackerApp.MultiGrid) {
+      window.TrackerApp.MultiGrid.focusCamera(cameraId, activeCameras);
     }
-    setGridMode('1x1');
   }
 
-  // Set Multi-Camera Grid Mode (1x1, 2x2, 3x3)
   function setGridMode(mode) {
     currentGridMode = mode;
-
-    document.querySelectorAll('.grid-switch-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.getAttribute('data-grid') === mode);
-    });
-
-    renderGrid();
+    if (window.TrackerApp.MultiGrid) {
+      window.TrackerApp.MultiGrid.setGridMode(mode, activeCameras);
+    }
   }
 
   function renderGrid() {
-    if (!multiGridContainer || !singleVideoWrapper) return;
-
-    if (currentGridMode === '1x1') {
-      multiGridContainer.style.display = 'none';
-      multiGridContainer.innerHTML = ''; // Detach background grid streams to enable hibernation
-      singleVideoWrapper.style.display = 'flex';
-      window.dispatchEvent(new Event('resize'));
-    } else {
-      singleVideoWrapper.style.display = 'none';
-      multiGridContainer.style.display = 'grid';
-
-      multiGridContainer.className = `multi-camera-grid grid-${currentGridMode}`;
-
-      // Render camera tiles
-      multiGridContainer.innerHTML = activeCameras.map(cam => `
-        <div class="camera-grid-tile glass-panel ${cam.id === focusedCameraId ? 'focused-tile' : ''}" data-id="${cam.id}">
-          <div class="tile-header">
-            <span class="tile-title">${escapeHtml(cam.name)}</span>
-            <span class="tile-status-badge ${cam.status === 'online' ? 'online' : 'offline'}">${cam.status.toUpperCase()}</span>
-          </div>
-          <div class="tile-video-container">
-            <img src="/stream/${cam.id}" alt="${escapeHtml(cam.name)}" loading="lazy" />
-          </div>
-          <div class="tile-footer">
-            <span class="tile-fps">${cam.fps} FPS</span>
-            <span class="tile-tracks">${cam.active_tracks_count || 0} tracks</span>
-            <button class="btn btn-xs btn-primary btn-tile-focus" data-id="${cam.id}">🔍 View 1x1</button>
-          </div>
-        </div>
-      `).join('');
-
-      // Add click to focus handlers
-      multiGridContainer.querySelectorAll('.camera-grid-tile, .btn-tile-focus').forEach(elem => {
-        elem.addEventListener('click', (e) => {
-          const camId = elem.getAttribute('data-id');
-          if (camId) {
-            focusCamera(camId);
-          }
-        });
-      });
+    if (window.TrackerApp.MultiGrid) {
+      window.TrackerApp.MultiGrid.renderGrid(activeCameras);
     }
   }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  window.addEventListener('beforeunload', () => {
-    if (multiGridContainer) multiGridContainer.innerHTML = '';
-  });
-  window.addEventListener('pagehide', () => {
-    if (multiGridContainer) multiGridContainer.innerHTML = '';
-  });
 
   // Export module to global window
   window.CameraManager = {

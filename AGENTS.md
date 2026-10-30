@@ -50,18 +50,15 @@ All new code and refactors must adhere to the 10 Core Coding Principles (**SRP, 
 
 ## 7. Monolith Freeze & Strangler-Fig Architecture Map
 The following legacy files currently exceed the 500-line hard ceiling and are under an active **Monolith Freeze**:
-- `dashboard/static/styles.css` (2,902 lines)
 - `intelligent_tracker/database.py` (2,107 lines, `TrackerDB` has 68 methods)
-- `dashboard/app.py` (1,951 lines)
 - `intelligent_tracker/geometry.py` (1,816 lines)
 - `intelligent_tracker/detectors.py` (1,653 lines)
 - `intelligent_tracker/core.py` (1,537 lines)
 - `intelligent_tracker/events.py` (1,377 lines)
-- `dashboard/static/app.js` (1,263 lines)
-- `dashboard/static/studio.js` (994 lines)
-- `dashboard/stream_manager.py` (880 lines, `StreamManager` has 25 methods)
-- `dashboard/static/review_and_rsac.js` (813 lines)
+- `dashboard/stream_manager.py` (680 lines, partially refactored)
 - `intelligent_tracker/tracker.py` (781 lines)
+
+*(Note: Successfully decomposed in Milestone 12: `dashboard/static/styles.css` 2,902 -> 33 lines, `dashboard/app.py` 1,951 -> 188 lines, `dashboard/static/app.js` 1,263 -> 159 lines, `dashboard/static/studio.js` 994 -> 473 lines, and `dashboard/static/review_and_rsac.js` 813 -> 375 lines).*
 
 ### Mandatory Placement for New Features ("Split-Before-You-Grow")
 1. **New Web Routes & API Endpoints**: Do **NOT** add new endpoints directly into `dashboard/app.py`. Place new route handlers in `dashboard/routers/<domain>.py` (using FastAPI `APIRouter`) and business logic in `dashboard/services/<domain>_service.py`, then mount the router in `dashboard/app.py`.

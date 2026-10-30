@@ -22,6 +22,8 @@
 | 8 | World Scenario Studio, Space Awareness & Homography BEV | ✅ **COMPLETE** |
 | 9 | Artifact & Face Intelligence, Active Learning & Adaptive Memory | ✅ **COMPLETE** |
 | 10 | VMS Dashboard Responsive Redesign, Ergonomics & Enterprise Hub Integration Readiness | ✅ **COMPLETE** |
+| 11 | Process Lifecycle Management, Zero-Load Hibernation & Runtime Diagnostics | ✅ **COMPLETE** |
+| 12 | Dashboard Monolith Refactoring & Strangler-Fig Decoupling | ✅ **COMPLETE** |
 
 ---
 
@@ -611,6 +613,20 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 6. **Lifecycle Manager & Persistence (`intelligent_tracker/lifecycle.py` & `database.py`):** Background sampler recording CPU, RAM, and stream counts every 15s to SQLite tables `system_resource_metrics` and `stream_lifecycle_events`.
 7. **Admin REST APIs (`dashboard/app.py`):** Superuser endpoints `/api/system/processes`, `/api/system/streams/{id}/evict`, `/api/system/hibernate_all`, `/api/system/metrics`, and `/api/system/events`.
 
+---
+
+## ✅ [Milestone 12] — Dashboard Monolith Refactoring & Strangler-Fig Decoupling (COMPLETE)
+**Status: COMPLETE** — Verified: 229/229 tests pass in Python 3.12.10 | 0 `!important` in CSS
+**Scope:** Complete Strangler-Fig decomposition of backend `dashboard/app.py` (1,951 -> 188 lines), master stylesheet `styles.css` (2,902 -> 33 lines), and frontend controllers `app.js` (1,263 -> 159 lines), `studio.js` (994 -> 473 lines), `review_and_rsac.js` (813 -> 375 lines), `camera_manager.js` (533 -> 458 lines), and `video_scrubber.js` (542 -> 497 lines) into cohesive domain submodules conforming to Quantitative Modularity Budgets.
+
+### Deliverables Completed:
+1. **Dependency Injection & Schemas:** Created `dashboard/dependencies.py` (201 lines) with typed singletons and bidirectional bridge to `dashboard.app` globals, and `dashboard/schemas.py` (181 lines) extracting 21 Pydantic request models.
+2. **Domain Service Decomposition:** Created `dashboard/services/stream_subscribers.py` (128L), `dashboard/services/frame_overlay.py` (162L), `dashboard/services/video_transcoder.py` (116L), and `dashboard/services/entity_tagger.py` (134L).
+3. **FastAPI Modular APIRouters:** Created 8 domain routers mounted in `dashboard/app.py`: `streaming.py` (164L), `cameras.py` (268L), `videos.py` (205L), `scenarios.py` (262L), `topology.py` (150L), `analytics.py` (245L), `rsac.py` (279L), and `system.py` (102L).
+4. **Frontend ITCSS Modularization:** Extracted 10 modular stylesheets into `dashboard/static/css/` (`tokens.css`, `badges.css`, `layout.css`, `player.css`, `scrubber.css`, `modals.css`, `views.css`, `studio.css`, `review.css`, `responsive.css`). Master stylesheet `styles.css` is an import manifest (33 lines). Elimination of 100% of `!important` declarations.
+5. **Frontend Core & Feature Decoupling:** Extracted 14 cohesive ES5/ES6 modules into `dashboard/static/js/core/` and `dashboard/static/js/features/` with backward-compatible global facades and Pub/Sub EventBus.
+6. **Hub Integration Readiness:** Validated HMAC-SHA256 webhooks, REST telemetry endpoint `GET /api/cameras/{camera_id}/telemetry`, zero-copy video streaming, and offline SQLite cache.
+
 ## Dependency Graph
 
 ```
@@ -625,6 +641,7 @@ M1 (Env & Core) ✅
                                             └── M9 (Artifact & Face Intelligence, Active Learning) ✅
                                                   └── M10 (VMS Dashboard Responsive Redesign & Hub Integration) ✅
                                                         └── M11 (Process Lifecycle Management & Zero-Load Hibernation) ✅
+                                                              └── M12 (Dashboard Monolith Refactoring & Strangler-Fig Decoupling) ✅
 ```
 
 ---
