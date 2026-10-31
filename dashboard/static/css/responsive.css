@@ -1,0 +1,117 @@
+/* ==========================================================================
+   Intelligent Tracker - Global Responsive Breakpoints & Media Adaptations
+   ========================================================================== */
+
+/* Breakpoint: Desktop Small / High-DPI (max-width: 1280px) */
+@media (max-width: 1280px) {
+  .app-header {
+    padding: 0 16px;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+}
+
+/* Breakpoint: Tablet Landscape (max-width: 1080px) */
+@media (max-width: 1080px) {
+  .live-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header {
+    flex-direction: column;
+    height: auto;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+}
+
+/* Breakpoint: Tablet Portrait (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .hamburger-btn {
+    display: flex;
+  }
+
+  .nav-tabs-wrapper {
+    display: none;
+  }
+
+  .header-action-btn {
+    display: none;
+  }
+
+  .live-pill {
+    display: none;
+  }
+
+  .live-grid,
+  .scrubber-grid,
+  .studio-layout,
+  .analytics-grid,
+  .review-layout,
+  .timeline-wrapper {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scenario-studio-card {
+    min-height: auto;
+  }
+}
+
+/* Breakpoint: Mobile Header & Controls (max-width: 768px) */
+@media (max-width: 768px) {
+  .app-header {
+    height: 60px;
+    padding: 0 12px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brand-title {
+    font-size: 0.95rem;
+  }
+
+  .telemetry-pill {
+    display: none;
+  }
+
+  .live-player-hud {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hud-left,
+  .hud-right,
+  .hud-center {
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+/* Breakpoint: Mobile Content & Layout (max-width: 768px) */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 12px;
+  }
+
+  .modal-body-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  .kpi-row {
+    flex-direction: column;
+  }
+}
+

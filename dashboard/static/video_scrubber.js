@@ -2,11 +2,10 @@
  * Intelligent Tracker - Video Studio & Playback Scrubber Controller.
  * 
  * Provides:
- * - Local video upload & listing (.mp4, .avi, .mkv, .mov)
  * - Frame-stepping scrubber (< 1 frame, > 1 frame)
  * - Variable playback speed (1x, 2x, 4x, 8x)
- * - Dynamic addition of recording as an active Camera Stream
- * - In-browser batch occurrence report generation
+ * - HTML5 video player controls & timeline scrubbing
+ * - Coordination of VideoLibrary and VideoBatch modules
  */
 
 (function () {
@@ -19,7 +18,6 @@
   const videoPlayer = document.getElementById('scrubber-video-player');
   const videoFileInput = document.getElementById('video-file-upload-input');
   const btnUploadVideo = document.getElementById('btn-upload-video');
-  const videoUploadStatus = document.getElementById('video-upload-status');
   const videoFilesList = document.getElementById('video-recordings-list');
 
   // Scrubber Controls
@@ -36,21 +34,12 @@
   // Video Actions
   const btnAddAsCamera = document.getElementById('btn-video-add-camera');
   const btnAnalyzeVideo = document.getElementById('btn-video-analyze');
-  const batchReportContainer = document.getElementById('video-batch-report-container');
   const selectTabPolicy = document.getElementById('scrubber-tab-policy');
 
   // Tab-Switching Lifecycle & Resource Policy State
   let tabPolicy = localStorage.getItem('intelligent_tracker_tab_policy') || 'auto-resume';
   let wasPlayingBeforeTabSwitch = false;
   let savedTimeBeforeTabSwitch = 0;
-
-  function showToast(message, type = 'info') {
-    if (typeof window.showToast === 'function') {
-      window.showToast(message, type);
-    } else {
-      alert(message);
-    }
-  }
 
   function init() {
     bindEvents();
@@ -68,7 +57,12 @@
 
     if (btnUploadVideo && videoFileInput) {
       btnUploadVideo.addEventListener('click', () => videoFileInput.click());
-      videoFileInput.addEventListener('change', uploadSelectedVideo);
+      videoFileInput.addEventListener('change', (e) => {
+        window.VideoLibrary?.uploadSelectedVideo(e, (res) => {
+          loadVideosList();
+          loadVideoIntoPlayer(res.video_url, res.filename, true, 'h264');
+        });
+      });
     }
 
     if (videoPlayer) {
@@ -86,17 +80,9 @@
       videoPlayer.addEventListener('error', handleVideoPlayerError);
     }
 
-    if (btnPlayPause) {
-      btnPlayPause.addEventListener('click', togglePlayPause);
-    }
-
-    if (btnStepBack) {
-      btnStepBack.addEventListener('click', () => stepFrame(-1));
-    }
-
-    if (btnStepForward) {
-      btnStepForward.addEventListener('click', () => stepFrame(1));
-    }
+    if (btnPlayPause) btnPlayPause.addEventListener('click', togglePlayPause);
+    if (btnStepBack) btnStepBack.addEventListener('click', () => stepFrame(-1));
+    if (btnStepForward) btnStepForward.addEventListener('click', () => stepFrame(1));
 
     if (timelineSlider) {
       timelineSlider.addEventListener('input', (e) => {
@@ -106,7 +92,22 @@
       });
     }
 
-    // Playback Speed buttons
+    bindSpeedButtons();
+
+    if (btnAddAsCamera) {
+      btnAddAsCamera.addEventListener('click', () => {
+        if (currentVideoFilename) window.VideoLibrary?.addVideoToCameraPool(currentVideoFilename);
+      });
+    }
+
+    if (btnAnalyzeVideo) {
+      btnAnalyzeVideo.addEventListener('click', () => {
+        if (currentVideoFilename) window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
+      });
+    }
+  }
+
+  function bindSpeedButtons() {
     const speedButtons = [
       { btn: btnSpeed1x, rate: 1.0 },
       { btn: btnSpeed2x, rate: 2.0 },
@@ -123,94 +124,19 @@
         });
       }
     });
-
-    // Add as camera
-    if (btnAddAsCamera) {
-      btnAddAsCamera.addEventListener('click', addVideoToCameraPool);
-    }
-
-    // Batch analyze
-    if (btnAnalyzeVideo) {
-      btnAnalyzeVideo.addEventListener('click', runBatchAnalytics);
-    }
   }
 
   function handleVideoPlayerError() {
     const err = videoPlayer?.error;
     let msg = 'Browser error playing video recording.';
     if (err && err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-      msg = `Codec not supported natively by browser (e.g. HEVC/H.265). Convert to standard H.264 MP4 for instant browser playback.`;
+      msg = 'Codec not supported natively by browser (e.g. HEVC/H.265). Convert to standard H.264 MP4 for instant browser playback.';
     }
-    showCodecNotice(msg, currentVideoFilename);
-  }
-
-  function showCodecNotice(message, filename) {
-    let notice = document.getElementById('scrubber-codec-notice');
-    if (!notice) {
-      notice = document.createElement('div');
-      notice.id = 'scrubber-codec-notice';
-      notice.className = 'codec-notice-banner glass-panel';
-      const viewport = document.querySelector('.scrubber-viewport');
-      if (viewport && viewport.parentNode) {
-        viewport.parentNode.insertBefore(notice, viewport);
-      }
-    }
-    notice.style.display = 'flex';
-    notice.style.alignItems = 'center';
-    notice.style.justifyContent = 'space-between';
-    notice.style.padding = '10px 14px';
-    notice.style.marginBottom = '12px';
-    notice.style.borderRadius = '8px';
-    notice.style.background = 'rgba(245, 158, 11, 0.12)';
-    notice.style.border = '1px solid rgba(245, 158, 11, 0.4)';
-    notice.style.fontSize = '0.85rem';
-    notice.innerHTML = `
-      <div style="flex:1; padding-right: 10px;">
-        <span style="color:#f59e0b; font-weight:600;">⚠️ Codec Compatibility:</span> ${escapeHtml(message)}
-      </div>
-      ${filename ? `<button class="btn btn-xs btn-primary btn-notice-convert" data-filename="${escapeHtml(filename)}">⚡ Convert to H.264</button>` : ''}
-    `;
-
-    notice.querySelector('.btn-notice-convert')?.addEventListener('click', () => {
-      if (filename) transcodeVideo(filename);
-    });
-  }
-
-  function hideCodecNotice() {
-    const notice = document.getElementById('scrubber-codec-notice');
-    if (notice) notice.style.display = 'none';
-  }
-
-  async function transcodeVideo(filename) {
-    if (!filename) return;
-    const btns = document.querySelectorAll(`.btn-transcode-video[data-filename="${CSS.escape(filename)}"], .btn-notice-convert[data-filename="${CSS.escape(filename)}"]`);
-    btns.forEach(b => {
-      b.disabled = true;
-      b.textContent = '⏳ Converting...';
-    });
-    showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`);
-
-    try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode`, {
-        method: 'POST'
+    window.VideoLibrary?.showCodecNotice(msg, currentVideoFilename, (fn) => {
+      window.VideoLibrary?.transcodeVideo(fn, () => {
+        loadVideosList();
       });
-      if (resp.ok) {
-        const data = await resp.json();
-        hideCodecNotice();
-        await loadVideosList();
-        loadVideoIntoPlayer(data.video_url, data.output_filename, true, 'h264');
-      } else {
-        const err = await resp.json();
-        showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
-      }
-    } catch (e) {
-      showToast(`Error during transcoding: ${e.message}`, 'error');
-    } finally {
-      btns.forEach(b => {
-        b.disabled = false;
-        b.textContent = '⚡ Convert';
-      });
-    }
+    });
   }
 
   async function loadVideosList() {
@@ -224,70 +150,51 @@
         return;
       }
 
-      videoFilesList.innerHTML = files.map(file => {
-        const isH264 = file.web_compatible;
-        const codecBadge = isH264
-          ? `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.4);">H.264</span>`
-          : `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(245,158,11,0.2); color:#f59e0b; border:1px solid rgba(245,158,11,0.4);">${escapeHtml((file.codec || 'HEVC').toUpperCase())}</span>`;
+      videoFilesList.innerHTML = files.map(file => window.VideoLibrary?.renderVideoFileCard(file, currentVideoFilename) || '').join('');
+      bindVideoCardActions();
 
-        const convertBtn = !isH264
-          ? `<button class="btn btn-xs btn-outline btn-transcode-video" data-filename="${escapeHtml(file.filename)}" title="Convert to browser-compatible H.264 MP4">⚡ Convert</button>`
-          : '';
-
-        return `
-        <div class="video-file-card glass-panel ${file.filename === currentVideoFilename ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}">
-          <div class="video-file-icon">📼</div>
-          <div class="video-file-meta">
-            <div class="video-filename" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename)}</div>
-            <div class="video-filesize">${file.size_mb} MB • ${codecBadge} ${file.resolution ? `• ${file.resolution}` : ''}</div>
-          </div>
-          <div class="video-file-actions">
-            ${convertBtn}
-            <button class="btn btn-xs btn-primary btn-select-video" data-url="${escapeHtml(file.video_url)}" data-filename="${escapeHtml(file.filename)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec)}">▶ Load</button>
-            <button class="btn btn-xs btn-outline btn-del-video" data-filename="${escapeHtml(file.filename)}">🗑️</button>
-          </div>
-        </div>
-      `;}).join('');
-
-      videoFilesList.querySelectorAll('.btn-select-video').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const url = btn.getAttribute('data-url');
-          const fn = btn.getAttribute('data-filename');
-          const web = btn.getAttribute('data-web') === 'true';
-          const codec = btn.getAttribute('data-codec');
-          loadVideoIntoPlayer(url, fn, web, codec);
-        });
-      });
-
-      videoFilesList.querySelectorAll('.btn-transcode-video').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const fn = btn.getAttribute('data-filename');
-          transcodeVideo(fn);
-        });
-      });
-
-      videoFilesList.querySelectorAll('.btn-del-video').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const fn = btn.getAttribute('data-filename');
-          if (confirm(`Delete recording file '${fn}'?`)) {
-            await fetch(`/api/videos/${encodeURIComponent(fn)}`, { method: 'DELETE' });
-            await loadVideosList();
-          }
-        });
-      });
-
-      // Auto-load first preferred video if none selected
       if (!currentVideoFilename && files.length > 0) {
         const preferred = files.find(f => f.web_compatible) || files[0];
         loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec);
       }
-
     } catch (e) {
       console.warn('Could not load videos list:', e);
     }
+  }
+
+  function bindVideoCardActions() {
+    videoFilesList.querySelectorAll('.btn-select-video').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const url = btn.getAttribute('data-url');
+        const fn = btn.getAttribute('data-filename');
+        const web = btn.getAttribute('data-web') === 'true';
+        const codec = btn.getAttribute('data-codec');
+        loadVideoIntoPlayer(url, fn, web, codec);
+      });
+    });
+
+    videoFilesList.querySelectorAll('.btn-transcode-video').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fn = btn.getAttribute('data-filename');
+        window.VideoLibrary?.transcodeVideo(fn, (data) => {
+          loadVideosList();
+          loadVideoIntoPlayer(data.video_url, data.output_filename, true, 'h264');
+        });
+      });
+    });
+
+    videoFilesList.querySelectorAll('.btn-del-video').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const fn = btn.getAttribute('data-filename');
+        if (confirm(`Delete recording file '${fn}'?`)) {
+          await fetch(`/api/videos/${encodeURIComponent(fn)}`, { method: 'DELETE' });
+          await loadVideosList();
+        }
+      });
+    });
   }
 
   function loadVideoIntoPlayer(url, filename, isWebCompatible, codec) {
@@ -295,63 +202,34 @@
     currentVideoUrl = url;
     currentVideoFilename = filename;
 
-    // Explicitly pause and reset playback state to eliminate event race conditions
     try {
       videoPlayer.pause();
     } catch (_) {}
     videoPlayer.currentTime = 0;
 
-    // Reset button state and timeline on new load
     if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
     if (timelineSlider) timelineSlider.value = 0;
-    hideCodecNotice();
+    window.VideoLibrary?.hideCodecNotice();
 
     videoPlayer.src = url;
     videoPlayer.load();
 
-    document.getElementById('scrubber-loaded-title').textContent = `Loaded: ${filename}`;
+    const titleEl = document.getElementById('scrubber-loaded-title');
+    if (titleEl) titleEl.textContent = `Loaded: ${filename}`;
     if (btnAddAsCamera) btnAddAsCamera.disabled = false;
     if (btnAnalyzeVideo) btnAnalyzeVideo.disabled = false;
 
     if (isWebCompatible === false) {
-      showCodecNotice(`This video is encoded with '${(codec || 'HEVC').toUpperCase()}' which may not play in standard browsers without conversion.`, filename);
+      window.VideoLibrary?.showCodecNotice(
+        `This video is encoded with '${(codec || 'HEVC').toUpperCase()}' which may not play in standard browsers without conversion.`,
+        filename,
+        (fn) => window.VideoLibrary?.transcodeVideo(fn, () => loadVideosList())
+      );
     }
 
-    // Highlight card
     document.querySelectorAll('.video-file-card').forEach(c => {
       c.classList.toggle('active-video', c.getAttribute('data-file') === filename);
     });
-  }
-
-  async function uploadSelectedVideo(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    videoUploadStatus.textContent = `Uploading ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`;
-
-    try {
-      const resp = await fetch('/api/videos/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (resp.ok) {
-        const res = await resp.json();
-        videoUploadStatus.innerHTML = `<span style="color:#10b981;">✓ Uploaded '${res.filename}'</span>`;
-        await loadVideosList();
-        loadVideoIntoPlayer(res.video_url, res.filename);
-      } else {
-        const err = await resp.json();
-        videoUploadStatus.innerHTML = `<span style="color:#ef4444;">✗ Upload failed: ${err.detail || 'Error'}</span>`;
-      }
-    } catch (err) {
-      videoUploadStatus.innerHTML = `<span style="color:#ef4444;">✗ Network error: ${err.message}</span>`;
-    } finally {
-      videoFileInput.value = '';
-    }
   }
 
   async function togglePlayPause() {
@@ -405,8 +283,7 @@
   function stepFrame(frameDelta) {
     if (!videoPlayer) return;
     videoPlayer.pause();
-    btnPlayPause.textContent = '▶ Play';
-    // Assume ~30 FPS frame duration ~0.0333s
+    if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
     const frameDuration = 1.0 / 30.0;
     videoPlayer.currentTime = Math.max(0, Math.min(videoPlayer.duration || 0, videoPlayer.currentTime + (frameDelta * frameDuration)));
   }
@@ -439,87 +316,6 @@
     return `${min}:${sec < 10 ? '0' : ''}${sec}.${ms < 10 ? '0' : ''}${ms}`;
   }
 
-  async function addVideoToCameraPool() {
-    if (!currentVideoFilename) return;
-    try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(currentVideoFilename)}/add_as_camera`, {
-        method: 'POST'
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        showToast(`Video successfully added as active stream '${data.camera_id}'!`, 'success');
-        if (window.CameraManager) {
-          await window.CameraManager.refreshCameras();
-          window.CameraManager.focusCamera(data.camera_id);
-        }
-      } else {
-        showToast('Failed to add video as camera.', 'error');
-      }
-    } catch (e) {
-      showToast(`Error: ${e.message}`, 'error');
-    }
-  }
-
-  async function runBatchAnalytics() {
-    if (!currentVideoFilename) return;
-    btnAnalyzeVideo.disabled = true;
-    btnAnalyzeVideo.textContent = '⏳ Processing Analytics...';
-    batchReportContainer.innerHTML = '<div class="empty-state">Running Edge AI detector and Re-ID indexer on recording...</div>';
-
-    try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(currentVideoFilename)}/analyze?sample_rate=1`, {
-        method: 'POST'
-      });
-      const data = await resp.json();
-
-      if (data.status === 'success') {
-        const rep = data.report || {};
-        batchReportContainer.innerHTML = `
-          <div class="batch-report-card glass-panel">
-            <h4>📊 Occurrence Indexing Report (${escapeHtml(currentVideoFilename)})</h4>
-            <div class="kpi-row" style="margin-top: 10px;">
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Frames Processed</div>
-                <div class="kpi-value cyan">${rep.frames_processed || 0}</div>
-              </div>
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Detections</div>
-                <div class="kpi-value green">${rep.total_detections || 0}</div>
-              </div>
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Sightings Recorded</div>
-                <div class="kpi-value cyan">${rep.total_sightings || 0}</div>
-              </div>
-              <div class="kpi-card glass-panel">
-                <div class="kpi-label">Unique Entities</div>
-                <div class="kpi-value green">${rep.unique_entities_identified || 0}</div>
-              </div>
-            </div>
-            <div style="margin-top: 12px; font-size: 13px; color: #94a3b8;">
-              Audit records cataloged in <code>TrackerDB</code>. View complete results in <strong>Sighting Timeline</strong> tab.
-            </div>
-          </div>
-        `;
-      } else {
-        batchReportContainer.innerHTML = `<div class="empty-state" style="color:#ef4444;">Analysis failed: ${data.detail || 'Error'}</div>`;
-      }
-    } catch (e) {
-      batchReportContainer.innerHTML = `<div class="empty-state" style="color:#ef4444;">Request error: ${e.message}</div>`;
-    } finally {
-      btnAnalyzeVideo.disabled = false;
-      btnAnalyzeVideo.textContent = '⚡ Run Batch Occurrence Report';
-    }
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
   window.VideoScrubber = {
     init: init,
     loadVideosList: loadVideosList,
@@ -532,11 +328,12 @@
       localStorage.setItem('intelligent_tracker_tab_policy', p);
     }
   };
+  window.VideoScrubber.onTabEnter = onTabEnter;
+  window.VideoScrubber.onTabLeave = onTabLeave;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-
 })();

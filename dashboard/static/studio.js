@@ -1,37 +1,33 @@
 /**
- * Intelligent Tracker - World Scenario Studio, Space Awareness & Homography Controller
- * Milestone 8 Implementation
+ * Intelligent Tracker - World Scenario Studio, Space Awareness & Homography Controller.
+ * Milestone 8 Implementation.
+ * 
+ * Coordinates:
+ * - Studio Canvas polygon and tripwire drawing modes
+ * - 2D Bird's-Eye-View (BEV) minimap rendering
+ * - Dedicated in-page modal dialog forms
+ * - Trajectory Journey Search & Video Export
  */
 
 (function () {
   'use strict';
 
-  // State Management
   const studioState = {
     activeCamera: 'cam_01',
-    mode: 'idle', // 'idle', 'draw_zone', 'draw_tripwire', 'calibrate_homography'
+    mode: 'idle',
     points: [],
     zones: [],
     tripwires: [],
     homography: null,
     topologyLinks: [],
-    activePriors: [],
     overlays: {
-      bboxes: true,
-      track_ids: true,
-      dwell_timers: true,
-      velocity: true,
-      zones: true,
-      tripwires: true,
-      heatmap: false,
-      bev_minimap: false,
-      hud_bar: true,
-      toast_prompts: true,
+      bboxes: true, track_ids: true, dwell_timers: true, velocity: true,
+      zones: true, tripwires: true, heatmap: false, bev_minimap: false,
+      hud_bar: true, toast_prompts: true,
     },
     canvas: null,
     ctx: null,
     bevCanvas: null,
-    bevCtx: null,
   };
 
   function showToast(title, body, type = 'info') {
@@ -42,209 +38,103 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Initialization
-  // ---------------------------------------------------------------------------
+  function updateStudioStatus(msg) {
+    const banner = document.getElementById('studio-status-banner');
+    if (banner) banner.textContent = msg;
+  }
+
+  function setStudioMode(mode) {
+    studioState.mode = mode;
+    studioState.points = [];
+    const banner = document.getElementById('studio-status-banner');
+
+    document.querySelectorAll('.studio-tool-btn').forEach(btn => btn.classList.remove('active'));
+    if (mode === 'draw_zone') {
+      document.getElementById('btn-mode-draw-zone')?.classList.add('active');
+      if (banner) banner.textContent = 'Mode: Draw Zone. Click vertices on video; double-click to close polygon.';
+    } else if (mode === 'draw_tripwire') {
+      document.getElementById('btn-mode-draw-tripwire')?.classList.add('active');
+      if (banner) banner.textContent = 'Mode: Draw Tripwire. Click start point, then click end point.';
+    } else if (mode === 'calibrate_homography') {
+      document.getElementById('btn-mode-homography')?.classList.add('active');
+      if (banner) banner.textContent = 'Mode: Calibrate Homography. Click 4 corners (TL -> TR -> BR -> BL).';
+    } else {
+      if (banner) banner.textContent = 'Ready. Select a tool to begin.';
+    }
+    drawOverlay();
+  }
+
+  function drawOverlay(cursorPt) {
+    window.StudioCanvas?.drawOverlay(studioState.ctx, studioState.canvas, studioState.mode, studioState.points, cursorPt);
+  }
+
   function initStudio() {
     studioState.canvas = document.getElementById('studio-drawing-canvas');
     if (studioState.canvas) {
       studioState.ctx = studioState.canvas.getContext('2d');
-      setupCanvasEventListeners(studioState.canvas);
+      setupCanvasListeners();
     }
-
     studioState.bevCanvas = document.getElementById('bev-minimap-canvas');
-    if (studioState.bevCanvas) {
-      studioState.bevCtx = studioState.bevCanvas.getContext('2d');
-    }
 
-    // Attach button event listeners
+    window.StudioOverlays?.init(() => studioState);
     bindStudioUI();
-    bindOverlayToolbar();
-    bindJourneySearch();
+    window.StudioOverlays?.bindOverlayToolbar();
+    window.JourneySearch?.bind();
 
-    // Load initial data
     loadCameraScenario(studioState.activeCamera);
     loadTopologyLinks();
-    loadCameraOverlays(studioState.activeCamera);
+    window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
   }
 
-  // ---------------------------------------------------------------------------
-  // Canvas Event Handling (Drawing & Calibration)
-  // ---------------------------------------------------------------------------
-  function setupCanvasEventListeners(canvas) {
-    canvas.addEventListener('click', onCanvasClick);
-    canvas.addEventListener('mousemove', onCanvasMouseMove);
-    canvas.addEventListener('dblclick', onCanvasDblClick);
+  function setupCanvasListeners() {
+    window.StudioCanvas?.setupListeners(studioState.canvas, {
+      onClick: (pt) => handleCanvasClick(pt),
+      onMouseMove: (pt) => drawOverlay(pt),
+      onDblClick: () => handleCanvasDblClick(),
+    });
   }
 
-  function getCanvasCoords(evt, canvas) {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return {
-      x: Math.round((evt.clientX - rect.left) * scaleX),
-      y: Math.round((evt.clientY - rect.top) * scaleY),
-    };
-  }
-
-  function onCanvasClick(evt) {
+  function handleCanvasClick(pt) {
     if (studioState.mode === 'idle') return;
-
-    const pt = getCanvasCoords(evt, studioState.canvas);
 
     if (studioState.mode === 'draw_zone') {
       studioState.points.push([pt.x, pt.y]);
-      drawStudioOverlay();
+      drawOverlay();
       updateStudioStatus(`Zone vertex #${studioState.points.length} placed at (${pt.x}, ${pt.y}). Double-click to close polygon.`);
     } else if (studioState.mode === 'draw_tripwire') {
       studioState.points.push([pt.x, pt.y]);
-      drawStudioOverlay();
+      drawOverlay();
       if (studioState.points.length === 2) {
-        openTripwireModal(studioState.points);
+        window.ScenarioModals?.openTripwireModal(studioState.points);
       } else {
         updateStudioStatus(`Tripwire start point set at (${pt.x}, ${pt.y}). Click end point.`);
       }
     } else if (studioState.mode === 'calibrate_homography') {
       if (studioState.points.length < 4) {
         studioState.points.push([pt.x, pt.y]);
-        drawStudioOverlay();
+        drawOverlay();
         const cornerNames = ['Top-Left', 'Top-Right', 'Bottom-Right', 'Bottom-Left'];
         const nextIdx = studioState.points.length;
         if (nextIdx < 4) {
           updateStudioStatus(`Corner ${nextIdx}/4 placed (${cornerNames[nextIdx - 1]}). Click corner #${nextIdx + 1} (${cornerNames[nextIdx]}).`);
         } else {
-          updateStudioStatus(`All 4 ground corners selected! Enter metric dimensions and click Save Calibration.`);
-          openHomographyModal(studioState.points);
+          updateStudioStatus('All 4 ground corners selected! Enter metric dimensions and click Save Calibration.');
+          window.ScenarioModals?.openHomographyModal(studioState.points);
         }
       }
     }
   }
 
-  function onCanvasMouseMove(evt) {
-    if (studioState.mode === 'idle' || studioState.points.length === 0) return;
-    const pt = getCanvasCoords(evt, studioState.canvas);
-    drawStudioOverlay(pt);
-  }
-
-  function onCanvasDblClick(evt) {
+  function handleCanvasDblClick() {
     if (studioState.mode === 'draw_zone') {
       if (studioState.points.length >= 3) {
-        openZoneModal(studioState.points);
+        window.ScenarioModals?.openZoneModal(studioState.points);
       } else {
         showToast('Validation Error', 'A polygonal zone requires at least 3 vertices.', 'warning');
       }
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Canvas Rendering (Drawing Preview)
-  // ---------------------------------------------------------------------------
-  function drawStudioOverlay(cursorPt) {
-    const ctx = studioState.ctx;
-    if (!ctx || !studioState.canvas) return;
-
-    ctx.clearRect(0, 0, studioState.canvas.width, studioState.canvas.height);
-
-    const pts = studioState.points;
-    if (pts.length === 0) return;
-
-    ctx.save();
-
-    if (studioState.mode === 'draw_zone') {
-      // Draw polygon edges
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i][0], pts[i][1]);
-      }
-      if (cursorPt) {
-        ctx.lineTo(cursorPt.x, cursorPt.y);
-      }
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(0, 200, 100, 0.25)';
-      ctx.fill();
-      ctx.strokeStyle = '#00ff88';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Draw vertices
-      for (let i = 0; i < pts.length; i++) {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(pts[i][0], pts[i][1], 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#00ff88';
-        ctx.stroke();
-      }
-    } else if (studioState.mode === 'draw_tripwire') {
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      const endX = cursorPt ? cursorPt.x : (pts[1] ? pts[1][0] : pts[0][0]);
-      const endY = cursorPt ? cursorPt.y : (pts[1] ? pts[1][1] : pts[0][1]);
-      ctx.lineTo(endX, endY);
-      ctx.strokeStyle = '#facc15';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Normal vector arrow (direction)
-      const dx = endX - pts[0][0];
-      const dy = endY - pts[0][1];
-      const len = Math.hypot(dx, dy);
-      if (len > 20) {
-        const midX = (pts[0][0] + endX) / 2;
-        const midY = (pts[0][1] + endY) / 2;
-        const nx = -dy / len;
-        const ny = dx / len;
-        ctx.beginPath();
-        ctx.moveTo(midX, midY);
-        ctx.lineTo(midX + nx * 25, midY + ny * 25);
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Arrow head
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(midX + nx * 25, midY + ny * 25, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    } else if (studioState.mode === 'calibrate_homography') {
-      // Draw quadrilateral
-      if (pts.length > 1) {
-        ctx.beginPath();
-        ctx.moveTo(pts[0][0], pts[0][1]);
-        for (let i = 1; i < pts.length; i++) {
-          ctx.lineTo(pts[i][0], pts[i][1]);
-        }
-        if (pts.length === 4) {
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(14, 165, 233, 0.2)';
-          ctx.fill();
-        }
-        ctx.strokeStyle = '#0ea5e9';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-
-      // Draw labeled corner circles
-      const cornerNames = ['1: TL', '2: TR', '3: BR', '4: BL'];
-      for (let i = 0; i < pts.length; i++) {
-        ctx.fillStyle = '#0ea5e9';
-        ctx.beginPath();
-        ctx.arc(pts[i][0], pts[i][1], 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px Inter, sans-serif';
-        ctx.fillText(cornerNames[i] || `${i + 1}`, pts[i][0] + 8, pts[i][1] - 8);
-      }
-    }
-
-    ctx.restore();
-  }
-
-  // ---------------------------------------------------------------------------
-  // REST API Integrations: Scenarios, Zones, Tripwires & Homography
-  // ---------------------------------------------------------------------------
   async function loadCameraScenario(cameraId) {
     try {
       const res = await fetch(`/api/scenarios/${cameraId}`);
@@ -254,11 +144,15 @@
       studioState.tripwires = data.tripwires || [];
       studioState.homography = data.homography || null;
 
-      renderScenarioListUI();
+      window.StudioOverlays?.renderScenarioListUI();
       renderBEVMinimap();
     } catch (err) {
       console.warn('Failed to load scenario:', err);
     }
+  }
+
+  function renderBEVMinimap() {
+    window.BEVMinimap?.render(studioState.bevCanvas, studioState.homography, studioState.zones, studioState.activeCamera);
   }
 
   async function saveZone(zoneData) {
@@ -270,7 +164,7 @@
       });
       if (res.ok) {
         updateStudioStatus(`Zone '${zoneData.name}' saved successfully.`);
-        if (window.showToast) window.showToast('Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'success');
+        showToast('Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'success');
         loadCameraScenario(zoneData.camera_id);
       }
     } catch (err) {
@@ -346,15 +240,12 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Cross-Camera Topology Links
-  // ---------------------------------------------------------------------------
   async function loadTopologyLinks() {
     try {
       const res = await fetch('/api/topology/transitions');
       if (!res.ok) return;
       studioState.topologyLinks = await res.json();
-      renderTopologyLinksUI();
+      window.StudioOverlays?.renderTopologyLinksUI();
     } catch (err) {
       console.warn('Failed to load topology transitions:', err);
     }
@@ -368,7 +259,7 @@
         body: JSON.stringify(linkData),
       });
       if (res.ok) {
-        updateStudioStatus(`Transition link '${linkData.source_camera}[${linkData.source_zone}] -> ${linkData.target_camera}[${linkData.target_zone}]' active.`);
+        updateStudioStatus(`Transition link active.`);
         showToast('Transition Saved', 'Spatial transition link established.', 'success');
         loadTopologyLinks();
       }
@@ -392,593 +283,36 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Top-Down Bird's-Eye-View (BEV) Minimap Rendering
-  // ---------------------------------------------------------------------------
-  function renderBEVMinimap() {
-    const canvas = studioState.bevCanvas;
-    const ctx = studioState.bevCtx;
-    if (!canvas || !ctx) return;
-
-    const cw = canvas.width;
-    const ch = canvas.height;
-    ctx.clearRect(0, 0, cw, ch);
-
-    // Dark tactical background
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, cw, ch);
-
-    const margin = 35;
-    const innerW = cw - 2 * margin;
-    const innerH = ch - 2 * margin;
-
-    const homo = studioState.homography;
-    const gw = (homo && homo.metric_width) ? homo.metric_width : 10.0;
-    const gh = (homo && homo.metric_height) ? homo.metric_height : 10.0;
-
-    const scaleX = innerW / gw;
-    const scaleY = innerH / gh;
-
-    function g2c(gx, gy) {
-      return {
-        x: Math.round(margin + gx * scaleX),
-        y: Math.round(margin + gy * scaleY),
-      };
-    }
-
-    // Grid boundary
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(margin, margin, innerW, innerH);
-
-    // Metric Grid Lines
-    ctx.fillStyle = '#64748b';
-    ctx.font = '10px JetBrains Mono, monospace';
-
-    const stepX = Math.max(2, Math.floor(gw / 4));
-    for (let gx = stepX; gx < gw; gx += stepX) {
-      const p1 = g2c(gx, 0);
-      const p2 = g2c(gx, gh);
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.strokeStyle = '#1e293b';
-      ctx.stroke();
-      ctx.fillText(`${gx}m`, p1.x - 8, ch - margin + 14);
-    }
-
-    const stepY = Math.max(2, Math.floor(gh / 4));
-    for (let gy = stepY; gy < gh; gy += stepY) {
-      const p1 = g2c(0, gy);
-      const p2 = g2c(gw, gy);
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.strokeStyle = '#1e293b';
-      ctx.stroke();
-      ctx.fillText(`${gy}m`, 6, p1.y + 3);
-    }
-
-    // Title Badge
-    ctx.fillStyle = '#00e5ff';
-    ctx.font = 'bold 11px Inter, sans-serif';
-    ctx.fillText(`BEV: ${studioState.activeCamera} (${gw}m x ${gh}m)`, margin, 20);
-
-    // Draw Transformed Zones
-    if (studioState.zones) {
-      studioState.zones.forEach((z) => {
-        if (!z.polygon || z.polygon.length < 3) return;
-        ctx.beginPath();
-        const p0 = g2c((z.polygon[0][0] / 640) * gw, (z.polygon[0][1] / 480) * gh);
-        ctx.moveTo(p0.x, p0.y);
-        for (let i = 1; i < z.polygon.length; i++) {
-          const pt = g2c((z.polygon[i][0] / 640) * gw, (z.polygon[i][1] / 480) * gh);
-          ctx.lineTo(pt.x, pt.y);
-        }
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(0, 200, 100, 0.2)';
-        ctx.fill();
-        ctx.strokeStyle = '#00ff88';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '10px Inter, sans-serif';
-        ctx.fillText(z.name, p0.x + 4, p0.y + 12);
-      });
-    }
-
-    // Draw Simulated or Telemetry Agents
-    if (window.latestTelemetry && window.latestTelemetry.active_tracks) {
-      window.latestTelemetry.active_tracks.forEach((trk) => {
-        let gx = (trk.bbox[0] + trk.bbox[2] / 2) / 640 * gw;
-        let gy = (trk.bbox[1] + trk.bbox[3]) / 480 * gh;
-        if (trk.ground_pos) {
-          gx = trk.ground_pos[0];
-          gy = trk.ground_pos[1];
-        }
-
-        const cp = g2c(gx, gy);
-        ctx.beginPath();
-        ctx.arc(cp.x, cp.y, 6, 0, Math.PI * 2);
-        ctx.fillStyle = trk.category === 'restricted' ? '#ef4444' : '#22c55e';
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 9px Inter, sans-serif';
-        ctx.fillText(trk.entity_name || `#${trk.id}`, cp.x + 8, cp.y + 3);
-      });
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Floating Video Overlays Toolbar
-  // ---------------------------------------------------------------------------
-  async function loadCameraOverlays(cameraId) {
-    try {
-      const res = await fetch(`/api/cameras/${cameraId}/overlays`);
-      if (res.ok) {
-        const data = await res.json();
-        Object.assign(studioState.overlays, data);
-        updateOverlayCheckboxes();
-      }
-    } catch (err) {
-      console.warn('Failed loading overlays:', err);
-    }
-  }
-
-  async function updateOverlays(updates) {
-    Object.assign(studioState.overlays, updates);
-    updateOverlayCheckboxes();
-
-    try {
-      await fetch(`/api/cameras/${studioState.activeCamera}/overlays`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
-    } catch (err) {
-      console.warn('Error saving overlays:', err);
-    }
-  }
-
-  function updateOverlayCheckboxes() {
-    Object.keys(studioState.overlays).forEach((key) => {
-      const el = document.getElementById(`overlay-toggle-${key}`);
-      if (el) {
-        el.checked = !!studioState.overlays[key];
-      }
-    });
-  }
-
-  function bindOverlayToolbar() {
-    const keys = [
-      'bboxes', 'track_ids', 'dwell_timers', 'velocity',
-      'zones', 'tripwires', 'heatmap', 'bev_minimap', 'hud_bar', 'toast_prompts'
-    ];
-
-    keys.forEach((key) => {
-      const el = document.getElementById(`overlay-toggle-${key}`);
-      if (el) {
-        el.addEventListener('change', (e) => {
-          updateOverlays({ [key]: e.target.checked });
-        });
-      }
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Trajectory Journey Search & Video Exporter
-  // ---------------------------------------------------------------------------
-  function bindJourneySearch() {
-    const btnSearch = document.getElementById('btn-journey-search');
-    const btnExport = document.getElementById('btn-journey-export');
-
-    if (btnSearch) {
-      btnSearch.addEventListener('click', () => {
-        const query = document.getElementById('journey-search-query').value.trim();
-        searchJourney(query);
-      });
-    }
-
-    if (btnExport) {
-      btnExport.addEventListener('click', () => {
-        const query = document.getElementById('journey-search-query').value.trim();
-        exportJourneyVideo(query);
-      });
-    }
-  }
-
-  async function searchJourney(entityNameOrId) {
-    const container = document.getElementById('journey-results-container');
-    if (!container) return;
-
-    container.innerHTML = '<div class="loading-state">🔍 Reconstructing cross-camera trajectory journey...</div>';
-
-    try {
-      const param = isNaN(entityNameOrId) ? `entity_name=${encodeURIComponent(entityNameOrId)}` : `entity_id=${entityNameOrId}`;
-      const res = await fetch(`/api/journey/search?${param}`);
-      if (!res.ok) {
-        container.innerHTML = '<div class="empty-state">No journey sightings found for this entity.</div>';
-        return;
-      }
-
-      const journey = await res.json();
-      renderJourneyResults(journey);
-    } catch (err) {
-      container.innerHTML = `<div class="error-state">Error searching journey: ${err.message}</div>`;
-    }
-  }
-
-  function renderJourneyResults(journey) {
-    const container = document.getElementById('journey-results-container');
-    if (!container) return;
-
-    if (!journey.hops || journey.hops.length === 0) {
-      container.innerHTML = '<div class="empty-state">No camera transitions detected for this entity.</div>';
-      return;
-    }
-
-    let html = `
-      <div class="journey-summary-card glass-panel">
-        <div class="journey-header">
-          <h4>🚶 Trajectory Journey: <strong>${journey.entity_name}</strong> (${journey.category.toUpperCase()})</h4>
-          <span class="badge ${journey.total_hops > 1 ? 'badge-primary' : 'badge-secondary'}">${journey.total_hops} Hops | ${journey.total_duration_seconds}s</span>
-        </div>
-        <div class="journey-narrative">${journey.summary_narrative}</div>
-      </div>
-      <div class="journey-hops-timeline">
-    `;
-
-    journey.hops.forEach((hop, idx) => {
-      const startTimeStr = new Date(hop.start_time * 1000).toLocaleTimeString();
-      const transitBadge = hop.transit_time_from_prev
-        ? `<div class="transit-connector"><span>⏱️ Transit: +${hop.transit_time_from_prev}s</span></div>`
-        : '';
-
-      const thumbUrl = hop.snapshot_path ? `/crops/${hop.snapshot_path.split(/[\\/]/).pop()}` : '';
-
-      html += `
-        ${transitBadge}
-        <div class="hop-card glass-panel">
-          <div class="hop-num">#${hop.hop_index}</div>
-          <div class="hop-details">
-            <div class="hop-title">
-              <strong>${hop.camera_name}</strong>
-              <span class="hop-time">${startTimeStr}</span>
-            </div>
-            <div class="hop-meta">
-              <span>Zone: ${hop.zone_id || 'General Area'}</span> •
-              <span>Dwell: ${hop.duration_seconds}s</span> •
-              <span>Sightings: ${hop.sightings_count}</span>
-            </div>
-          </div>
-          ${thumbUrl ? `<div class="hop-thumb"><img src="${thumbUrl}" alt="Snapshot" /></div>` : ''}
-        </div>
-      `;
-    });
-
-    html += '</div>';
-    container.innerHTML = html;
-  }
-
-  async function exportJourneyVideo(entityNameOrId) {
-    const btn = document.getElementById('btn-journey-export');
-    const statusDiv = document.getElementById('journey-export-status');
-    if (btn) btn.disabled = true;
-    if (statusDiv) statusDiv.innerHTML = '⏳ Slicing footage and concatenating MP4 video with tactical HUD title cards...';
-
-    try {
-      const payload = isNaN(entityNameOrId) ? { entity_name: entityNameOrId } : { entity_id: parseInt(entityNameOrId, 10) };
-      const res = await fetch('/api/journey/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Export failed');
-      }
-
-      const data = await res.json();
-      if (statusDiv) {
-        statusDiv.innerHTML = `
-          <div class="alert alert-success">
-            ✅ <strong>Journey MP4 Ready!</strong>
-            <a href="${data.video_url}" target="_blank" class="btn btn-sm btn-primary" download>⬇️ Download MP4 (${data.video_file})</a>
-            <div class="video-preview-box" style="margin-top: 10px;">
-              <video src="${data.video_url}" controls autoplay style="max-width: 100%; border-radius: 6px;"></video>
-            </div>
-          </div>
-        `;
-      }
-    } catch (err) {
-      if (statusDiv) statusDiv.innerHTML = `<div class="alert alert-danger">❌ Export failed: ${err.message}</div>`;
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Modals & UI Binding
-  // ---------------------------------------------------------------------------
   function bindStudioUI() {
-    const btnModeZone = document.getElementById('btn-mode-draw-zone');
-    const btnModeTw = document.getElementById('btn-mode-draw-tripwire');
-    const btnModeHomo = document.getElementById('btn-mode-homography');
-    const btnClearCanvas = document.getElementById('btn-studio-clear');
-
-    if (btnModeZone) {
-      btnModeZone.addEventListener('click', () => setStudioMode('draw_zone'));
-    }
-    if (btnModeTw) {
-      btnModeTw.addEventListener('click', () => setStudioMode('draw_tripwire'));
-    }
-    if (btnModeHomo) {
-      btnModeHomo.addEventListener('click', () => setStudioMode('calibrate_homography'));
-    }
-    if (btnClearCanvas) {
-      btnClearCanvas.addEventListener('click', () => {
-        setStudioMode('idle');
-        studioState.points = [];
-        drawStudioOverlay();
-        updateStudioStatus('Canvas cleared. Mode: Idle.');
-      });
-    }
-
-    // Add Transition Link Modal button
-    const btnAddLink = document.getElementById('btn-add-transition-link');
-    if (btnAddLink) {
-      btnAddLink.addEventListener('click', openTransitionLinkModal);
-    }
-
-    initStudioModals();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Dedicated In-Page Modal Dialog Forms (Slice 1B - No Browser Prompts)
-  // ---------------------------------------------------------------------------
-  let pendingZonePolygon = null;
-  let pendingTripwirePoints = null;
-  let pendingHomographyPoints = null;
-  let studioModalsInitialized = false;
-
-  function initStudioModals() {
-    if (studioModalsInitialized) return;
-    studioModalsInitialized = true;
-
-    // 1. Zone Builder Modal
-    const modalZone = document.getElementById('modal-studio-zone');
-    const formZone = document.getElementById('studio-zone-form');
-    const closeZone = () => {
-      if (modalZone) modalZone.style.display = 'none';
-      pendingZonePolygon = null;
+    document.getElementById('btn-mode-draw-zone')?.addEventListener('click', () => setStudioMode('draw_zone'));
+    document.getElementById('btn-mode-draw-tripwire')?.addEventListener('click', () => setStudioMode('draw_tripwire'));
+    document.getElementById('btn-mode-homography')?.addEventListener('click', () => setStudioMode('calibrate_homography'));
+    document.getElementById('btn-studio-clear')?.addEventListener('click', () => {
       setStudioMode('idle');
-    };
-    document.getElementById('modal-zone-close')?.addEventListener('click', closeZone);
-    document.getElementById('modal-zone-cancel')?.addEventListener('click', closeZone);
-    if (formZone) {
-      formZone.addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (!pendingZonePolygon) return closeZone();
-        const name = (document.getElementById('modal-zone-name-input')?.value || '').trim();
-        const cat = (document.getElementById('modal-zone-category-select')?.value || '').trim();
-        const dwell = parseFloat(document.getElementById('modal-zone-dwell-input')?.value || '5.0') || 5.0;
-        const capVal = parseInt(document.getElementById('modal-zone-capacity-input')?.value || '0', 10);
-        const capacity = capVal > 0 ? capVal : null;
+      studioState.points = [];
+      drawOverlay();
+      updateStudioStatus('Canvas cleared. Mode: Idle.');
+    });
 
-        saveZone({
-          camera_id: studioState.activeCamera,
-          name: name,
-          polygon: pendingZonePolygon,
-          category_filter: cat,
-          dwell_threshold: dwell,
-          capacity_limit: capacity,
-          color: [0, 200, 100],
-        });
-        closeZone();
-      });
-    }
+    document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
+      window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);
+    });
 
-    // 2. Tripwire Builder Modal
-    const modalTripwire = document.getElementById('modal-studio-tripwire');
-    const formTripwire = document.getElementById('studio-tripwire-form');
-    const closeTripwire = () => {
-      if (modalTripwire) modalTripwire.style.display = 'none';
-      pendingTripwirePoints = null;
-      setStudioMode('idle');
-    };
-    document.getElementById('modal-tripwire-close')?.addEventListener('click', closeTripwire);
-    document.getElementById('modal-tripwire-cancel')?.addEventListener('click', closeTripwire);
-    if (formTripwire) {
-      formTripwire.addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (!pendingTripwirePoints) return closeTripwire();
-        const name = (document.getElementById('modal-tripwire-name-input')?.value || '').trim();
-        const bidir = document.getElementById('modal-tripwire-bidir-select')?.value === '1';
-
-        saveTripwire({
-          camera_id: studioState.activeCamera,
-          name: name,
-          line_segment: pendingTripwirePoints,
-          bidirectional: bidir,
-          color: [0, 255, 255],
-        });
-        closeTripwire();
-      });
-    }
-
-    // 3. Homography Calibration Modal
-    const modalHomography = document.getElementById('modal-studio-homography');
-    const formHomography = document.getElementById('studio-homography-form');
-    const closeHomography = () => {
-      if (modalHomography) modalHomography.style.display = 'none';
-      pendingHomographyPoints = null;
-      setStudioMode('idle');
-    };
-    document.getElementById('modal-homography-close')?.addEventListener('click', closeHomography);
-    document.getElementById('modal-homography-cancel')?.addEventListener('click', closeHomography);
-    if (formHomography) {
-      formHomography.addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (!pendingHomographyPoints) return closeHomography();
-        const w = parseFloat(document.getElementById('modal-homography-width-input')?.value || '10.0') || 10.0;
-        const h = parseFloat(document.getElementById('modal-homography-height-input')?.value || '10.0') || 10.0;
-
-        saveHomographyCalibration({
-          camera_id: studioState.activeCamera,
-          src_points: pendingHomographyPoints,
-          metric_width: w,
-          metric_height: h,
-        });
-        closeHomography();
-      });
-    }
-
-    // 4. Spatial Transition Modal
-    const modalTransition = document.getElementById('modal-studio-transition');
-    const formTransition = document.getElementById('studio-transition-form');
-    const closeTransition = () => {
-      if (modalTransition) modalTransition.style.display = 'none';
-    };
-    document.getElementById('modal-transition-close')?.addEventListener('click', closeTransition);
-    document.getElementById('modal-transition-cancel')?.addEventListener('click', closeTransition);
-    if (formTransition) {
-      formTransition.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const srcCam = (document.getElementById('modal-trans-src-cam-input')?.value || '').trim();
-        const srcZone = (document.getElementById('modal-trans-src-zone-input')?.value || '').trim();
-        const tgtCam = (document.getElementById('modal-trans-tgt-cam-input')?.value || '').trim();
-        const tgtZone = (document.getElementById('modal-trans-tgt-zone-input')?.value || '').trim();
-        const tMin = parseFloat(document.getElementById('modal-trans-tmin-input')?.value || '2.0') || 2.0;
-        const tMax = parseFloat(document.getElementById('modal-trans-tmax-input')?.value || '15.0') || 15.0;
-        const boost = parseFloat(document.getElementById('modal-trans-boost-input')?.value || '0.35') || 0.35;
-        const bidir = !!document.getElementById('modal-trans-bidir-cb')?.checked;
-
-        saveTopologyLink({
-          source_camera: srcCam,
-          source_zone: srcZone,
-          target_camera: tgtCam,
-          target_zone: tgtZone,
-          t_min: tMin,
-          t_max: tMax,
-          prior_boost: boost,
-          bidirectional: bidir,
-        });
-        closeTransition();
-      });
-    }
+    window.ScenarioModals?.init({
+      onSaveZone: (data) => saveZone({ ...data, camera_id: studioState.activeCamera }),
+      onSaveTripwire: (data) => saveTripwire({ ...data, camera_id: studioState.activeCamera }),
+      onSaveHomography: (data) => saveHomographyCalibration({ ...data, camera_id: studioState.activeCamera }),
+      onSaveTransition: (data) => saveTopologyLink(data),
+      onCancel: () => setStudioMode('idle'),
+    });
   }
 
-  function openZoneModal(polygon) {
-    pendingZonePolygon = polygon;
-    const nameInput = document.getElementById('modal-zone-name-input');
-    if (nameInput) nameInput.value = `zone_${Date.now() % 1000}`;
-    const modal = document.getElementById('modal-studio-zone');
-    if (modal) modal.style.display = 'flex';
-  }
-
-  function openTripwireModal(points) {
-    pendingTripwirePoints = points;
-    const nameInput = document.getElementById('modal-tripwire-name-input');
-    if (nameInput) nameInput.value = `tw_${Date.now() % 1000}`;
-    const modal = document.getElementById('modal-studio-tripwire');
-    if (modal) modal.style.display = 'flex';
-  }
-
-  function openHomographyModal(points) {
-    pendingHomographyPoints = points;
-    const modal = document.getElementById('modal-studio-homography');
-    if (modal) modal.style.display = 'flex';
-  }
-
-  function openTransitionLinkModal() {
-    const srcCamInput = document.getElementById('modal-trans-src-cam-input');
-    if (srcCamInput) srcCamInput.value = studioState.activeCamera;
-    const modal = document.getElementById('modal-studio-transition');
-    if (modal) modal.style.display = 'flex';
-  }
-
-  function renderScenarioListUI() {
-    const zoneListEl = document.getElementById('studio-zones-list');
-    if (zoneListEl) {
-      if (studioState.zones.length === 0) {
-        zoneListEl.innerHTML = '<div class="empty-state">No zones defined. Click Draw Zone to create one.</div>';
-      } else {
-        zoneListEl.innerHTML = studioState.zones.map((z) => `
-          <div class="studio-item-card">
-            <div class="item-title">
-              <span class="color-dot" style="background: rgb(${z.color[2]}, ${z.color[1]}, ${z.color[0]});"></span>
-              <strong>${z.name}</strong>
-              ${z.capacity_limit ? `<span class="badge">Cap: ${z.capacity_limit}</span>` : ''}
-            </div>
-            <div class="item-sub">${z.polygon.length} vertices | Dwell: ${z.dwell_threshold}s</div>
-            <button class="btn btn-xs btn-outline-danger" onclick="window.Studio.deleteZone('${studioState.activeCamera}', '${z.name}')">🗑️</button>
-          </div>
-        `).join('');
-      }
-    }
-
-    const twListEl = document.getElementById('studio-tripwires-list');
-    if (twListEl) {
-      if (studioState.tripwires.length === 0) {
-        twListEl.innerHTML = '<div class="empty-state">No tripwires defined. Click Draw Tripwire.</div>';
-      } else {
-        twListEl.innerHTML = studioState.tripwires.map((tw) => `
-          <div class="studio-item-card">
-            <div class="item-title">
-              <span class="color-dot" style="background: rgb(${tw.color[2]}, ${tw.color[1]}, ${tw.color[0]});"></span>
-              <strong>${tw.name}</strong>
-              <span class="badge">${tw.bidirectional ? 'IN/OUT' : 'One-Way'}</span>
-            </div>
-            <div class="item-sub">(${tw.line_segment[0][0]}, ${tw.line_segment[0][1]}) -> (${tw.line_segment[1][0]}, ${tw.line_segment[1][1]})</div>
-            <button class="btn btn-xs btn-outline-danger" onclick="window.Studio.deleteTripwire('${studioState.activeCamera}', '${tw.name}')">🗑️</button>
-          </div>
-        `).join('');
-      }
-    }
-  }
-
-  function renderTopologyLinksUI() {
-    const listEl = document.getElementById('topology-links-list');
-    if (!listEl) return;
-
-    if (studioState.topologyLinks.length === 0) {
-      listEl.innerHTML = '<div class="empty-state">No transition links registered. Click + Add Spatial Transition.</div>';
-      return;
-    }
-
-    listEl.innerHTML = studioState.topologyLinks.map((l) => `
-      <div class="topology-link-card glass-panel">
-        <div class="link-flow">
-          <span class="cam-badge">${l.source_camera}</span>
-          <span class="zone-badge">${l.source_zone}</span>
-          <span class="arrow">${l.bidirectional ? '⟷' : '⟶'}</span>
-          <span class="cam-badge">${l.target_camera}</span>
-          <span class="zone-badge">${l.target_zone}</span>
-        </div>
-        <div class="link-timing">
-          <span>Transit Window: <strong>${l.t_min}s – ${l.t_max}s</strong></span> •
-          <span>Prior Boost: <strong>+${(l.prior_boost * 100).toFixed(0)}%</strong></span>
-        </div>
-        <button class="btn btn-xs btn-outline-danger" onclick="window.Studio.deleteTopologyLink('${l.link_id}')">🗑️ Remove</button>
-      </div>
-    `).join('');
-  }
-
-  // Periodic loop for BEV Minimap agent position updates
   setInterval(() => {
-    if (document.getElementById('tab-studio')?.classList.contains('active') ||
-        studioState.overlays.bev_minimap) {
+    if (document.getElementById('tab-studio')?.classList.contains('active') || studioState.overlays.bev_minimap) {
       renderBEVMinimap();
     }
   }, 250);
 
-  // Expose global Studio API
   window.Studio = {
     init: initStudio,
     setMode: setStudioMode,
@@ -986,8 +320,8 @@
     deleteTripwire: deleteTripwire,
     deleteTopologyLink: deleteTopologyLink,
     renderBEV: renderBEVMinimap,
-    searchJourney: searchJourney,
-    exportJourney: exportJourneyVideo,
+    searchJourney: (q) => window.JourneySearch?.search(q),
+    exportJourney: (q) => window.JourneySearch?.exportVideo(q),
   };
 
   document.addEventListener('DOMContentLoaded', initStudio);

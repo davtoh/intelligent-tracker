@@ -611,6 +611,19 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 6. **Lifecycle Manager & Persistence (`intelligent_tracker/lifecycle.py` & `database.py`):** Background sampler recording CPU, RAM, and stream counts every 15s to SQLite tables `system_resource_metrics` and `stream_lifecycle_events`.
 7. **Admin REST APIs (`dashboard/app.py`):** Superuser endpoints `/api/system/processes`, `/api/system/streams/{id}/evict`, `/api/system/hibernate_all`, `/api/system/metrics`, and `/api/system/events`.
 
+## ✅ [Milestone 12] — Dashboard Architecture & Domain Services Decoupling (Phase 1 COMPLETE)
+**Status: Phase 1 COMPLETE** — Verified: 231/231 tests pass in Python 3.12.10 (Sphinx: 0 warnings)
+**Scope:** Architectural decomposition of `dashboard/` subsystem in accordance with quantitative modularity budgets. Extracted cold collaborator services from `dashboard/stream_manager.py` into `dashboard/services/` (`StreamSubscriberRegistry`, `FrameOverlayRenderer`, `VideoTranscodeService`, `EntityTaggerService`), shrinking `stream_manager.py` from 880L to 680L while preserving 100% of methods, zero-copy inference performance, deep video hibernation, and contract parity.
+
+### Deliverables Completed (Phase 1):
+1. **Stream Subscriber Registry (`dashboard/services/stream_subscribers.py`):** 126L service managing leased viewer tokens, 3.0s lease TTL eviction, and VideoSource pause/resume hibernation callbacks.
+2. **Frame Overlay Renderer (`dashboard/services/frame_overlay.py`):** 160L service extracting HUD annotations, bounding boxes, dwell timers, velocity arrows, and zone polygons.
+3. **Video Transcoder Service (`dashboard/services/video_transcoder.py`):** 113L service extracting ffprobe inspection and ffmpeg transcoding subprocesses.
+4. **Entity Tagger Service (`dashboard/services/entity_tagger.py`):** 137L service extracting click-to-tag visual crop, Re-ID embedding extraction, and SQLite signature registration.
+5. **Decoupled StreamManager (`dashboard/stream_manager.py`):** Reduced from 880 lines to 680 lines via facade delegation with 100% backward compatibility and zero performance regression.
+6. **Contract Smoke Test (`tests/test_refactor_contract.py`):** Locks in DOM `<select>` dropdown and CSS `!important` parity.
+7. **Architectural Roadmap (`dashboard_refactor_plan.md`):** Complete 4-phase plan with 1-phase turn gates.
+
 ## Dependency Graph
 
 ```
@@ -625,6 +638,7 @@ M1 (Env & Core) ✅
                                             └── M9 (Artifact & Face Intelligence, Active Learning) ✅
                                                   └── M10 (VMS Dashboard Responsive Redesign & Hub Integration) ✅
                                                         └── M11 (Process Lifecycle Management & Zero-Load Hibernation) ✅
+                                                              └── M12 (Dashboard Architecture Decoupling - Phase 1) ✅
 ```
 
 ---

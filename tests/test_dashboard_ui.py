@@ -6,6 +6,7 @@ Milestone 10 Deliverable (Responsive Layout, Ergonomics, In-Page Modals, Telemet
 """
 
 import os
+import re
 import tempfile
 import unittest
 from fastapi.testclient import TestClient
@@ -114,6 +115,14 @@ class TestDashboardUI(unittest.TestCase):
         css_res = self.client.get("/static/styles.css")
         self.assertEqual(css_res.status_code, 200)
         css = css_res.text
+
+        # If master ITCSS entrypoint uses @import, resolve and verify each modular stylesheet
+        import_urls = re.findall(r'@import\s+url\(["\']([^"\']+)["\']\);', css)
+        for rel_url in import_urls:
+            sub_res = self.client.get(f"/static/{rel_url}")
+            self.assertEqual(sub_res.status_code, 200, f"Failed to load imported stylesheet: /static/{rel_url}")
+            css += "\n" + sub_res.text
+
         self.assertIn(".live-player-hud", css)
         self.assertIn(".nav-tabs-wrapper", css)
         self.assertIn(".mobile-nav-drawer", css)
@@ -126,6 +135,8 @@ class TestDashboardUI(unittest.TestCase):
         self.assertIn("STANDBY_POSTER_SVG", js)
         self.assertIn("detachLiveStream", js)
         self.assertIn("attachLiveStream", js)
+        self.assertNotIn("window.location.protocol =", js)
+        self.assertNotIn("location.protocol =", js)
 
     def test_rest_telemetry_snapshot_endpoint(self):
         """Verify GET /api/cameras/{camera_id}/telemetry endpoint contract for Enterprise Hub canvas overlay."""
@@ -151,4 +162,3 @@ class TestDashboardUI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

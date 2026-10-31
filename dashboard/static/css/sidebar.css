@@ -1,0 +1,194 @@
+/* ==========================================================================
+   Intelligent Tracker - Sidebar Panels (KPIs, Zones, Tripwires & Alerts)
+   ========================================================================== */
+
+.sidebar-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.kpi-card {
+  padding: 14px;
+  text-align: center;
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.kpi-value.cyan {
+  color: var(--cyan);
+}
+
+.kpi-value.green {
+  color: var(--emerald);
+}
+
+.kpi-value.red {
+  color: var(--crimson);
+}
+
+.kpi-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.zone-panel,
+.tripwire-panel,
+.alerts-mini-panel {
+  padding: 16px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.panel-header h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.panel-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-subtle);
+}
+
+/* Zone Items */
+.zone-item {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.zone-item.breached {
+  border-color: var(--crimson);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.zone-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.zone-progress-bg {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.zone-progress-bar {
+  height: 100%;
+  background: var(--emerald);
+  transition: width 0.3s ease;
+}
+
+.zone-progress-bar.warning {
+  background: var(--amber);
+}
+
+.zone-progress-bar.danger {
+  background: var(--crimson);
+}
+
+/* Tripwire Items */
+.tripwire-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+
+.tw-counts {
+  display: flex;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.tw-in {
+  color: var(--emerald);
+}
+
+.tw-out {
+  color: var(--amber);
+}
+
+/* Live Alerts Mini List */
+.alerts-mini-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.alert-mini-card {
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--cyan);
+  font-size: 0.75rem;
+}
+
+.alert-mini-card.intrusion {
+  border-left-color: var(--crimson);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.alert-mini-card.restricted {
+  border-left-color: var(--crimson);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.alert-mini-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.alert-mini-time {
+  color: var(--text-subtle);
+  font-family: var(--font-mono);
+}
+

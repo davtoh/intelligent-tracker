@@ -1236,3 +1236,275 @@ During Phase 1B browser and container runtime audit, 4 interrelated operational 
 - **Eviction Test**: `python scripts/stream_ctl.py evict cam_01` successfully evicted leases, forced state transition to `HIBERNATING`, and recorded audit event.
 - **Full Test Suite**: 223 out of 223 unit and integration tests passing (100% green).
 - **Documentation**: Sphinx build verified with 0 warnings.
+
+
+---
+
+## [Milestone 12] - 2026-10-30 - Dashboard Architecture & Domain Services Decoupling (Phase 1)
+
+### 1. Objectives & Scope
+- Initiate architectural decomposition of `dashboard/` subsystem in accordance with `/refactor-monolith` and `/frontier-architect` quantitative modularity budgets.
+- Extract cold collaborator services from `dashboard/stream_manager.py` (exceeded 880 lines) into dedicated domain services under `dashboard/services/`.
+- Guarantee **Zero-Copy Hot Path**: OpenCV inference loop (`StreamManager._worker_loop`) processes video frames directly on NumPy arrays without IPC, thread hopping, or serialization overhead.
+- Guarantee **Deep Hibernation Preservation**: `StreamSubscriberRegistry` manages leased subscriber tokens with 3.0s lease TTL, triggering `VideoSource.pause()` when subscriber count hits zero (< 1% idle container CPU).
+- Prepare first-class architectural seams for Enterprise Hub integration (Conversation ID `c2969330-7f3b-4ab1-afd2-9ddebcab2e2a`): REST telemetry polling (`GET /api/cameras/{camera_id}/telemetry`), HMAC alert signing, and offline SQLite delta sync.
+- Establish baseline contract snapshot (`.refactor_baseline.json`) and permanent contract smoke test (`tests/test_refactor_contract.py`).
+
+### 2. Files Touched / Created
+- `dashboard/services/__init__.py`: Package export for domain services.
+- `dashboard/services/stream_subscribers.py` (126 lines): `StreamSubscriberRegistry` extracting leased viewer tokens, TTL 3.0s auto-pruning, and hibernation pause/resume callbacks.
+- `dashboard/services/frame_overlay.py` (160 lines): `FrameOverlayRenderer` extracting HUD annotations, bounding boxes, dwell timers, velocity vectors, and zone polygons.
+- `dashboard/services/video_transcoder.py` (113 lines): `VideoTranscodeService` extracting ffprobe inspection and ffmpeg transcoding.
+- `dashboard/services/entity_tagger.py` (137 lines): `EntityTaggerService` extracting click-to-tag bounding box visual crop, Re-ID embedding, and SQLite signature registration.
+- `dashboard/stream_manager.py`: Shrunk from 880 lines to 680 lines (eliminated 200 lines from the monolith) via facade delegation, maintaining 100% backward compatibility for all 25 public methods/properties.
+- `tests/test_refactor_contract.py`: Automated contract smoke test enforcing DOM `<select>` dropdown and CSS `!important` parity.
+- `scripts/code_health_audit.py`, `scripts/contract_snapshot.py`, `scripts/surface_scanners.py`: Portable structural audit and contract verification CLI tools.
+- `dashboard_refactor_plan.md`: Complete 4-phase architectural roadmap with 1-phase turn gates.
+
+### 3. Empirical Verification & Modularity Audit
+- **Modularity Budgets Achieved**:
+  - `dashboard/services/frame_overlay.py`: 160 lines (Target: $\le$ 350L).
+  - `dashboard/services/entity_tagger.py`: 137 lines (Target: $\le$ 350L).
+  - `dashboard/services/stream_subscribers.py`: 126 lines (Target: $\le$ 350L).
+  - `dashboard/services/video_transcoder.py`: 113 lines (Target: $\le$ 350L).
+  - `dashboard/services/__init__.py`: 19 lines (Target: $\le$ 350L).
+  - `dashboard/stream_manager.py`: 680 lines (reduced from 880 lines, -200 lines).
+- **Automated Regression Test Suite**:
+  - `python -m unittest discover tests`
+  - Result: **Ran 231 tests in 21.892s — OK (0 failures, 0 errors)**.
+- **Hardware Hibernation Verification**:
+  - `python -m unittest tests/test_hibernation.py tests/test_lifecycle.py`
+  - Result: **Ran 11 tests in 2.859s — OK (0 failures, 0 errors)**.
+- **Contract Smoke Test**:
+  - `python -m unittest tests/test_refactor_contract.py`
+  - Result: **Ran 2 tests in 0.006s — OK (0 failures, 0 errors)**.
+- **Documentation Build**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
+  - Result: **Build succeeded with 0 warnings**.
+
+### 4. Next Phase
+- Phase 2: Backend API Routers & App Factory Decoupling (`dashboard/dependencies.py`, `dashboard/schemas.py`, `dashboard/routers/`, App Factory in `dashboard/app.py`).
+
+
+---
+
+## [Milestone 13] - 2026-10-30 - Dashboard API Routers & App Factory Decoupling (Phase 2)
+
+### 1. Objectives & Scope
+- Decompose the monolithic FastAPI web application in `dashboard/app.py` (previously 1,951 lines and 76 endpoints) into a clean, modular router architecture adhering strictly to quantitative modularity budgets ($\le$ 350 lines soft target, $\le$ 500 lines hard ceiling, $\le$ 40 lines per function, $\le$ 15–25 lines per endpoint handler).
+- Establish `dashboard/dependencies.py` implementing the **Bidirectional Proxy Pattern** for `camera_pool`, `stream_manager`, `scenario_manager`, and `lifecycle_manager`, ensuring 100% compatibility with test fixtures that dynamically monkeypatch module-level globals on `dashboard.app`.
+- Consolidate all 21 request/response Pydantic models into `dashboard/schemas.py` with full re-export facades on `dashboard.app`.
+- Extract 8 cohesive domain `APIRouter` modules under `dashboard/routers/`:
+  1. `system.py`: Hardware status, system diagnostics, process management, stream eviction, and database backup export/import.
+  2. `cameras.py`: Multi-camera pool CRUD, hardware discovery, presets, overlays, freeze frame, and **`GET /api/cameras/{camera_id}/telemetry`** for central Enterprise Hub canvas overlay proxying.
+  3. `streaming.py`: Live MJPEG video stream with low-latency `await request.is_disconnected()` guard and real-time bi-directional telemetry WebSockets.
+  4. `scenarios.py`: Polygonal zones, directional tripwires, 4-point homography ground plane calibration, and Bird's-Eye-View (BEV) minimap rendering.
+  5. `rsac.py`: Universal Entity Enrollment, Human-in-the-Loop Active Learning Review Queue, custom category badges, RSAC zone rules, pet alarm suppression whitelist, and visual descriptor version history/rollback.
+  6. `analytics.py`: Spatial density heatmaps, gallery identity CRUD, Re-ID sighting history, EventBus alerts, click-to-tag bounding box enrollment, and crop thumbnail serving.
+  7. `videos.py`: Local video recording management, uploads with auto-transcode, H.264 transcoding delegation, offline batch indexing, and HTML5 video streaming.
+  8. `topology.py`: Cross-camera spatial transition links, active predictive Re-ID priors, and multi-camera trajectory journey search/video export.
+- Convert `dashboard/app.py` into a thin FastAPI App Factory (`create_app()`, 233 lines) maintaining 100% backward compatibility for all module globals, helper functions, and Pydantic schemas.
+
+### 2. Files Touched / Created
+- `dashboard/dependencies.py` (236 lines): Bidirectional proxy bridge and typed dependency providers (`get_camera_pool`, `get_stream_manager`, `get_scenario_mgr`, `get_lifecycle_manager`, `get_db`, `get_rsac_mgr`, `get_active_learning_mgr`, `get_enrollment_mgr`, `reload_all_galleries`).
+- `dashboard/schemas.py` (184 lines): Validated Pydantic models for cameras, zones, tripwires, homography, RSAC access control, and active learning candidate reviews.
+- `dashboard/routers/__init__.py` (37 lines): Package facade exposing all 8 domain routers.
+- `dashboard/routers/system.py` (155 lines): System health, backup export/import, and process eviction router.
+- `dashboard/routers/cameras.py` (298 lines): Camera pool CRUD, discovery, telemetry, and overlays router.
+- `dashboard/routers/streaming.py` (126 lines): MJPEG live streaming and WebSockets router.
+- `dashboard/routers/scenarios.py` (271 lines): Zones, tripwires, homography, and BEV minimap router.
+- `dashboard/routers/rsac.py` (299 lines): RSAC access rules, enrollment, active learning, and version rollback router.
+- `dashboard/routers/analytics.py` (267 lines): Heatmap, entities, sightings, and event alerts router.
+- `dashboard/routers/videos.py` (242 lines): Video management, uploads, transcoding, and scrubber router.
+- `dashboard/routers/topology.py` (166 lines): Spatial transitions and multi-camera journey router.
+- `dashboard/app.py` (233 lines): Shrunk from 1,951 lines down to 233 lines (-1,718 lines / 88% reduction) as a clean App Factory and backward-compatible facade.
+- `.refactor/state.json`: Advanced campaign from Phase 2 to Phase 3.
+
+### 3. Empirical Verification & Modularity Audit
+- **Modularity Budgets Achieved (All 12 Files Healthy / 0 Critical / 0 Warning)**:
+  - `dashboard/app.py`: 233 lines (Target: $\le$ 350L, reduced from 1,951 lines).
+  - `dashboard/dependencies.py`: 236 lines (Target: $\le$ 350L).
+  - `dashboard/schemas.py`: 184 lines (Target: $\le$ 350L).
+  - `dashboard/routers/rsac.py`: 299 lines (Target: $\le$ 350L).
+  - `dashboard/routers/cameras.py`: 298 lines (Target: $\le$ 350L).
+  - `dashboard/routers/scenarios.py`: 271 lines (Target: $\le$ 350L).
+  - `dashboard/routers/analytics.py`: 267 lines (Target: $\le$ 350L).
+  - `dashboard/routers/videos.py`: 242 lines (Target: $\le$ 350L).
+  - `dashboard/routers/topology.py`: 166 lines (Target: $\le$ 350L).
+  - `dashboard/routers/system.py`: 155 lines (Target: $\le$ 350L).
+  - `dashboard/routers/streaming.py`: 126 lines (Target: $\le$ 350L).
+  - `dashboard/routers/__init__.py`: 37 lines (Target: $\le$ 350L).
+  - All functions across all routers and dependencies: $\le$ 40 lines (100% compliant).
+- **Contract Parity & Zero Regression Diff**:
+  - `python scripts/contract_snapshot.py verify --path dashboard --strict`
+  - Result: **OK: Zero contract regressions detected! (DOM IDs, selects, globals, routes, and CSS preserved)**. All 76 backend routes intact.
+- **Contract Smoke Test**:
+  - `python -m unittest tests/test_refactor_contract.py`
+  - Result: **Ran 2 tests in 0.007s — OK (0 failures, 0 errors)**.
+- **API & Lifecycle Integration Suites**:
+  - `python -m unittest tests/test_dashboard.py tests/test_scenario_api.py tests/test_vms_api.py tests/test_m9_api.py tests/test_lifecycle.py`
+  - Result: **Ran 33 tests in 9.476s — OK (0 failures, 0 errors)**.
+- **Full Automated Regression Suite**:
+  - `python -m unittest discover tests`
+  - Result: **Ran 231 tests in 27.169s — OK (0 failures, 0 errors)**.
+- **Sphinx Documentation Build**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
+  - Result: **Build succeeded with 0 warnings**.
+
+### 4. Next Phase
+- Phase 3: Frontend Modular ITCSS Stylesheets (`dashboard/static/styles.css` decomposed into modular layers with 0 `!important`).
+
+
+---
+
+## [Milestone 14] - 2026-10-30 - Frontend Modular ITCSS Stylesheets Decomposition (Phase 3)
+
+### 1. Objectives & Scope
+- Decompose the monolithic stylesheet in `dashboard/static/styles.css` (previously 2,902 lines) into a clean, modular ITCSS (Inverted Triangle CSS) layered architecture strictly adhering to quantitative modularity budgets (150–300 lines healthy target, $\le$ 350 lines soft ceiling, $\le$ 500 lines hard ceiling).
+- Enforce strict project CSS guidelines: eliminate all legacy occurrences of `!important` (previously 4 items in baseline) using natural specificity hierarchies (`.studio-toolbar .studio-tool-btn.active`, `.btn.studio-tool-btn.active`, `.video-card:fullscreen .video-container`), avoiding specificity debt.
+- Structure stylesheets into 16 cohesive domain partials under `dashboard/static/css/`:
+  1. `tokens.css` (70 lines): `:root` design tokens, color palette, typography, glassmorphism panel styles.
+  2. `components.css` (81 lines): Buttons (`.btn`, `.btn-primary`, `.btn-outline`), form inputs, and empty states.
+  3. `badges.css` (81 lines): Category pills (`staff`, `vip`, `restricted`, `family_car`, `delivery_truck`, `cleaning_crew`, `guard_dog`, `pet`) and hardware interface badges (`badge-usb`, `badge-onvif`).
+  4. `layout.css` (289 lines): App header, branding, horizontal scroll-snapped nav tabs, main container shell.
+  5. `drawer.css` (121 lines): Mobile slide-out navigation drawer with smooth cubic-bezier transitions.
+  6. `sidebar.css` (194 lines): KPI analytics metrics, zone status bars, tripwire tallies, and live security alerts list.
+  7. `player.css` (286 lines): Live video player card, `:fullscreen` modes, interactive annotation canvas, and live player HUD toolbar.
+  8. `vms_grid.css` (182 lines): Multi-camera matrix grid container (`grid-2x2`, `grid-3x3`), matrix switcher, and camera grid tiles.
+  9. `views.css` (323 lines): Entity gallery grid, sighting timeline stream, density heatmaps, and security alerts table.
+  10. `scrubber.css` (196 lines): Video studio playback scrubber, HTML5 video player, speed controls, and video library list.
+  11. `studio.css` (221 lines): Scenario Studio toolbar, drawing canvas, floating overlay chips, and Bird's-Eye-View (BEV) minimap.
+  12. `topology.css` (163 lines): Spatial topology link flow cards and multi-camera trajectory journey hops timeline.
+  13. `review.css` (211 lines): Active learning review queue inbox, candidate confidence meters, action buttons, and version history timeline.
+  14. `modals.css` (267 lines): Standardized dialog architecture with scrollable bodies, camera manager modal, and backup manager dialog.
+  15. `toast.css` (88 lines): Floating toast notifications with keyframe slide animations.
+  16. `responsive.css` (117 lines): Global media breakpoints (1280px, 1080px, 1024px, 768px).
+- Convert `dashboard/static/styles.css` into a lean 35-line ITCSS master entrypoint with ordered `@import` statements preserving 100% backward compatibility for `<link rel="stylesheet" href="/static/styles.css">`.
+- Update `tests/test_dashboard_ui.py` to verify that all imported ITCSS modules resolve with HTTP 200 and that all responsive modernization classes are present across the stylesheet cascade.
+- Advance campaign state in `.refactor/state.json` from Phase 3 to Phase 4.
+
+### 2. Files Touched / Created
+- `dashboard/static/css/tokens.css` (70 lines)
+- `dashboard/static/css/components.css` (81 lines)
+- `dashboard/static/css/badges.css` (81 lines)
+- `dashboard/static/css/layout.css` (289 lines)
+- `dashboard/static/css/drawer.css` (121 lines)
+- `dashboard/static/css/sidebar.css` (194 lines)
+- `dashboard/static/css/player.css` (286 lines)
+- `dashboard/static/css/vms_grid.css` (182 lines)
+- `dashboard/static/css/views.css` (323 lines)
+- `dashboard/static/css/scrubber.css` (196 lines)
+- `dashboard/static/css/studio.css` (221 lines)
+- `dashboard/static/css/topology.css` (163 lines)
+- `dashboard/static/css/review.css` (211 lines)
+- `dashboard/static/css/modals.css` (267 lines)
+- `dashboard/static/css/toast.css` (88 lines)
+- `dashboard/static/css/responsive.css` (117 lines)
+- `dashboard/static/styles.css` (35 lines, reduced from 2,902 lines)
+- `tests/test_dashboard_ui.py`: Updated asset integrity check to resolve and verify `@import` rules.
+- `tests/test_refactor_contract.py`: Updated contract smoke test.
+- `.refactor/state.json`: Advanced campaign to Phase 4 (active).
+- `.refactor/plan.md` & `dashboard_refactor_plan.md`: Updated Phase 3 to completed status.
+
+### 3. Empirical Verification & Modularity Audit
+- **Modularity Budgets Achieved (All 17 Stylesheet Files Healthy / 0 Critical / 0 Warning)**:
+  - Every single CSS file is $\le$ 323 lines (100% compliant with 350L soft warning and 500L hard ceiling).
+  - `dashboard/static/styles.css`: 35 lines (98.8% line reduction).
+  - All functions / rules / media queries: $\le$ 40 lines (100% compliant).
+- **CSS Specificity Standard**:
+  - `!important` count: **0** across all stylesheets (down from 4 items, 100% eliminated).
+- **Contract Parity & Zero Regression Diff**:
+  - `python scripts/contract_snapshot.py verify --path dashboard --strict`
+  - Result: **OK: Zero contract regressions detected! (DOM IDs, selects, globals, routes, and CSS preserved)**.
+- **Contract Smoke Test**:
+  - `python -m unittest tests/test_refactor_contract.py`
+  - Result: **Ran 3 tests in 0.013s — OK (0 failures, 0 errors)**.
+- **Frontend Dashboard UI Suite**:
+  - `python -m unittest tests/test_dashboard_ui.py`
+  - Result: **Ran 5 tests in 0.386s — OK (0 failures, 0 errors)**.
+- **Full Automated Regression Suite**:
+  - `python -m unittest discover tests`
+  - Result: **Ran 232 tests in 29.225s — OK (0 failures, 0 errors)**.
+- **Sphinx Documentation Build**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
+  - Result: **Build succeeded with 0 warnings**.
+
+### 4. Next Phase
+- Phase 4: Frontend Modular Feature Modules & Contracts (`dashboard/static/app.js`, `studio.js`, `review_and_rsac.js`, `video_scrubber.js`, `camera_manager.js` decomposed into modular feature controllers under `dashboard/static/js/` preserving all `window.*` globals).
+
+
+---
+
+## [2026-10-31] - Milestone 15: Phase 4 Dashboard Monolith Decomposition (Client-Side JS Modularization) & Campaign Completion
+
+### 1. Objectives & Scope
+- Decompose all client-side JavaScript "God Files" (`dashboard/static/app.js`, `studio.js`, `review_and_rsac.js`, `video_scrubber.js`, `camera_manager.js`) to achieve 100% compliance with quantitative modularity budgets ($\le$ 350 lines soft ceiling, $\le$ 500 lines hard ceiling).
+- Extract 18 cohesive domain submodules into `dashboard/static/js/` without introducing external node/npm build dependencies or runtime bundle overhead.
+- Guarantee 100% invariant preservation across all DOM IDs (256/256), interactive `<select>` dropdowns (15/15), and global `window.*` API contracts (`window.App`, `window.CameraManager`, `window.ReviewAndRSAC`, `window.Studio`, `window.VideoScrubber`, `window.showToast`, etc.).
+- Complete all 4 phases of the dashboard modernization campaign in `.refactor/state.json`.
+
+### 2. Files Created & Modified
+- **New Modular JavaScript Submodules** (`dashboard/static/js/`):
+  - `video_batch.js` (85 lines) — Batch analytics report generation and progress tracking.
+  - `video_library.js` (189 lines) — Video listing, uploads, transcode notices, camera pool addition.
+  - `camera_discovery.js` (213 lines) — USB device scanning, ONVIF discovery, preset URL generation, socket connection testing.
+  - `camera_grid.js` (107 lines) — Multi-camera matrix grid switcher (1x1, 2x2, 3x3), camera focus.
+  - `universal_enrollment.js` (292 lines) — Live freeze-frame acquisition, canvas bounding box drag selection, biometrics extraction.
+  - `rsac_versions.js` (131 lines) — Descriptor version history retrieval, modal timeline rendering, 1-click rollback.
+  - `review_modals.js` (161 lines) — Quick-enroll and candidate reassign modals.
+  - `bev_minimap.js` (134 lines) — Tactical 2D top-down minimap canvas, metric grid, projected zone polygons, telemetry entities.
+  - `scenario_modals.js` (203 lines) — In-page modal forms for zones, tripwires, homography, and spatial transitions.
+  - `journey_search.js` (155 lines) — Trajectory journey queries, timeline rendering, animated MP4 export.
+  - `studio_canvas.js` (141 lines) — Studio canvas mouse interaction and vector overlay drawing.
+  - `studio_overlays.js` (137 lines) — Overlay toolbar toggles, persistence, scenario lists, and topology transitions rendering.
+  - `live_player.js` (121 lines) — Standby poster SVG, stream attach/detach, player HUD buttons, fullscreen handler.
+  - `interactive_canvas.js` (205 lines) — Aspect-ratio canvas scaling, bounding box hit testing, tooltip, click-to-tag modal form.
+  - `telemetry.js` (178 lines) — WebSocket lifecycle, KPI updates, zone occupancy bars, tripwire tallies, mini-alerts.
+  - `gallery_timeline.js` (240 lines) — Entity gallery grid, category filters, sighting timeline queries, snapshot viewer modal.
+  - `analytics_view.js` (158 lines) — Chart.js traffic time-series, alerts table, heatmap controls.
+  - `backup_manager.js` (54 lines) — System snapshot backup import/restore modal.
+- **Decomposed Master Facade Controllers**:
+  - `dashboard/static/app.js`: Reduced from 1,263 lines to 345 lines (OK).
+  - `dashboard/static/video_scrubber.js`: Reduced from 542 lines to 339 lines (OK).
+  - `dashboard/static/studio.js`: Reduced from 994 lines to 328 lines (OK).
+  - `dashboard/static/camera_manager.js`: Reduced from 533 lines to 300 lines (OK).
+  - `dashboard/static/review_and_rsac.js`: Reduced from 813 lines to 293 lines (OK).
+- **HTML Shell & Manifests**:
+  - `dashboard/static/index.html`: Added ordered `<script src="/static/js/...">` tags for all 18 submodules ahead of master facade controllers.
+  - `.refactor/plan.md` & `dashboard_refactor_plan.md`: Updated Phase 4 to completed status.
+  - `.refactor/state.json`: Advanced campaign to COMPLETED (Phase 4 of 4 closed).
+
+### 3. Verification & Modularity Audit
+- **Code Health Audit**:
+  - Executed `python scripts/code_health_audit.py --path dashboard/static`.
+  - Result: **40 files evaluated — 0 Critical, 0 Warning**. Every single CSS and JS file is $\le$ 345 lines (100% compliant with the 350L soft ceiling and 500L hard ceiling).
+- **Contract Parity & Invariant Snapshot**:
+  - Executed `python scripts/contract_snapshot.py verify --path dashboard --strict`.
+  - Result: **OK: Zero contract regressions detected! (DOM IDs, selects, globals, routes, and CSS preserved)**.
+- **Contract Smoke Tests**:
+  - Executed `python -m unittest tests/test_refactor_contract.py`.
+  - Result: **Ran 3 tests in 0.012s — OK (0 failures, 0 errors)**.
+- **Dashboard UI Asset Integrity Tests**:
+  - Executed `python -m unittest tests/test_dashboard_ui.py`.
+  - Result: **Ran 5 tests in 0.370s — OK (0 failures, 0 errors)**.
+- **Full Headless Test Suite**:
+  - Executed `python -m unittest discover tests` with `MPLBACKEND=Agg`.
+  - Result: **Ran 232 tests in 23.603s — OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation Build**:
+  - Executed `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.
+  - Result: **Build succeeded with 0 warnings**.
+
+### 4. Refactoring Campaign Summary
+Across all 4 phases of the dashboard modernization campaign:
+- **Phase 1**: Decoupled `dashboard/stream_manager.py` (880L) into domain services (`services/stream_subscribers.py`, `services/frame_overlay.py`, `services/entity_tagger.py`), maintaining zero-copy NumPy hot path and deep hardware hibernation.
+- **Phase 2**: Decoupled `dashboard/app.py` (1,951L) into 8 cohesive APIRouters in `dashboard/routers/` and a thin App Factory with bidirectional dependency injection in `dashboard/dependencies.py`.
+- **Phase 3**: Decoupled `dashboard/static/styles.css` (2,902L) into 17 modular ITCSS component stylesheets in `dashboard/static/css/`, completely eliminating all `!important` occurrences.
+- **Phase 4**: Decoupled 5 client-side JavaScript monoliths (4,145L total) into 18 focused feature submodules in `dashboard/static/js/`, reducing every single file below 350 lines while preserving 100% contract parity.
+- **Final Modularity State**: 0 Critical files, 0 Warning files across the entire `dashboard/` subsystem.
+
+
+### 5. Post-Refactor Hotfix: Infinite Reload Elimination (Regression Recovery)
+- **Root Cause Diagnosis**: `dashboard/static/app.js` contained an accidental assignment `window.location.protocol = window.location.protocol;`. In standard browser specifications, setting `location.protocol` (even to its current value) triggers an immediate full page navigation/reload, causing the dashboard to reload endlessly upon `DOMContentLoaded` (observed as persistent UI flickering and unclickable controls).
+- **Scanner Fix**: Updated `_JS_GLOBAL_EXPORT_RE` in `surface_scanners.py` with negative lookahead `\s*=(?!=)` so JavaScript equality comparisons (`===`) are not falsely captured as global symbol assignments.
+- **Eliminated Reload Loop**: Removed the dead assignment statement from `dashboard/static/app.js` and cleansed the phantom export from `.refactor/baseline.json`.
+- **Automated Regression Guard**: Added explicit assertions in `tests/test_dashboard_ui.py` (`self.assertNotIn("location.protocol =", js)`).
