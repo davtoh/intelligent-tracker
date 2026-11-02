@@ -118,27 +118,33 @@ Running the Application
 Interactive GUI Tracking
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: powershell
+.. code-block:: bash
 
-    # Run YOLOv8 on default webcam
-    .\.venv\Scripts\python.exe main.py --detector yolov8 --source 0
+    # Run YOLOv8 on auto-detected real physical camera
+    python main.py --detector yolov8 --source real
+
+    # Target specific camera by name (e.g. GoPro, OBS, USB Webcam)
+    python main.py --detector yolov8 --source gopro --classes person --conf 0.40
+
+    # Run YOLOv8 on default webcam index 0
+    python main.py --detector yolov8 --source 0
 
     # Run YOLO11 on synthetic test frames (no camera needed)
-    .\.venv\Scripts\python.exe main.py --detector yolo11 --source synthetic
+    python main.py --detector yolo11 --source synthetic
 
     # Filter for person detections with minimum confidence of 0.40
-    .\.venv\Scripts\python.exe main.py --detector yolov8 --classes person --conf 0.40
+    python main.py --detector yolov8 --classes person --conf 0.40
 
     # Run with legacy Haar cascade face detector
-    .\.venv\Scripts\python.exe main.py --detector haar --source 0
+    python main.py --detector haar --source 0
 
 Headless Benchmarking (CI / Servers)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: powershell
+.. code-block:: bash
 
     # Run 60 frames benchmark with YOLOv8 without opening GUI
-    .\.venv\Scripts\python.exe main.py --detector yolov8 --source synthetic --headless --frames 60
+    python main.py --detector yolov8 --source synthetic --headless --frames 60
 
 CLI Options
 ~~~~~~~~~~~
@@ -179,6 +185,46 @@ CLI Options
 | ``--frames``    | ``60``        | Frames to process in headless mode (``0`` = infinite)                    |
 +-----------------+---------------+--------------------------------------------------------------------------+
 
+Hardware Camera Management & Exclusive Lock Recovery
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Physical USB webcams and capture cards operate under exclusive hardware pin locks on Windows (DirectShow) and Linux (V4L2). If an application exits uncleanly, an orphaned process may hold the camera pin, causing subsequent open attempts to fail.
+
+Intelligent Tracker provides an administrative utility (``scripts/camera_manager.py``) to audit devices, release locked pins, and terminate orphaned worker processes:
+
+.. code-block:: bash
+
+    # Audit all connected cameras and active worker processes
+    python scripts/camera_manager.py --status
+
+    # Release a specific camera index (e.g. device index 2)
+    python scripts/camera_manager.py --release-camera 2
+
+    # Force release device index 2
+    python scripts/camera_manager.py --release-camera 2 --force
+
+    # Terminate a specific background worker PID holding a camera
+    python scripts/camera_manager.py --kill-pid 27368
+
+    # Bulk release all camera handles and terminate orphaned worker processes
+    python scripts/camera_manager.py --release --kill-orphans
+
+Multi-Consumer Shared Stream Proxy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When multiple applications or Docker containers need simultaneous access to the same physical camera:
+
+1. Launch the FastAPI dashboard as the primary capture agent: ``python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000``
+2. Connect external clients or Docker containers to the MJPEG broadcast endpoint:
+
+.. code-block:: bash
+
+    # Local host client
+    python main.py --source http://localhost:8000/api/v1/streams/cam_01/feed --detector yolov8
+
+    # Docker container client
+    python main.py --source http://host.docker.internal:8000/api/v1/streams/cam_01/feed --detector yolov8
+
 
 Scenario Combinations Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -186,7 +232,17 @@ Scenario Combinations Matrix
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | Scenario / Objective                | Detector   | Tracker    | Source            | Config File         | Key Parameters                                  | Mode                | Example Runnable Command                                                                           |
 +=====================================+============+============+===================+=====================+=================================================+=====================+====================================================================================================+
+| **Camera & Process Status Audit**   | -          | -          | -                 | -                   | ``--status``                                    | CLI Audit           | ``python scripts/camera_manager.py --status``                                                      |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Release Blocked Camera Index**    | -          | -          | -                 | -                   | ``--release-camera 2``                          | CLI Release         | ``python scripts/camera_manager.py --release-camera 2``                                            |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Kill Orphaned Worker PID**        | -          | -          | -                 | -                   | ``--kill-pid 27368 --force``                    | Process Terminate   | ``python scripts/camera_manager.py --kill-pid 27368 --force``                                      |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Physical Webcam Auto-Detect**     | ``yolov8`` | ``centroid``| ``real``          | -                   | ``--classes person --conf 0.40``                | Interactive GUI     | ``python main.py --detector yolov8 --source real --classes person --conf 0.40``                     |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Target Camera by Name**           | ``yolov8`` | ``centroid``| ``gopro``         | -                   | ``--classes person --conf 0.40``                | Interactive GUI     | ``python main.py --detector yolov8 --source gopro --classes person --conf 0.40``                    |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Multi-Consumer Stream Proxy**     | ``yolov8`` | ``centroid``| ``http://...``    | -                   | ``--classes person --conf 0.40``                | Shared Stream       | ``python main.py --source http://localhost:8000/api/v1/streams/cam_01/feed --detector yolov8``     |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Synthetic CI Smoke Test**         | ``mock``   | ``centroid``| ``synthetic``    | ``configs/demo.yaml``| ``--headless --frames 30``                     | Headless (30f)      | ``python main.py --config configs/demo.yaml --headless --frames 30``                                |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+

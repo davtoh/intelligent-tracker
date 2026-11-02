@@ -25,6 +25,7 @@ import cv2
 import numpy as np
 
 from intelligent_tracker.events import frame_to_base64
+from intelligent_tracker.camera_device import CameraDeviceHandler
 
 logger = logging.getLogger("intelligent_tracker.discovery")
 
@@ -76,7 +77,7 @@ class DiscoveredCamera:
 def find_physical_cameras(max_devices: int = 6) -> List[DiscoveredCamera]:
     """
     Probes physical hardware indices to detect connected USB webcams
-    and local video capture devices.
+    and local video capture devices using CameraDeviceHandler.
 
     Args:
         max_devices: Maximum device index count to probe (default: 6).
@@ -85,37 +86,25 @@ def find_physical_cameras(max_devices: int = 6) -> List[DiscoveredCamera]:
         List of DiscoveredCamera objects for detected devices.
     """
     discovered: List[DiscoveredCamera] = []
-    backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
-
-    for idx in range(max_devices):
-        try:
-            cam = cv2.VideoCapture(idx, backend) if backend else cv2.VideoCapture(idx)
-            if cam.isOpened():
-                ret, frame = cam.read()
-                w = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH) or 640)
-                h = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480)
-                fps = float(cam.get(cv2.CAP_PROP_FPS) or 30.0)
-                cam.release()
-
-                if ret and frame is not None and frame.size > 0:
-                    device_id = f"usb_{idx}"
-                    discovered.append(DiscoveredCamera(
-                        id=device_id,
-                        name=f"USB Camera {idx}",
-                        source=idx,
-                        type="usb",
-                        resolution=f"{w}x{h}",
-                        fps=round(fps, 1),
-                        details={
-                            "index": idx,
-                            "backend": "DirectShow" if sys.platform.startswith("win") else "V4L2/Default",
-                        },
-                    ))
-            else:
-                cam.release()
-        except Exception as e:
-            logger.debug("Probing device index %d failed: %s", idx, e)
-
+    usb_devs = CameraDeviceHandler.discover_usb_cameras(max_devices=max_devices)
+    for dev in usb_devs:
+        idx = dev["index"]
+        device_id = f"usb_{idx}"
+        dev_name = dev.get("name") or f"USB Camera {idx}"
+        is_virt = dev.get("is_virtual", False)
+        discovered.append(DiscoveredCamera(
+            id=device_id,
+            name=dev_name,
+            source=idx,
+            type="usb",
+            resolution=dev.get("resolution", "640x480"),
+            fps=dev.get("fps", 30.0),
+            details={
+                "index": idx,
+                "backend": dev.get("backend", "DirectShow" if sys.platform.startswith("win") else "V4L2"),
+                "is_virtual": is_virt,
+            },
+        ))
     return discovered
 
 
@@ -333,7 +322,17 @@ def discover_all_cameras(
         rtsp_cams = discover_rtsp_devices(subnet_ips=filtered_ips, timeout=0.2, max_workers=24)
         results.extend(rtsp_cams)
 
-    if not results and mock_fallback:
+    if not results and CameraDeviceHandler.is_container_environment():
+        results.append(DiscoveredCamera(
+            id="docker_notice",
+            name="Host USB Camera Pass-through Required (Docker)",
+            source="synthetic",
+            type="synthetic",
+            resolution="640x480",
+            fps=30.0,
+            details={"notes": "Container has no /dev/video* devices mapped. Run on host OS (`python main.py`) to access USB webcams."},
+        ))
+    elif not results and mock_fallback:
         results.append(DiscoveredCamera(
             id="synthetic_01",
             name="Synthetic Test Feed (Simulation)",
@@ -397,22 +396,34 @@ def test_camera_connection(source: Any, timeout: float = 3.0) -> Dict[str, Any]:
     # 3. Try opening physical or network source
     cap = None
     try:
-        backend = cv2.CAP_DSHOW if (isinstance(source, int) and sys.platform.startswith("win")) else 0
-        if backend:
-            cap = cv2.VideoCapture(source, backend)
-        else:
-            cap = cv2.VideoCapture(source)
+        cap, backend_name = CameraDeviceHandler.open_camera(source, test_read=True)
+        if not cap or not cap.isOpened():
+            # Check if this physical device index exists on the system to provide specific diagnostic
+            dev_exists = False
+            friendly_name = ""
+            if isinstance(source, int) or (isinstance(source, str) and source.isdigit()):
+                idx = int(source)
+                names = CameraDeviceHandler.get_device_names()
+                if 0 <= idx < len(names):
+                    dev_exists = True
+                    friendly_name = names[idx]
 
-        if not cap.isOpened():
+            if dev_exists:
+                err_msg = (
+                    f"Device #{source} ('{friendly_name}') was detected, but is currently locked by another "
+                    f"process or streaming session. Close other video apps or release blocked cameras."
+                )
+            else:
+                err_msg = f"Could not open video capture device #{source} or RTSP stream (device not present or inaccessible)."
+
             return {
                 "success": False,
                 "source": str(source),
-                "error": "Could not open video capture device or RTSP stream",
+                "error": err_msg,
             }
 
-        # Read test frame
         ret, frame = cap.read()
-        if not ret or frame is None or frame.size == 0:
+        if not ret or not CameraDeviceHandler.validate_frame(frame):
             return {
                 "success": False,
                 "source": str(source),
@@ -430,6 +441,7 @@ def test_camera_connection(source: Any, timeout: float = 3.0) -> Dict[str, Any]:
             "width": w,
             "height": h,
             "fps": round(fps, 1),
+            "backend": backend_name,
             "snapshot_base64": snapshot,
         }
     except Exception as e:
@@ -439,11 +451,7 @@ def test_camera_connection(source: Any, timeout: float = 3.0) -> Dict[str, Any]:
             "error": str(e),
         }
     finally:
-        if cap is not None:
-            try:
-                cap.release()
-            except Exception:
-                pass
+        CameraDeviceHandler.safe_release(cap, settle_delay=0.2)
 
 
 def build_preset_rtsp_url(

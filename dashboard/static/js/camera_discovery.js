@@ -142,7 +142,7 @@
       const devices = await resp.json();
 
       if (!devices || devices.length === 0) {
-        listEl.innerHTML = '<div class="empty-state">No new cameras discovered. Ensure cameras are powered and on the same subnet.</div>';
+        listEl.innerHTML = '<div class="empty-state">No new cameras discovered. Ensure cameras are powered and on the same subnet. (Note: Inside Docker containers, USB webcams are isolated on the host; run on host via <code>python main.py</code> for direct USB access).</div>';
         return;
       }
 
@@ -152,8 +152,10 @@
             <div class="dev-title">${escapeHtml(dev.name)}</div>
             <div class="dev-sub">
               <span class="badge ${dev.type === 'usb' ? 'badge-usb' : 'badge-onvif'}">${escapeHtml(dev.type.toUpperCase())}</span>
-              <span>${escapeHtml(String(dev.source))}</span>
+              ${dev.details && dev.details.is_virtual ? '<span class="badge" style="background:rgba(99,102,241,0.2);color:#818cf8;border:1px solid #6366f1;">VIRTUAL</span>' : ''}
+              <span>#${escapeHtml(String(dev.source))}</span>
               ${dev.resolution ? `<span>${escapeHtml(dev.resolution)}</span>` : ''}
+              ${dev.fps ? `<span>${dev.fps} FPS</span>` : ''}
             </div>
           </div>
           <div class="dev-actions">
@@ -204,10 +206,32 @@
     }
   }
 
+  async function releaseCameras() {
+    const btnRelease = document.getElementById('btn-release-cameras');
+    if (btnRelease) {
+      btnRelease.disabled = true;
+      btnRelease.textContent = '⏳ Releasing...';
+    }
+    try {
+      const resp = await fetch('/api/cameras/release', { method: 'POST' });
+      const data = await resp.json();
+      showToast(data.message || 'Camera handles released.', 'success');
+      setTimeout(() => scanDevices(), 400);
+    } catch (e) {
+      showToast(`Failed to release: ${e.message}`, 'error');
+    } finally {
+      if (btnRelease) {
+        btnRelease.disabled = false;
+        btnRelease.textContent = '🔓 Release Blocked';
+      }
+    }
+  }
+
   window.CameraDiscovery = {
     updatePresetUrl: updatePresetUrl,
     testConnection: testConnection,
     scanDevices: scanDevices,
+    releaseCameras: releaseCameras,
   };
 })();
 

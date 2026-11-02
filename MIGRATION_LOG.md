@@ -1566,3 +1566,173 @@ Across all 4 phases of the dashboard modernization campaign:
     - One-click "Copy" button successfully writes the full string to clipboard with "Copied!" visual confirmation.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: **Build succeeded with 0 warnings**.
+
+
+## [Bugfix & Architecture Hardening] - 2026-11-01 - Sturdy Camera Device Handler & USB Stream Acquisition
+
+### 1. Objectives & Scope
+- Resolve USB camera feed failures when running `main.py --source real` (`0` frames processed, pipeline timeout).
+- Resolve USB device detection failures when using "Scan for Devices" in the web dashboard.
+- Eliminate camera driver locking, COM apartment collisions, and device blocking during rapid open/close sequences on Windows.
+- Implement a sturdy, centralized hardware camera abstraction (`CameraDeviceHandler`) adhering strictly to Modularity Budgets (target 150-300 lines, SRP).
+
+### 2. Files Modified / Created
+- `intelligent_tracker/camera_device.py` (New, 228 lines):
+  - Created centralized `CameraDeviceHandler` class with cross-platform backend fallback (`DirectShow` -> `Media Foundation` -> `V4L2` -> `AVFoundation`).
+  - Thread-safe acquisition mutex (`_device_lock`) preventing race conditions and concurrent DirectShow COM graph collisions.
+  - Driver unbind settle cooldown protocol (`safe_release(cap, settle_delay=0.25)`).
+  - Robust visual frame validation (`validate_frame(frame, min_std=0.5)`).
+  - Clean device probing (`probe_device(idx)`), discovery (`discover_usb_cameras()`), and first-working selection (`find_first_working_camera()`).
+  - Container environment awareness (`is_container_environment()`).
+- `intelligent_tracker/video.py` (Reduced by 34 lines):
+  - Modernized `is_physical_camera()` to validate active frames rather than relying on brittle hardware register properties (`CAP_PROP_BRIGHTNESS` etc. which return `-1.0` on modern UVC devices).
+  - Delegated `find_physical_cameras()` and `find_first_real_camera()` to `CameraDeviceHandler`.
+  - Routed `VideoSource._open_capture()` through `CameraDeviceHandler.open_camera()` and `safe_release()`.
+- `intelligent_tracker/discovery.py` (Reduced by 14 lines):
+  - Updated `find_physical_cameras()` to return detected USB devices with resolution, FPS, and backend metadata from `CameraDeviceHandler`.
+  - Updated `test_camera_connection()` to safely acquire, test, and release video captures via `CameraDeviceHandler`.
+  - Added Docker container notice clarifying that host USB webcams are isolated by default in containers.
+- `dashboard/static/js/camera_discovery.js`:
+  - Updated empty-state discovery message to clarify Docker container isolation vs host execution.
+- `tests/test_camera_device.py` (New, 140 lines):
+  - 13 comprehensive unit tests covering frame validation, safe release, backend hierarchy, mock probing, sequential discovery, and source resolution.
+
+### 3. Verification & Empirical Proof
+- **Symptom 1 Reproduction & Resolution**:
+  - *Before*: `python main.py --detector yolov8 --classes person --conf 0.40 --source real` resulted in `Processed Frames: 0`, `[WARN] Video source timeout or stream completed.`
+  - *After*: `python main.py --detector yolov8 --classes person --conf 0.40 --source real --frames 10 --headless` auto-detects real camera, ingests frames at ~29 FPS with `Processed Frames: 10`, 0 reconnects, and 0 timeouts.
+- **Symptom 2 Device Discovery & Probing**:
+  - `discover_all_cameras(include_usb=True)` successfully discovers connected USB cameras (e.g. `USB Camera 0` @ 640x480, `USB Camera 1` @ 1920x1080).
+  - Back-to-back testing of sources `0` and `1` succeeds with 100% reliability (`Res 0: True 640x480`, `Res 1: True 1920x1080`) with zero COM unbind collisions.
+- **Automated Test Suite**:
+  - `python -m unittest tests/test_camera_device.py`: **13 tests in 0.832s — OK**.
+  - `python -m unittest discover -s tests -p "test_*.py"`: **245 tests in 40.177s — OK (100% green)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: **Build succeeded with 0 warnings**.
+
+
+## [Bugfix & Architectural Resilience] - 2026-11-01 - Heterogeneous Re-ID Embedding Dimension Alignment & Defensive Guard
+
+### 1. Objectives & Scope
+- Resolve runtime exception `ValueError: shapes (1,2560) and (384,) not aligned: 2560 (dim 1) != 384 (dim 0)` during `main.py` pipeline execution when matching enrolled entity signatures.
+- Support heterogeneous feature extractors (`DualModelFeatureExtractor` [2560-d], `OnnxReIDExtractor` [512-d], `ColorHistogramExtractor` [384-d], `MockFeatureExtractor` [16-d]) coexisting in SQLite database without crashing matrix math operations.
+- Establish a multi-tier defense architecture:
+  - **Tier 1 (Database / Query Level)**: Parameterized dimension filtering in `TrackerDB.get_gallery_embeddings(expected_dim=...)`.
+  - **Tier 2 (Matcher Level)**: Automatic `expected_dim` injection from active extractor with descriptive dimension mismatch notifications in `GalleryMatcher.reload_gallery()`.
+  - **Tier 3 (Math Primitive Level)**: Defensive vector alignment validation in `batch_cosine_similarity()`.
+  - **Tier 4 (CLI Orchestration)**: Automatic extractor detection in `main.py` for enrolled galleries and support for `--reid dual` / `--reid dual_model`.
+
+### 2. Files Modified / Created
+- `intelligent_tracker/reid.py`:
+  - Added dimension alignment guard in `batch_cosine_similarity()`: returns empty score array and logs warning if `gallery.shape[1] != q.shape[0]`.
+  - Added `embedding_dim` property to `BaseFeatureExtractor`.
+- `intelligent_tracker/database.py`:
+  - Enhanced `TrackerDB.get_gallery_embeddings(expected_dim=None)` to safely filter deserialized BLOB embeddings by dimension, preventing `np.vstack` dimension collision crashes.
+- `intelligent_tracker/matcher.py`:
+  - In `GalleryMatcher.reload_gallery()`, pass `expected_dim=getattr(self.extractor, "embedding_dim", None)` to query only compatible signatures.
+  - Added informative logging when database signatures are skipped due to dimension incompatibility, directing users to the matching `--reid` engine.
+- `main.py`:
+  - Added `"dual"` and `"dual_model"` to `--reid` argument choices.
+  - Added intelligent extractor auto-detection: when `--reid` is not specified, probes `tracker.db` signature dimension and automatically selects `"dual"` (2560-d) or `"onnx"` (512-d).
+- `tests/test_reid.py`:
+  - Added `test_batch_cosine_similarity_dimension_mismatch` verifying graceful empty array return on misaligned dimensions.
+- `tests/test_matcher.py`:
+  - Added `test_dimension_mismatch_filtering` verifying SQLite signatures with incompatible dimensions are ignored without crashing.
+
+### 3. Verification & Empirical Proof
+- **Symptom Reproduction & Resolution**:
+  - *Before*: `python main.py --detector yolov8 --classes person --conf 0.40 --source real` crashed with `ValueError: shapes (1,2560) and (384,) not aligned: 2560 (dim 1) != 384 (dim 0)`.
+  - *After*:
+    - Default auto-detection: `python main.py --detector yolov8 --classes person --conf 0.40 --source real --frames 10 --headless` auto-selects `dual` Re-ID engine, connects to webcam #0, recognizes 1 enrolled signature, and processes all 10 frames smoothly.
+    - Explicit override: `python main.py --detector yolov8 --classes person --conf 0.40 --source real --reid color --frames 5 --headless` filters incompatible signatures (gallery: 0 signatures) and processes frames without error.
+- **Automated Test Suite**:
+  - `python -m unittest tests/test_reid.py tests/test_matcher.py`: **15 tests in 0.154s — OK**.
+  - `python -m unittest discover tests`: **247 tests in 32.186s — OK (100% green)**.
+
+
+## [Feature & Diagnostics] - 2026-11-01 - Friendly Camera Discovery, Multi-Consumer Proxy & Device Resource Manager
+
+### 1. Objectives & Scope
+- Resolve hardware device locking collisions where multiple processes or streams competing for the same physical camera cause `Could not open video capture device or RTSP stream`.
+- Enumerate real, human-readable friendly camera hardware names (`GoPro Webcam`, `OBS Virtual Camera`) via Windows DirectShow registry (`winreg`) and Linux v4l2 rather than opaque `USB Camera {index}` labels.
+- Differentiate and prioritize real physical hardware cameras over virtual loopback devices (e.g. `OBS Virtual Camera`, `DroidCam`) when resolving `--source real`.
+- Provide a dedicated Camera Resource Manager CLI (`scripts/camera_manager.py`) to inspect device status (`AVAILABLE`, `BUSY / LOCKED`, `NOT PRESENT`), identify locking processes (PIDs), and execute safe unbind driver resets.
+- Add shared stream awareness to the web VMS test endpoint (`/api/cameras/test`) so testing an already-streaming channel grabs the live frame buffer without triggering hardware exclusive lock conflicts.
+- Add Web UI "Release Blocked" trigger and multi-consumer proxy documentation for Docker (`host.docker.internal`).
+
+### 2. Files Modified / Created
+- `intelligent_tracker/camera_device.py`:
+  - Added `get_device_names()` and `get_friendly_name(index)` utilizing zero-dependency native Windows Registry `winreg` and Linux `/sys/class/video4linux`.
+  - Added `is_virtual_device(name)` to classify virtual loopback feeds.
+  - Enhanced `find_first_working_camera(prefer_physical=True)` to prioritize physical webcams over virtual cameras.
+  - Added `resolve_source()` with friendly name substring resolution (e.g. `'gopro'` -> index 1).
+- `intelligent_tracker/camera_tool.py` (New):
+  - Created standalone diagnostic & resource management utility supporting `--status`, `--release`, `--kill-orphans`, and `--test <idx>`.
+- `scripts/camera_manager.py` (New):
+  - Created root CLI shortcut script.
+- `intelligent_tracker/discovery.py`:
+  - Enriched `find_physical_cameras()` with friendly device names and virtual badges.
+  - Enhanced `test_camera_connection()` to return specific, actionable diagnostics when a detected device is busy/locked by another application.
+- `dashboard/routers/cameras.py`:
+  - Added `CameraPool` active stream lookup in `test_camera_connection_route()`: returns live frame buffer if the camera is already running in VMS.
+  - Added `POST /api/cameras/release` endpoint to trigger driver cooldown.
+- `dashboard/static/index.html` & `dashboard/static/js/camera_discovery.js` & `dashboard/static/camera_manager.js`:
+  - Added "Release Blocked" button (`#btn-release-cameras`).
+  - Added virtual badge indicators and FPS metadata in discovery cards.
+- `tests/test_camera_tool.py` (New):
+  - 7 unit tests covering name resolution, virtual classification, source resolution, and resource inspection.
+
+### 3. Verification & Empirical Proof
+- **Diagnostic Inspection**:
+  - `python scripts/camera_manager.py --status` accurately maps Device #0 to `OBS Virtual Camera` (Virtual, 640x480) and Device #1 to `GoPro Webcam` (Hardware, 1920x1080).
+- **Physical Prioritization**:
+  - `python main.py --source real --frames 5 --headless` auto-selects `GoPro Webcam` (Hardware device index #1) over `OBS Virtual Camera`.
+- **Friendly Name CLI Resolution**:
+  - `python main.py --source gopro` successfully resolves to index #1 (`GoPro Webcam`).
+- **Automated Test Suite**:
+  - `python -m unittest tests/test_camera_tool.py`: **7 tests in 9.732s — OK**.
+  - `python -m unittest tests/test_camera_device.py`: **13 tests in 1.023s — OK**.
+  - `python -m unittest discover tests`: **254 tests in 41.980s — OK (100% green)**.
+
+
+## [Enhancement & Docs] - 2026-11-01 - Targeted Camera/PID Release, Self-Process Exclusion & Sphinx/README Documentation
+
+### 1. Objectives & Scope
+- Provide targeted release for a specific camera index (`--release-camera <INDEX>` / `--free <INDEX>`) and targeted process termination (`--kill-pid <PID> [--force]`) in `camera_tool.py` and `scripts/camera_manager.py`.
+- Filter out the running `camera_manager.py` / `camera_tool.py` command itself from the active worker process list in inspection reports.
+- Author dedicated Sphinx documentation (`documentation/camera_management.rst`) covering DirectShow / V4L2 exclusive locking, friendly device aliases, CLI tooling, and the multi-consumer stream proxy pattern.
+- Update `documentation/index.rst`, `README.rst`, `documentation/analytics.rst`, and `documentation/detectors.rst` with valid RST tables and OS-agnostic runnable commands.
+- Ensure 100% green Sphinx build (`sphinx -E -W --keep-going`) with 0 warnings.
+- Verify full test suite (256 tests, 100% green).
+
+### 2. Files Modified / Created
+- `intelligent_tracker/camera_tool.py`:
+  - Added `terminate_process_by_pid(pid: int, force: bool = False) -> bool` with graceful SIGTERM and immediate SIGKILL fallbacks.
+  - Added `release_camera_by_index(index: int, force: bool = False) -> Dict[str, Any]` for targeted device cooldown.
+  - Enhanced `find_camera_worker_processes()` to filter out the caller script PID, parent PID, and processes running `camera_manager` or `camera_tool`.
+  - Added CLI flags: `--release-camera <INDEX>`, `--kill-pid <PID> [PID...]`, `--force` (`-f`).
+- `scripts/camera_manager.py`:
+  - Added CLI forwarding for `--release-camera` and `--kill-pid`.
+- `tests/test_camera_tool.py`:
+  - Added unit tests: `test_terminate_process_by_pid_not_found`, `test_release_camera_by_index`.
+- `documentation/camera_management.rst` (New):
+  - Comprehensive guide covering OS capture subsystems, exclusive hardware locks, friendly names, CLI management, multi-consumer shared proxy, and scenario matrix.
+- `documentation/index.rst`:
+  - Added `camera_management` under the Dashboard, VMS & Spatial Studio toctree.
+- `README.rst`:
+  - Added "Hardware Camera Management & Exclusive Lock Recovery" and "Multi-Consumer Shared Stream Proxy" sections.
+  - Expanded Scenario Combinations Matrix with audit, release, kill, friendly source, and stream proxy commands.
+  - Sanitized commands to OS-agnostic standard syntax (`python ...`).
+- `documentation/analytics.rst` & `documentation/detectors.rst`:
+  - Fixed table borders and docutils list indentation formatting to achieve 0 Sphinx warnings.
+
+### 3. Verification & Empirical Proof
+- **Targeted Camera Release & Kill PID**:
+  - `python scripts/camera_manager.py --release-camera 2` cleanly reports status, device name, and pin cooldown.
+  - `python scripts/camera_manager.py --kill-pid 999999` safely handles non-existent PIDs without crash.
+- **Self-Process Exclusion**:
+  - `python scripts/camera_manager.py --status` reports other workers without listing itself as an active camera process.
+- **Sphinx Documentation Clean Build**:
+  - `python -m sphinx -E -W --keep-going documentation/ documentation/_build/html/`: **build succeeded with 0 warnings**.
+- **Automated Test Suite**:
+  - `python -m unittest discover tests`: **Ran 256 tests in 46.759s — OK (100% green)**.

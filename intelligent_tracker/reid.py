@@ -16,11 +16,14 @@ Provides:
 """
 
 import os
+import logging
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional, Any, Union, List, Dict
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 try:
     import onnxruntime as ort
@@ -72,6 +75,14 @@ def batch_cosine_similarity(gallery_matrix: np.ndarray, query_vec: np.ndarray) -
     if gallery.ndim == 1:
         gallery = gallery.reshape(1, -1)
 
+    if gallery.shape[1] != q.shape[0]:
+        logger.warning(
+            "Dimension mismatch in batch_cosine_similarity: gallery dim %d != query dim %d. Returning empty scores.",
+            gallery.shape[1],
+            q.shape[0],
+        )
+        return np.empty((0,), dtype=np.float32)
+
     norms = np.linalg.norm(gallery, axis=1, keepdims=True)
     norms[norms < 1e-7] = 1.0
     normalized_gallery = gallery / norms
@@ -88,6 +99,11 @@ class BaseFeatureExtractor(ABC):
     """
     Abstract base class for visual feature extraction and Re-ID embeddings.
     """
+
+    @property
+    def embedding_dim(self) -> Optional[int]:
+        """Dimensionality of the feature embedding vector (or None if dynamic/unknown)."""
+        return getattr(self, "_embedding_dim", None)
 
     @abstractmethod
     def extract_crop(self, crop: np.ndarray) -> np.ndarray:

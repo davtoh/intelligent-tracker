@@ -38,6 +38,14 @@ class TestReID(unittest.TestCase):
         self.assertAlmostEqual(sims[1], 0.0, places=4)
         self.assertAlmostEqual(sims[2], 0.7071, places=3)
 
+    def test_batch_cosine_similarity_dimension_mismatch(self):
+        """Mismatched query and gallery dimensions must return empty scores without crashing."""
+        gallery = np.random.randn(5, 2560).astype(np.float32)
+        query = np.random.randn(384).astype(np.float32)
+        scores = batch_cosine_similarity(gallery, query)
+        self.assertIsInstance(scores, np.ndarray)
+        self.assertEqual(scores.size, 0)
+
     def test_color_histogram_extractor(self):
         """Test spatial HSV color histogram extraction and L2 normalization."""
         extractor = ColorHistogramExtractor(spatial_grid=(3, 1), h_bins=8, s_bins=4, v_bins=4)

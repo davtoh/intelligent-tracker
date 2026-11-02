@@ -32,15 +32,15 @@ from typing import Optional, Tuple, Union, Dict, Any
 import cv2
 import numpy as np
 
+from intelligent_tracker.camera_device import CameraDeviceHandler
+
 logger = logging.getLogger(__name__)
 
 
 def is_physical_camera(cap: cv2.VideoCapture) -> bool:
     """
     Determine if an open VideoCapture corresponds to a physical hardware webcam
-    or a virtual software camera (OBS Virtual Camera, GoPro, ManyCam, etc.).
-    Physical UVC cameras implement hardware sensor control registers (Brightness, Contrast, Sharpness, etc.).
-    Virtual cameras return -1.0 for all hardware control registers.
+    delivering real visual data.
     """
     if not cap or not cap.isOpened():
         return False
@@ -48,6 +48,12 @@ def is_physical_camera(cap: cv2.VideoCapture) -> bool:
         val = cap.get(prop)
         if val >= 0.0:
             return True
+    try:
+        ret, frame = cap.read()
+        if ret and CameraDeviceHandler.validate_frame(frame):
+            return True
+    except Exception:
+        pass
     return False
 
 
@@ -55,19 +61,8 @@ def find_physical_cameras(max_devices: int = 5) -> list:
     """
     Probe camera device indices (0..max_devices-1) and return indices of physical hardware webcams.
     """
-    physical_indices = []
-    backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
-    for idx in range(max_devices):
-        cap = cv2.VideoCapture(idx, backend) if backend else cv2.VideoCapture(idx)
-        if cap.isOpened():
-            if is_physical_camera(cap):
-                physical_indices.append(idx)
-            cap.release()
-            if sys.platform.startswith("win"):
-                time.sleep(0.1)
-    if physical_indices and sys.platform.startswith("win"):
-        time.sleep(0.35)
-    return physical_indices
+    cams = CameraDeviceHandler.discover_usb_cameras(max_devices=max_devices)
+    return [c["index"] for c in cams]
 
 
 def find_first_real_camera(max_devices: int = 5) -> Optional[int]:
@@ -75,36 +70,7 @@ def find_first_real_camera(max_devices: int = 5) -> Optional[int]:
     Probe camera device indices (0..max_devices-1) and return the index of the first
     physical hardware camera producing valid video frame data.
     """
-    backend = cv2.CAP_DSHOW if sys.platform.startswith("win") else 0
-    for idx in range(max_devices):
-        cap = cv2.VideoCapture(idx, backend) if backend else cv2.VideoCapture(idx)
-        if cap.isOpened() and not is_physical_camera(cap) and idx == 0 and sys.platform.startswith("win"):
-            # On Windows, if a physical camera was recently released by a previous run,
-            # DirectShow may momentarily route index 0 to a virtual camera while the driver unbinds.
-            # Give it a brief settle delay and re-check index 0.
-            cap.release()
-            time.sleep(0.4)
-            cap = cv2.VideoCapture(0, backend)
-
-        if cap.isOpened():
-            is_phys = is_physical_camera(cap)
-            if is_phys:
-                ret, frame = cap.read()
-                cap.release()
-                if sys.platform.startswith("win"):
-                    # DirectShow COM driver on Windows requires ~0.45s cooldown to unbind hardware
-                    # before a subsequent VideoCapture can reliably re-acquire the physical camera.
-                    time.sleep(0.45)
-                else:
-                    time.sleep(0.05)
-                if ret and frame is not None:
-                    return idx
-            cap.release()
-            if sys.platform.startswith("win"):
-                time.sleep(0.1)
-            else:
-                time.sleep(0.05)
-    return None
+    return CameraDeviceHandler.find_first_working_camera(max_devices=max_devices)
 
 
 def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
@@ -113,6 +79,8 @@ def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
 
     - If 'auto', 'real', 'physical', 'hardware', or 'webcam':
       Automatically finds and returns the index of the first camera delivering real physical sensor data.
+    - If friendly name substring (e.g. 'gopro', 'obs'):
+      Resolves to matching device index.
     - If a numeric index (e.g. 0, 1, '0', '1'):
       Strictly preserves the configured index without alteration, ensuring deterministic and agnostic behavior.
     - If synthetic/mock/file/rtsp:
@@ -122,8 +90,9 @@ def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
     if s_str in ("auto", "real", "physical", "hardware", "webcam"):
         real_idx = find_first_real_camera(max_devices=5)
         if real_idx is not None:
-            logger.info("Auto-detected real physical camera at device index #%d", real_idx)
-            print("[INFO] Auto-detected real physical camera at device index #{}".format(real_idx))
+            dev_name = CameraDeviceHandler.get_friendly_name(real_idx)
+            logger.info("Auto-detected real physical camera at device index #%d (%s)", real_idx, dev_name)
+            print("[INFO] Auto-detected real physical camera at device index #{} ({})".format(real_idx, dev_name))
             return real_idx
         logger.warning("No physical hardware camera found with real data; defaulting to device index 0.")
         print("[WARN] No physical hardware camera found with real data; defaulting to device index 0.")
@@ -132,6 +101,14 @@ def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
         return "libcamera"
     elif s_str.isdigit():
         return int(s_str)
+
+    # Check for friendly name resolution (e.g. 'gopro', 'obs')
+    resolved = CameraDeviceHandler.resolve_source(source)
+    if isinstance(resolved, int):
+        dev_name = CameraDeviceHandler.get_friendly_name(resolved)
+        print("[INFO] Resolved camera name '{}' to device index #{} ({})".format(source, resolved, dev_name))
+        return resolved
+
     return source
 
 
@@ -338,12 +315,13 @@ class VideoSource:
                 # Force TCP transport if possible to eliminate UDP packet loss artifacts
                 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;102400"
                 self._cap = cv2.VideoCapture(str(self.source), cv2.CAP_FFMPEG)
-            elif self.is_webcam and sys.platform.startswith("win"):
-                # On Windows, DirectShow (CAP_DSHOW) avoids MSMF async device locks (-1072873822)
-                self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
-                if not self._cap or not self._cap.isOpened():
-                    time.sleep(0.35)
-                    self._cap = cv2.VideoCapture(self.source, cv2.CAP_DSHOW)
+            elif self.is_webcam:
+                self._cap, _ = CameraDeviceHandler.open_camera(
+                    self.source,
+                    width=self.target_width,
+                    height=self.target_height,
+                    test_read=False,
+                )
             else:
                 self._cap = cv2.VideoCapture(self.source)
 
@@ -490,13 +468,8 @@ class VideoSource:
                             self._reconnections += 1
                             time.sleep(self.reconnect_delay)
                             if self._cap:
-                                try:
-                                    self._cap.release()
-                                except Exception:
-                                    pass
+                                CameraDeviceHandler.safe_release(self._cap, settle_delay=0.25)
                                 self._cap = None
-                            if sys.platform.startswith("win"):
-                                time.sleep(0.3)
                             self._open_capture()
                             continue
                         else:
@@ -549,10 +522,7 @@ class VideoSource:
             # Worker thread owns the release of its capture object in finally block
             with self._lock:
                 if self._cap:
-                    try:
-                        self._cap.release()
-                    except Exception:
-                        pass
+                    CameraDeviceHandler.safe_release(self._cap, settle_delay=0.15)
                     self._cap = None
                 self._is_connected = False
 

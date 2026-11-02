@@ -13,6 +13,7 @@ visual Re-ID gallery matching against TrackerDB:
 """
 
 import time
+import logging
 from collections import deque
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Optional, Tuple, Any, Union
@@ -22,6 +23,8 @@ import numpy as np
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.reid import BaseFeatureExtractor, batch_cosine_similarity, cosine_similarity
 from intelligent_tracker.tracker import Track, check_track_occlusions
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -174,11 +177,31 @@ class GalleryMatcher:
             self.gallery_names = []
             self.gallery_categories = []
             return
-        mat, ids, names, categories = self.db.get_gallery_embeddings()
+        expected_dim = getattr(self.extractor, "embedding_dim", None)
+        mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=expected_dim)
         self.gallery_matrix = mat
         self.gallery_entity_ids = ids
         self.gallery_names = names
         self.gallery_categories = categories
+
+        if expected_dim is not None and len(ids) == 0:
+            try:
+                all_sigs = self.db.get_signatures()
+                if all_sigs:
+                    other_dims = {
+                        (s["embedding"].shape[0] if hasattr(s.get("embedding"), "shape") else 0)
+                        for s in all_sigs
+                    }
+                    logger.info(
+                        "GalleryMatcher: %d active signatures in database skipped due to dimension mismatch "
+                        "(gallery dims: %s vs extractor %s dim: %d). Use matching extractor (e.g. --reid dual) to match.",
+                        len(all_sigs),
+                        ", ".join(str(d) for d in sorted(other_dims) if d > 0),
+                        self.extractor.__class__.__name__,
+                        expected_dim,
+                    )
+            except Exception:
+                pass
 
     refresh_gallery = reload_gallery
 

@@ -739,7 +739,10 @@
 
             <div class="section-subhead" style="margin-top: 16px;">
               <h4>Hardware & LAN Auto-Discovery</h4>
-              <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
+                <button class="btn btn-xs btn-outline" id="btn-release-cameras" title="Release locked camera handles and reset DirectShow driver">🔓 Release Blocked</button>
+              </div>
             </div>
             <div class="discovered-devices-list" id="discovered-devices-list">
               <div class="empty-state">Click "Scan for Devices" to probe USB and ONVIF LAN cameras.</div>

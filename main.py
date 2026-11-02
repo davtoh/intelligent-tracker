@@ -118,8 +118,8 @@ def parse_args():
     parser.add_argument(
         "--reid",
         default=None,
-        choices=["color", "onnx", "mock", "none"],
-        help="Visual Re-ID feature extractor for cross-session identification (default: none or config value)",
+        choices=["color", "onnx", "mock", "none", "dual", "dual_model"],
+        help="Visual Re-ID feature extractor for cross-session identification (default: color or config value)",
     )
     parser.add_argument(
         "--reid-thresh",
@@ -241,7 +241,25 @@ def main():
     # Re-ID & SQLite Database configuration
     db_cfg = cfg.get("database", {})
     reid_cfg = cfg.get("reid", {})
-    reid_name = args.reid or reid_cfg.get("model", "color")
+    db_path = args.db or db_cfg.get("path", "data/tracker.db")
+
+    reid_name = args.reid or reid_cfg.get("model")
+    if reid_name is None and db_path and os.path.exists(db_path):
+        try:
+            probe_db = TrackerDB(db_path)
+            probe_sigs = probe_db.get_signatures()
+            if probe_sigs and hasattr(probe_sigs[0].get("embedding"), "shape"):
+                probe_dim = probe_sigs[0]["embedding"].shape[0]
+                if probe_dim == 2560:
+                    reid_name = "dual"
+                elif probe_dim == 512:
+                    reid_name = "onnx"
+        except Exception:
+            pass
+
+    if reid_name is None:
+        reid_name = reid_cfg.get("model", "color")
+
     if reid_name and str(reid_name).lower() == "none":
         reid_name = None
 

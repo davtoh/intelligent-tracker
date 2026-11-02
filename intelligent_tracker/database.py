@@ -20,6 +20,7 @@ import os
 import csv
 import json
 import time
+import logging
 import sqlite3
 import threading
 from datetime import datetime
@@ -27,6 +28,8 @@ from typing import List, Dict, Tuple, Optional, Any, Union
 
 import numpy as np
 import cv2
+
+logger = logging.getLogger(__name__)
 
 
 class TrackerDB:
@@ -707,10 +710,13 @@ class TrackerDB:
             finally:
                 cursor.close()
 
-    def get_gallery_embeddings(self) -> Tuple[np.ndarray, List[int], List[str], List[str]]:
+    def get_gallery_embeddings(
+        self, expected_dim: Optional[int] = None
+    ) -> Tuple[np.ndarray, List[int], List[str], List[str]]:
         """
         Fetch all gallery signatures as a unified 2D matrix for vectorized matching.
 
+        :param expected_dim: Optional dimension filter to only load compatible embeddings.
         :return: Tuple of:
             - `embeddings_matrix`: np.ndarray of shape (N, D) float32 (empty (0, 0) if no signatures)
             - `entity_ids`: List[int] of length N
@@ -739,13 +745,25 @@ class TrackerDB:
         entity_ids = []
         names = []
         categories = []
+        target_dim = expected_dim
 
         for row in rows:
             vec = self.deserialize_embedding(row["embedding"])
-            vectors.append(vec)
+            if vec is None or vec.size == 0:
+                continue
+            dim = vec.shape[0] if vec.ndim == 1 else vec.size
+            if target_dim is not None and dim != target_dim:
+                continue
+            if target_dim is None:
+                target_dim = dim
+            vectors.append(vec.ravel())
             entity_ids.append(row["entity_id"])
             names.append(row["name"])
             categories.append(row["category"])
+
+        if not vectors:
+            out_dim = expected_dim if expected_dim is not None else 0
+            return np.empty((0, out_dim), dtype=np.float32), [], [], []
 
         embeddings_matrix = np.vstack(vectors).astype(np.float32)
         return embeddings_matrix, entity_ids, names, categories

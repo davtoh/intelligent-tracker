@@ -7,6 +7,7 @@ Overview
 Milestone 3 equips Intelligent Tracker with an enterprise-grade video ingestion and computer vision analytics pipeline designed for retail foot traffic, queue dwell time monitoring, security zone surveillance, and smart facility management.
 
 Key Highlights:
+
 - **Non-blocking Threaded RTSP Reader** (``intelligent_tracker.video.VideoSource``):
   - Decoupled frame capture thread preventing network jitter from stalling detection.
   - Bounded queue with zero-latency frame drop on lag.
@@ -148,10 +149,10 @@ YAML templates configure the entire analytics pipeline declaratively:
 CLI Usage
 ---------
 
-.. code-block:: powershell
+.. code-block:: bash
 
     # Run demo config in headless mode with video export
-    .\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 100 --output output.mp4
+    python main.py --config configs/demo.yaml --headless --frames 100 --output output.mp4
 
     # Run with YOLOv8 on an RTSP stream
-    .\.venv\Scripts\python.exe main.py --detector yolov8 --source rtsp://192.168.1.100/stream1 --config configs/retail.yaml
+    python main.py --detector yolov8 --source rtsp://192.168.1.100/stream1 --config configs/retail.yaml

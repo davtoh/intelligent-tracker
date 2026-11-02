@@ -164,6 +164,28 @@ class TestGalleryMatcher(unittest.TestCase):
         self.assertEqual(trk35.identity_label, "Person #1")
         self.assertEqual(self.matcher.next_session_id, 2)  # No inflation of session ID count
 
+    def test_dimension_mismatch_filtering(self):
+        """Signatures in DB whose dimensions do not match extractor must be ignored without crashing."""
+        # 1. Enroll entity with 2560-dimensional vector in database
+        eid1 = self.db.add_entity(name="DualEntity", category="visitor")
+        vec_2560 = np.ones(2560, dtype=np.float32)
+        self.db.add_signature(eid1, vec_2560)
+
+        # 2. Extractor has embedding_dim=16, so reload_gallery should filter out the 2560-d signature
+        self.matcher.reload_gallery()
+        self.assertEqual(self.matcher.gallery_size, 0)
+
+        # 3. Enroll another entity with matching 16-d vector
+        eid2 = self.db.add_entity(name="MockEntity", category="staff")
+        vec_16 = np.ones(16, dtype=np.float32)
+        self.db.add_signature(eid2, vec_16)
+
+        # 4. reload_gallery should now include only the matching 16-d signature
+        self.matcher.reload_gallery()
+        self.assertEqual(self.matcher.gallery_size, 1)
+        self.assertEqual(self.matcher.gallery_names[0], "MockEntity")
+        self.assertEqual(self.matcher.gallery_matrix.shape, (1, 16))
+
 
 if __name__ == "__main__":
     unittest.main()

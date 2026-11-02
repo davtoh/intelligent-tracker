@@ -91,6 +91,13 @@
       });
     }
 
+    const btnReleaseCameras = document.getElementById('btn-release-cameras');
+    if (btnReleaseCameras) {
+      btnReleaseCameras.addEventListener('click', () => {
+        window.CameraDiscovery?.releaseCameras?.();
+      });
+    }
+
     [presetSelect, inputCamIp, inputCamPort, inputCamUser, inputCamPass, inputCamChannel, selectCamStream].forEach(elem => {
       if (elem) {
         elem.addEventListener('input', () => window.CameraDiscovery?.updatePresetUrl());

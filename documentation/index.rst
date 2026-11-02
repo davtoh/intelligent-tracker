@@ -51,6 +51,7 @@ Documentation Contents
 
    dashboard
    vms
+   camera_management
    scenario_studio
    artifact_and_face_intelligence
    deployment
