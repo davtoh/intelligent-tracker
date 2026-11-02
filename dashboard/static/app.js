@@ -96,8 +96,20 @@ document.addEventListener('DOMContentLoaded', () => {
     navTabs.forEach(tab => {
       const isTarget = tab.getAttribute('data-tab') === targetTabId;
       tab.classList.toggle('active', isTarget);
-      if (isTarget) tab.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      if (isTarget && tab.offsetParent !== null) {
+        const wrapper = document.getElementById('nav-tabs-wrapper');
+        if (wrapper && wrapper.scrollWidth > wrapper.clientWidth) {
+          const wrapRect = wrapper.getBoundingClientRect();
+          const tabRect = tab.getBoundingClientRect();
+          const targetLeft = (tabRect.left - wrapRect.left) + wrapper.scrollLeft - (wrapper.clientWidth - tabRect.width) / 2;
+          wrapper.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        }
+      }
     });
+
+    if (window.scrollX !== 0) {
+      window.scrollTo(0, window.scrollY);
+    }
 
     drawerTabs.forEach(tab => {
       tab.classList.toggle('active', tab.getAttribute('data-tab') === targetTabId);

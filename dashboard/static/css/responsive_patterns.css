@@ -1,0 +1,265 @@
+/* ==========================================================================
+   Intelligent Tracker - Encapsulated Reusable Responsive Patterns & Objects
+   Supports 320px-1440px+ viewports, 256px+ height, 400% zoom & a11y preferences
+   Natural CSS Specificity - Modularity Budget <= 350 lines
+   ========================================================================== */
+
+/* --- 0. Zero Document Horizontal Overflow & Root Containment --- */
+html,
+body {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+/* --- 1. Reusable Nav-Tabs Scroll Controls --- */
+.nav-tabs-container {
+  display: none;
+}
+
+@media (min-width: 1025px) {
+  .nav-tabs-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    position: relative;
+  }
+}
+
+.nav-tabs-wrapper {
+  min-width: 0;
+  position: relative;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-snap-type: x mandatory;
+}
+
+.nav-tabs-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-scroll-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-muted, #94a3b8);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast, 150ms ease);
+  user-select: none;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.nav-scroll-btn:hover:not(:disabled) {
+  color: var(--cyan, #06b6d4);
+  border-color: rgba(6, 182, 212, 0.5);
+  background: rgba(6, 182, 212, 0.15);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
+}
+
+.nav-scroll-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+  border-color: transparent;
+  background: rgba(15, 23, 42, 0.3);
+  box-shadow: none;
+}
+
+/* Hide arrow controls when tabs fit without horizontal cut-off */
+.nav-tabs-container.no-overflow .nav-scroll-btn {
+  display: none;
+}
+
+/* --- 2. Desktop Small / High-DPI Compacting (1025px - 1280px) --- */
+@media (max-width: 1280px) {
+  .header-action-btn .btn-text { display: none; }
+  .header-action-btn { padding: 6px 10px; }
+  .header-left .live-pill { display: none; }
+}
+
+/* --- 3. Reusable Glass-Panel, Media & Chart Containment --- */
+.glass-panel,
+.card-header,
+.card-actions,
+.video-container,
+.chart-wrapper,
+.heatmap-viewport,
+.toolbar-panel,
+.review-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card-header,
+.card-actions,
+.toolbar-panel,
+.toolbar-left,
+.toolbar-right,
+.filter-pills,
+.filter-row {
+  flex-wrap: wrap;
+}
+
+#live-stream-img,
+#scrubber-video-player,
+#trafficChart,
+#static-heatmap-img,
+.studio-canvas-container img {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.search-box {
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.review-queue-grid {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+}
+
+.review-filter-group {
+  display: flex;
+  gap: 6px;
+  margin-left: 20px;
+  flex-wrap: wrap;
+}
+
+/* --- 4. Reusable Responsive Table Container (Zero Document Overflow) --- */
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  display: block;
+  box-sizing: border-box;
+}
+
+.alerts-table-card {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* --- 5. Interactive Touch Targets (WCAG AA >= 24px, Touch >= 44px) --- */
+.btn,
+.nav-tab,
+.drawer-tab,
+.form-select-sm,
+.filter-pill,
+.hamburger-btn,
+.drawer-close-btn {
+  min-height: 28px;
+  min-width: 28px;
+  box-sizing: border-box;
+}
+
+.hamburger-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* --- 6. Mobile & Small Screen Breakpoints (< 580px down to 320px) --- */
+@media (max-width: 580px) {
+  .app-header {
+    height: 56px;
+    padding: 0 10px;
+  }
+  .header-left { gap: 8px; min-width: 0; }
+  .logo-text { min-width: 0; }
+  .brand-title {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .header-right { gap: 6px; }
+  .connection-status-pill {
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    max-width: 110px;
+  }
+  .card-header,
+  .toolbar-panel,
+  .filter-row,
+  .scrubber-timeline-row,
+  .scrubber-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .card-actions,
+  .toolbar-left,
+  .toolbar-right,
+  .review-filter-group {
+    width: 100%;
+    margin-left: 0;
+  }
+  .review-queue-grid { grid-template-columns: 1fr; }
+  .search-box { max-width: 100%; }
+  .studio-layout-grid,
+  .studio-sidebar,
+  .sidebar-column {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
+
+/* --- 7. Compact Baseline Mobile (320px - 360px) --- */
+@media (max-width: 360px) {
+  .app-header { padding: 0 8px; }
+  .logo-icon,
+  .grid-switcher-group { display: none; }
+  .brand-title { font-size: 0.8rem; }
+  .connection-status-pill {
+    max-width: 80px;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+  }
+  .main-content { padding: 8px; }
+}
+
+/* --- 8. Vertical Space Adaptation (Minimum Height 256px Baseline) --- */
+@media (max-height: 480px) {
+  .app-header {
+    position: static;
+    height: auto;
+    padding: 6px 12px;
+  }
+  .video-container { max-height: 55vh; }
+  .modal-card { max-height: 94vh; overflow-y: auto; }
+}
+
+/* --- 9. Accessibility Preferences & Reduced Motion --- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.001ms;
+    scroll-behavior: auto;
+  }
+  .pulse-dot { animation: none; }
+}

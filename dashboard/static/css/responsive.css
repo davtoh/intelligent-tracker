@@ -31,12 +31,13 @@
   }
 }
 
-/* Breakpoint: Tablet Portrait (max-width: 1024px) */
+/* Breakpoint: Tablet Portrait & Mobile Navigation (max-width: 1024px) */
 @media (max-width: 1024px) {
   .hamburger-btn {
     display: flex;
   }
 
+  .nav-tabs-container,
   .nav-tabs-wrapper {
     display: none;
   }
@@ -51,6 +52,7 @@
 
   .live-grid,
   .scrubber-grid,
+  .studio-layout-grid,
   .studio-layout,
   .analytics-grid,
   .review-layout,
@@ -114,4 +116,3 @@
     flex-direction: column;
   }
 }
-

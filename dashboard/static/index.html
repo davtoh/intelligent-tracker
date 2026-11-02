@@ -10,6 +10,7 @@
   <!-- Chart.js CDN for zero-dependency real-time time-series -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/css/responsive_patterns.css">
 </head>
 <body class="dark-theme">
   <!-- Header & Navigation -->
@@ -39,60 +40,64 @@
       </div>
     </div>
 
-    <!-- Navigation Tabs Wrapper (Responsive Horizontal Auto-Scroll with Scroll Snap) -->
-    <div class="nav-tabs-wrapper" id="nav-tabs-wrapper">
-      <nav class="nav-tabs" role="tablist">
-        <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab">
-          <span class="tab-icon">📹</span>
-          <span>Live Monitor</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab">
-          <span class="tab-icon">📼</span>
-          <span>Video Studio</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab">
-          <span class="tab-icon">👥</span>
-          <span>Entity Gallery</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab">
-          <span class="tab-icon">⏱️</span>
-          <span>Sighting Timeline</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab">
-          <span class="tab-icon">📊</span>
-          <span>Analytics & Heatmap</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab">
-          <span class="tab-icon">🚨</span>
-          <span>Security Alerts</span>
-          <span class="badge alert-count-badge" id="header-alert-badge">0</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab">
-          <span class="tab-icon">📐</span>
-          <span>Scenario Studio</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab">
-          <span class="tab-icon">🚶</span>
-          <span>Journey Search</span>
-        </button>
-        <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab">
-          <span class="tab-icon">🧠</span>
-          <span>Review & Learn</span>
-          <span class="badge review-count-badge" id="header-review-badge" style="display:none;">0</span>
-        </button>
-      </nav>
+    <!-- Navigation Tabs Container (Scroll buttons, Auto-Scroll Strip & Quick Tab Selector) -->
+    <div class="nav-tabs-container">
+      <button class="nav-scroll-btn prev" id="nav-tabs-prev" aria-label="Scroll tabs left" title="Scroll tabs left" disabled>‹</button>
+      <div class="nav-tabs-wrapper" id="nav-tabs-wrapper">
+        <nav class="nav-tabs" role="tablist">
+          <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab" aria-selected="true" tabindex="0">
+            <span class="tab-icon">📹</span>
+            <span>Live Monitor</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">📼</span>
+            <span>Video Studio</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">👥</span>
+            <span>Entity Gallery</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">⏱️</span>
+            <span>Sighting Timeline</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">📊</span>
+            <span>Analytics & Heatmap</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">🚨</span>
+            <span>Security Alerts</span>
+            <span class="badge alert-count-badge" id="header-alert-badge">0</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">📐</span>
+            <span>Scenario Studio</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">🚶</span>
+            <span>Journey Search</span>
+          </button>
+          <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab" aria-selected="false" tabindex="-1">
+            <span class="tab-icon">🧠</span>
+            <span>Review & Learn</span>
+            <span class="badge review-count-badge" id="header-review-badge" style="display:none;">0</span>
+          </button>
+        </nav>
+      </div>
+      <button class="nav-scroll-btn next" id="nav-tabs-next" aria-label="Scroll tabs right" title="Scroll tabs right">›</button>
     </div>
 
     <!-- Header Telemetry Controls & VMS Actions -->
     <div class="header-right">
       <button class="btn btn-sm btn-primary header-action-btn" id="btn-open-enrollment" title="Universal Freeze-Frame Artifact & Face Enrollment">
-        ✨ Enroll
+        <span>✨</span><span class="btn-text"> Enroll</span>
       </button>
       <button class="btn btn-sm btn-outline header-action-btn" id="btn-manage-cameras" title="Camera Auto-Discovery & Stream Manager">
-        📹 Cameras
+        <span>📹</span><span class="btn-text"> Cameras</span>
       </button>
       <button class="btn btn-sm btn-outline header-action-btn" id="btn-backup-manager" title="Export / Import System State Snapshot">
-        💾 Backup
+        <span>💾</span><span class="btn-text"> Backup</span>
       </button>
       <div class="telemetry-pill">
         <span class="telemetry-label">FPS:</span>
@@ -622,7 +627,7 @@
               <span>🧠 Review & Learn Inbox</span>
               <span class="badge" id="review-inbox-counter">0 Candidates</span>
             </h3>
-            <div class="filter-group" style="display: flex; gap: 6px; margin-left: 20px;">
+            <div class="filter-group review-filter-group">
               <button class="btn btn-xs btn-outline review-filter-btn active" data-status="pending">Pending</button>
               <button class="btn btn-xs btn-outline review-filter-btn" data-status="confirmed">Confirmed</button>
               <button class="btn btn-xs btn-outline review-filter-btn" data-status="reassigned">Reassigned</button>
@@ -1284,6 +1289,7 @@
   <script src="/static/js/rsac_versions.js"></script>
   <script src="/static/js/review_modals.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/js/nav_tabs_manager.js"></script>
   <script src="/static/camera_manager.js"></script>
   <script src="/static/video_scrubber.js"></script>
   <script src="/static/studio.js"></script>
