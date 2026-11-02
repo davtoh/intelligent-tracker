@@ -178,6 +178,39 @@ class TestResponsiveNavigation(unittest.TestCase):
         self.assertIn("@media (max-width: 1080px)", css)
         self.assertIn("flex-direction: column;", css)
 
+    def test_header_spacing_and_gap_discipline(self):
+        """Verify .app-header and .nav-tabs-container enforce defensive gaps and prevent element collision."""
+        # layout.css must provide explicit gap on .app-header
+        layout_res = self.client.get("/static/css/layout.css")
+        self.assertEqual(layout_res.status_code, 200)
+        layout_css = layout_res.text
+        self.assertIn("gap: 16px;", layout_css, ".app-header must define explicit 16px gap to prevent flush collision")
+
+        # responsive_patterns.css must provide margin and gap on .nav-tabs-container
+        resp_res = self.client.get("/static/css/responsive_patterns.css")
+        self.assertEqual(resp_res.status_code, 200)
+        resp_css = resp_res.text
+        self.assertIn("gap: 8px;", resp_css, ".nav-tabs-container must specify internal gap between scroll buttons and wrapper")
+        self.assertIn("margin: 0 8px;", resp_css, ".nav-tabs-container must maintain margin to isolate from header-left and header-right")
+
+    def test_nav_tabs_manager_snap_offset_and_disable_contracts(self):
+        """Verify nav_tabs_manager.js accurately disables prev/next buttons taking into account scroll-snap offsets."""
+        nav_js_res = self.client.get("/static/js/nav_tabs_manager.js")
+        self.assertEqual(nav_js_res.status_code, 200)
+        nav_js = nav_js_res.text
+
+        # Must include snap-aware isAtStart and isAtEnd methods
+        self.assertIn("isAtStart()", nav_js)
+        self.assertIn("isAtEnd()", nav_js)
+        self.assertIn("firstRect.left >= wrapRect.left", nav_js, "isAtStart must inspect first tab bounding box against wrapper")
+        self.assertIn("firstTab.offsetLeft", nav_js, "isAtStart must compensate for first tab offsetLeft snap position")
+        self.assertIn("this.isAtStart()", nav_js, "prevBtn.disabled must be driven by isAtStart()")
+        self.assertIn("this.isAtEnd()", nav_js, "nextBtn.disabled must be driven by isAtEnd()")
+
+        # scrollPrev must explicitly handle snap return to 0
+        self.assertIn("scrollTo({ left: 0", nav_js, "scrollPrev must scroll explicitly to 0 when near start")
+        self.assertIn("Math.max(0, targetLeft)", nav_js, "switchTab must clamp targetLeft to 0")
+
 
 if __name__ == "__main__":
     unittest.main()

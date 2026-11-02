@@ -70,13 +70,41 @@
     scrollPrev() {
       if (!this.wrapper) return;
       const step = Math.max(160, Math.floor(this.wrapper.clientWidth * 0.75));
-      this.wrapper.scrollBy({ left: -step, behavior: 'smooth' });
+      if (this.wrapper.scrollLeft <= step + 30) {
+        this.wrapper.scrollTo({ left: 0, behavior: 'smooth' });
+      } else {
+        this.wrapper.scrollBy({ left: -step, behavior: 'smooth' });
+      }
       setTimeout(() => this.updateScrollButtons(), 350);
+    }
+
+    isAtStart() {
+      if (!this.wrapper) return true;
+      const { scrollLeft } = this.wrapper;
+      if (scrollLeft <= 4) return true;
+      const firstTab = this.tabs[0]?.element;
+      if (!firstTab) return scrollLeft <= 16;
+      const wrapRect = this.wrapper.getBoundingClientRect();
+      const firstRect = firstTab.getBoundingClientRect();
+      // Tab left edge is within/at wrapper left edge, or scrollLeft aligns with first tab offset
+      return firstRect.left >= wrapRect.left - 4 || scrollLeft <= (firstTab.offsetLeft + 2);
+    }
+
+    isAtEnd() {
+      if (!this.wrapper) return true;
+      const { scrollLeft, scrollWidth, clientWidth } = this.wrapper;
+      if ((scrollLeft + clientWidth) >= (scrollWidth - 6)) return true;
+      const lastTab = this.tabs[this.tabs.length - 1]?.element;
+      if (!lastTab) return false;
+      const wrapRect = this.wrapper.getBoundingClientRect();
+      const lastRect = lastTab.getBoundingClientRect();
+      // Tab right edge is within/at wrapper right edge
+      return lastRect.right <= wrapRect.right + 4;
     }
 
     updateScrollButtons() {
       if (!this.wrapper || !this.prevBtn || !this.nextBtn) return;
-      const { scrollLeft, scrollWidth, clientWidth } = this.wrapper;
+      const { scrollWidth, clientWidth } = this.wrapper;
       const isOverflowing = scrollWidth > clientWidth + 6;
 
       if (this.container) {
@@ -89,8 +117,8 @@
         return;
       }
 
-      this.prevBtn.disabled = scrollLeft <= 4;
-      this.nextBtn.disabled = (scrollLeft + clientWidth) >= (scrollWidth - 6);
+      this.prevBtn.disabled = this.isAtStart();
+      this.nextBtn.disabled = this.isAtEnd();
     }
 
     setupKeyboardNav() {
@@ -137,7 +165,7 @@
             const wrapRect = this.wrapper.getBoundingClientRect();
             const tabRect = t.element.getBoundingClientRect();
             const targetLeft = (tabRect.left - wrapRect.left) + this.wrapper.scrollLeft - (this.wrapper.clientWidth - tabRect.width) / 2;
-            this.wrapper.scrollTo({ left: targetLeft, behavior: 'smooth' });
+            this.wrapper.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
           }
         }
       });
@@ -155,6 +183,7 @@
       }
 
       this.updateScrollButtons();
+      setTimeout(() => this.updateScrollButtons(), 350);
     }
   }
 

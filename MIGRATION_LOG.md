@@ -1786,3 +1786,38 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: **build succeeded with 0 warnings**.
 - **Automated Test Suite**:
   - `python -m unittest discover tests`: **Ran 262 tests in 54.164s — OK (100% green, 0 failures, 0 errors)**.
+
+
+---
+
+## 2026-11-02: Fix Nav Scroll Prev Button Disabled State, Header Gaps & Layout Design Standards Enforcement
+
+### 1. Root Cause Breakdown
+- **Symptom 1 (`#nav-tabs-prev` not disabling at start)**:
+  - In `dashboard/static/js/nav_tabs_manager.js`, `updateScrollButtons()` checked `this.prevBtn.disabled = scrollLeft <= 4;`.
+  - However, CSS scroll-snap (`scroll-snap-type: x mandatory` with `.nav-tab { scroll-snap-align: start }`) combined with `.nav-tabs-wrapper` (8px padding) and `.nav-tabs` (4px padding + 1px border) establishes the resting `offsetLeft` of the first tab at 13px. When scrolled to the start, `scrollLeft` rests at 13px ($13 > 4$), so the button remained enabled indefinitely.
+  - **Fix**: Added snap-aware `isAtStart()` and `isAtEnd()` methods that inspect the first and last tab bounding client rects against the wrapper container (`firstRect.left >= wrapRect.left - 4 || scrollLeft <= (firstTab.offsetLeft + 2)`), and ensure `scrollPrev()` explicitly smooth-scrolls to 0 when near the start boundary.
+- **Symptom 2 (Right scroll button sticking flush against `.header-right`)**:
+  - In `dashboard/static/css/layout.css`, `.app-header` had default `gap: normal` (0px) and `.nav-tabs-container` had `margin: 0`, causing `#nav-tabs-next` to sit flush against the first button in `.header-right`.
+  - **Fix**: Added `gap: 16px;` to `.app-header` and `margin: 0 8px; gap: 8px;` to `.nav-tabs-container` in `dashboard/static/css/responsive_patterns.css`, ensuring a clean, symmetric 24px visual separation without layout collision.
+- **Rule Enforcement**:
+  - Enshrined Spacing & Separation Discipline, Zero Collision & Overlap Guarantee, Strict Viewport Containment, and Resilient Directional Control States into `AGENTS.md` and global rules (`security_and_standards.md`, `modernization_rules.md`).
+  - Added unit regression tests in `tests/test_responsive_navigation.py` asserting header spacing, margin isolation, and snap offset compensation contracts.
+
+### 2. Files Modified
+- `dashboard/static/js/nav_tabs_manager.js`:
+  - Added `isAtStart()` and `isAtEnd()`; updated `scrollPrev()` and `switchTab()` with boundary clamping and delayed button refresh.
+- `dashboard/static/app.js`:
+  - Added `Math.max(0, targetLeft)` clamping and synchronized `window.navTabsManager.updateScrollButtons()`.
+- `dashboard/static/css/layout.css`:
+  - Added `gap: 16px;` to `.app-header`.
+- `dashboard/static/css/responsive_patterns.css`:
+  - Added `margin: 0 8px; gap: 8px;` to desktop `.nav-tabs-container`.
+- `tests/test_responsive_navigation.py`:
+  - Added `test_header_spacing_and_gap_discipline` and `test_nav_tabs_manager_snap_offset_and_disable_contracts`.
+- `AGENTS.md`:
+  - Formalized Frontend Spacing & Structural Separation, Zero Overlap, and Viewport Containment standards.
+
+### 3. Verification & Empirical Proof
+- Automated unit tests: `python -m unittest tests/test_responsive_navigation.py` -> 9/9 tests passed (0 failures, 0 errors).
+- Full test suite: `python -m unittest discover -s tests -p "test_*.py"` -> Ran 265 tests in 49.224s — OK (100% green).

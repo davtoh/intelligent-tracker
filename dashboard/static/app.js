@@ -102,7 +102,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const wrapRect = wrapper.getBoundingClientRect();
           const tabRect = tab.getBoundingClientRect();
           const targetLeft = (tabRect.left - wrapRect.left) + wrapper.scrollLeft - (wrapper.clientWidth - tabRect.width) / 2;
-          wrapper.scrollTo({ left: targetLeft, behavior: 'smooth' });
+          wrapper.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+          window.navTabsManager?.updateScrollButtons?.();
+          setTimeout(() => window.navTabsManager?.updateScrollButtons?.(), 350);
         }
       }
     });

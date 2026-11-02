@@ -20,11 +20,12 @@ body {
   .nav-tabs-container {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     flex: 1 1 auto;
     min-width: 0;
     max-width: 100%;
     position: relative;
+    margin: 0 8px;
   }
 }
 
