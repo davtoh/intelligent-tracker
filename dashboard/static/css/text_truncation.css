@@ -1,0 +1,183 @@
+/* ==========================================================================
+   Intelligent Tracker - Accessible Text Truncation & Popover System
+   Milestone: Layout Stability & WCAG 2.1/2.2 AA Accessibility (AX)
+   ========================================================================== */
+
+/* 1. Base Truncation & Defensive Layout Utilities */
+.text-truncate,
+.text-ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.text-truncate-block {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.text-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.text-wrap-break {
+  overflow-wrap: break-word;
+  word-break: break-all;
+  min-width: 0;
+  white-space: normal;
+}
+
+/* Flex & Grid Containment Helpers */
+.truncate-container,
+.flex-truncate-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* 2. Interactive Truncation Trigger (For Actionables & Click/Hover Elements) */
+.truncate-trigger {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.truncate-trigger:hover {
+  color: var(--cyan);
+}
+
+.truncate-trigger:focus-visible {
+  outline: 2px solid rgba(6, 182, 212, 0.6);
+  outline-offset: 2px;
+}
+
+/* 3. Top-Layer Popover Container (WCAG 1.4.13 Compliant: Hoverable & Dismissible) */
+.truncate-popover {
+  position: fixed;
+  z-index: 9999;
+  display: none;
+  max-width: min(92vw, 440px);
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 15px rgba(6, 182, 212, 0.2);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.truncate-popover.visible {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.truncate-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.truncate-popover-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+}
+
+.truncate-popover-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: var(--cyan);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.truncate-popover-copy-btn:hover {
+  background: var(--cyan);
+  color: #0f172a;
+}
+
+.truncate-popover-copy-btn.copied {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+.truncate-popover-body {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: all;
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.truncate-popover-arrow {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  transform: rotate(45deg);
+}
+
+.truncate-popover[data-placement="top"] .truncate-popover-arrow {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-top: none;
+  border-left: none;
+}
+
+.truncate-popover[data-placement="bottom"] .truncate-popover-arrow {
+  top: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-bottom: none;
+  border-right: none;
+}
+

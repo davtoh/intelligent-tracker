@@ -8,6 +8,7 @@
 /* 2. Elements, Buttons & Badges */
 @import url("css/components.css");
 @import url("css/badges.css");
+@import url("css/text_truncation.css");
 
 /* 3. Layout & Navigation */
 @import url("css/layout.css");

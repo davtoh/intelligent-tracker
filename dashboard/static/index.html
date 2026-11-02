@@ -297,7 +297,7 @@
       <div class="scrubber-grid">
         <div class="glass-panel video-player-card">
           <div class="card-header">
-            <h3 id="scrubber-loaded-title">📼 Video Playback Scrubber</h3>
+            <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback Scrubber</h3>
             <div class="card-actions">
               <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera Feed</button>
               <button class="btn btn-sm btn-outline" id="btn-video-analyze" disabled>⚡ Run Batch Analytics</button>
@@ -1261,6 +1261,7 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- JavaScript Modules -->
+  <script src="/static/js/text_truncation_manager.js"></script>
   <script src="/static/js/backup_manager.js"></script>
   <script src="/static/js/live_player.js"></script>
   <script src="/static/js/interactive_canvas.js"></script>

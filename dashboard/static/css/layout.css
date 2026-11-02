@@ -206,6 +206,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .telemetry-pill {
@@ -237,6 +239,16 @@
   border-radius: var(--radius-sm);
   background: rgba(15, 23, 42, 0.8);
   border: 1px solid var(--border-subtle);
+  max-width: 260px;
+  min-width: 0;
+}
+
+#connection-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  display: inline-block;
 }
 
 .connection-status-pill.online {

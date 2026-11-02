@@ -215,7 +215,21 @@
     videoPlayer.load();
 
     const titleEl = document.getElementById('scrubber-loaded-title');
-    if (titleEl) titleEl.textContent = `Loaded: ${filename}`;
+    if (titleEl) {
+      const fullTitle = 'Loaded: ' + filename;
+      if (window.TextTruncationManager) {
+        window.TextTruncationManager.apply(titleEl, {
+          fullText: fullTitle,
+          mode: 'middle',
+          maxLength: 38,
+          preserveExt: true,
+          label: 'Loaded Video File'
+        });
+      } else {
+        titleEl.textContent = fullTitle;
+        titleEl.title = fullTitle;
+      }
+    }
     if (btnAddAsCamera) btnAddAsCamera.disabled = false;
     if (btnAnalyzeVideo) btnAnalyzeVideo.disabled = false;
 

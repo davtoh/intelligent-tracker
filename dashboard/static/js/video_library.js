@@ -165,7 +165,7 @@
       <div class="video-file-card glass-panel ${file.filename === currentFilename ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}">
         <div class="video-file-icon">📼</div>
         <div class="video-file-meta">
-          <div class="video-filename" title="${escapeHtml(file.filename)}">${escapeHtml(file.filename)}</div>
+          <div class="video-filename truncate-trigger" data-full-text="${escapeHtml(file.filename)}" data-truncate-label="Video File" title="${escapeHtml(file.filename)}">${escapeHtml(window.TextTruncationManager ? window.TextTruncationManager.format(file.filename, { mode: 'middle', maxLength: 30, preserveExt: true }) : file.filename)}</div>
           <div class="video-filesize">${file.size_mb} MB • ${codecBadge} ${file.resolution ? `• ${file.resolution}` : ''}</div>
         </div>
         <div class="video-file-actions">

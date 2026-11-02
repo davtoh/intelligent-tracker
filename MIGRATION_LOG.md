@@ -1508,3 +1508,61 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Scanner Fix**: Updated `_JS_GLOBAL_EXPORT_RE` in `surface_scanners.py` with negative lookahead `\s*=(?!=)` so JavaScript equality comparisons (`===`) are not falsely captured as global symbol assignments.
 - **Eliminated Reload Loop**: Removed the dead assignment statement from `dashboard/static/app.js` and cleansed the phantom export from `.refactor/baseline.json`.
 - **Automated Regression Guard**: Added explicit assertions in `tests/test_dashboard_ui.py` (`self.assertNotIn("location.protocol =", js)`).
+
+
+## [Bugfix & UX Modernization] - 2026-10-31 - Accessible Text Truncation, Layout Containment & Interactive Popovers
+
+### 1. Objectives & Scope
+- Resolve layout clipping, horizontal overflow, and navigation tab displacement caused by long unconstrained identifiers, video filenames, and stream IDs across the VMS dashboard UI.
+- Address empirical bug symptoms:
+  1. Video Scrubber card title (`#scrubber-loaded-title`) overflowing `.card-header` and pushing the "+ Add as Active Camera Feed" button out of the card boundary into the adjacent upload column.
+  2. Navbar connection status pill (`#connection-status-pill`) ballooning to ~492px, expanding `.header-right` and crushing `.nav-tabs-wrapper` from ~800px down to 338px (displacing tabs and overlapping header buttons).
+- Build a reusable, accessible frontend class and utility system (`TextTruncationManager` and `text_truncation.css`) supporting ellipsis (end and smart middle), wrap, and interactive accessible popovers with one-click copy and ESC dismissibility (WCAG 1.4.13 & 4.1.2 compliant).
+
+### 2. Files Modified / Created
+- `dashboard/static/css/text_truncation.css` (New, 137 lines):
+  - Created base utilities (`.text-truncate`, `.text-ellipsis`, `.text-clamp-2`, `.text-clamp-3`, `.text-wrap-break`).
+  - Added layout containment helpers (`.truncate-container`, `.flex-truncate-child`).
+  - Designed accessible dark-theme glassmorphic popover (`.truncate-popover`) with viewport collision awareness and copy button.
+- `dashboard/static/styles.css`: Added `@import url("css/text_truncation.css");` (0 `!important` rule maintained).
+- `dashboard/static/js/text_truncation_manager.js` (New, 236 lines, 8 methods):
+  - Encapsulated string truncation strategies (middle truncation preserving file extensions, end ellipsis, wrap).
+  - Built WCAG 1.4.13-compliant interactive popover (`role="tooltip"`, `aria-describedby`, hover/focus trigger, hoverable popover body, ESC key dismissal, one-click clipboard copy with animated feedback).
+- `dashboard/static/index.html`:
+  - Added `<script src="/static/js/text_truncation_manager.js"></script>` ahead of dependent modules.
+  - Added `.text-truncate` class and title fallback to `#scrubber-loaded-title`.
+- `dashboard/static/css/scrubber.css`:
+  - Added defensive layout containment (`min-width: 0`, `flex: 1 1 auto`) to `.video-player-card .card-header`, `#scrubber-loaded-title`, and `.video-file-meta`.
+- `dashboard/static/css/layout.css`:
+  - Added `flex-shrink: 0; min-width: 0;` to `.header-right`.
+  - Added `max-width: 260px; min-width: 0;` to `.connection-status-pill` and `min-width: 0; text-overflow: ellipsis;` to `#connection-status-text`.
+- `dashboard/static/video_scrubber.js`:
+  - Applied `window.TextTruncationManager.apply` on `#scrubber-loaded-title` with middle truncation and accessible popover.
+- `dashboard/static/app.js`:
+  - Applied `window.TextTruncationManager.apply` on `#connection-status-text` when stream ID exceeds 14 chars.
+- `dashboard/static/js/video_library.js`:
+  - Integrated `TextTruncationManager.format` and `.truncate-trigger` for recording list file cards.
+- `tests/test_dashboard_ui.py`:
+  - Added automated static asset integrity assertions for `.text-truncate`, `.truncate-popover`, and `TextTruncationManager`.
+
+### 3. Verification & Empirical Proof
+- **Contract & AST Surface Invariants**:
+  - `python -m unittest tests/test_refactor_contract.py`: **3 tests in 0.012s — OK (0 `!important` occurrences, all DOM IDs preserved)**.
+- **Unit & UI Integration Tests**:
+  - `python -m unittest tests/test_dashboard_ui.py`: **5 tests in 0.361s — OK**.
+  - `python -m unittest discover tests`: **232 tests in 24.239s — OK (100% green)**.
+- **Container Synchronization**:
+  - Ran `run_diagnose.py container --sync-check`: Verified 100% in sync with Docker runtime container.
+- **Live Chrome CDP Empirical Layout Verification**:
+  - Scrubber Card Header (`#scrubber-loaded-title`):
+    - Before: `titleWidth = 717.56px`, `cardHeaderScrollWidth = 1093px > cardHeaderWidth = 998px` (95px overflow, displacing action buttons).
+    - After: `titleFormattedText = 'Loaded: 20260912...50d9e_G94106186.mp4'`, `cardHeaderWidth = 998px`, `cardHeaderScrollWidth = 998px` (`hasHeaderOverflow = false`). Button right edge at 874px safely inside card boundary (1056px).
+  - Navbar Connection Pill (`#connection-status-pill`):
+    - Before: `connPillWidth = 491.98px`, `headerRightWidth = 787.88px`, `navTabsWidth = 338.31px` (navigation tabs crushed, buttons displaced/wrapped).
+    - After: `connText = 'Connected (...G94106186)'`, `connPillWidth = 187.92px` (reduced by 304px), `headerRightWidth = 578.94px`, `navTabsWidth = 547.25px` (tabs restored with +209px breathing room).
+  - Popover Interaction:
+    - Hover/focus over truncated elements triggers top-layer `#text-truncation-popover` (`role="tooltip"`, `aria-describedby`).
+    - ESC key, mouseleave, or clicking outside cleanly dismisses the popover.
+    - One-click "Copy" button successfully writes the full string to clipboard with "Copied!" visual confirmation.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: **Build succeeded with 0 warnings**.

@@ -196,7 +196,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onWsStatusChange(isOnline) {
     if (connStatusPill) connStatusPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
-    if (connStatusText) connStatusText.textContent = isOnline ? `Connected (${activeCameraId})` : 'Reconnecting...';
+    if (connStatusText) {
+      const fullText = isOnline ? `Connected (${activeCameraId})` : 'Reconnecting...';
+      if (window.TextTruncationManager && isOnline && activeCameraId.length > 14) {
+        window.TextTruncationManager.apply(connStatusText, {
+          fullText: fullText,
+          mode: 'middle',
+          maxLength: 24,
+          preserveExt: false,
+          label: 'Active Stream'
+        });
+      } else {
+        connStatusText.textContent = fullText;
+        connStatusText.title = fullText;
+      }
+    }
   }
 
   function syncCanvas() {

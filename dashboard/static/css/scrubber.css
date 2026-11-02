@@ -16,6 +16,23 @@
   flex-direction: column;
 }
 
+.video-player-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+#scrubber-loaded-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+
 .scrubber-viewport {
   position: relative;
   width: 100%;
@@ -171,7 +188,8 @@
 }
 
 .video-file-meta {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
 }
 

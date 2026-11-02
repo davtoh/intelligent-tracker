@@ -138,6 +138,16 @@ class TestDashboardUI(unittest.TestCase):
         self.assertNotIn("window.location.protocol =", js)
         self.assertNotIn("location.protocol =", js)
 
+        # Milestone: Text Truncation & Accessible Popovers
+        self.assertIn(".text-truncate", css)
+        self.assertIn(".truncate-popover", css)
+
+        tt_res = self.client.get("/static/js/text_truncation_manager.js")
+        self.assertEqual(tt_res.status_code, 200)
+        self.assertIn("class TextTruncationManager", tt_res.text)
+        self.assertIn("showPopover", tt_res.text)
+        self.assertIn("copyText", tt_res.text)
+
     def test_rest_telemetry_snapshot_endpoint(self):
         """Verify GET /api/cameras/{camera_id}/telemetry endpoint contract for Enterprise Hub canvas overlay."""
         res = self.client.get("/api/cameras/cam_01/telemetry")
