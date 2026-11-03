@@ -2444,3 +2444,52 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 304 tests in 40.524s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+## 2026-11-03: Refactor Monolith - Phase 4: Core Scene Graph & Event Bus Infrastructure (intelligent_tracker/core/ & intelligent_tracker/events/)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/core.py` was a 1,537-line God module combining hierarchical spatial graphs (`Space`), collections (`Group`, `CompleteGroup`), agent visual representations (`Agent`), trajectory items (`TailItem`), and weak-reference dictionary watchers.
+  - `Group` had 34 methods/properties across 373 lines, while `Space` had 17 methods across 333 lines.
+  - `intelligent_tracker/events.py` was a 1,377-line God module mixing typed event dataclasses, centralized async `EventBus`, HTTP `WebhookDispatcher` with exponential backoff retries, `TelegramDispatcher` with Markdown formatting and `/status` command handling, `MqttPublisher` for Home Assistant/IoT telemetry, and `AlertRuleEngine` quiet hours evaluator.
+  - Decomposed both monoliths into clean, SRP-compliant domain packages (`intelligent_tracker/core/` and `intelligent_tracker/events/`) adhering strictly to modularity budgets ($\le 261$ lines across all 17 submodules).
+- **Zero-Breaking-Import Facade**:
+  - `intelligent_tracker/core/__init__.py` (65 lines) re-exports 100% of spatial primitives, groups, agents, trajectory types, and OpenCV version helpers with complete backwards compatibility.
+  - `intelligent_tracker/events/__init__.py` (58 lines) re-exports 100% of event dataclasses, event bus, dispatchers, rule engines, and snapshot helpers.
+  - Maintained zero broken imports across all callers (`tests/test_core.py`, `tests/test_events.py`, `detectors/`, `analytics.py`, `stream_manager.py`, `discovery.py`, `main.py`).
+
+### 2. Files Modified & Created
+- `intelligent_tracker/core/__init__.py` (Created, 65 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/core/weakref_utils.py` (Created, 252 lines): `SpaceHandle`, `WeakWatcher`, `WeakWatcherWithData`, `WeakWatcherDictionary`, `WeakRefDictionary`.
+- `intelligent_tracker/core/space_hierarchy.py` (Created, 131 lines): `SpaceHierarchyMixin` for hierarchy traversal, child registration, and family tree queries.
+- `intelligent_tracker/core/spaces.py` (Created, 189 lines): `MetaSpace`, `Space`, `deco_name`.
+- `intelligent_tracker/core/group_mutations.py` (Created, 172 lines): `GroupMutationMixin` for item addition, removal, and pending mutation dispatch.
+- `intelligent_tracker/core/groups.py` (Created, 182 lines): `GroupHandle`, `Group` collection and iteration logic.
+- `intelligent_tracker/core/complete_groups.py` (Created, 165 lines): `CompleteGroup` for high-performance indexing and index retrieval.
+- `intelligent_tracker/core/agents.py` (Created, 125 lines): `Agent` spatial representation with bounding boxes, rotated rectangles, and contours.
+- `intelligent_tracker/core/tails.py` (Created, 187 lines): `Point`, `TailItem` trajectory history and geometric intersection checks.
+- `intelligent_tracker/events/__init__.py` (Created, 58 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/events/types.py` (Created, 250 lines): `frame_to_base64`, `crop_to_base64`, `decode_snapshot_base64`, `BaseEvent`, `ZoneEvent`, `TripwireCrossEvent`, `IntrusionAlert`, `OccupancyThresholdEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`, `RSACViolationEvent`, `PetActivityEvent`, `ReviewItemQueuedEvent`.
+- `intelligent_tracker/events/bus.py` (Created, 174 lines): `EventBus` pub/sub engine with thread-safe queue, async worker threads, and error isolation.
+- `intelligent_tracker/events/webhooks.py` (Created, 177 lines): `WebhookDispatcher` with HTTP POST retries, HMAC-SHA256 signatures, and backoff.
+- `intelligent_tracker/events/telegram.py` (Created, 261 lines): `TelegramDispatcher` with Markdown formatting, snapshot uploads, cooldown deduplication, and `/status` bot query responder.
+- `intelligent_tracker/events/mqtt.py` (Created, 214 lines): `MqttPublisher` for Home Assistant / Node-RED telemetry, retained occupancy, sightings, and LWT.
+- `intelligent_tracker/events/rules.py` (Created, 222 lines): `QuietHours`, `AlertRule`, `AlertRuleEngine` for time-of-day schedules and dynamic alert generation.
+- `intelligent_tracker/events/pipeline.py` (Created, 120 lines): `setup_event_pipeline` configuration factory.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/core intelligent_tracker/events`:
+  - Result: 17/17 files OK (all $\le 261$ lines, healthy budget $\le 350$ lines), 0 Critical, 0 Warnings.
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions).
+- **Targeted Core & Events Tests**:
+  - `tests/test_core.py` (17/17 OK in 1.48s)
+  - `tests/test_events.py` (19/19 OK in 1.26s)
+  - `tests/test_detectors.py` (25/25 OK in 0.88s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 44.184s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
