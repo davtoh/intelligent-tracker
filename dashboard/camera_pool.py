@@ -420,7 +420,7 @@ class CameraPool:
                     logger.debug("Error stopping manager: %s", e)
 
             mgrs = list(self.streams.values())
-            if parallel and len(mgrs) > 1:
+            if parallel and mgrs:
                 with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
                     futures = [executor.submit(_stop_stream, m) for m in mgrs]
                     for f in as_completed(futures):

@@ -33,16 +33,25 @@ def get_console_logger() -> logging.Logger:
     uvicorn_logger = logging.getLogger("uvicorn.error")
     if uvicorn_logger.handlers:
         return uvicorn_logger
+    if uvicorn_logger.parent and uvicorn_logger.parent.handlers:
+        return uvicorn_logger.parent
+    if logger.handlers:
+        return logger
+    root_log = logging.getLogger()
+    if root_log.handlers:
+        return root_log
     return logger
 
 
 def is_test_environment() -> bool:
     """Return True if running inside an automated test suite runner."""
+    main_mod = sys.modules.get("__main__")
+    main_file = getattr(main_mod, "__file__", "") or ""
     return (
         os.environ.get("TESTING") == "1"
-        or "unittest" in sys.modules
-        or "pytest" in sys.modules
-        or any("unittest" in arg or "pytest" in arg for arg in sys.argv)
+        or any("unittest" in str(arg).lower() or "pytest" in str(arg).lower() for arg in sys.argv)
+        or "unittest" in main_file.lower()
+        or "pytest" in main_file.lower()
     )
 
 
@@ -65,6 +74,11 @@ def start_watchdog_guard(timeout: float = 4.0) -> None:
             timeout,
         )
         if not is_test_environment():
+            try:
+                sys.stdout.flush()
+                sys.stderr.flush()
+            except Exception:
+                pass
             os._exit(0)
 
     t = threading.Thread(target=_watchdog_worker, name="ShutdownWatchdogGuard", daemon=True)

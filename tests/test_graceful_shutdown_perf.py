@@ -106,6 +106,37 @@ class TestGracefulShutdownPerformance(unittest.TestCase):
             mgr.signal_stop.assert_called()
             mgr.stop.assert_called()
 
+    def test_camera_pool_single_stream_and_sequential_fallback(self):
+        """CameraPool.stop_all must handle single stream and parallel=False branch cleanly."""
+        with patch.object(CameraPool, "save_cameras"), patch.object(CameraPool, "load_cameras"):
+            pool = CameraPool(
+                config_file="dummy.json",
+                db_path=":memory:",
+                base_config_path="configs/alert_demo.yaml",
+                autostart=False,
+            )
+
+        mock_mgr = MagicMock(spec=StreamManager)
+        mock_mgr.signal_stop = MagicMock()
+        mock_mgr.stop = MagicMock()
+        pool.streams = {"single_cam": mock_mgr}
+
+        pool.stop_all(parallel=True)
+        self.assertEqual(len(pool.streams), 0)
+        mock_mgr.signal_stop.assert_called_once()
+        mock_mgr.stop.assert_called_once()
+
+        # Test parallel=False sequential path
+        mock_mgr2 = MagicMock(spec=StreamManager)
+        mock_mgr2.signal_stop = MagicMock()
+        mock_mgr2.stop = MagicMock()
+        pool.streams = {"cam_seq": mock_mgr2}
+
+        pool.stop_all(parallel=False)
+        self.assertEqual(len(pool.streams), 0)
+        mock_mgr2.signal_stop.assert_called_once()
+        mock_mgr2.stop.assert_called_once()
+
     def test_event_bus_workers_terminated_cleanly_on_stream_stop(self):
         """StreamManager.stop() must stop internal EventBus to avoid orphaned worker threads."""
         sm = StreamManager(

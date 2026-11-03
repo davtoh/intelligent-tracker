@@ -429,7 +429,7 @@ class StreamManager:
         self.signal_stop()
         with self._lock:
             if self._thread and self._thread.is_alive():
-                self._thread.join(timeout=1.5)
+                self._thread.join(timeout=0.6)
             if self.video_source:
                 self.video_source.release()
             if self.event_pipeline:

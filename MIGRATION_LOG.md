@@ -2229,3 +2229,46 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
 - **Real-World Uvicorn 7-Camera Teardown**:
   - Live server process with 7 configured cameras cleanly stopped and exited in **1.72s** (down from 20–30s+ hang).
+
+
+
+## 2026-11-03: App Debugger - Fix Watchdog False-Positive Test Detection & VideoSource Shutdown Waits
+
+### 1. Root Cause & Architectural Triage
+- **Watchdog `is_test_environment()` False Positive**:
+  - `is_test_environment()` previously checked `"unittest" in sys.modules`.
+  - When `intelligent_tracker` or `dashboard.app` initializes, transitive dependencies (e.g., `numpy.testing`, `pyparsing.testing`) unconditionally import `unittest`, placing `'unittest'` in `sys.modules` for every production run.
+  - As a result, `is_test_environment()` returned `True` in production, causing the watchdog to log `"Graceful shutdown watchdog timeout (4.0s) reached; forcing clean process exit."` but skip `os._exit(0)`, leaving lingering Python processes alive with unjoined background threads.
+  - Refactored `is_test_environment()` to strictly inspect active test runner entrypoints (`__main__.__file__` and `sys.argv`), returning `False` in production while protecting test suite runners.
+- **Uninterruptible Worker Sleeps in VideoSource**:
+  - `VideoSource._capture_worker` still contained residual `time.sleep()` calls in frame-rate pacing (`min_frame_time`), empty frame retries, and reconnect backoffs.
+  - Replaced all remaining worker sleeps with `self._stop_event.wait(timeout=...)` to ensure immediate loop break on `signal_stop()`.
+- **Driver Lock Settle Delay Optimization**:
+  - `CameraDeviceHandler.safe_release()` previously slept `0.15s` - `0.25s` per camera under `_device_lock`. During process shutdown, settling DirectShow hardware for immediate re-opening is unnecessary. Set `settle_delay=0.0` on teardown to eliminate serialized multi-camera unbind delays.
+- **Bounded Join Timeouts**:
+  - Reduced thread join timeouts in `StreamManager.stop()` and `VideoSource.stop()` from `1.5s` to `0.6s`.
+
+### 2. Files Touched
+- `dashboard/services/shutdown_handler.py`:
+  - Fixed `is_test_environment()` to check `sys.argv` and `__main__.__file__` instead of `"unittest" in sys.modules`.
+  - Added stdout/stderr flushing before `os._exit(0)`.
+  - Improved `get_console_logger()` to resolve handlers across parent logger hierarchies and root logger.
+- `intelligent_tracker/video.py`:
+  - Replaced `time.sleep()` in `_capture_worker` with `_stop_event.wait()`.
+  - Set `settle_delay=0.0` during stream stop.
+  - Bounded join timeout to `0.6s`.
+- `dashboard/camera_pool.py`:
+  - Enabled parallel concurrent teardown for all non-empty stream pools.
+- `dashboard/stream_manager.py`:
+  - Bounded worker thread join timeout to `0.6s`.
+- `tests/test_shutdown_handler.py`:
+  - Added `test_is_test_environment_detection` and `test_watchdog_triggers_exit_in_production`.
+- `tests/test_graceful_shutdown_perf.py`:
+  - Added `test_camera_pool_single_stream_and_sequential_fallback` covering single-stream and sequential fallback branches.
+
+### 3. Verification & Testing
+- **Shutdown Handler & Performance Tests**:
+  - `python -m unittest -v tests/test_shutdown_handler.py tests/test_graceful_shutdown_perf.py`: 14/14 tests passed in 0.8s — **OK (0 failures, 0 errors)**.
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: 304/304 tests passed in 40.2s — **OK (100% green)**.
+

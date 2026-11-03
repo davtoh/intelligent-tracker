@@ -75,6 +75,37 @@ class TestShutdownHandler(unittest.TestCase):
         start_watchdog_guard(timeout=10.0)
         start_watchdog_guard(timeout=10.0)
 
+    def test_is_test_environment_detection(self):
+        """is_test_environment must accurately identify test runners without false positives."""
+        import sys
+        from dashboard.services.shutdown_handler import is_test_environment
+
+        # Under the active unittest runner, it must be True
+        self.assertTrue(is_test_environment())
+
+        # Under simulated production uvicorn execution, it must be False
+        with patch.object(sys, "argv", ["C:\\Python312\\Scripts\\uvicorn.exe", "dashboard.app:app", "--port", "8000"]), \
+             patch.dict(sys.modules, {"__main__": MagicMock(__file__="C:\\Python312\\Lib\\site-packages\\uvicorn\\main.py")}), \
+             patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("TESTING", None)
+            self.assertFalse(is_test_environment())
+
+    def test_watchdog_triggers_exit_in_production(self):
+        """Watchdog must trigger os._exit(0) when running in production mode."""
+        import sys
+        from dashboard.services.shutdown_handler import start_watchdog_guard
+        import dashboard.services.shutdown_handler as sh
+
+        with patch.object(sh, "_WATCHDOG_STARTED", False), \
+             patch.object(sh, "is_test_environment", return_value=False), \
+             patch("os._exit") as mock_exit:
+            start_watchdog_guard(timeout=0.05)
+            # Give daemon thread time to wake
+            import time
+            time.sleep(0.15)
+            mock_exit.assert_called_once_with(0)
+
 
 if __name__ == "__main__":
     unittest.main()

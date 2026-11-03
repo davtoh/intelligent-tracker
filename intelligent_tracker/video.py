@@ -453,13 +453,15 @@ class VideoSource:
                             if self._open_capture():
                                 ret, frame = self._cap.read()
                         if not ret or frame is None:
-                            time.sleep(0.02)
+                            if self._stop_event.wait(timeout=0.02):
+                                break
                             continue
                     elif self.is_webcam:
                         # Transient webcam frame miss: retry multiple times before tearing down hardware
                         consecutive_empty += 1
                         if consecutive_empty < 15:
-                            time.sleep(0.02)
+                            if self._stop_event.wait(timeout=0.02):
+                                break
                             continue
 
                     if not ret or frame is None:
@@ -467,7 +469,8 @@ class VideoSource:
                         if self.auto_reconnect and not self.is_file:
                             reconnect_attempts += 1
                             self._reconnections += 1
-                            time.sleep(self.reconnect_delay)
+                            if self._stop_event.wait(timeout=self.reconnect_delay):
+                                break
                             if self._cap:
                                 CameraDeviceHandler.safe_release(self._cap, settle_delay=0.25)
                                 self._cap = None
@@ -518,12 +521,13 @@ class VideoSource:
                     elapsed = time.time() - loop_start
                     sleep_dur = min_frame_time - elapsed
                     if sleep_dur > 0:
-                        time.sleep(sleep_dur)
+                        if self._stop_event.wait(timeout=sleep_dur):
+                            break
         finally:
             # Worker thread owns the release of its capture object in finally block
             with self._lock:
                 if self._cap:
-                    CameraDeviceHandler.safe_release(self._cap, settle_delay=0.15)
+                    CameraDeviceHandler.safe_release(self._cap, settle_delay=0.0)
                     self._cap = None
                 self._is_connected = False
 
@@ -609,7 +613,7 @@ class VideoSource:
             return
         self.signal_stop()
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.5)
+            self._thread.join(timeout=0.6)
             self._thread = None
         # Drain queue
         while not self._queue.empty():
@@ -620,14 +624,12 @@ class VideoSource:
         with self._lock:
             if self._cap is not None:
                 try:
-                    CameraDeviceHandler.safe_release(self._cap, settle_delay=0.15)
+                    CameraDeviceHandler.safe_release(self._cap, settle_delay=0.0)
                 except Exception as e:
                     logger.debug("Exception releasing VideoSource cap: %s", e)
                 finally:
                     self._cap = None
                     self._is_connected = False
-        if sys.platform.startswith("win"):
-            time.sleep(0.05)
         try:
             atexit.unregister(self.stop)
         except Exception:
