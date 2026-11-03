@@ -2,15 +2,15 @@
 
 ## Executive Summary
 
-A comprehensive structural audit across the entire **Intelligent Tracker** repository (148 files, ~37,000+ lines of code) was performed using the automated AST budget engine (`code_health_audit.py`). 
+A comprehensive structural audit across the entire **Intelligent Tracker** repository (150 files, ~37,000+ lines of code) was performed using the automated AST budget engine (`code_health_audit.py`). 
 
-The baseline test suite is **100% passing** (279 unit and integration tests passing in 53.1s via the project virtual environment runner). The previous campaign successfully modularized the `dashboard/` subsystem (decoupling 76 routes into 10 FastAPI routers, refactoring 2,902 lines of CSS into modular ITCSS stylesheets with 0 `!important`, and modularizing frontend feature controllers).
+The baseline test suite is **100% passing** (283 unit and integration tests passing in ~50s via the project virtual environment runner). The previous campaign successfully modularized the `dashboard/` subsystem (decoupling 76 routes into 10 FastAPI routers, refactoring 2,902 lines of CSS into modular ITCSS stylesheets with 0 `!important`, and modularizing frontend feature controllers).
 
 However, the core tracking library (`intelligent_tracker/`), application entrypoint (`main.py`), and test harness (`tests/`) contain **17 Critical Monoliths** (exceeding the 500-line hard ceiling or 12-method class budget) and **10 Soft Warnings** (exceeding 350 lines or 10 methods).
 
 ```mermaid
-pie title Repository Code Budget Breakdown (148 Files)
-    "Healthy Budget (<= 350L)" : 121
+pie title Repository Code Budget Breakdown (150 Files)
+    "Healthy Budget (<= 350L)" : 123
     "Soft Warning (351-500L)" : 10
     "Critical Breach (> 500L / > 12M)" : 17
 ```
@@ -22,40 +22,42 @@ pie title Repository Code Budget Breakdown (148 Files)
 ### A. Subsystem Line Distribution & Health
 | Subsystem / Directory | Files | Total Lines | Critical (> 500L) | Warnings (351-500L) | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`intelligent_tracker/`** | 32 | 18,917 | **13** | **5** | 🚨 Highest Refactor Priority |
-| **`dashboard/`** | 6 | 1,826 | **1** | **1** | StreamManager & CameraPool remaining |
+| **`intelligent_tracker/`** | 32 | 18,925 | **13** | **5** | 🚨 Highest Refactor Priority |
+| **`dashboard/`** | 6 | 1,844 | **1** | **1** | StreamManager (725L) & CameraPool (406L) |
 | **`dashboard/routers/`** | 10 | 2,053 | 0 | 0 | ✅ OK (All within budget) |
-| **`dashboard/services/`** | 6 | 735 | 0 | 0 | ✅ OK (All within budget) |
-| **`dashboard/static/`** | 6 | 1,752 | 0 | 3 | Minor JS controller warnings (~350-370L) |
+| **`dashboard/services/`** | 7 | 895 | 0 | 0 | ✅ OK (All within budget) |
+| **`dashboard/static/`** | 6 | 1,752 | 0 | 3 | Minor JS controller warnings (~350-371L) |
 | **`dashboard/static/css/`** | 19 | 3,550 | 0 | 0 | ✅ OK (All within budget, 0 `!important`) |
 | **`dashboard/static/js/`** | 21 | 3,658 | 0 | 0 | ✅ OK (All within budget) |
-| **`tests/`** | 38 | 7,355 | **2** | 0 | `test_core.py` & `test_events.py` |
+| **`tests/`** | 39 | 7,422 | **2** | 0 | `test_core.py` (760L) & `test_events.py` (720L) |
+| **`tests/experimental/`** | 2 | 332 | 0 | 0 | ✅ OK (All within budget) |
 | **`scripts/`** | 5 | 1,205 | 0 | 1 | `cdp_inspect.py` (436L) |
+| **`documentation/`** | 1 | 180 | 0 | 0 | ✅ OK (All within budget) |
 | **Root (`main.py`)** | 2 | 839 | **1** | 0 | `main.py` (710L, 511L `main()`) |
 
 ---
 
 ### B. Complete Critical Monolith Registry (Ceiling > 500 Lines / > 12 Methods)
 
-| # | File Path | Current Lines | Primary God Class / Function | Issues & Smells |
-| :- | :--- | :--- | :--- | :--- |
-| **1** | `intelligent_tracker/database.py` | **2,125** | `TrackerDB` (2,091L, **68 methods**) | `_init_schema` (344L), `get_entity_analytics` (78L), `enroll_entity` (77L). Violates SRP by mixing SQLite DDL, camera registry, entity embeddings, gallery rollbacks, telemetry, and spatial sightings into one class. |
-| **2** | `intelligent_tracker/geometry.py` | **1,816** | `BasePoly` (531L, 30 methods)<br>`cnt_intersection` (316L) | `Completeness` (210L, 11 methods), `indexes` (110L), `ZoneROI.update` (98L). Mixes polygon primitive vectors, line clipping, Sutherland-Hodgman intersections, and ROI tracking logic. |
-| **3** | `intelligent_tracker/detectors.py` | **1,653** | `Object` (438L, 35 methods)<br>`Detector` (284L, 17 methods) | `OnnxDetector.detect` (99L), `process_raw_objects` (77L). Couplets detected object bounding box representations with ONNX runtime inference, Haar Cascades, and legacy OpenCV DNN backends. |
-| **4** | `intelligent_tracker/core.py` | **1,537** | `Group` (373L, 34 methods)<br>`Space` (333L, 17 methods) | `TailItem` (174L, 20 methods), `CompleteGroup` (158L, 12 methods). Monolithic hierarchical spatial graphs mixed with dynamic agent collections and trajectory queues. |
-| **5** | `intelligent_tracker/events.py` | **1,377** | `TelegramDispatcher` (228L)<br>`EventBus` (161L, 11 methods) | `setup_event_pipeline` (108L), `AlertRuleEngine.evaluate` (83L). Pub/sub bus, event dataclasses, third-party webhook dispatchers, and rule filtering engines in a single file. |
-| **6** | `intelligent_tracker/tracker.py` | **781** | `CentroidTracker` (230L)<br>`CentroidTracker.update` (158L) | `SortTracker.update` (93L), `check_track_occlusions` (67L), `Track` (53L). Merges centroid Euclidean distance tracking, SORT Kalman filters, occlusion reasoning, and track lifecycle state. |
-| **7** | `tests/test_core.py` | **760** | `GroupEfficiencyTestCase` (216L)<br>`GroupTestCase` (220L) | Single 207-line test method `test_compare`. Overloaded test file testing disparate space parenting, group iteration, and performance benchmarking. |
-| **8** | `dashboard/stream_manager.py` | **711** | `StreamManager` (659L, **29 methods**) | `_worker_loop` (233L), `_init_subsystems` (153L), `__init__` (85L). Orchestrates thread lifecycle, frame acquisition, computer vision pipeline, JPEG encoding, and telemetry recording. |
-| **9** | `main.py` | **710** | `main` function (**511 lines**)<br>`parse_args` (95L) | Giant monolithic application loop handling argument parsing, camera initialization, window management, keyboard events, and highgui rendering. |
-| **10** | `tests/test_events.py` | **720** | `TestFullPipelineIntegration` | `test_pipeline_setup_and_analytics_integration` (74L), `test_typed_events` (61L), `test_mqtt_publishing_mock` (60L). |
-| **11** | `intelligent_tracker/analytics.py` | **641** | `AnalyticsEngine` (404L)<br>`OccupancyHeatmap` (209L) | `AnalyticsEngine.update` (197L), `AnalyticsEngine.draw` (82L). Combines trajectory heatmaps, zone dwell timers, and flow counters. |
-| **12** | `intelligent_tracker/video.py` | **635** | `VideoSource` (472L, 18 methods) | `_capture_worker` (118L), `_open_capture` (86L). Threaded video ingestion, RTSP reconnection backoff, hardware acceleration, and synthetic fallback generator. |
-| **13** | `intelligent_tracker/matcher.py` | **624** | `GalleryMatcher` (543L) | `match_track` (236L), `__init__` (83L), `_apply_bounded_ema_update` (78L). Feature vector cosine distance matching, bounded EMA gallery updates, and multi-camera re-identification. |
-| **14** | `intelligent_tracker/discovery.py` | **560** | Network Probing Functions | `test_camera_connection` (106L), `probe_onvif_devices` (79L), `build_preset_rtsp_url` (65L). Multi-protocol camera discovery (ONVIF WS-Discovery, RTSP port sweep, presets). |
-| **15** | `intelligent_tracker/reid.py` | **555** | `OnnxReIDExtractor` | `_init_session` (43L), `extract_crop` (41L). Model loading, DirectML/CUDA execution provider setup, and batch image normalization. |
-| **16** | `intelligent_tracker/high_objects.py` | **518** | `Scene` (269L, 25 methods)<br>`World` (163L, 11 methods) | High-level simulation object graphs with compound coordinate spaces. |
-| **17** | `intelligent_tracker/periferials.py` | **510** | `VideoStream` (176L, 15 methods)<br>`SyncCameras` (117L, 14 methods) | Multi-camera synchronization and legacy OpenCV frame readers. |
+| # | File Path | Current Lines | Primary God Class / Function | Issues & Smells | Target Architecture |
+| :- | :--- | :--- | :--- | :--- | :--- |
+| **1** | `intelligent_tracker/database.py` | **2,125** | `TrackerDB` (2,091L, **68 methods**) | `_init_schema` (344L), `get_entity_analytics` (78L), `enroll_entity` (77L). Violates SRP by mixing SQLite DDL, camera registry, entity embeddings, gallery rollbacks, telemetry, and spatial sightings into one class. | `intelligent_tracker/repositories/`: `schema_manager.py`, `entity_repo.py`, `camera_repo.py`, `analytics_repo.py`, `event_repo.py`, `scenario_repo.py` + Facade in `database.py` |
+| **2** | `intelligent_tracker/geometry.py` | **1,816** | `BasePoly` (531L, 30 methods)<br>`cnt_intersection` (316L) | `Completeness` (210L, 11 methods), `indexes` (110L), `ZoneROI.update` (98L). Mixes polygon primitive vectors, line clipping, Sutherland-Hodgman intersections, and ROI tracking logic. | `intelligent_tracker/geometry/`: `primitives.py`, `polygons.py`, `intersections.py`, `zones.py`, `associations.py` + Facade in `geometry.py` |
+| **3** | `intelligent_tracker/detectors.py` | **1,653** | `Object` (438L, 35 methods)<br>`Detector` (284L, 17 methods) | `OnnxDetector.detect` (99L), `process_raw_objects` (77L). Couples detected object bounding box representations with ONNX runtime inference, Haar Cascades, and legacy OpenCV DNN backends. | `intelligent_tracker/detectors/`: `objects.py`, `base.py`, `onnx_detector.py`, `legacy_detectors.py` + Facade in `detectors.py` |
+| **4** | `intelligent_tracker/core.py` | **1,537** | `Group` (373L, 34 methods)<br>`Space` (333L, 17 methods) | `TailItem` (174L, 20 methods), `CompleteGroup` (158L, 12 methods). Monolithic hierarchical spatial graphs mixed with dynamic agent collections and trajectory queues. | `intelligent_tracker/core/`: `spaces.py`, `collections.py`, `tails.py` + Facade in `core.py` |
+| **5** | `intelligent_tracker/events.py` | **1,377** | `TelegramDispatcher` (228L)<br>`EventBus` (161L, 11 methods) | `setup_event_pipeline` (108L), `AlertRuleEngine.evaluate` (83L). Pub/sub bus, event dataclasses, third-party webhook dispatchers, and rule filtering engines in a single file. | `intelligent_tracker/events/`: `bus.py`, `types.py`, `dispatchers.py`, `rules.py` + Facade in `events.py` |
+| **6** | `intelligent_tracker/tracker.py` | **781** | `CentroidTracker` (230L)<br>`CentroidTracker.update` (158L) | `SortTracker.update` (93L), `check_track_occlusions` (67L), `Track` (53L). Merges centroid Euclidean distance tracking, SORT Kalman filters, occlusion reasoning, and track lifecycle state. | `intelligent_tracker/tracking/`: `track.py`, `centroid.py`, `sort.py`, `occlusion.py` + Facade in `tracker.py` |
+| **7** | `tests/test_core.py` | **760** | `GroupEfficiencyTestCase` (216L)<br>`GroupTestCase` (220L) | Single 207-line test method `test_compare`. Overloaded test file testing disparate space parenting, group iteration, and performance benchmarking. | `tests/`: `test_core_spaces.py`, `test_core_groups.py`, `test_core_efficiency.py` |
+| **8** | `dashboard/stream_manager.py` | **725** | `StreamManager` (673L, **29 methods**) | `_worker_loop` (233L), `_init_subsystems` (153L), `__init__` (85L). Orchestrates thread lifecycle, frame acquisition, computer vision pipeline, JPEG encoding, and telemetry recording. | `dashboard/services/`: `stream_worker.py`, `pipeline_factory.py`, `stream_overlay.py` + Facade in `stream_manager.py` |
+| **9** | `main.py` | **710** | `main` function (**511 lines**)<br>`parse_args` (95L) | Giant monolithic application loop handling argument parsing, camera initialization, window management, keyboard events, and highgui rendering. | `intelligent_tracker/cli/`: `arguments.py`, `pipeline_builder.py`, `runner.py` + thin 25-line bootstrap `main.py` |
+| **10** | `tests/test_events.py` | **720** | `TestFullPipelineIntegration` | `test_pipeline_setup_and_analytics_integration` (74L), `test_typed_events` (61L), `test_mqtt_publishing_mock` (60L). | `tests/`: `test_events_bus.py`, `test_events_dispatchers.py`, `test_events_rules.py` |
+| **11** | `intelligent_tracker/video.py` | **643** | `VideoSource` (480L, 18 methods) | `_capture_worker` (118L), `_open_capture` (86L). Threaded video ingestion, RTSP reconnection backoff, hardware acceleration, and synthetic fallback generator. | `intelligent_tracker/video/`: `source.py`, `capture_worker.py` + Facade in `video.py` |
+| **12** | `intelligent_tracker/analytics.py` | **641** | `AnalyticsEngine` (404L)<br>`OccupancyHeatmap` (209L) | `AnalyticsEngine.update` (197L), `AnalyticsEngine.draw` (82L). Combines trajectory heatmaps, zone dwell timers, and flow counters. | `intelligent_tracker/analytics/`: `engine.py`, `heatmaps.py` + Facade in `analytics.py` |
+| **13** | `intelligent_tracker/matcher.py` | **624** | `GalleryMatcher` (543L) | `match_track` (236L), `__init__` (83L), `_apply_bounded_ema_update` (78L). Feature vector cosine distance matching, bounded EMA gallery updates, and multi-camera re-identification. | `intelligent_tracker/matching/`: `gallery.py`, `metrics.py` + Facade in `matcher.py` |
+| **14** | `intelligent_tracker/discovery.py` | **560** | Network Probing Functions | `test_camera_connection` (106L), `probe_onvif_devices` (79L), `build_preset_rtsp_url` (65L). Multi-protocol camera discovery (ONVIF WS-Discovery, RTSP port sweep, presets). | `intelligent_tracker/discovery/`: `onvif.py`, `rtsp.py`, `scanner.py` + Facade in `discovery.py` |
+| **15** | `intelligent_tracker/reid.py` | **555** | `OnnxReIDExtractor` | `_init_session` (43L), `extract_crop` (41L). Model loading, DirectML/CUDA execution provider setup, and batch image normalization. | `intelligent_tracker/reid/`: `extractor.py`, `feature_pool.py` + Facade in `reid.py` |
+| **16** | `intelligent_tracker/high_objects.py` | **518** | `Scene` (269L, 25 methods)<br>`World` (163L, 11 methods) | High-level simulation object graphs with compound coordinate spaces. | `intelligent_tracker/simulation/`: `scene.py`, `world.py` + Facade in `high_objects.py` |
+| **17** | `intelligent_tracker/periferials.py` | **510** | `VideoStream` (176L, 15 methods)<br>`SyncCameras` (117L, 14 methods) | Multi-camera synchronization and legacy OpenCV frame readers. | `intelligent_tracker/peripherals/`: `stream.py`, `sync.py` + Facade in `periferials.py` |
 
 ---
 
@@ -98,8 +100,8 @@ flowchart TD
     P2["Phase 2: Computational Geometry\nintelligent_tracker/geometry.py (1,816L)\n-> geometry/ (primitives, polygons, intersections, zones, associations)"]
     P3["Phase 3: Object Detection Backends\nintelligent_tracker/detectors.py (1,653L)\n-> detectors/ (objects, base, onnx, legacy)"]
     P4["Phase 4: Scene Graph & Event Bus\ncore.py (1,537L) & events.py (1,377L)\n-> core/ & events/"]
-    P5["Phase 5: Tracking & Discovery Pipeline\ntracker.py (781L), matcher.py (624L), video.py (635L), discovery.py (560L)"]
-    P6["Phase 6: Entrypoint & Streaming Orchestration\nmain.py (710L) & dashboard/stream_manager.py (711L)\n-> cli/ & services/"]
+    P5["Phase 5: Tracking & Discovery Pipeline\ntracker.py (781L), matcher.py (624L), video.py (643L), discovery.py (560L), reid.py (555L)"]
+    P6["Phase 6: Entrypoint & Streaming Orchestration\nmain.py (710L) & dashboard/stream_manager.py (725L)\n-> cli/ & services/"]
     P7["Phase 7: Test Suite De-crufting & Warnings\ntest_core.py (760L), test_events.py (720L), warnings"]
 
     P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
@@ -154,14 +156,14 @@ flowchart TD
 - **Verification**: `test_core.py`, `test_events.py`.
 
 #### 🔹 Phase 5: Tracking Engines, ReID Matcher, Video & Discovery
-- **Targets**: `tracker.py` (781L), `matcher.py` (624L), `video.py` (635L), `discovery.py` (560L), `reid.py` (555L).
+- **Targets**: `tracker.py` (781L), `matcher.py` (624L), `video.py` (643L), `discovery.py` (560L), `reid.py` (555L).
 - **Tracking Package**: `intelligent_tracker/tracking/` (`track.py`, `centroid.py`, `sort.py`, `occlusion.py`).
 - **Matching Package**: `intelligent_tracker/matching/` (`gallery.py`, `metrics.py`).
 - **Video & Discovery**: Extract capture worker thread and ONVIF/RTSP probe tools into focused submodules.
 - **Verification**: `test_tracker.py`, `test_matcher.py`, `test_video.py`.
 
 #### 🔹 Phase 6: Application Entrypoint & Streaming Service Orchestration
-- **Targets**: `main.py` (710 lines) & `dashboard/stream_manager.py` (711 lines).
+- **Targets**: `main.py` (710 lines) & `dashboard/stream_manager.py` (725 lines).
 - **CLI Architecture**: `intelligent_tracker/cli/`
   1. `arguments.py` (~120L): CLI argument parsing, profile presets, scenarios.
   2. `pipeline_builder.py` (~200L): Factory wiring video source, detector, tracker, event bus, and database.
