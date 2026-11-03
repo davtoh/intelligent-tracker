@@ -2386,3 +2386,61 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 304 tests in 40.276s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+## 2026-11-03: Refactor Monolith - Phase 3: Object Detection Backends & Representations (intelligent_tracker/detectors/)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/detectors.py` was a 1,653-line God module coupling `Object` bounding box and kinematics representations, `Detector` space-lifecycle management, ONNX runtime deep learning backends (`OnnxDetector`), hardware-accelerated Coral Edge TPU runtime (`EdgeTpuDetector`), OpenCV Haar Cascades, affine perspective generators, and color thresholding into a single file.
+  - `Object` had 35 methods/properties across 438 lines, violating the Single Responsibility Principle by combining OpenCV multi-tracker initializations, direction delta estimations, canvas drawing, and spatial containment queries.
+  - `OnnxDetector.detect` was a 99-line monolithic method handling image letterboxing, inference execution, prediction transposition, confidence filtering, bounding box remapping, and vectorized NMS.
+  - Decomposed into cohesive domain submodules under `intelligent_tracker/detectors/` adhering strictly to quantitative modularity budgets (all files $\le 344$ lines, classes $\le 10$ methods, functions $\le 35$ lines).
+- **Zero-Breaking-Import Facade**:
+  - Transformed `intelligent_tracker/detectors.py` into package `intelligent_tracker/detectors/__init__.py` (74 lines) re-exporting 100% of public detector classes, factory registry, and object tracking representations with complete backwards compatibility.
+  - Preserved all OpenCV cascade paths, coordinate clamping proofs, and Edge AI inference contracts verbatim.
+  - Maintained zero broken imports across all callers (`tests/test_detectors.py`, `tests/test_tracker.py`, `high_objects.py`, `interactive.py`, `reid.py`, `main.py`).
+
+### 2. Files Modified & Created
+- `intelligent_tracker/detectors/__init__.py` (Created, 74 lines):
+  - Clean re-export facade with complete `__all__` registry.
+- `intelligent_tracker/detectors/base.py` (Created, 66 lines):
+  - `BaseDetector` abstract interface, `Detection` namedtuple, and `DetectorFactory` decoupled registry.
+- `intelligent_tracker/detectors/objects.py` (Created, 100 lines):
+  - `Object` entity representation, track lifecycle, and coordinate bounding boxes.
+- `intelligent_tracker/detectors/object_mixins.py` (Created, 344 lines):
+  - `ObjectDynamicsMixin` (8 items), `ObjectGeometryMixin` (7 items), `ObjectVisualMixin` (6 items), `ObjectSpatialMixin` (6 items), `ObjectKinematicsMixin` (4 items).
+- `intelligent_tracker/detectors/core_detector.py` (Created, 225 lines):
+  - `DetectorObjectLifecycleMixin` (6 items), `DetectorProcessingMixin` (6 items), `Detector` base class (6 items).
+- `intelligent_tracker/detectors/haar.py` (Created, 213 lines):
+  - `HaarCascadeDetector` (3 items), `InvariantCascade` (3 items), `EyeDetector` (2 items), `FaceDetector` (2 items), `affine`.
+- `intelligent_tracker/detectors/yunet.py` (Created, 114 lines):
+  - `YuNetFaceDetector` (4 items) with OpenCV cv2.FaceDetectorYN support and Haar fallback cascade.
+- `intelligent_tracker/detectors/color_detector.py` (Created, 96 lines):
+  - `ColorDetector` (10 items) for HSV range thresholding and candidate filtering.
+- `intelligent_tracker/detectors/mock_detector.py` (Created, 70 lines):
+  - `MockDetector` (3 items) for deterministic simulation and headless testing.
+- `intelligent_tracker/detectors/onnx_detector.py` (Created, 342 lines):
+  - `OnnxDetector` (7 items), `letterbox`, `nms_numpy`, `_create_yolov8_detector`, `_create_yolo11_detector`.
+- `intelligent_tracker/detectors/edgetpu_detector.py` (Created, 120 lines):
+  - `EdgeTpuDetector` (5 items) for hardware-accelerated Coral TPU runtime.
+- `intelligent_tracker/detectors/legacy_detectors.py` (Created, 20 lines):
+  - `PeopleDetector`, `ObjectDetector`, `MovementDetector` backwards compatibility stubs.
+- `intelligent_tracker/detectors/coco_classes.py` (Created, 13 lines):
+  - Standard 80-class COCO labels.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/detectors --show-methods`:
+  - Result: 13/13 files OK (all $\le 344$ lines, healthy budget $\le 350$ lines), 0 Critical, 0 Warnings.
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions).
+- **Targeted Detector Tests**:
+  - `tests/test_detectors.py` (25/25 OK in 1.18s)
+  - `tests/test_tracker.py` (9/9 OK in 0.002s)
+  - `tests/test_modernization.py` (2/2 OK in 0.80s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 40.524s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
