@@ -536,11 +536,12 @@ class StreamManager:
                 # 3. Spatial Analytics
                 if self.analytics:
                     try:
-                        analytics_res = self.analytics.update(tracks, frame_time=curr_t, current_frame=frame)
+                        analytics_res = self.analytics.update(tracks, timestamp=curr_t, current_frame=frame)
                         # Milestone 8: Trigger Cross-Camera Topology Predictive Priors on Zone Exit
                         if self.topology and analytics_res and "new_events" in analytics_res:
                             for ev_d in analytics_res.get("new_events", []):
-                                if ev_d.get("event_type") == "zone" and ev_d.get("action") == "exit":
+                                action = ev_d.get("action") or ev_d.get("event_type")
+                                if action in ("exit", "zone_exit"):
                                     z_name = ev_d.get("zone_id")
                                     tid = ev_d.get("track_id")
                                     t_obj = tracks.get(tid)
@@ -554,7 +555,7 @@ class StreamManager:
                                         timestamp=curr_t,
                                     )
                     except Exception as e:
-                        logger.debug("Analytics error: %s", e)
+                        logger.warning("Analytics error: %s", e, exc_info=True)
 
                 # 4. Re-ID Gallery Matching (with Cross-Camera Topology Priors)
                 if self.gallery_matcher and tracks:

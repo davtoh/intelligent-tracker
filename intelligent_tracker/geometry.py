@@ -1457,8 +1457,15 @@ class ZoneEvent:
     centroid: Optional[Tuple[float, float]] = None
     bbox: Optional[Tuple[int, int, int, int]] = None
 
+    @property
+    def action(self) -> str:
+        """Alias for event_type ('enter', 'exit', 'dwell') for cross-subsystem event compatibility."""
+        return self.event_type
+
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["action"] = self.event_type
+        return d
 
 
 @dataclass

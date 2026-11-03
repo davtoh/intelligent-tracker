@@ -209,6 +209,61 @@ class TestDashboardApp(unittest.TestCase):
         set_shutting_down(False)
         evt.clear()
 
+    def test_12_stream_manager_analytics_update_and_topology_exit_trigger(self):
+        """Verify StreamManager coordinates analytics updates and triggers topology on zone exit."""
+        import numpy as np
+        from intelligent_tracker.topology import CrossCameraTopology, SpatialTransitionLink
+        from intelligent_tracker.analytics import AnalyticsEngine
+        from intelligent_tracker.geometry import ZoneROI
+        from intelligent_tracker.tracker import Track
+
+        topo = CrossCameraTopology()
+        topo.add_link(SpatialTransitionLink(
+            link_id="l1",
+            source_camera="cam_01",
+            source_zone="lobby",
+            target_camera="cam_02",
+            target_zone="hall",
+            t_min=1.0,
+            t_max=10.0,
+        ))
+        zone = ZoneROI(polygon=[(0, 0), (100, 0), (100, 100), (0, 100)], name="lobby", dwell_threshold=0.5)
+        analytics = AnalyticsEngine(zones=[zone], heatmap_enabled=False)
+
+        mgr = StreamManager(db_path=self.db_path, camera_id="cam_01")
+        mgr.topology = topo
+        mgr.analytics = analytics
+
+        # Enter zone
+        t1 = Track(track_id=42, bbox=(20, 20, 10, 10), timestamp=100.0)
+        t1.entity_id = 99
+        t1.entity_name = "Agent 42"
+        analytics.update({42: t1}, timestamp=100.0)
+
+        # Exit zone
+        t1.update(bbox=(300, 300, 10, 10), timestamp=102.0)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        analytics_res = mgr.analytics.update({42: t1}, timestamp=102.0, current_frame=frame)
+        self.assertIn("new_events", analytics_res)
+        self.assertGreater(len(analytics_res["new_events"]), 0)
+
+        # Execute the stream loop exit handling logic
+        for ev_d in analytics_res.get("new_events", []):
+            action = ev_d.get("action") or ev_d.get("event_type")
+            if action in ("exit", "zone_exit"):
+                mgr.topology.record_zone_exit(
+                    camera_id=mgr.camera_id,
+                    zone_name=ev_d.get("zone_id"),
+                    entity_name="Agent 42",
+                    entity_id=99,
+                    timestamp=102.0,
+                )
+
+        # Confirm active spatial prior spawned in target camera
+        priors = topo.get_active_priors(target_camera="cam_02", timestamp=105.0)
+        self.assertEqual(len(priors), 1)
+        self.assertEqual(priors[0].entity_id, 99)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -296,15 +296,23 @@ class AnalyticsEngine:
         self,
         tracks: Dict[int, Track],
         timestamp: Optional[float] = None,
+        frame_time: Optional[float] = None,
+        current_frame: Optional[np.ndarray] = None,
+        frame: Optional[np.ndarray] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """
         Process active tracks across all zones, tripwires, and heatmaps.
 
         :param tracks: Dict[track_id, Track] of confirmed or active tracks
         :param timestamp: Current frame timestamp
+        :param frame_time: Alias for timestamp (seconds since epoch)
+        :param current_frame: Optional video frame (NumPy array) for event snapshot extraction
+        :param frame: Alias for current_frame
         :return: Telemetry update dictionary
         """
-        now = timestamp if timestamp is not None else time.time()
+        now = timestamp if timestamp is not None else (frame_time if frame_time is not None else time.time())
+        active_frame = current_frame if current_frame is not None else frame
         self.total_frames_analyzed += 1
         new_events = []
 
@@ -321,7 +329,10 @@ class AnalyticsEngine:
                         self.events.append(ev)
                         if self.event_bus is not None:
                             try:
-                                from intelligent_tracker.events import TripwireCrossEvent
+                                from intelligent_tracker.events import TripwireCrossEvent, crop_to_base64
+                                snap_b64 = None
+                                if active_frame is not None and getattr(track, "bbox", None) is not None:
+                                    snap_b64 = crop_to_base64(active_frame, track.bbox)
                                 bus_ev = TripwireCrossEvent(
                                     camera_id=self.camera_id,
                                     tripwire_id=tw.name,
@@ -334,6 +345,7 @@ class AnalyticsEngine:
                                     entity_name=getattr(track, "entity_name", getattr(track, "identity_label", None)),
                                     entity_category=getattr(track, "entity_category", None),
                                     timestamp=now,
+                                    snapshot_base64=snap_b64,
                                 )
                                 self.event_bus.publish(bus_ev)
                             except Exception as ex:
@@ -347,9 +359,15 @@ class AnalyticsEngine:
                 self.events.extend(z_events)
                 if self.event_bus is not None:
                     try:
-                        from intelligent_tracker.events import ZoneEvent as BusZoneEvent
+                        from intelligent_tracker.events import ZoneEvent as BusZoneEvent, crop_to_base64
                         for z_ev in z_events:
                             trk = tracks.get(z_ev.track_id)
+                            snap_b64 = None
+                            if active_frame is not None:
+                                ev_box = z_ev.bbox or (getattr(trk, "bbox", None) if trk else None)
+                                if ev_box is not None:
+                                    snap_b64 = crop_to_base64(active_frame, ev_box)
+
                             bus_ev = BusZoneEvent(
                                 camera_id=self.camera_id,
                                 zone_id=z_ev.zone_id,
@@ -362,6 +380,7 @@ class AnalyticsEngine:
                                 entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", None)) if trk else None,
                                 entity_category=getattr(trk, "entity_category", None) if trk else None,
                                 timestamp=now,
+                                snapshot_base64=snap_b64,
                             )
                             self.event_bus.publish(bus_ev)
 
@@ -387,6 +406,7 @@ class AnalyticsEngine:
                                         entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", "Pet")),
                                         entity_category=trk_cat,
                                         timestamp=now,
+                                        snapshot_base64=snap_b64,
                                     )
                                     new_events.append(pet_ev)
                                     self.events.append(pet_ev)
@@ -404,6 +424,7 @@ class AnalyticsEngine:
                                         severity=decision.severity,
                                         message=decision.reason,
                                         timestamp=now,
+                                        snapshot_base64=snap_b64,
                                     )
                                     new_events.append(rsac_ev)
                                     self.events.append(rsac_ev)
@@ -418,6 +439,7 @@ class AnalyticsEngine:
                                     entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", "Pet")),
                                     entity_category=trk_cat,
                                     timestamp=now,
+                                    snapshot_base64=snap_b64,
                                 )
                                 new_events.append(pet_ev)
                                 self.events.append(pet_ev)
@@ -433,7 +455,8 @@ class AnalyticsEngine:
                 if z.occupancy > cap and not breached:
                     z._threshold_breached = True
                     try:
-                        from intelligent_tracker.events import OccupancyThresholdEvent
+                        from intelligent_tracker.events import OccupancyThresholdEvent, frame_to_base64
+                        snap_b64 = frame_to_base64(active_frame) if active_frame is not None else None
                         thresh_ev = OccupancyThresholdEvent(
                             camera_id=self.camera_id,
                             zone_id=z_name,
@@ -443,6 +466,7 @@ class AnalyticsEngine:
                             severity="warning",
                             message="Zone '{}' exceeded occupancy capacity ({}/max {})".format(z_name, z.occupancy, cap),
                             timestamp=now,
+                            snapshot_base64=snap_b64,
                         )
                         new_events.append(thresh_ev)
                         self.events.append(thresh_ev)
@@ -453,7 +477,8 @@ class AnalyticsEngine:
                 elif z.occupancy <= cap and breached:
                     z._threshold_breached = False
                     try:
-                        from intelligent_tracker.events import OccupancyThresholdEvent
+                        from intelligent_tracker.events import OccupancyThresholdEvent, frame_to_base64
+                        snap_b64 = frame_to_base64(active_frame) if active_frame is not None else None
                         thresh_ev = OccupancyThresholdEvent(
                             camera_id=self.camera_id,
                             zone_id=z_name,
@@ -463,6 +488,7 @@ class AnalyticsEngine:
                             severity="info",
                             message="Zone '{}' occupancy cleared within capacity ({}/max {})".format(z_name, z.occupancy, cap),
                             timestamp=now,
+                            snapshot_base64=snap_b64,
                         )
                         new_events.append(thresh_ev)
                         self.events.append(thresh_ev)

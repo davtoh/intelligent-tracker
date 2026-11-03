@@ -2138,3 +2138,42 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 290 tests in 46.004s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+
+## 2026-11-03: Frontier Architect & App Debugger - AnalyticsEngine Parameter Contract & Topology Exit Bridge
+
+### 1. Root Cause & Architectural Rationale
+- **Silenced Analytics Execution**:
+  - In `dashboard/stream_manager.py`, `self.analytics.update(tracks, frame_time=curr_t, current_frame=frame)` was called inside a `try...except Exception as e: logger.debug(...)` block.
+  - `AnalyticsEngine.update` only accepted `tracks` and `timestamp: Optional[float] = None`, causing Python to raise `TypeError: AnalyticsEngine.update() got an unexpected keyword argument 'frame_time'` on every frame.
+  - Because `logger.debug` is hidden at default `INFO` logging levels, the error was completely swallowed and spatial analytics (zone dwell tracking, tripwire tallies, occupancy limits, heatmaps) was entirely bypassed during live streaming.
+- **Architectural Intention for `current_frame`**:
+  - Pipeline stages pass both temporal (`timestamp`/`frame_time`) and visual (`frame`/`current_frame`) context.
+  - When an image frame is present during analytics events (`TripwireCrossEvent`, `ZoneEvent`, `RSACViolationEvent`, `PetActivityEvent`, `OccupancyThresholdEvent`), `AnalyticsEngine` should automatically capture and embed visual evidence crops (`snapshot_base64`) using `crop_to_base64`/`frame_to_base64`.
+- **Cross-Camera Topology Zone Exit Schema Mismatch**:
+  - In `dashboard/stream_manager.py`, the condition `if ev_d.get("event_type") == "zone" and ev_d.get("action") == "exit":` was dead code: `geometry.ZoneEvent.to_dict()` returned `event_type="exit"` with no `action` field, and `events.ZoneEvent` used `event_type="zone_exit"`.
+  - Added `@property def action(self) -> str` and `"action": self.event_type` to `geometry.ZoneEvent.to_dict()`, and updated `stream_manager.py` to evaluate `action = ev_d.get("action") or ev_d.get("event_type")` matching `("exit", "zone_exit")`.
+
+### 2. Files Touched
+- `intelligent_tracker/analytics.py`:
+  - Updated `AnalyticsEngine.update` signature to accept `timestamp: Optional[float] = None, frame_time: Optional[float] = None, current_frame: Optional[np.ndarray] = None, frame: Optional[np.ndarray] = None, **kwargs: Any`.
+  - Enriched event bus publishing (`TripwireCrossEvent`, `ZoneEvent`, `PetActivityEvent`, `RSACViolationEvent`, `OccupancyThresholdEvent`) to generate and attach `snapshot_base64` visual crops when `current_frame` is provided.
+- `intelligent_tracker/geometry.py`:
+  - Added `@property def action(self) -> str` returning `self.event_type`.
+  - Included `"action": self.event_type` in `ZoneEvent.to_dict()` for cross-subsystem schema parity.
+- `dashboard/stream_manager.py`:
+  - Standardized the call to `self.analytics.update(tracks, timestamp=curr_t, current_frame=frame)`.
+  - Updated zone exit check to `action = ev_d.get("action") or ev_d.get("event_type"); if action in ("exit", "zone_exit"):` to ensure Milestone 8 cross-camera predictive priors reliably fire.
+  - Replaced swallowed `logger.debug` with visible `logger.warning(..., exc_info=True)` to prevent silent failures.
+- `tests/test_analytics.py`:
+  - Added `test_zone_event_action_property_and_to_dict` verifying schema parity.
+  - Added `test_analytics_engine_update_with_frame_time_and_current_frame` verifying parameter resilience and snapshot generation on event bus.
+- `tests/test_dashboard.py`:
+  - Added `test_12_stream_manager_analytics_update_and_topology_exit_trigger` verifying that stream manager analytics updates trigger topology priors on zone exit.
+
+### 3. Verification & Testing
+- `python -m unittest tests/test_analytics.py tests/test_dashboard.py`: 20/20 tests passed — **OK (0 failures, 0 errors)**.
+- `python -m unittest tests/test_topology.py tests/test_events.py`: 27/27 tests passed — **OK (0 failures, 0 errors)**.
+- `python -m unittest tests/test_modernization.py`: 2/2 tests passed — **OK (0 failures, 0 errors)**.
+- `python -m unittest discover tests`: 292/292 tests passed — **OK (100% green)**.

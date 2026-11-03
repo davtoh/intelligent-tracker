@@ -223,6 +223,56 @@ class TestAnalyticsAndGeometry(unittest.TestCase):
         self.assertAlmostEqual(events3[0].dwell_time, 2.5, places=1)
         self.assertEqual(zone.total_exits, 0)
 
+    def test_zone_event_action_property_and_to_dict(self):
+        """ZoneEvent should expose action property and include action in to_dict() for event bus compatibility."""
+        ze = ZoneEvent(zone_id="lobby", track_id=5, event_type="exit", timestamp=50.0)
+        self.assertEqual(ze.action, "exit")
+        d = ze.to_dict()
+        self.assertEqual(d["event_type"], "exit")
+        self.assertEqual(d["action"], "exit")
+
+    def test_analytics_engine_update_with_frame_time_and_current_frame(self):
+        """AnalyticsEngine.update should accept frame_time, current_frame, and **kwargs, enriching events with snapshots."""
+        from intelligent_tracker.events import EventBus
+
+        bus = EventBus()
+        zone = ZoneROI(polygon=[(50, 50), (150, 50), (150, 150), (50, 150)], name="vault", dwell_threshold=1.0)
+        tw = Tripwire(line_segment=((0, 100), (200, 100)), name="door_line")
+        engine = AnalyticsEngine(
+            zones=[zone],
+            tripwires=[tw],
+            heatmap_enabled=False,
+            event_bus=bus,
+        )
+
+        test_frame = np.full((200, 200, 3), 180, dtype=np.uint8)
+
+        # 1. Update with frame_time, current_frame, and unexpected kwargs
+        t1 = Track(track_id=1, bbox=(80, 80, 30, 30), timestamp=10.0)
+        res = engine.update(
+            {1: t1},
+            frame_time=10.0,
+            current_frame=test_frame,
+            unexpected_arg="should_not_crash",
+        )
+        self.assertEqual(res["total_active_tracks"], 1)
+        self.assertEqual(res["new_events_count"], 1)
+
+        # Captured bus history should contain snapshot_base64 extracted from current_frame
+        recent = bus.get_recent_events(limit=10)
+        self.assertGreaterEqual(len(recent), 1)
+        zone_ev = recent[0]
+        self.assertIsNotNone(zone_ev.snapshot_base64)
+        self.assertGreater(len(zone_ev.snapshot_base64), 50)
+
+        # 2. Tripwire crossing with frame should also attach snapshot_base64
+        t1.update(bbox=(80, 110, 30, 30), timestamp=10.5)
+        engine.update({1: t1}, frame_time=10.5, current_frame=test_frame)
+        recent_all = bus.get_recent_events(limit=10)
+        tripwire_events = [ev for ev in recent_all if getattr(ev, "event_type", "") == "tripwire_cross"]
+        self.assertEqual(len(tripwire_events), 1)
+        self.assertIsNotNone(tripwire_events[0].snapshot_base64)
+
 
 if __name__ == "__main__":
     unittest.main()
