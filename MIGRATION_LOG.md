@@ -2332,3 +2332,57 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 304 tests in 41.846s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+
+## 2026-11-03: Refactor Monolith - Phase 2: Computational Geometry & Polygon Mathematics (intelligent_tracker/geometry/)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/geometry.py` was an 1,823-line God module containing complex Bézier line clipping, Sutherland-Hodgman polygon graph intersections, port-linked bidirectional connection solvers, recursive traversal routines, and retail spatial analytics (`Tripwire`, `ZoneROI`).
+  - `BasePoly` had 30 items/methods and 531 lines, mixing port indexing, connection resolution, inversion, and recursive traversals.
+  - Decomposed into cohesive domain submodules under `intelligent_tracker/geometry/` adhering strictly to quantitative modularity budgets (all files $\le 350$ lines, classes $\le 10-12$ methods).
+- **Zero-Breaking-Import Facade**:
+  - Converted `intelligent_tracker/geometry.py` into package `intelligent_tracker/geometry/__init__.py` (84 lines) re-exporting 100% of public primitives, exceptions, polygon graph solvers, raster operations, and retail zone classes.
+  - Preserved all mathematical docstrings, Bézier/Line-intersection formulas, and computer vision proofs verbatim.
+  - Zero broken imports across all callers (`stream_manager.py`, `analytics.py`, `core.py`, `high_objects.py`, `interactive.py`, `scenarios.py`, `main.py`).
+
+### 2. Files Modified & Created
+- `intelligent_tracker/geometry/__init__.py` (Created via `git mv`, 84 lines):
+  - Clean re-export facade with complete `__all__` registry.
+- `intelligent_tracker/geometry/primitives.py` (Created, 181 lines):
+  - `NotInvertible`, `IncompleteAssociations`, `norm_point`, `bezier`, `line_intersection`, `cnt_group`, `go_around`, `segments_intersect`.
+- `intelligent_tracker/geometry/indexing.py` (Created, 165 lines):
+  - `generate_poly_indexes`, `resolve_poly_connections`.
+- `intelligent_tracker/geometry/polygons.py` (Created, 278 lines):
+  - `PolyPortAccessMixin` (8 items), `PolyPortLinkMixin` (7 items), `PolyTraversalMixin` (5 items), `BasePoly` (10 items), `Interception`, `PolyLine`.
+- `intelligent_tracker/geometry/associations.py` (Created, 184 lines):
+  - `Completeness` (11 items), `_associate_single_references`, `_associate_complex_groups`.
+- `intelligent_tracker/geometry/raster.py` (Created, 68 lines):
+  - `draw_drawContours`, `draw_fillConvexPoly`, `draw_fillPoly`, `intersect_AND`, `intersect_ADD`.
+- `intelligent_tracker/geometry/intersections.py` (Created, 288 lines):
+  - `EspList`, `cnt_check_intersection`, `cnt_intersection`, `intersect_analytical`, `mixed_intersections`.
+- `intelligent_tracker/geometry/tripwire.py` (Created, 170 lines):
+  - `TripwireEvent`, `Tripwire` (6 items).
+- `intelligent_tracker/geometry/zone_roi.py` (Created, 216 lines):
+  - `ZoneEvent`, `ZoneROI` (9 items).
+- `intelligent_tracker/geometry/zones.py` (Created, 11 lines):
+  - Convenience domain re-export module.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/geometry --show-methods`:
+  - Result: 10/10 files OK (all $\le 288$ lines, healthy budget $\le 350$ lines), 0 Critical, 0 Warnings.
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions).
+- **Targeted Geometry & Analytics Tests**:
+  - `tests/test_geometry.py` (3/3 OK in 0.02s)
+  - `tests/test_analytics.py` (8/8 OK in 0.20s)
+  - `tests/test_interactive.py` (6/6 OK in 0.20s)
+  - `tests/test_scenarios.py` (5/5 OK in 0.15s)
+  - `tests/test_homography.py` (6/6 OK in 0.05s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 40.276s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
