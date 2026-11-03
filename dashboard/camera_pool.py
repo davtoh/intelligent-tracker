@@ -15,6 +15,7 @@ import time
 import json
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Any, Tuple
 
 from dashboard.stream_manager import StreamManager
@@ -395,12 +396,39 @@ class CameraPool:
                     elif not mgr.is_running:
                         mgr.start()
 
-    def stop_all(self):
-        """Stops all active camera streams."""
+    def signal_stop_all(self):
+        """Immediately broadcast stop signal to all active streams without blocking."""
         with self._lock:
             for mgr in self.streams.values():
+                if hasattr(mgr, "signal_stop"):
+                    try:
+                        mgr.signal_stop()
+                    except Exception as e:
+                        logger.debug("Error signaling stop on manager: %s", e)
+
+    def stop_all(self, parallel: bool = True):
+        """Stops all active camera streams concurrently in parallel."""
+        with self._lock:
+            # Pass 1: Broadcast immediate stop signal across all streams
+            self.signal_stop_all()
+
+            # Pass 2: Concurrent or sequential teardown
+            def _stop_stream(m):
                 try:
-                    mgr.stop()
+                    m.stop()
                 except Exception as e:
                     logger.debug("Error stopping manager: %s", e)
+
+            mgrs = list(self.streams.values())
+            if parallel and len(mgrs) > 1:
+                with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
+                    futures = [executor.submit(_stop_stream, m) for m in mgrs]
+                    for f in as_completed(futures):
+                        try:
+                            f.result()
+                        except Exception:
+                            pass
+            else:
+                for m in mgrs:
+                    _stop_stream(m)
             self.streams.clear()

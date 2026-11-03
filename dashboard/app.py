@@ -15,6 +15,7 @@ Modular FastAPI Application Factory providing:
 """
 
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -86,7 +87,11 @@ from dashboard.schemas import (
     TripwireCreateRequest,
     ZoneCreateRequest,
 )
-from dashboard.services.shutdown_handler import GracefulCancellationMiddleware, install_shutdown_handlers
+from dashboard.services.shutdown_handler import (
+    GracefulCancellationMiddleware,
+    async_shutdown_pool,
+    install_shutdown_handlers,
+)
 from dashboard.services.video_transcoder import VideoTranscodeService
 from dashboard.services.windows_resilience import apply_windows_iocp_patch
 from dashboard.stream_manager import StreamManager
@@ -137,9 +142,9 @@ async def lifespan(app: FastAPI):
     if lifecycle_manager:
         lifecycle_manager.stop_sampler()
     if camera_pool:
-        camera_pool.stop_all()
+        await async_shutdown_pool(camera_pool)
     elif stream_manager:
-        stream_manager.stop()
+        await asyncio.to_thread(stream_manager.stop)
 
 
 def create_app() -> FastAPI:

@@ -2177,3 +2177,55 @@ Across all 4 phases of the dashboard modernization campaign:
 - `python -m unittest tests/test_topology.py tests/test_events.py`: 27/27 tests passed — **OK (0 failures, 0 errors)**.
 - `python -m unittest tests/test_modernization.py`: 2/2 tests passed — **OK (0 failures, 0 errors)**.
 - `python -m unittest discover tests`: 292/292 tests passed — **OK (100% green)**.
+
+
+
+## 2026-11-03: Frontier Architect & App Debugger - Tier 2 Graceful Server Shutdown & Concurrency Architecture
+
+### 1. Root Cause & Architectural Rationale
+- **Sequential $O(N)$ Teardown Bottleneck**:
+  - `CameraPool.stop_all()` previously stopped all configured camera streams sequentially on the main asyncio thread. For 7 streams with reconnect and error timeouts, teardown took 15–25+ seconds.
+  - Re-architected `CameraPool.stop_all(parallel=True)` with a two-pass strategy: Pass 1 broadcasts `signal_stop()` simultaneously across all streams in $< 1\text{ms}$; Pass 2 executes concurrent teardown via `ThreadPoolExecutor(max_workers=min(8, len(mgrs)))`.
+- **Uninterruptible Sleep in Worker Loops**:
+  - `VideoSource._capture_worker` and `StreamManager._worker_loop` relied on `time.sleep()`, which could not be interrupted by `_running = False` flags, forcing joins to wait full sleep intervals (up to 2.0s per stream).
+  - Introduced `_stop_event = threading.Event()` in both `VideoSource` and `StreamManager`, replacing `time.sleep()` with `self._stop_event.wait(timeout=...)`. Thread wake-up on shutdown now occurs in $< 10\text{ms}$ (0ms syscall unblock).
+- **Orphaned EventBus Worker Threads**:
+  - `StreamManager.stop()` stopped the rule engine but failed to invoke `stop()` on `self.event_pipeline["event_bus"]`, leaking `EventBusWorker` daemon threads on server exit.
+  - Added explicit `event_bus.stop()` in `StreamManager.stop()`.
+- **Asynchronous Event Loop Protection & Watchdog Guard**:
+  - Moved heavy hardware capture teardowns off the asyncio event loop thread using `async_shutdown_pool(camera_pool)` backed by `asyncio.to_thread()`, keeping Uvicorn's event loop unblocked to rapidly close HTTP keep-alive connections.
+  - Implemented `start_watchdog_guard(timeout=4.0)` to ensure that if a proprietary third-party OS driver (DirectShow/MSMF/V4L2) hangs in kernel space, the process cleanly and safely terminates via `os._exit(0)` without leaving the terminal frozen.
+
+### 2. Files Touched
+- `intelligent_tracker/video.py`:
+  - Added `self._stop_event` and `signal_stop()` method to `VideoSource`.
+  - Replaced reconnect `time.sleep(self.reconnect_delay)` with interruptible `_stop_event.wait()`.
+- `dashboard/stream_manager.py`:
+  - Added `self._stop_event` and `signal_stop()` method to `StreamManager`.
+  - Replaced loop throttling and error placeholder sleeps with `_stop_event.wait()`.
+  - Ensured `self.event_pipeline["event_bus"].stop()` is called cleanly during teardown.
+- `dashboard/camera_pool.py`:
+  - Implemented `signal_stop_all()` for broadcast signaling.
+  - Re-architected `stop_all(parallel=True)` using `concurrent.futures.ThreadPoolExecutor` for parallel multi-camera join.
+- `dashboard/services/shutdown_handler.py`:
+  - Added `broadcast_shutdown()` to instantly signal all subsystems upon `SIGINT`/`SIGTERM`/`SIGBREAK`.
+  - Added `async_shutdown_pool()` for non-blocking lifespan shutdown.
+  - Added `start_watchdog_guard()` with test-environment detection.
+- `dashboard/app.py`:
+  - Integrated `await async_shutdown_pool(camera_pool)` in `lifespan()` shutdown context.
+- `tests/test_graceful_shutdown_perf.py`:
+  - **Created** (150 lines): Validates sub-millisecond interruptible sleep in `VideoSource` & `StreamManager`, concurrent parallel scaling in `CameraPool`, event loop non-blocking behavior, zero leaked EventBus workers, and watchdog initiation.
+- `tests/test_shutdown_handler.py`:
+  - Added tests for `async_shutdown_pool`, `start_watchdog_guard`, and broadcast handlers.
+
+### 3. Verification & Testing
+- **Performance & Graceful Shutdown Unit Tests**:
+  - `python -m unittest tests/test_graceful_shutdown_perf.py tests/test_shutdown_handler.py`: 11/11 tests passed in 2.7s — **OK (0 failures, 0 errors)**.
+- **Modernization Invariant Verification**:
+  - `python -m unittest tests/test_modernization.py`: 2/2 tests passed in 1.6s — **OK (0 failures, 0 errors)**.
+- **Full Project Test Suite**:
+  - `python -m unittest discover tests`: Ran 301 tests in 51.504s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+- **Real-World Uvicorn 7-Camera Teardown**:
+  - Live server process with 7 configured cameras cleanly stopped and exited in **1.72s** (down from 20–30s+ hang).

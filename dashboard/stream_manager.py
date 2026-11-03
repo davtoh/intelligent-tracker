@@ -97,6 +97,7 @@ class StreamManager:
         self._lock = threading.RLock()
         self._thread: Optional[threading.Thread] = None
         self._running = False
+        self._stop_event = threading.Event()
         self._latest_jpeg: Optional[bytes] = None
         self._latest_raw_frame: Optional[np.ndarray] = None
         self._latest_telemetry: Dict[str, Any] = {
@@ -402,27 +403,42 @@ class StreamManager:
             ret, buf = cv2.imencode(".jpg", bev, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             return buf.tobytes() if ret else b""
 
+    def signal_stop(self):
+        """Signal worker loop and video source to terminate immediately without waiting."""
+        self._running = False
+        self._stop_event.set()
+        if self.video_source and hasattr(self.video_source, "signal_stop"):
+            try:
+                self.video_source.signal_stop()
+            except Exception:
+                pass
+
     def start(self):
         """Start background processing loop."""
         with self._lock:
             if self._running:
                 return
             self._running = True
+            self._stop_event.clear()
             self._thread = threading.Thread(target=self._worker_loop, name="StreamManagerWorker", daemon=True)
             self._thread.start()
             logger.info("StreamManager background worker started for %s", self.camera_id)
 
     def stop(self):
         """Stop background worker cleanly."""
+        self.signal_stop()
         with self._lock:
-            self._running = False
             if self._thread and self._thread.is_alive():
-                self._thread.join(timeout=2.0)
+                self._thread.join(timeout=1.5)
             if self.video_source:
                 self.video_source.release()
-            if self.event_pipeline and "rule_engine" in self.event_pipeline:
-                if hasattr(self.event_pipeline["rule_engine"], "stop"):
+            if self.event_pipeline:
+                if "rule_engine" in self.event_pipeline and hasattr(self.event_pipeline["rule_engine"], "stop"):
                     self.event_pipeline["rule_engine"].stop()
+                if "event_bus" in self.event_pipeline and hasattr(self.event_pipeline["event_bus"], "stop"):
+                    self.event_pipeline["event_bus"].stop()
+            elif self.event_bus and hasattr(self.event_bus, "stop"):
+                self.event_bus.stop()
             logger.info("StreamManager stopped for %s", self.camera_id)
 
     def _worker_loop(self):
@@ -436,7 +452,7 @@ class StreamManager:
         last_t = time.time()
 
         with self.video_source as vs:
-            while self._running:
+            while self._running and not self._stop_event.is_set():
                 # Smart Hibernation: if no active viewers are connected and we have processed
                 # at least one frame (to initialize telemetry & preview), sleep to conserve CPU.
                 if self.subscriber_count <= 0 and frame_count > 0:
@@ -448,7 +464,8 @@ class StreamManager:
                             if self._latest_telemetry:
                                 self._latest_telemetry["fps"] = 0.0
                                 self._latest_telemetry["status"] = "hibernating"
-                    time.sleep(0.2)
+                    if self._stop_event.wait(timeout=0.2):
+                        break
                     continue
 
                 if self._is_hibernating:
@@ -487,9 +504,11 @@ class StreamManager:
                                 self._latest_telemetry["fps"] = 0.0
                                 self._latest_telemetry["error_code"] = err_code
                                 self._latest_telemetry["error_msg"] = err_msg
-                        time.sleep(0.5)
+                        if self._stop_event.wait(timeout=0.5):
+                            break
                         continue
-                    time.sleep(0.04)
+                    if self._stop_event.wait(timeout=0.04):
+                        break
                     continue
 
                 if consecutive_empty > 0 or frame_count % 30 == 1:

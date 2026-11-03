@@ -73,3 +73,24 @@ The following legacy files currently exceed the 500-line hard ceiling and are un
 3. **New Stream / Pipeline Logic**: Do **NOT** expand `dashboard/stream_manager.py`. Extract focused collaborator classes (e.g. `dashboard/services/stream_lifecycle.py`, `dashboard/services/frame_Overlay.py`).
 4. **New Frontend Scripts & Styles**: Do **NOT** append new feature blocks to `dashboard/static/app.js` or `dashboard/static/styles.css`. Place new frontend modules in `dashboard/static/js/<feature>.js` and component styles in `dashboard/static/css/<component>.css`.
 5. **Decomposing Existing Monoliths**: When executing a dedicated refactoring milestone, use the `/refactor-monolith` skill and preserve 100% of existing public imports via `__init__.py` or facade re-exports.
+
+## 8. Thread Safety & Task Shutdown Invariants
+- **Interruptible Worker Sleeps**: Never use uninterruptible `time.sleep()` in long-running background loops, worker threads, or reconnection backoffs. Always use kernel event waits: `self._stop_event.wait(timeout=delay)`. When shutdown is requested, setting `_stop_event` must wake threads in $< 10\text{ms}$.
+- **Two-Pass Non-Blocking Teardown**: When managing multiple child workers or streams, implement a two-pass teardown:
+  1. *Pass 1 (Broadcast)*: Signal all child tasks/threads to stop simultaneously (`signal_stop()`).
+  2. *Pass 2 (Parallel Join)*: Join/await workers concurrently (`ThreadPoolExecutor` or `asyncio.gather`) with bounded timeouts. Multi-worker teardown must scale in $O(1)$ time: $\max(t_1, \dots, t_N)$ rather than $\sum t_i$.
+- **Zero Orphaned Workers**: Every component that spawns threads or asyncio background tasks (`EventBus`, `StreamManager`, `VideoSource`, `TelemetrySampler`) must provide a paired `stop()` method, and parent lifecycles must explicitly invoke it.
+- **Async Event Loop Protection**: Never execute heavy synchronous hardware driver unbinds or process joins directly on the main asyncio event loop. Offload them via `asyncio.to_thread()`.
+- **Fail-Safe Watchdog**: Mission-critical server processes must include a background watchdog timer during shutdown to prevent deadlocks from uncooperative C/C++ kernel drivers.
+
+## 9. Branch Coverage & Static Symbol Resolution Invariants
+- **Exhaustive Branch Testing (`if/elif/else`)**:
+  - Tests must never cover only the "happy path" `if` condition. When introducing branching logic with fallback dependencies, conditional coordinators, or error branches, add explicit unit tests exercising every `elif` and `else` branch.
+  - Specifically test fallback configurations (e.g., primary pool absent $\rightarrow$ single-stream fallback branch executed).
+- **Pre-Commit Static Symbol Verification (AST Check)**:
+  - Whenever code is added or modified, verify that all symbols, modules, and type references are explicitly imported at the top of the file.
+  - In environments without active linter daemons, run a fast AST compile check before marking tasks complete:
+    ```bash
+    python -c "import ast; [compile(open(f, encoding='utf-8').read(), f, 'exec') for f in ['<modified_files>']]"
+    ```
+  - Never assume a branch is valid simply because the main test suite passed without error.

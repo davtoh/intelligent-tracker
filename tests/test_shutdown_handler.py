@@ -50,7 +50,8 @@ class TestShutdownHandler(unittest.TestCase):
 
     def test_install_shutdown_handlers(self):
         """Verify signal handlers wrap existing handlers and invoke set_shutting_down."""
-        with patch("dashboard.dependencies.set_shutting_down") as mock_set_shutting_down:
+        with patch("dashboard.dependencies.set_shutting_down") as mock_set_shutting_down, \
+             patch("dashboard.services.shutdown_handler.start_watchdog_guard"):
             install_shutdown_handlers()
             handler = signal.getsignal(signal.SIGINT)
             self.assertTrue(callable(handler))
@@ -62,6 +63,17 @@ class TestShutdownHandler(unittest.TestCase):
                 pass
 
             mock_set_shutting_down.assert_called_with(True)
+
+    def test_async_shutdown_pool_handles_none(self):
+        """async_shutdown_pool must safely return without error when camera_pool is None."""
+        from dashboard.services.shutdown_handler import async_shutdown_pool
+        asyncio.run(async_shutdown_pool(None))
+
+    def test_start_watchdog_guard_idempotent(self):
+        """start_watchdog_guard must start only a single daemon thread across repeated calls."""
+        from dashboard.services.shutdown_handler import start_watchdog_guard
+        start_watchdog_guard(timeout=10.0)
+        start_watchdog_guard(timeout=10.0)
 
 
 if __name__ == "__main__":

@@ -4,21 +4,95 @@
 Intelligent Tracker - Central Graceful Shutdown & Cancellation Handler.
 
 Provides:
-- Immediate shutdown signal interception (SIGINT, SIGTERM, SIGBREAK) to unblock
-  active streaming responses before Uvicorn enters its blocking connection-wait loop.
+- Immediate shutdown signal interception (SIGINT, SIGTERM, SIGBREAK) broadcasting
+  rapid stop events to active camera streams and streaming responses.
+- Concurrent non-blocking pool teardown via asyncio.to_thread.
+- Fail-safe watchdog timer preventing deadlocks in kernel-space OS drivers.
 - ASGI cancellation middleware suppressing benign asyncio.CancelledError exceptions
   during server termination or client connection aborts.
 """
 
 import asyncio
 import logging
+import os
 import signal
 import sys
+import threading
+import time
 from typing import Callable, Optional
 
 logger = logging.getLogger("intelligent_tracker.shutdown_handler")
 
 _HANDLERS_INSTALLED = False
+_WATCHDOG_STARTED = False
+_WATCHDOG_LOCK = threading.Lock()
+
+
+def get_console_logger() -> logging.Logger:
+    """Resolve an active console-bound logger (prioritizing uvicorn.error)."""
+    uvicorn_logger = logging.getLogger("uvicorn.error")
+    if uvicorn_logger.handlers:
+        return uvicorn_logger
+    return logger
+
+
+def is_test_environment() -> bool:
+    """Return True if running inside an automated test suite runner."""
+    return (
+        os.environ.get("TESTING") == "1"
+        or "unittest" in sys.modules
+        or "pytest" in sys.modules
+        or any("unittest" in arg or "pytest" in arg for arg in sys.argv)
+    )
+
+
+def start_watchdog_guard(timeout: float = 4.0) -> None:
+    """
+    Start a background watchdog daemon ensuring the process exits even if
+    an external C/C++ driver (DirectShow/MSMF/V4L2) deadlocks in kernel space.
+    """
+    global _WATCHDOG_STARTED
+    with _WATCHDOG_LOCK:
+        if _WATCHDOG_STARTED:
+            return
+        _WATCHDOG_STARTED = True
+
+    def _watchdog_worker():
+        time.sleep(timeout)
+        con_log = get_console_logger()
+        con_log.warning(
+            "Graceful shutdown watchdog timeout (%.1fs) reached; forcing clean process exit.",
+            timeout,
+        )
+        if not is_test_environment():
+            os._exit(0)
+
+    t = threading.Thread(target=_watchdog_worker, name="ShutdownWatchdogGuard", daemon=True)
+    t.start()
+
+
+def broadcast_shutdown() -> None:
+    """
+    Immediately broadcast shutdown signal across all active subsystems,
+    stopping video sources and client streams without waiting for joins.
+    """
+    from dashboard.dependencies import (
+        get_camera_pool,
+        get_active_stream_manager,
+        set_shutting_down,
+    )
+
+    set_shutting_down(True)
+
+    pool = get_camera_pool()
+    if pool and hasattr(pool, "signal_stop_all"):
+        pool.signal_stop_all()
+    else:
+        sm = get_active_stream_manager()
+        if sm and hasattr(sm, "signal_stop"):
+            sm.signal_stop()
+
+    start_watchdog_guard(timeout=4.0)
 
 
 def install_shutdown_handlers() -> None:
@@ -29,8 +103,6 @@ def install_shutdown_handlers() -> None:
     global _HANDLERS_INSTALLED
     if _HANDLERS_INSTALLED:
         return
-
-    from dashboard.dependencies import set_shutting_down
 
     target_signals = ["SIGINT", "SIGTERM"]
     if sys.platform == "win32":
@@ -45,8 +117,12 @@ def install_shutdown_handlers() -> None:
             if callable(prev_handler):
                 def _create_handler(orig_handler: Callable, name: str) -> Callable:
                     def _sig_handler(signum, frame):
-                        logger.info("Intercepted %s, signaling active streams to disconnect...", name)
-                        set_shutting_down(True)
+                        con_log = get_console_logger()
+                        con_log.info(
+                            "Intercepted %s: broadcasting fast shutdown to all camera streams...",
+                            name,
+                        )
+                        broadcast_shutdown()
                         orig_handler(signum, frame)
                     return _sig_handler
 
@@ -56,6 +132,34 @@ def install_shutdown_handlers() -> None:
 
     _HANDLERS_INSTALLED = True
     logger.debug("Installed graceful shutdown signal hooks.")
+
+
+async def async_shutdown_pool(camera_pool, timeout: float = 3.0) -> None:
+    """
+    Asynchronously terminate all camera streams in parallel off the main thread,
+    preventing event loop starvation and blocking.
+    """
+    if camera_pool is None:
+        return
+
+    broadcast_shutdown()
+    con_log = get_console_logger()
+    start_t = time.time()
+
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(camera_pool.stop_all, parallel=True),
+            timeout=timeout,
+        )
+        elapsed = time.time() - start_t
+        con_log.info("Intelligent Tracker CameraPool stopped cleanly in %.2fs.", elapsed)
+    except asyncio.TimeoutError:
+        con_log.warning(
+            "CameraPool parallel stop timed out after %.1fs; continuing shutdown...",
+            timeout,
+        )
+    except Exception as exc:
+        con_log.debug("Exception during async pool shutdown: %s", exc)
 
 
 class GracefulCancellationMiddleware:
@@ -74,4 +178,3 @@ class GracefulCancellationMiddleware:
             if scope.get("type") in ("http", "websocket"):
                 return
             raise
-

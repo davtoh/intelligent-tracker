@@ -221,6 +221,7 @@ class VideoSource:
         self._thread = None
         self._running = False
         self._is_paused = False
+        self._stop_event = threading.Event()
         self._pause_event = threading.Event()
         self._pause_event.set()
         self._ready_event = threading.Event()
@@ -380,6 +381,7 @@ class VideoSource:
 
             self._running = True
             self._is_paused = False
+            self._stop_event.clear()
             self._pause_event.set()
             self._first_frame_read = False
             self._ready_event.clear()
@@ -426,7 +428,8 @@ class VideoSource:
                         reconnect_attempts += 1
                         self._reconnections += 1
                         logger.info("VideoSource '%s': Attempting reconnect #%d in %.1fs...", self.source, reconnect_attempts, self.reconnect_delay)
-                        time.sleep(self.reconnect_delay)
+                        if self._stop_event.wait(timeout=self.reconnect_delay):
+                            continue
                         if self._open_capture():
                             reconnect_attempts = 0
                             logger.info("VideoSource '%s': Successfully reconnected.", self.source)
@@ -589,17 +592,22 @@ class VideoSource:
         """Returns True if the video capture is currently hibernated."""
         return self._is_paused
 
-    def stop(self):
-        """Stop background worker and release camera hardware cleanly without cross-thread races."""
-        if not self._running and self._cap is None:
-            return
+    def signal_stop(self) -> None:
+        """Signal background worker to terminate immediately without waiting for join."""
         self._running = False
         self._is_paused = False
+        self._stop_event.set()
         self._pause_event.set()
         try:
             self._queue.put_nowait(None)
         except Exception:
             pass
+
+    def stop(self):
+        """Stop background worker and release camera hardware cleanly without cross-thread races."""
+        if not self._running and self._cap is None:
+            return
+        self.signal_stop()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1.5)
             self._thread = None
