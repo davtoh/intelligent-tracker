@@ -50,6 +50,23 @@ class TestCameraTool(unittest.TestCase):
             self.assertEqual(CameraDeviceHandler.resolve_source("2"), 2)
             self.assertEqual(CameraDeviceHandler.resolve_source("synthetic"), "synthetic")
 
+    def test_resolve_source_delegation_ssot_virtual_rejection(self):
+        """CameraDeviceHandler.resolve_source('real') must delegate to SSOT and bypass virtual cameras."""
+        fake_names = ["OBS Virtual Camera", "GoPro Webcam"]
+        with patch.object(CameraDeviceHandler, "get_device_names", return_value=fake_names):
+            with patch.object(CameraDeviceHandler, "find_first_working_camera", return_value=None):
+                # When auto-detect probe returns None, SSOT fallback must select index 1 (GoPro), not index 0 (OBS)
+                resolved = CameraDeviceHandler.resolve_source("real")
+                self.assertEqual(resolved, 1)
+
+    def test_resolve_source_dynamic_device_name_remap(self):
+        """CameraDeviceHandler.resolve_source with device_name should handle shifted indices."""
+        fake_names = ["OBS Virtual Camera", "GoPro Webcam"]
+        with patch.object(CameraDeviceHandler, "get_device_names", return_value=fake_names):
+            # Index shifted from 0 to 1
+            resolved = CameraDeviceHandler.resolve_source("0", device_name="GoPro Webcam")
+            self.assertEqual(resolved, 1)
+
     def test_find_first_working_camera_prefer_physical(self):
         """Hardware cameras should be prioritized over virtual cameras when prefer_physical=True."""
         mock_obs = {"index": 0, "name": "OBS Virtual Camera", "is_virtual": True, "valid": True}

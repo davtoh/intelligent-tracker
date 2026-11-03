@@ -316,27 +316,22 @@ class CameraDeviceHandler:
             return chosen.get("index")
 
     @classmethod
-    def resolve_source(cls, source: Union[int, str]) -> Union[int, str]:
+    def resolve_source(
+        cls,
+        source: Union[int, str],
+        device_name: Optional[str] = None,
+        prefer_physical: bool = True,
+    ) -> Union[int, str]:
         """
-        Intelligently resolve source identifiers:
-        - 'real', 'auto', 'hardware': first working camera (preferring physical).
-        - Substring match against friendly names (e.g. 'gopro' -> index 1, 'obs' -> index 0).
-        - Digits -> int.
-        - RTSP/file/synthetic -> unchanged.
+        Resolve source identifier by delegating to canonical CameraPathResolver.
+
+        Preserves backwards-compatibility for callers while enforcing
+        Single Source of Truth (SSOT) resolution: container-to-host path normalization,
+        dynamic hardware index re-mapping, and virtual camera rejection.
         """
-        s_str = str(source).strip()
-        if s_str.isdigit():
-            return int(s_str)
-        lower = s_str.lower()
-        if lower in ("real", "auto", "physical", "hardware", "webcam"):
-            idx = cls.find_first_working_camera(prefer_physical=True)
-            return idx if idx is not None else 0
+        from intelligent_tracker.camera_resolver import CameraPathResolver
 
-        # Match against known device names
-        dev_names = cls.get_device_names()
-        for i, name in enumerate(dev_names):
-            if lower in name.lower():
-                logger.info("Resolved camera source '%s' to device index #%d (%s)", source, i, name)
-                return i
-
-        return source
+        resolved, _ = CameraPathResolver.resolve_camera_source(
+            source, device_name=device_name, prefer_physical=prefer_physical
+        )
+        return resolved

@@ -1933,3 +1933,30 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 275 tests in 43.353s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+## 2026-11-02: Frontier Architect - SSOT Camera Resolver Consolidation & Zombie Facade Elimination
+
+### 1. Objectives & Scope
+- Resolve dual-maintenance anti-pattern identified in architectural audit of commit `f2a7d87a`.
+- Purge unreferenced zombie facade `dashboard/services/camera_resolver.py`.
+- Consolidate camera resolution logic on Single Source of Truth (SSOT) by refactoring `CameraDeviceHandler.resolve_source()` to delegate directly to `CameraPathResolver.resolve_camera_source()`.
+- Eliminate divergence risk ensuring all legacy and script callers benefit from virtual OBS camera rejection, Docker-to-host path normalization, and dynamic friendly name re-mapping.
+
+### 2. Files Touched
+- `dashboard/services/camera_resolver.py`:
+  - **Deleted**: Purged 11-line zombie re-export shim with zero consumers.
+- `intelligent_tracker/camera_device.py`:
+  - Refactored `CameraDeviceHandler.resolve_source()` to a 1-line delegation pass-through calling `CameraPathResolver.resolve_camera_source()`.
+  - Preserved full backwards compatibility while extending optional `device_name` and `prefer_physical` parameters.
+  - Reduced file size from 342 lines to 300 lines (comfortably within the 150–300 lines healthy modularity target).
+- `tests/test_camera_tool.py`:
+  - Added `test_resolve_source_delegation_ssot_virtual_rejection` verifying virtual loopback device rejection via SSOT.
+  - Added `test_resolve_source_dynamic_device_name_remap` verifying dynamic index shift re-mapping.
+
+### 3. Verification & Testing
+- **Subsystem Unit Tests**:
+  - `python -m unittest tests/test_camera_tool.py tests/test_camera_resolver.py`: 16/16 tests passed — **OK (0 failures, 0 errors)**.
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 277 tests in 49.248s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
