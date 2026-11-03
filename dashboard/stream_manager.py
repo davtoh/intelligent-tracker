@@ -191,6 +191,20 @@ class StreamManager:
         """Returns True if the background worker thread is active."""
         return self._running
 
+    @property
+    def width(self) -> int:
+        """Stream frame width with fallback to video source or config."""
+        if self.video_source and getattr(self.video_source, "width", None):
+            return int(self.video_source.width)
+        return int(self.cfg.get("video", {}).get("width", 640))
+
+    @property
+    def height(self) -> int:
+        """Stream frame height with fallback to video source or config."""
+        if self.video_source and getattr(self.video_source, "height", None):
+            return int(self.video_source.height)
+        return int(self.cfg.get("video", {}).get("height", 480))
+
     def _load_config(self, path: Optional[str]) -> Dict[str, Any]:
         if not path or not os.path.exists(path):
             return {}

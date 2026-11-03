@@ -264,6 +264,8 @@ class VideoSource:
             if resolved_file:
                 self.is_file = True
                 self.source = resolved_file
+            elif s.lower().endswith((".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v")):
+                self.is_file = True
             else:
                 # Fallback check: numeric camera index
                 try:
@@ -312,6 +314,12 @@ class VideoSource:
                     height=self.target_height,
                     test_read=False,
                 )
+            elif self.is_file:
+                if not os.path.exists(str(self.source)):
+                    logger.warning("Video file not found for capture: %s", self.source)
+                    self._is_connected = False
+                    return False
+                self._cap = cv2.VideoCapture(self.source)
             else:
                 self._cap = cv2.VideoCapture(self.source)
 

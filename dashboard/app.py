@@ -87,11 +87,15 @@ from dashboard.schemas import (
     ZoneCreateRequest,
 )
 from dashboard.services.video_transcoder import VideoTranscodeService
+from dashboard.services.windows_resilience import apply_windows_iocp_patch
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.lifecycle import StreamLifecycleManager
 from intelligent_tracker.scenarios import ScenarioManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
+
+# Apply Windows IOCP Proactor socket resilience for transient drops on startup
+apply_windows_iocp_patch()
 
 # Global module references for test fixtures and backward-compatibility
 camera_pool: Optional[CameraPool] = None

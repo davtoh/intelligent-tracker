@@ -115,6 +115,21 @@ class TestStreamManagerLeasedSubscribers(unittest.TestCase):
         time.sleep(0.5)
         self.assertTrue(self.sm.is_hibernating)
 
+    def test_stream_manager_dimensions_and_error_placeholder(self):
+        """StreamManager must expose width and height properties and generate placeholder without AttributeError."""
+        from dashboard.services.camera_diagnostics import CameraHealthManager
+
+        self.assertEqual(self.sm.width, 640)
+        self.assertEqual(self.sm.height, 480)
+
+        # Generating error placeholder should succeed using stream dimensions
+        CameraHealthManager().set_error(self.sm.camera_id, "Test file not found", error_code="FILE_NOT_FOUND")
+        jpeg = CameraHealthManager().create_error_placeholder_jpeg(
+            self.sm.camera_id, name=self.sm.name, width=self.sm.width, height=self.sm.height
+        )
+        self.assertIsInstance(jpeg, bytes)
+        self.assertGreater(len(jpeg), 100)
+
 
 if __name__ == "__main__":
     unittest.main()

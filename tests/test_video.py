@@ -6,6 +6,7 @@ Unit tests for intelligent_tracker.video (VideoSource & Synthetic Generator).
 
 import time
 import unittest
+from unittest.mock import patch
 import numpy as np
 
 from intelligent_tracker.video import VideoSource, SyntheticFrameGenerator
@@ -145,6 +146,20 @@ class TestVideoSource(unittest.TestCase):
         self.assertEqual(resolve_camera_source("1"), 1)
         self.assertEqual(resolve_camera_source("synthetic"), "synthetic")
         self.assertEqual(resolve_camera_source("test.mp4"), "test.mp4")
+
+    def test_nonexistent_video_file_classification_and_safe_open(self):
+        """Nonexistent video files must be classified as is_file=True and safely fail without cv2 error."""
+        with patch("cv2.VideoCapture") as mock_vc:
+            vs = VideoSource(source="/app/data/videos/non_existent_clip_123.mp4")
+            self.assertTrue(vs.is_file)
+            self.assertFalse(vs.is_webcam)
+            self.assertFalse(vs.is_synthetic)
+            self.assertFalse(vs.is_rtsp)
+
+            # _open_capture should detect file absence and return False cleanly without invoking cv2
+            success = vs._open_capture()
+            self.assertFalse(success)
+            mock_vc.assert_not_called()
 
 
 if __name__ == "__main__":

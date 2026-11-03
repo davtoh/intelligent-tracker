@@ -2062,3 +2062,40 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Campaign State**:
   - Initialized `.refactor/state.json` (Phase 1 active, 7 phases total).
   - Saved `.refactor/plan.md`.
+
+
+## 2026-11-02: App Debugger - Multi-Symptom Runtime Regression Diagnosis & Resolution
+
+### 1. Objectives & Scope
+- Diagnose and resolve post-modernization server startup and runtime regressions on Windows.
+- Fix Python asyncio Windows IOCP socket accept crashes (`WinError 64` ERROR_NETNAME_DELETED).
+- Resolve `StreamManagerWorker` thread termination caused by missing `StreamManager.width` and `StreamManager.height` attributes during diagnostic error frame synthesis.
+- Eliminate OpenCV C++ pattern assertion warnings (`icvExtractPattern`) by hardening video file source classification in `VideoSource`.
+
+### 2. Files Modified & Created
+- `dashboard/services/windows_resilience.py`:
+  - **Created** (127 lines): Lightweight, modular resilience service patching CPython's `BaseProactorEventLoop._start_serving` and `IocpProactor.accept` to absorb transient Windows client drops without terminating the main server listening socket or leaking coroutine exceptions.
+- `dashboard/app.py`:
+  - Applied `apply_windows_iocp_patch()` upon dashboard initialization.
+- `dashboard/stream_manager.py`:
+  - Added `@property def width(self) -> int` and `@property def height(self) -> int` with fallback cascade (`video_source` -> `config` -> default `640x480`).
+- `intelligent_tracker/video.py`:
+  - Hardened `_classify_source()` to ensure sources with video file extensions are properly flagged as `is_file = True` even when absent from disk.
+  - Added guard in `_open_capture()` to immediately return `False` when a video file does not exist on disk, preventing invalid OpenCV pattern sequence parsing.
+- `tests/test_windows_resilience.py`:
+  - **Created** (32 lines): Unit tests for transient Windows socket error codes and patch idempotency.
+- `tests/test_hibernation.py`:
+  - Added `test_stream_manager_dimensions_and_error_placeholder` verifying dimension properties and placeholder synthesis.
+- `tests/test_video.py`:
+  - Added `test_nonexistent_video_file_classification_and_safe_open` asserting safe capture rejection without invoking OpenCV.
+
+### 3. Verification & Testing
+- **Subsystem Unit Tests**:
+  - `python -m unittest tests/test_video.py tests/test_hibernation.py tests/test_windows_resilience.py`: 18/18 tests passed — **OK (0 failures, 0 errors)**.
+- **Modernization Invariant Verification**:
+  - `python -m unittest tests/test_modernization.py`: 2/2 tests passed — **OK (0 failures, 0 errors)**.
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 283 tests in 49.396s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
