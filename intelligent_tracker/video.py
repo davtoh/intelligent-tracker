@@ -86,30 +86,13 @@ def resolve_camera_source(source: Union[str, int]) -> Union[str, int]:
     - If synthetic/mock/file/rtsp:
       Preserved as-is.
     """
-    s_str = str(source).strip().lower()
-    if s_str in ("auto", "real", "physical", "hardware", "webcam"):
-        real_idx = find_first_real_camera(max_devices=5)
-        if real_idx is not None:
-            dev_name = CameraDeviceHandler.get_friendly_name(real_idx)
-            logger.info("Auto-detected real physical camera at device index #%d (%s)", real_idx, dev_name)
-            print("[INFO] Auto-detected real physical camera at device index #{} ({})".format(real_idx, dev_name))
-            return real_idx
-        logger.warning("No physical hardware camera found with real data; defaulting to device index 0.")
-        print("[WARN] No physical hardware camera found with real data; defaulting to device index 0.")
-        return 0
-    elif s_str in ("libcamera", "rpi", "picamera", "rpicam"):
-        return "libcamera"
-    elif s_str.isdigit():
-        return int(s_str)
+    from intelligent_tracker.camera_resolver import CameraPathResolver
 
-    # Check for friendly name resolution (e.g. 'gopro', 'obs')
-    resolved = CameraDeviceHandler.resolve_source(source)
+    resolved, meta = CameraPathResolver.resolve_camera_source(source)
     if isinstance(resolved, int):
-        dev_name = CameraDeviceHandler.get_friendly_name(resolved)
-        print("[INFO] Resolved camera name '{}' to device index #{} ({})".format(source, resolved, dev_name))
-        return resolved
-
-    return source
+        dev_name = meta.get("device_name") or CameraDeviceHandler.get_friendly_name(resolved)
+        print("[INFO] Resolved camera source '{}' to device index #{} ({})".format(source, resolved, dev_name))
+    return resolved
 
 
 class SyntheticFrameGenerator:
@@ -275,13 +258,20 @@ class VideoSource:
         elif os.path.exists(s):
             self.is_file = True
         else:
-            # Fallback check: numeric camera index
-            try:
-                self.source = int(self.source)
-                self.is_webcam = True
-            except (ValueError, TypeError):
-                # Unknown source, treat as RTSP/file/network attempt
-                self.is_rtsp = s.startswith("rtsp")
+            # Check if source resolves to a video file across host/container paths
+            from intelligent_tracker.camera_resolver import CameraPathResolver
+            resolved_file, _, _ = CameraPathResolver.resolve_file_source(s)
+            if resolved_file:
+                self.is_file = True
+                self.source = resolved_file
+            else:
+                # Fallback check: numeric camera index
+                try:
+                    self.source = int(self.source)
+                    self.is_webcam = True
+                except (ValueError, TypeError):
+                    # Unknown source, treat as RTSP/file/network attempt
+                    self.is_rtsp = s.startswith("rtsp")
 
     def _open_capture(self) -> bool:
         if self.is_synthetic:

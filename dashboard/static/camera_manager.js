@@ -14,6 +14,8 @@
   let activeCameras = [];
   let cameraPresets = [];
   let focusedCameraId = 'cam_01';
+  let editingCameraId = null;
+  let selectedDeviceName = null;
 
   // Modal Elements
   const modalCameraManager = document.getElementById('modal-camera-manager');
@@ -82,10 +84,11 @@
 
     if (btnScanDevices) {
       btnScanDevices.addEventListener('click', () => {
-        window.CameraDiscovery?.scanDevices(({ id, name, source }) => {
-          if (inputCamId) inputCamId.value = id;
+        window.CameraDiscovery?.scanDevices(({ id, name, source, device_name }) => {
+          if (inputCamId && !editingCameraId) inputCamId.value = id;
           if (inputCamName) inputCamName.value = name;
           if (inputCamSource) inputCamSource.value = source;
+          selectedDeviceName = device_name || name;
           window.CameraDiscovery?.testConnection();
         });
       });
@@ -195,8 +198,10 @@
           </button>
         </td>
         <td>
-          <button class="btn btn-xs btn-outline btn-focus-cam" data-id="${c.id}">🔍 Focus</button>
-          <button class="btn btn-xs btn-danger btn-delete-cam" data-id="${c.id}">🗑️</button>
+          <button class="btn btn-xs btn-outline btn-edit-cam" data-id="${c.id}" title="Edit Camera Settings">✏️</button>
+          <button class="btn btn-xs btn-outline btn-focus-cam" data-id="${c.id}" title="Focus Camera">🔍</button>
+          ${c.status === 'error' ? `<button class="btn btn-xs btn-outline btn-diag-cam" data-id="${c.id}" title="Inspect Error Trace" style="color: #f87171; border-color: rgba(239, 68, 68, 0.5);">🛠️</button>` : ''}
+          <button class="btn btn-xs btn-danger btn-delete-cam" data-id="${c.id}" title="Delete Camera">🗑️</button>
         </td>
       </tr>
     `).join('');
@@ -204,7 +209,52 @@
     bindTableActionButtons();
   }
 
+  function editCamera(id) {
+    const cam = activeCameras.find(c => c.id === id);
+    if (!cam) return;
+
+    openModal();
+    editingCameraId = id;
+    selectedDeviceName = cam.device_name || null;
+
+    if (inputCamId) {
+      inputCamId.value = cam.id;
+      inputCamId.disabled = true;
+    }
+    if (inputCamName) inputCamName.value = cam.name || '';
+    if (inputCamSource) inputCamSource.value = cam.source || '';
+    if (presetSelect && cam.type) presetSelect.value = cam.type;
+
+    const btnSave = document.getElementById('btn-save-camera');
+    if (btnSave) btnSave.textContent = '💾 Update Camera';
+
+    showToast(`Editing camera '${cam.name}' (${id})`, 'info');
+  }
+
+  function resetForm() {
+    editingCameraId = null;
+    selectedDeviceName = null;
+    if (camForm) camForm.reset();
+    if (inputCamId) inputCamId.disabled = false;
+    const btnSave = document.getElementById('btn-save-camera');
+    if (btnSave) btnSave.textContent = '💾 Save Camera to VMS';
+  }
+
   function bindTableActionButtons() {
+    activeCamerasTableBody.querySelectorAll('.btn-edit-cam').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        editCamera(id);
+      });
+    });
+
+    activeCamerasTableBody.querySelectorAll('.btn-diag-cam').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        window.CameraDiagnosticsUI?.openDiagnosticModal(id);
+      });
+    });
+
     activeCamerasTableBody.querySelectorAll('.btn-toggle-cam').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-id');
@@ -251,17 +301,28 @@
       detector: document.getElementById('cam-detector-select')?.value || 'mock',
       tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
       enabled: true,
+      device_name: selectedDeviceName,
     };
 
     try {
-      const resp = await fetch('/api/cameras', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let resp;
+      if (editingCameraId) {
+        resp = await fetch(`/api/cameras/${encodeURIComponent(editingCameraId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        resp = await fetch('/api/cameras', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (resp.ok) {
-        showToast(`Camera '${name}' added successfully!`, 'success');
+        showToast(editingCameraId ? `Camera '${name}' updated!` : `Camera '${name}' added!`, 'success');
+        resetForm();
         closeModal();
         await refreshCameras();
         focusCamera(id);
@@ -297,6 +358,9 @@
     refreshCameras: refreshCameras,
     focusCamera: focusCamera,
     setGridMode: setGridMode,
+    editCamera: editCamera,
+    openModal: openModal,
+    closeModal: closeModal,
   };
 
   if (document.readyState === 'loading') {

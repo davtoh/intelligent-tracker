@@ -57,9 +57,9 @@ def inspect_camera_devices(max_devices: int = 6) -> List[Dict[str, Any]]:
             res_str = f"{w}x{h}"
         else:
             CameraDeviceHandler.safe_release(cap, settle_delay=0.05)
-            # If name exists in OS registry, device is present but locked
+            # If name exists in OS registry, check virtual vs physical lock
             if idx < len(known_names):
-                status = "BUSY (LOCKED)"
+                status = "IDLE (OFFLINE)" if is_virt else "BUSY (LOCKED)"
                 res_str = "-"
                 fps = 0.0
             else:

@@ -148,8 +148,12 @@ class CameraPool:
         start: bool = True,
     ) -> StreamManager:
         """Internal helper to instantiate and start a StreamManager."""
-        source = cfg.get("source", "synthetic")
+        raw_source = cfg.get("source", "synthetic")
+        device_name = cfg.get("device_name") or cfg.get("details", {}).get("device_name")
         name = cfg.get("name", f"Camera {camera_id.upper()}")
+
+        from intelligent_tracker.camera_resolver import CameraPathResolver
+        resolved_source, _ = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
 
         custom_cfg = {}
         if cfg.get("detector"):
@@ -162,14 +166,14 @@ class CameraPool:
             db_path=self.db_path,
             camera_id=camera_id,
             name=name,
-            source_override=source,
+            source_override=resolved_source,
             custom_cfg=custom_cfg if custom_cfg else None,
         )
 
         self.streams[camera_id] = mgr
         if start:
             mgr.start()
-            logger.info("Started camera stream [%s] '%s' (%s)", camera_id, name, source)
+            logger.info("Started camera stream [%s] '%s' (%s -> %s)", camera_id, name, raw_source, resolved_source)
         return mgr
 
     def add_camera(
@@ -183,6 +187,7 @@ class CameraPool:
         enabled: bool = True,
         autostart: bool = True,
         details: Optional[Dict[str, Any]] = None,
+        device_name: Optional[str] = None,
     ) -> StreamManager:
         """
         Hot-adds a new camera feed dynamically without server restarts.
@@ -197,6 +202,7 @@ class CameraPool:
             enabled: Whether stream is active immediately.
             autostart: Whether to start worker thread immediately.
             details: Optional extra metadata (ip, port, vendor, etc.).
+            device_name: Optional persistent device friendly name for hardware matching.
 
         Returns:
             The created StreamManager instance.
@@ -205,6 +211,8 @@ class CameraPool:
             # If camera already exists, remove/stop it first
             if camera_id in self.streams:
                 self.remove_camera(camera_id)
+
+            resolved_device_name = device_name or (details.get("device_name") if details else None)
 
             cam_entry = {
                 "id": camera_id,
@@ -215,6 +223,7 @@ class CameraPool:
                 "detector": detector or "mock",
                 "tracker": tracker or "centroid",
                 "details": details or {},
+                "device_name": resolved_device_name,
                 "created_at": time.time(),
             }
 
@@ -244,6 +253,8 @@ class CameraPool:
         enabled: Optional[bool] = None,
         detector: Optional[str] = None,
         tracker: Optional[str] = None,
+        device_name: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Updates an existing camera configuration dynamically.
@@ -256,6 +267,7 @@ class CameraPool:
             cfg = self.camera_configs[camera_id]
             source_changed = (source is not None and source != cfg.get("source"))
             enabled_changed = (enabled is not None and enabled != cfg.get("enabled"))
+            device_name_changed = (device_name is not None and device_name != cfg.get("device_name"))
 
             if name is not None:
                 cfg["name"] = name
@@ -269,11 +281,15 @@ class CameraPool:
                 cfg["detector"] = detector
             if tracker is not None:
                 cfg["tracker"] = tracker
+            if device_name is not None:
+                cfg["device_name"] = device_name
+            if details is not None:
+                cfg["details"] = details
 
             self.save_cameras()
 
             # Hot reload stream if necessary
-            if source_changed or enabled_changed:
+            if source_changed or enabled_changed or device_name_changed:
                 if camera_id in self.streams:
                     old_mgr = self.streams.pop(camera_id)
                     old_mgr.stop()
@@ -342,13 +358,25 @@ class CameraPool:
                     res_str = f"{mgr.video_source.width}x{mgr.video_source.height}"
                     is_synth = mgr.video_source.is_synthetic
 
+                from dashboard.services.camera_diagnostics import CameraHealthManager
+                health = CameraHealthManager().get_health(cam_id)
+                health_status = "paused" if not cfg.get("enabled", True) else (
+                    health.status if health.status != "unknown" else ("online" if is_running else "offline")
+                )
+                if is_running and health.status == "error":
+                    health_status = "error"
+
                 result.append({
                     "id": cam_id,
                     "name": cfg.get("name", f"Camera {cam_id}"),
                     "source": str(cfg.get("source", "synthetic")),
                     "type": cfg.get("type", "synthetic" if is_synth else "rtsp"),
                     "enabled": cfg.get("enabled", True),
-                    "status": "online" if is_running else ("paused" if not cfg.get("enabled") else "offline"),
+                    "status": health_status,
+                    "error_code": health.error_code if health.error_code != "OK" else None,
+                    "error_message": health.last_error,
+                    "suggested_action": health.suggested_action,
+                    "device_name": cfg.get("device_name") or (cfg.get("details") or {}).get("device_name"),
                     "fps": round(telemetry.get("fps", 0.0), 1),
                     "resolution": res_str,
                     "active_tracks_count": len(telemetry.get("active_tracks", [])),

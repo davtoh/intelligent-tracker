@@ -56,6 +56,7 @@ from dashboard.dependencies import (
 from dashboard.routers import (
     analytics_router,
     cameras_router,
+    camera_diagnostics_router,
     rsac_router,
     scenarios_router,
     streaming_router,
@@ -159,6 +160,7 @@ def create_app() -> FastAPI:
     # Mount domain APIRouters
     application.include_router(system_router)
     application.include_router(cameras_router)
+    application.include_router(camera_diagnostics_router)
     application.include_router(streaming_router)
     application.include_router(scenarios_router)
     application.include_router(rsac_router)

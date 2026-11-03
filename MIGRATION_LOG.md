@@ -1821,3 +1821,57 @@ Across all 4 phases of the dashboard modernization campaign:
 ### 3. Verification & Empirical Proof
 - Automated unit tests: `python -m unittest tests/test_responsive_navigation.py` -> 9/9 tests passed (0 failures, 0 errors).
 - Full test suite: `python -m unittest discover -s tests -p "test_*.py"` -> Ran 265 tests in 49.224s — OK (100% green).
+
+---
+
+## 2026-11-02: Environment-Agnostic Camera Storage, Hybrid Device Signature Resolution & Diagnostics Error UI
+
+### 1. Objectives & Scope
+- **Environment-Agnostic Path Normalization**:
+  - Implemented bidirectional normalization between Docker container paths (`/app/data/videos/...`) and host paths (`data/videos/...`).
+  - Added multi-root candidate fallback resolution in `CameraPathResolver.resolve_file_source()`, probing direct paths, workspace-relative roots, and `data/videos/` base filenames.
+- **Hybrid Device Signature & Virtual Camera Safety**:
+  - Implemented friendly device name binding (e.g. `device_name: "GoPro Webcam"` or `"USB Camera 2"`) in `CameraPathResolver.resolve_camera_source()`, dynamically re-mapping shifted DirectShow hardware indices on Windows across reboots and reconnections.
+  - Hardened `--source real` / `auto` auto-detection to strictly exclude virtual loopback devices (e.g. OBS Virtual Camera), preventing virtual cameras from taking over physical feeds.
+  - Fixed `scripts/camera_manager.py --status` and `intelligent_tracker/camera_tool.py` to report inactive virtual cameras as `IDLE (OFFLINE)` rather than falsely marking them as `BUSY (LOCKED)`.
+- **Camera Health Manager & Diagnostic Traceback Engine**:
+  - Delivered `CameraHealthManager` (`dashboard/services/camera_diagnostics.py`) providing structured error tracking (`CameraHealthReport`), traceback capture, and actionable remediation suggestions.
+  - Replaced the perpetual, silent `"Camera Initializing..."` hanging state in `StreamManager._worker_loop` with dynamic error placeholder frame synthesis displaying `[!] FILE_NOT_FOUND`, `[!] DEVICE_LOCKED`, or `[!] RTSP_TIMEOUT` alongside error codes and remediation advice.
+- **Diagnostics API & Frontend UI Inspector**:
+  - Created `dashboard/routers/camera_diagnostics.py` exposing `GET /api/cameras/{id}/diagnostics`, `POST /api/cameras/{id}/release`, `POST /api/cameras/{id}/probe`, and `GET /api/cameras/diagnostics/summary`.
+  - Created `dashboard/static/css/camera_diagnostics.css` with responsive, zero-`!important` glassmorphism styles.
+  - Created `dashboard/static/js/camera_diagnostics_ui.js` providing error banner overlays, a modal dialog (`#modal-camera-diagnostics`) with full tracebacks, and a direct "Edit in Camera Manager" bridge.
+  - Enhanced `dashboard/static/camera_manager.js` to support inline "✏️ Edit" actions, form pre-population, `device_name` capture during device scans, and `PUT /api/cameras/{id}` updates without stream interruptions.
+
+### 2. Files Modified & Created
+- `intelligent_tracker/camera_resolver.py`: Created core environment-agnostic path and device resolver.
+- `dashboard/services/camera_resolver.py`: Re-export facade maintaining clean architectural boundaries.
+- `dashboard/services/camera_diagnostics.py`: Created `CameraHealthManager` singleton and error placeholder renderer.
+- `dashboard/routers/camera_diagnostics.py`: Created REST API endpoints for telemetry, release, and probing.
+- `dashboard/routers/__init__.py`: Registered and re-exported `camera_diagnostics_router`.
+- `dashboard/app.py`: Mounted `camera_diagnostics_router`.
+- `dashboard/camera_pool.py`: Integrated `CameraPathResolver` and `CameraHealthManager`, added `device_name` support and diagnostic fields to `list_cameras()`.
+- `dashboard/stream_manager.py`: Added consecutive failure detection, health status tracking, and error frame rendering in `_worker_loop`.
+- `intelligent_tracker/camera_tool.py`: Fixed `is_virt` status reporting to `IDLE (OFFLINE)`.
+- `intelligent_tracker/video.py`: Replaced naive fallback to index 0 with safe physical registry resolution.
+- `dashboard/static/css/camera_diagnostics.css`: Created scoped styles for error badges, banners, and diagnostic modal.
+- `dashboard/static/js/camera_diagnostics_ui.js`: Created UI module for banners, diagnostic modal, and traceback inspector.
+- `dashboard/static/camera_manager.js`: Added "✏️ Edit" action, form population, `PUT` updates, and `device_name` storage.
+- `dashboard/static/index.html`: Linked diagnostic CSS/JS and injected `#modal-camera-diagnostics`.
+- `tests/test_camera_resolver.py`: Added 5 unit tests for path normalization, device name re-mapping, and virtual camera rejection.
+- `tests/test_camera_diagnostics.py`: Added 4 unit tests for health state transitions, error frame generation, and API endpoints.
+
+### 3. Verification & Empirical Proof
+- **Contract & Architecture Tests**:
+  - `python -m unittest tests/test_refactor_contract.py`: 3/3 tests passed (HTML element IDs preserved, zero `!important` in CSS).
+- **Resolver & Diagnostics Tests**:
+  - `python -m unittest tests/test_camera_resolver.py`: 5/5 tests passed (0 failures, 0 errors).
+  - `python -m unittest tests/test_camera_diagnostics.py`: 4/4 tests passed (0 failures, 0 errors).
+- **Camera Device & Tool Verification**:
+  - `python scripts/camera_manager.py --status`: Correctly reports `#0 OBS Virtual Camera` as `IDLE (OFFLINE)` and physical cameras as `AVAILABLE`.
+  - `python main.py --source real`: Correctly resolves to physical GoPro Webcam (`#1`), strictly rejecting the virtual loopback device.
+- **Full Repository Test Suite**:
+  - `python -m unittest discover tests`: Ran 274 tests in 69.505s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation Clean Build**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: **build succeeded with 0 warnings**.
+

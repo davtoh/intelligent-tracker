@@ -11,6 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/css/responsive_patterns.css">
+  <link rel="stylesheet" href="/static/css/camera_diagnostics.css">
 </head>
 <body class="dark-theme">
   <!-- Header & Navigation -->
@@ -842,6 +843,60 @@
     </div>
   </div>
 
+  <!-- Modal: Camera Channel Diagnostics & Traceback Inspector -->
+  <div class="modal-backdrop" id="modal-camera-diagnostics" style="display: none;">
+    <div class="modal-card glass-panel modal-lg">
+      <div class="modal-header">
+        <h3 id="diag-modal-title">🛠️ Camera Diagnostics & Health Inspector</h3>
+        <button class="modal-close-btn" id="modal-diag-close">&times;</button>
+      </div>
+      <div class="modal-body-scroll">
+        <div class="diag-info-grid">
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Operational Status</span>
+            <span class="diag-stat-value" id="diag-stat-status">Checking...</span>
+          </div>
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Error Code</span>
+            <span class="diag-stat-value" id="diag-stat-code">OK</span>
+          </div>
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Configured Source</span>
+            <span class="diag-stat-value" id="diag-stat-source">-</span>
+          </div>
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Hardware Signature</span>
+            <span class="diag-stat-value" id="diag-stat-device">-</span>
+          </div>
+          <div class="diag-stat-card">
+            <span class="diag-stat-label">Consecutive Failures</span>
+            <span class="diag-stat-value" id="diag-stat-failures">0</span>
+          </div>
+        </div>
+
+        <div class="diag-advice-panel">
+          <div class="diag-advice-title">
+            <span>💡 Suggested Remediation:</span>
+          </div>
+          <div class="diag-advice-body" id="diag-advice-body">
+            Checking status...
+          </div>
+        </div>
+
+        <div class="section-subhead">
+          <h4>Diagnostic Output & Traceback</h4>
+        </div>
+        <div class="diag-traceback-box" id="diag-traceback-box">Loading diagnostic details...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="modal-diag-cancel">Close</button>
+        <button type="button" class="btn btn-outline" id="diag-btn-probe-channel">⚡ Probe Hardware</button>
+        <button type="button" class="btn btn-outline" id="diag-btn-release-lock" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">🔓 Release Device Lock</button>
+        <button type="button" class="btn btn-primary" id="diag-btn-edit-manager">✏️ Edit in Camera Manager</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal 4: Backup & State Migration -->
   <div class="modal-backdrop" id="modal-backup-manager" style="display: none;">
     <div class="modal-card glass-panel">
@@ -1291,6 +1346,7 @@
   <script src="/static/app.js"></script>
   <script src="/static/js/nav_tabs_manager.js"></script>
   <script src="/static/camera_manager.js"></script>
+  <script src="/static/js/camera_diagnostics_ui.js"></script>
   <script src="/static/video_scrubber.js"></script>
   <script src="/static/studio.js"></script>
   <script src="/static/review_and_rsac.js"></script>

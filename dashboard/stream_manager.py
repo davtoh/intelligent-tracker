@@ -417,6 +417,7 @@ class StreamManager:
             return
 
         frame_count = 0
+        consecutive_empty = 0
         fps_samples = []
         last_t = time.time()
 
@@ -446,8 +447,38 @@ class StreamManager:
 
                 ret, frame = vs.read(timeout=1.0)
                 if not ret or frame is None:
-                    time.sleep(0.02)
+                    consecutive_empty += 1
+                    if consecutive_empty >= 4:
+                        from dashboard.services.camera_diagnostics import CameraHealthManager
+                        err_code = "NO_FRAMES_DECODED"
+                        err_msg = "No video frames could be decoded from source"
+                        if getattr(vs, "is_file", False) and not os.path.exists(str(vs.source)):
+                            err_code = "FILE_NOT_FOUND"
+                            err_msg = f"Video file not found: {vs.source}"
+                        elif getattr(vs, "is_webcam", False) and not getattr(vs, "_is_connected", False):
+                            err_code = "DEVICE_LOCKED"
+                            err_msg = f"Camera device #{vs.source} is locked or unavailable"
+                        elif getattr(vs, "is_rtsp", False) and not getattr(vs, "_is_connected", False):
+                            err_code = "RTSP_TIMEOUT"
+                            err_msg = f"RTSP connection timed out: {vs.source}"
+
+                        CameraHealthManager().set_error(self.camera_id, err_msg, error_code=err_code)
+                        with self._lock:
+                            self._latest_jpeg = CameraHealthManager().create_error_placeholder_jpeg(
+                                self.camera_id, name=self.name, width=self.width, height=self.height
+                            )
+                            if self._latest_telemetry:
+                                self._latest_telemetry["status"] = "error"
+                                self._latest_telemetry["fps"] = 0.0
+                                self._latest_telemetry["error_code"] = err_code
+                                self._latest_telemetry["error_msg"] = err_msg
+                    time.sleep(0.04)
                     continue
+
+                if consecutive_empty > 0 or frame_count % 30 == 1:
+                    from dashboard.services.camera_diagnostics import CameraHealthManager
+                    CameraHealthManager().set_online(self.camera_id, fps=measured_fps)
+                consecutive_empty = 0
 
                 # Protect downstream pipelines, browser rendering, and network from oversized frames
                 max_dim = 1280
