@@ -16,7 +16,11 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket
 
-from dashboard.dependencies import get_active_stream_manager
+from dashboard.dependencies import (
+    get_active_stream_manager,
+    get_shutdown_event,
+    is_shutting_down,
+)
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.streaming")
 
@@ -42,8 +46,9 @@ async def get_live_stream(camera_id: str, request: Request):
 
     async def frame_generator():
         mgr.add_subscriber(sub_id)
+        shutdown_evt = get_shutdown_event()
         try:
-            while True:
+            while not is_shutting_down() and not shutdown_evt.is_set():
                 if await request.is_disconnected():
                     break
                 mgr.heartbeat_subscriber(sub_id)
@@ -53,7 +58,11 @@ async def get_live_stream(camera_id: str, request: Request):
                         b"--frame\r\n"
                         b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
                     )
-                await asyncio.sleep(0.04)  # ~25 FPS
+                try:
+                    await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)
+                    break
+                except asyncio.TimeoutError:
+                    pass
         except (asyncio.CancelledError, GeneratorExit):
             pass
         finally:
@@ -114,14 +123,17 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, camera_id: str):
 
     sender = asyncio.create_task(_run_ws_sender(websocket, queue))
     receiver = asyncio.create_task(_run_ws_receiver(websocket, mgr))
+    shutdown_evt = get_shutdown_event()
+    shutdown_task = asyncio.create_task(shutdown_evt.wait())
 
     try:
         done, pending = await asyncio.wait(
-            [sender, receiver],
+            [sender, receiver, shutdown_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
             task.cancel()
     finally:
+        shutdown_task.cancel()
         mgr.unregister_ws_subscriber(sync_listener)
 

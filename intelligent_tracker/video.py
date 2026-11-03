@@ -528,6 +528,8 @@ class VideoSource:
 
         try:
             frame = self._queue.get(block=True, timeout=timeout)
+            if frame is None or not self._running:
+                return False, None
             return True, frame
         except queue.Empty:
             return False, None
@@ -586,8 +588,12 @@ class VideoSource:
         self._running = False
         self._is_paused = False
         self._pause_event.set()
+        try:
+            self._queue.put_nowait(None)
+        except Exception:
+            pass
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=2.0)
+            self._thread.join(timeout=1.5)
             self._thread = None
         # Drain queue
         while not self._queue.empty():
@@ -595,6 +601,15 @@ class VideoSource:
                 self._queue.get_nowait()
             except queue.Empty:
                 break
+        with self._lock:
+            if self._cap is not None:
+                try:
+                    CameraDeviceHandler.safe_release(self._cap, settle_delay=0.15)
+                except Exception as e:
+                    logger.debug("Exception releasing VideoSource cap: %s", e)
+                finally:
+                    self._cap = None
+                    self._is_connected = False
         if sys.platform.startswith("win"):
             time.sleep(0.05)
         try:

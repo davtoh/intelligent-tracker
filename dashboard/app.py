@@ -51,6 +51,7 @@ from dashboard.dependencies import (
     set_camera_pool,
     set_lifecycle_manager,
     set_scenario_manager,
+    set_shutting_down,
     set_stream_manager,
 )
 from dashboard.routers import (
@@ -128,6 +129,7 @@ async def lifespan(app: FastAPI):
 
     yield
     logger.info("Shutting down Intelligent Tracker CameraPool...")
+    set_shutting_down(True)
     if lifecycle_manager:
         lifecycle_manager.stop_sampler()
     if camera_pool:

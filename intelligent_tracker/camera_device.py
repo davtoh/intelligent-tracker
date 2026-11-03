@@ -61,7 +61,8 @@ class CameraDeviceHandler:
         Safely release a cv2.VideoCapture instance and wait for OS driver graph unbind.
         DirectShow COM on Windows requires ~0.25s to teardown before a device can be re-opened.
         """
-        with cls._device_lock:
+        acquired = cls._device_lock.acquire(timeout=2.0)
+        try:
             if cap is None:
                 return
             try:
@@ -74,6 +75,9 @@ class CameraDeviceHandler:
             finally:
                 if sys.platform.startswith("win") and settle_delay > 0:
                     time.sleep(settle_delay)
+        finally:
+            if acquired:
+                cls._device_lock.release()
 
     @classmethod
     def validate_frame(cls, frame: Optional[np.ndarray], min_std: float = 0.5) -> bool:

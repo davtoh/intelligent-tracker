@@ -10,6 +10,7 @@ Supports runtime synchronization and monkeypatching compatibility for test fixtu
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import sys
@@ -40,6 +41,54 @@ _camera_pool: Optional[CameraPool] = None
 _stream_manager: Optional[StreamManager] = None
 _scenario_manager: Optional[ScenarioManager] = None
 _lifecycle_manager: Optional[StreamLifecycleManager] = None
+_shutdown_event: Optional[asyncio.Event] = None
+_is_shutting_down: bool = False
+
+
+def get_shutdown_event() -> asyncio.Event:
+    """Retrieve or initialize the application-wide asyncio shutdown event for active loop."""
+    global _shutdown_event
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if _shutdown_event is None:
+        _shutdown_event = asyncio.Event()
+    elif current_loop is not None and getattr(_shutdown_event, "_loop", None) is not None:
+        if _shutdown_event._loop is not current_loop:
+            _shutdown_event = asyncio.Event()
+
+    if _is_shutting_down and not _shutdown_event.is_set():
+        _shutdown_event.set()
+
+    return _shutdown_event
+
+
+def is_shutting_down() -> bool:
+    """Return True if the dashboard service is currently in process of shutting down."""
+    return _is_shutting_down
+
+
+def set_shutting_down(shutting_down: bool = True) -> None:
+    """Signal all active video streaming generators and WebSocket channels to disconnect."""
+    global _is_shutting_down, _shutdown_event
+    _is_shutting_down = shutting_down
+    if _shutdown_event is not None:
+        try:
+            loop = getattr(_shutdown_event, "_loop", None)
+            if loop and loop.is_running():
+                if shutting_down:
+                    loop.call_soon_threadsafe(_shutdown_event.set)
+                else:
+                    loop.call_soon_threadsafe(_shutdown_event.clear)
+            else:
+                if shutting_down:
+                    _shutdown_event.set()
+                else:
+                    _shutdown_event.clear()
+        except Exception:
+            pass
 
 
 def get_camera_pool() -> Optional[CameraPool]:

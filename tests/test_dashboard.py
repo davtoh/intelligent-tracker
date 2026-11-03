@@ -191,6 +191,24 @@ class TestDashboardApp(unittest.TestCase):
             resp = websocket.receive_json()
             self.assertTrue(resp.get("type") == "pong" or "camera_id" in resp or "fps" in resp)
 
+    def test_11_streaming_shutdown_termination(self):
+        """Verify that triggering shutdown aborts streaming response loops cleanly."""
+        from dashboard.dependencies import get_shutdown_event, is_shutting_down, set_shutting_down
+
+        set_shutting_down(False)
+        evt = get_shutdown_event()
+        evt.clear()
+        self.assertFalse(is_shutting_down())
+        self.assertFalse(evt.is_set())
+
+        set_shutting_down(True)
+        self.assertTrue(is_shutting_down())
+        self.assertTrue(evt.is_set())
+
+        # Cleanup state for following tests
+        set_shutting_down(False)
+        evt.clear()
+
 
 if __name__ == "__main__":
     unittest.main()

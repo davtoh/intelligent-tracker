@@ -1875,3 +1875,61 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Sphinx Documentation Clean Build**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: **build succeeded with 0 warnings**.
 
+
+---
+
+## 2026-11-02: App Debugger - Resolution of Uvicorn Graceful Shutdown Deadlock & Windows DirectShow COM ActiveMovie Zombie Process
+
+### 1. Symptoms & Incident Triage
+- User ran Uvicorn server: `.\.venv\Scripts\python.exe -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000` (without `--reload`).
+- When sending `CTRL + C` (SIGINT), the console printed:
+  ```
+  INFO:     Shutting down
+  INFO:     Waiting for connections to close. (CTRL+C to force quit)
+  ```
+- User closed the browser tab at `http://localhost:8000/#live`, but the shutdown remained hung.
+- Pressing `CTRL + C` a second time failed to exit or respond.
+- Status inspection revealed orphaned worker processes:
+  `- PID 55908 | [TRACKER/DASHBOARD] | 164.6 MB | python.exe` (with window title: `ActiveMovie Window`, consuming 2h26m CPU).
+
+### 2. Root Cause Analysis
+1. **Uvicorn Infinite StreamingResponse Deadlock**:
+   - `dashboard/routers/streaming.py` served an infinite generator `frame_generator()` inside `StreamingResponse`.
+   - When Uvicorn received SIGINT, `H11Protocol.shutdown()` marked `keep_alive = False` but left transport open awaiting response completion.
+   - Uvicorn entered `while self.server_state.connections and not self.force_exit: await asyncio.sleep(0.1)` with default `timeout_graceful_shutdown = None` (infinite).
+   - Because `frame_generator()` only checked `request.is_disconnected()` (a client-driven check), the connection was never closed from the server side.
+2. **DirectShow COM Filter Graph Teardown Deadlock**:
+   - In `intelligent_tracker/video.py`, `VideoSource.stop()` relied on `_capture_worker` to release `self._cap` inside its `finally:` block.
+   - When `self._thread.join(timeout=2.0)` timed out (due to hardware read/reconnect or DirectShow C++ COM block), `VideoSource.stop()` abandoned `self._cap` without releasing it.
+   - On Windows, OpenCV's DirectShow backend (`cv2.CAP_DSHOW`) creates an internal Win32 message window (`ActiveMovie Window`).
+   - When Python's main thread initiated runtime finalization (`Py_FinalizeEx`), Windows loader lock and the active DirectShow COM STA thread deadlocked with the CRT exit routines, creating a permanent zombie process ignoring signals.
+3. **Class-Level Lock Guarding**:
+   - `CameraDeviceHandler.safe_release()` acquired `_device_lock` without a timeout, leading to thread contention during concurrent device teardown.
+
+### 3. Surgical Code Fixes
+- **`dashboard/dependencies.py`**:
+  - Implemented thread-safe and loop-safe `get_shutdown_event()`, `is_shutting_down()`, and `set_shutting_down(bool)`.
+- **`dashboard/app.py`**:
+  - In `lifespan()`, immediately called `set_shutting_down(True)` upon shutdown initiation before stopping stream managers and pools.
+- **`dashboard/routers/streaming.py`**:
+  - Bound `shutdown_evt = get_shutdown_event()` inside `frame_generator()`. Replaced blocking sleeps with `await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)`, guaranteeing instantaneous (<1ms) generator exit when shutdown starts.
+  - In `websocket_telemetry_endpoint`, added a `shutdown_task` to `asyncio.wait()`, ensuring clean disconnection and task cancellation on server stop.
+- **`intelligent_tracker/video.py`**:
+  - In `VideoSource.stop()`, injected a sentinel `None` into `self._queue` to unblock any thread awaiting `read()`.
+  - Added an explicit hardware capture release block inside `VideoSource.stop()`, guaranteeing that `CameraDeviceHandler.safe_release(self._cap)` is executed even if the worker thread join times out.
+  - In `VideoSource.read()`, safely handled sentinel values when `self._running` is `False`.
+- **`intelligent_tracker/camera_device.py`**:
+  - Guarded `safe_release()` device lock acquisition with `cls._device_lock.acquire(timeout=2.0)`, ensuring release operations cannot hang on a deadlocked mutex.
+- **Process Cleanup**:
+  - Force-terminated zombie processes PID 55908 and PID 37644 via `camera_manager.py --kill-pid 55908 --force`.
+  - Re-verified hardware readiness via `camera_manager.py --status`: all cameras (`#0 OBS`, `#1 GoPro`, `#2 USB Camera 2`) freed and returned to `AVAILABLE`.
+- **`.TODO/Commands`**:
+  - Added `--timeout-graceful-shutdown 3` to Uvicorn command recipes to enforce a strict hard-cap on connection drainage.
+
+### 4. Verification & Testing
+- **New Unit Regression Test**:
+  - Added `test_11_streaming_shutdown_termination` to `tests/test_dashboard.py` verifying state transitions and loop-safe shutdown event handling.
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 275 tests in 43.353s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
