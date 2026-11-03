@@ -2272,3 +2272,63 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Full Test Suite**:
   - `python -m unittest discover tests`: 304/304 tests passed in 40.2s — **OK (100% green)**.
 
+
+
+## 2026-11-03: Refactor Monolith - Phase 1: Persistence Layer & Repository Pattern (intelligent_tracker/database.py)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/database.py` was a 2,125-line God class with 68 methods (`TrackerDB`), mixing SQLite DDL, entity enrollment, feature embedding serialization, gallery matrices, sightings audit trails, Scenario Studio zones/tripwires/transitions, homography calibrations, active learning queues, RSAC permissions, pet whitelists, local offline credential caches, and telemetry.
+  - Decomposed into cohesive domain mixins under `intelligent_tracker/repositories/` adhering strictly to quantitative modularity budgets (all files $\le 350$ lines, classes $\le 12$ methods).
+- **Zero-Breaking-Import Facade**:
+  - Retained `TrackerDB` as a 128-line composition facade inheriting from all domain mixins. 100% of existing imports and public APIs (`serialize_embedding`, `deserialize_embedding`, `add_entity`, `get_sightings`, etc.) remain identical and backwards-compatible.
+
+### 2. Files Modified & Created
+- `intelligent_tracker/database.py`:
+  - Reduced from 2,125 lines down to 128 lines; acts as a composition facade.
+- `intelligent_tracker/repositories/schema_manager.py` (Created, 322 lines):
+  - `SchemaMixin`: SQLite DDL table setup, indexes, migrations, and seed data.
+- `intelligent_tracker/repositories/entity_repo.py` (Created, 239 lines):
+  - `EntityMixin`: Entity registration, updates, retrieval, deletion, and high-level enrollment helper.
+- `intelligent_tracker/repositories/signature_repo.py` (Created, 216 lines):
+  - `SignatureMixin`: Re-ID feature embedding serialization, signatures, and gallery matrices.
+- `intelligent_tracker/repositories/descriptor_repo.py` (Created, 164 lines):
+  - `DescriptorMixin`: Historical descriptor versions, continuous learning drift audits, and memory rollback.
+- `intelligent_tracker/repositories/analytics_repo.py` (Created, 230 lines):
+  - `AnalyticsMixin`: Sightings audit trail, entity analytics, dwell time calculations, and CSV/JSON exports.
+- `intelligent_tracker/repositories/spatial_repo.py` (Created, 277 lines):
+  - `SpatialMixin`: Scenario Studio zones, tripwires, cross-camera transitions, and homography calibrations.
+- `intelligent_tracker/repositories/learning_repo.py` (Created, 159 lines):
+  - `LearningMixin`: Active learning review inbox and role-based custom categories.
+- `intelligent_tracker/repositories/rsac_repo.py` (Created, 146 lines):
+  - `RsacMixin`: Role-based spatial access control rules and pet whitelists.
+- `intelligent_tracker/repositories/whitelist_repo.py` (Created, 241 lines):
+  - `WhitelistMixin`: Offline-first local whitelist, cloud sync state, and offline access queue.
+- `intelligent_tracker/repositories/telemetry_repo.py` (Created, 115 lines):
+  - `TelemetryMixin`: Hardware resource telemetry and stream lifecycle events.
+- `intelligent_tracker/repositories/__init__.py` (Created, 31 lines):
+  - Package re-exports for all mixins.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/database.py intelligent_tracker/repositories/ --show-methods`:
+  - Result: 12/12 files OK, 0 Critical, 0 Warnings.
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions).
+- **Targeted Persistence & Integration Tests**:
+  - `test_database.py` (11/11 OK in 1.2s)
+  - `test_backup.py` (6/6 OK in 0.8s)
+  - `test_scenarios.py` (5/5 OK in 0.4s)
+  - `test_active_learning.py` (5/5 OK in 0.4s)
+  - `test_rsac.py` (6/6 OK in 0.4s)
+  - `test_enrollment.py` (3/3 OK in 0.8s)
+  - `test_m9_api.py` (4/4 OK in 0.3s)
+  - `test_topology.py` (8/8 OK in 0.003s)
+  - `test_journey.py` (3/3 OK in 0.3s)
+  - `test_refactor_contract.py` (3/3 OK in 0.02s)
+  - `test_modernization.py` (2/2 OK in 0.8s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 41.846s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
