@@ -2012,3 +2012,53 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 279 tests in 46.641s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+## 2026-11-02: Full Repository Modularity Audit & Core Modernization Campaign Launch
+
+### 1. Objectives & Scope
+- Execute a comprehensive AST structural code health audit across the entire repository (148 files, ~37,000+ LOC) via `code_health_audit.py`.
+- Identify all legacy God classes, oversized functions, and files breaching quantitative modularity budgets (150–300 lines healthy target, 350 lines soft warning, 500 lines hard ceiling, $\le$ 10–12 methods per class).
+- Anchor clean Git baseline (`1fa015e`) and verify 100% green test suite status (279/279 tests passing).
+- Formulate a 7-phase zero-regression refactoring roadmap with 1-phase turn gates, re-export facades, and mathematical comment preservation.
+- Initialize machine-readable campaign state in `.refactor/state.json` and persist architectural roadmap in `.refactor/plan.md`.
+
+### 2. Audit Findings & Target Monolith Registry
+- **Healthy Files**: 121 files within standard budget ($\le$ 350 lines).
+- **Soft Warnings**: 10 files (351–500 lines or 10–12 methods).
+- **Critical Monoliths (17 files exceeding 500-line hard ceiling or class method limits)**:
+  1. `intelligent_tracker/database.py` (2,125 lines, `TrackerDB` has 68 methods)
+  2. `intelligent_tracker/geometry.py` (1,816 lines, `BasePoly` has 30 methods, `cnt_intersection` is 316 lines)
+  3. `intelligent_tracker/detectors.py` (1,653 lines, `Object` has 35 methods, `Detector` has 17 methods)
+  4. `intelligent_tracker/core.py` (1,537 lines, `Group` has 34 methods, `Space` has 17 methods)
+  5. `intelligent_tracker/events.py` (1,377 lines, `EventBus` has 11 methods, `TelegramDispatcher` has 228 lines)
+  6. `intelligent_tracker/tracker.py` (781 lines, `CentroidTracker.update` is 158 lines)
+  7. `tests/test_core.py` (760 lines, `test_compare` is 207 lines)
+  8. `dashboard/stream_manager.py` (711 lines, `StreamManager` has 29 methods)
+  9. `main.py` (710 lines, `main()` is 511 lines)
+  10. `tests/test_events.py` (720 lines, full integration and pipeline tests)
+  11. `intelligent_tracker/analytics.py` (641 lines, `AnalyticsEngine` has 404 lines)
+  12. `intelligent_tracker/video.py` (635 lines, `VideoSource` has 18 methods)
+  13. `intelligent_tracker/matcher.py` (624 lines, `GalleryMatcher` has 543 lines)
+  14. `intelligent_tracker/discovery.py` (560 lines, camera probe functions)
+  15. `intelligent_tracker/reid.py` (555 lines, `OnnxReIDExtractor` session and pooling)
+  16. `intelligent_tracker/high_objects.py` (518 lines, `Scene` has 25 methods)
+  17. `intelligent_tracker/periferials.py` (510 lines, `VideoStream` & `SyncCameras`)
+
+### 3. Campaign Roadmap (7 Phases)
+- **Phase 1 (Active)**: Persistence & Repository Pattern (`intelligent_tracker/database.py` -> `intelligent_tracker/repositories/`).
+- **Phase 2**: Computational Geometry & Polygon Math (`intelligent_tracker/geometry.py` -> `intelligent_tracker/geometry/`).
+- **Phase 3**: Object Detection Backends (`intelligent_tracker/detectors.py` -> `intelligent_tracker/detectors/`).
+- **Phase 4**: Core Scene Graph & Event Bus Infrastructure (`core.py` & `events.py` -> `core/` & `events/`).
+- **Phase 5**: Tracking Engines, ReID Matcher, Video & Discovery (`tracker.py`, `matcher.py`, `video.py`, `discovery.py`).
+- **Phase 6**: Application Entrypoint & Streaming Orchestration (`main.py` & `stream_manager.py` -> `cli/` & `services/`).
+- **Phase 7**: Test Suite De-crufting & Warning Modules (`tests/`, `scripts/cdp_inspect.py`, JS controllers).
+
+### 4. Verification & Testing
+- **Automated Test Baseline**:
+  - `python -m unittest discover tests`: Ran 279 tests in 53.1s — **OK (100% green, 0 failures, 0 errors)**.
+- **Structural Auditor Validation**:
+  - `python "<skill_dir>/scripts/code_health_audit.py" --path . --by-dir`
+- **Campaign State**:
+  - Initialized `.refactor/state.json` (Phase 1 active, 7 phases total).
+  - Saved `.refactor/plan.md`.
