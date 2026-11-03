@@ -478,14 +478,17 @@ class StreamManager:
 
                         CameraHealthManager().set_error(self.camera_id, err_msg, error_code=err_code)
                         with self._lock:
-                            self._latest_jpeg = CameraHealthManager().create_error_placeholder_jpeg(
-                                self.camera_id, name=self.name, width=self.width, height=self.height
-                            )
+                            if self._latest_jpeg is None or (self._latest_telemetry and self._latest_telemetry.get("status") != "error"):
+                                self._latest_jpeg = CameraHealthManager().create_error_placeholder_jpeg(
+                                    self.camera_id, name=self.name, width=self.width, height=self.height
+                                )
                             if self._latest_telemetry:
                                 self._latest_telemetry["status"] = "error"
                                 self._latest_telemetry["fps"] = 0.0
                                 self._latest_telemetry["error_code"] = err_code
                                 self._latest_telemetry["error_msg"] = err_msg
+                        time.sleep(0.5)
+                        continue
                     time.sleep(0.04)
                     continue
 

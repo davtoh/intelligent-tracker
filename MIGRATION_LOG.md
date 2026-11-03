@@ -2099,3 +2099,42 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
 
+
+
+## 2026-11-02: App Debugger - Graceful Shutdown Hang Resolution & Log Flood Deduplication
+
+### 1. Objectives & Scope
+- Eliminate Uvicorn server hang on `CTRL + C` (`Waiting for connections to close. (CTRL+C to force quit)`) and subsequent `KeyboardInterrupt` / `CancelledError` ASGI application crash.
+- Resolve mutual shutdown deadlock between Starlette `StreamingResponse` video frame generator and Uvicorn connection draining lifecycle.
+- Eliminate high-frequency `FILE_NOT_FOUND` warning flood (25–50 warnings/sec) in `CameraStream._worker_loop` and `CameraHealthManager.set_error()`.
+- Implement central `DeduplicatingLogger` service providing rate-limited, state-aware log suppression and recovery resets.
+- Add loop backoff and placeholder synthesis guards in `StreamManager` worker loop.
+
+### 2. Files Modified & Created
+- `dashboard/services/logger_manager.py`:
+  - **Created** (95 lines): Thread-safe singleton `DeduplicatingLogger` with `warning_once`, `error_once`, `info_once`, `log_once`, and `reset` capabilities.
+- `dashboard/services/shutdown_handler.py`:
+  - **Created** (68 lines): Signal interception service (`install_shutdown_handlers`) wrapping `SIGINT`, `SIGTERM`, and `SIGBREAK` to signal active streams immediately upon the first interrupt signal.
+  - Added `GracefulCancellationMiddleware` to absorb benign ASGI `CancelledError` exceptions during server termination or client disconnections.
+- `dashboard/services/camera_diagnostics.py`:
+  - Routed `CameraHealthManager.set_error()` through `DeduplicatingLogger.warning_once` to log only on error state transitions or code/message changes.
+  - Reset deduplication state in `set_online()` so subsequent failures are faithfully reported.
+- `dashboard/stream_manager.py`:
+  - Guarded `create_error_placeholder_jpeg()` so error placeholder images are not redundantly regenerated 25 times per second.
+  - Backed off worker sleep from `0.04s` (25 Hz) to `0.5s` (2 Hz) during persistent camera outage states to save CPU.
+- `dashboard/app.py`:
+  - Mounted `GracefulCancellationMiddleware` and registered `install_shutdown_handlers()` in `lifespan`.
+- `tests/test_logger_manager.py`:
+  - **Created** (78 lines): Unit tests asserting log suppression across 100 consecutive calls, message change emission, recovery resets, and `CameraHealthManager` integration.
+- `tests/test_shutdown_handler.py`:
+  - **Created** (58 lines): Unit tests verifying cancellation absorption and signal handler installation.
+
+### 3. Verification & Testing
+- **Target Unit Tests**:
+  - `python -m unittest tests/test_logger_manager.py tests/test_shutdown_handler.py tests/test_camera_diagnostics.py`: 11/11 tests passed in 1.7s — **OK (0 failures, 0 errors)**.
+- **Modernization Invariant Verification**:
+  - `python -m unittest tests/test_modernization.py`: 2/2 tests passed in 0.7s — **OK (0 failures, 0 errors)**.
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 290 tests in 46.004s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.

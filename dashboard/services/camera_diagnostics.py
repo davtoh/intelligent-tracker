@@ -18,6 +18,8 @@ from typing import Dict, List, Optional, Any, Union
 import cv2
 import numpy as np
 
+from dashboard.services.logger_manager import DeduplicatingLogger
+
 logger = logging.getLogger("intelligent_tracker.dashboard.services.camera_diagnostics")
 
 
@@ -65,6 +67,7 @@ class CameraHealthManager:
         """Mark camera channel healthy and reset failure counters."""
         with self._lock:
             report = self._reports.setdefault(camera_id, CameraHealthReport(camera_id=camera_id))
+            was_error = (report.status == "error")
             report.status = "online"
             report.last_error = None
             report.error_code = "OK"
@@ -75,6 +78,8 @@ class CameraHealthManager:
             report.last_updated = time.time()
             if diagnostics:
                 report.diagnostics.update(diagnostics)
+            if was_error:
+                DeduplicatingLogger().reset(f"camera_error:{camera_id}")
 
     def set_error(
         self,
@@ -101,7 +106,14 @@ class CameraHealthManager:
                 report.attempted_paths = list(attempted_paths)
             if diagnostics:
                 report.diagnostics.update(diagnostics)
-            logger.warning("Camera [%s] reported error (%s): %s", camera_id, error_code, error_msg)
+            DeduplicatingLogger().warning_once(
+                f"camera_error:{camera_id}",
+                "Camera [%s] reported error (%s): %s",
+                camera_id,
+                error_code,
+                error_msg,
+                target_logger=logger,
+            )
 
     def get_health(self, camera_id: str) -> CameraHealthReport:
         """Retrieve health snapshot for a camera channel."""

@@ -86,6 +86,7 @@ from dashboard.schemas import (
     TripwireCreateRequest,
     ZoneCreateRequest,
 )
+from dashboard.services.shutdown_handler import GracefulCancellationMiddleware, install_shutdown_handlers
 from dashboard.services.video_transcoder import VideoTranscodeService
 from dashboard.services.windows_resilience import apply_windows_iocp_patch
 from dashboard.stream_manager import StreamManager
@@ -111,6 +112,7 @@ _probe_video_file = VideoTranscodeService.probe_video
 async def lifespan(app: FastAPI):
     """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
     global stream_manager, camera_pool, scenario_manager, lifecycle_manager
+    install_shutdown_handlers()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     camera_pool = CameraPool()
     set_camera_pool(camera_pool)
@@ -156,6 +158,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    application.add_middleware(GracefulCancellationMiddleware)
 
     # Mount static assets and crops
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
