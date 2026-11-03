@@ -7,8 +7,6 @@ Defines validated data transfer schemas for REST endpoints across cameras,
 zones, tripwires, homography, RSAC access control, and active learning candidate reviews.
 """
 
-from __future__ import annotations
-
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 

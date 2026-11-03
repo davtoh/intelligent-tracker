@@ -7,8 +7,6 @@ Provides endpoints for spatial scenario configuration, polygonal zones,
 directional tripwires, 4-point homography calibration, and Bird's-Eye-View (BEV) minimap rendering.
 """
 
-from __future__ import annotations
-
 import io
 import logging
 from typing import Optional

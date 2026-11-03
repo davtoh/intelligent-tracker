@@ -9,8 +9,6 @@ Provides:
 - Safe resolution of 'real' / 'auto' physical sources that strictly rejects virtual loopback devices (OBS).
 """
 
-from __future__ import annotations
-
 import os
 import sys
 import logging

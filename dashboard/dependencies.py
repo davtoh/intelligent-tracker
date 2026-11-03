@@ -8,8 +8,6 @@ StreamManager, ScenarioManager, and StreamLifecycleManager.
 Supports runtime synchronization and monkeypatching compatibility for test fixtures.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import os

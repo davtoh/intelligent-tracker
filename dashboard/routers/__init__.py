@@ -14,8 +14,6 @@ Exports the 8 domain APIRouters:
 - topology: Spatial transitions and multi-camera trajectory journey search
 """
 
-from __future__ import annotations
-
 from dashboard.routers.analytics import router as analytics_router
 from dashboard.routers.cameras import router as cameras_router
 from dashboard.routers.camera_diagnostics import router as camera_diagnostics_router

@@ -4,7 +4,7 @@ This file documents persistent instructions, modernization principles, and archi
 
 ## 1. Python Modernization & Decrufting Standards
 All codebase additions and refactors MUST strictly follow modern Python 3.10–3.12+ idioms:
-- **No Python 2 Compatibility Imports**: Never use `from __future__ import division, print_function, absolute_import`. These are no-ops in Python 3.
+- **Zero `__future__` Imports**: Never use `from __future__ import ...` (including `annotations`, `division`, `print_function`, `absolute_import`). The project strictly targets Python 3.10–3.12+, where type unions (`|`), built-in generics (`list[T]`, `dict[K, V]`), and mathematical operations are natively supported without postponed stringification overhead or legacy shims. Automated enforcement is maintained via `tests/test_modernization.py`.
 - **No Obsolete Shims**: Never import `builtins.object`, `past.builtins.basestring`, `past.utils.old_div`, or `six` (`reraise`, `with_metaclass`, `moves`).
 - **Clean Class Declarations**: Never write `class Foo(object):`. Use standard `class Foo:`. For metaclasses, use `class Foo(metaclass=Meta):`.
 - **Modern Exception Chaining**: Use native `raise NewException(...) from err` rather than custom reraise helpers.

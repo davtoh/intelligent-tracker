@@ -8,8 +8,6 @@ multi-backend fallback (DirectShow -> Media Foundation -> V4L2 -> AVFoundation),
 and safe release with driver cooldowns to prevent COM unbind collisions on Windows.
 """
 
-from __future__ import annotations
-
 import os
 import sys
 import time

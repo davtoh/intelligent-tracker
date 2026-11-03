@@ -7,8 +7,6 @@ Provides real-time MJPEG live streaming and bi-directional WebSocket telemetry
 channels with low-latency disconnect detection and viewer session management.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 import time

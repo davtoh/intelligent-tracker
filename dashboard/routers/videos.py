@@ -7,8 +7,6 @@ Provides endpoints for video file listing, chunked uploads, background H.264
 transcoding, dynamic camera registration, and HTML5 video streaming/seeking.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import subprocess

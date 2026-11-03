@@ -1960,3 +1960,55 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 277 tests in 49.248s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+## 2026-11-02: Complete Decrufting & Total Elimination of `__future__` Imports
+
+### 1. Objectives & Scope
+- Modernize all Python modules to native Python 3.10–3.12+ syntax by removing all remaining `from __future__ import annotations` (PEP 563) statements.
+- Eliminate runtime reflection overhead in FastAPI routers (`dashboard/routers/`) and Pydantic schemas (`dashboard/schemas.py`).
+- Align all module headers with canonical PEP 8 3-tier import grouping.
+- Enforce permanent automated zero-regression prevention via dedicated AST test suite (`tests/test_modernization.py`).
+- Update persistent architecture guidelines in `AGENTS.md` and `.agents/rules/security_and_standards.md`.
+
+### 2. Files Touched (26 Files)
+- **Dashboard Routers, Services & Schemas (18 files)**:
+  - `dashboard/app.py`
+  - `dashboard/dependencies.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/routers/analytics.py`
+  - `dashboard/routers/camera_diagnostics.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/routers/rsac.py`
+  - `dashboard/routers/scenarios.py`
+  - `dashboard/routers/streaming.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/topology.py`
+  - `dashboard/routers/videos.py`
+  - `dashboard/schemas.py`
+  - `dashboard/services/camera_diagnostics.py`
+  - `dashboard/services/entity_tagger.py`
+  - `dashboard/services/frame_overlay.py`
+  - `dashboard/services/stream_subscribers.py`
+  - `dashboard/services/video_transcoder.py`
+- **Intelligent Tracker Core & Tools (3 files)**:
+  - `intelligent_tracker/camera_device.py`
+  - `intelligent_tracker/camera_resolver.py`
+  - `intelligent_tracker/camera_tool.py`
+- **Unit Tests (3 files)**:
+  - `tests/test_camera_diagnostics.py`
+  - `tests/test_camera_resolver.py`
+  - `tests/test_modernization.py` (New AST-based regression test asserting 0 `__future__` imports and 0 legacy shims)
+- **Architecture Guidelines & Rules (2 files)**:
+  - `AGENTS.md`
+  - `.agents/rules/security_and_standards.md`
+
+### 3. Verification & Testing
+- **Modernization AST Invariant Tests**:
+  - `python -m unittest tests/test_modernization.py`: 2/2 tests passed in 0.734s — **OK (0 failures, 0 errors)**.
+- **Subsystem Unit Tests**:
+  - `python -m unittest tests/test_camera_tool.py tests/test_camera_resolver.py tests/test_camera_diagnostics.py tests/test_dashboard.py tests/test_scenario_api.py tests/test_vms_api.py`: 44/44 tests passed in 24.8s — **OK (0 failures, 0 errors)**.
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 279 tests in 46.641s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.

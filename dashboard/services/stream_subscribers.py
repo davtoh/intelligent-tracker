@@ -6,8 +6,6 @@ Manages viewer leases, TTL-based eviction, WebSocket push distribution,
 and deep video source hibernation callbacks.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 import time

@@ -8,8 +8,6 @@ Learning Review Queue, RSAC custom categories and zone policies, pet alarm white
 and visual descriptor version history and rollbacks.
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 import os

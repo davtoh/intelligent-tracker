@@ -4,8 +4,6 @@
 Unit tests for Camera Health Manager and Diagnostics API Router.
 """
 
-from __future__ import annotations
-
 import unittest
 from unittest.mock import patch, MagicMock
 

@@ -7,8 +7,6 @@ Provides endpoints for spatial transition links between camera zones,
 active predictive Re-ID priors, and multi-camera trajectory journey reconstruction/video export.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import time

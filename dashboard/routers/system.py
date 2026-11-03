@@ -7,8 +7,6 @@ Provides endpoints for system status, resource metrics, stream lifecycle
 management (process eviction, hibernation), and database backup export/import.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import shutil

@@ -7,8 +7,6 @@ Provides endpoints for spatial density heatmaps, enrolled identity management,
 Re-ID sightings search, EventBus notifications, click-to-tag enrollments, and crop thumbnails.
 """
 
-from __future__ import annotations
-
 from dataclasses import asdict
 import io
 import logging

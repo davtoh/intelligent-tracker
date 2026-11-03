@@ -9,8 +9,6 @@ Provides:
 - Hardware probe and targeted lock release orchestration.
 """
 
-from __future__ import annotations
-
 import time
 import logging
 import threading

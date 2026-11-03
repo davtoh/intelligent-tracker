@@ -8,8 +8,6 @@ stream toggle, overlay configuration, freeze frame acquisition,
 and central Enterprise Hub telemetry polling.
 """
 
-from __future__ import annotations
-
 import base64
 import logging
 from typing import Optional

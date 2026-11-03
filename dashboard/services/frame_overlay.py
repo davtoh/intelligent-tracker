@@ -6,8 +6,6 @@ Renders computer vision HUD annotations, bounding boxes, dwell timers,
 velocity vectors, zone polygons, and BEV minimap overlays onto video frames.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple

@@ -6,8 +6,6 @@ Extracts bounding box visual crops from raw video frames, generates Re-ID
 embeddings, persists thumbnails, and registers entities into SQLite TrackerDB.
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import time

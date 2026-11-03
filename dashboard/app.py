@@ -14,8 +14,6 @@ Modular FastAPI Application Factory providing:
 - Single-page web UI served at GET /
 """
 
-from __future__ import annotations
-
 from contextlib import asynccontextmanager
 import logging
 import os

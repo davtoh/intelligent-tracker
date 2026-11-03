@@ -18,5 +18,5 @@ Enforce industry-standard best practices, IoT/CCTV edge security, video privacy 
    - Replace Unix-only modules (such as `import resource`) with cross-platform alternatives (`psutil`).
 4. **Idiomatic Modern Python:**
    - Target modern Python (3.10 - 3.12+).
-   - Progressively phase out obsolete Python 2/3 shims (`from __future__ import ...`, `from builtins import object`, `six`, `future`) in favor of native Python 3 constructs and type annotations.
+   - Disallow all `__future__` imports (including `annotations`, `division`, `print_function`, `absolute_import`) and obsolete compatibility shims (`from builtins import object`, `six`, `future`) in favor of native Python 3.10–3.12+ constructs, built-in generics, and type annotations.
    - Use standard `logging` rather than scattered `print()` statements.

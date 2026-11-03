@@ -4,8 +4,6 @@
 Unit tests for Intelligent Tracker Environment-Agnostic Camera & Path Resolver.
 """
 
-from __future__ import annotations
-
 import os
 import unittest
 from pathlib import Path

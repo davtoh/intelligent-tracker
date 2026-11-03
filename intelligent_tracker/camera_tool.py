@@ -12,8 +12,6 @@ Provides:
 - Identification and cleanup of orphaned background worker processes holding video handles.
 """
 
-from __future__ import annotations
-
 import os
 import sys
 import time

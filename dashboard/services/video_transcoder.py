@@ -6,8 +6,6 @@ Probes video codec metadata via ffprobe and transcodes non-browser formats
 (HEVC, AVI, MKV) to web-optimized H.264 MP4 streams.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

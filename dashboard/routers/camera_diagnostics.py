@@ -9,8 +9,6 @@ Provides:
 - Instant camera source probing and multi-channel system health summaries.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import Dict, Any
 
