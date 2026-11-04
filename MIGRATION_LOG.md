@@ -2493,3 +2493,53 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 304 tests in 44.184s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+## 2026-11-03: Refactor Monolith - Phase 5 (Sub-Phase 5.1): Tracking Engines & Threaded Video Ingestion (intelligent_tracker/tracker/ & intelligent_tracker/video/)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/tracker.py` was a 781-line God module containing object tracking representations (`Track`), Euclidean/IoU centroid association (`CentroidTracker` with a 158-line `update` method), 2D kinematic Kalman filters (`KalmanBoxTracker`), SORT tracking (`SortTracker` with a 93-line `update` method), occlusion reasoning (`check_track_occlusions`), and tracker factory registration (`TrackerFactory`).
+  - `intelligent_tracker/video.py` was a 653-line God module combining threaded RTSP/file ingestion, auto-reconnect exponential backoff loops, hardware probe heuristics, deep capture hibernation, and high-fidelity synthetic frame generation (`SyntheticFrameGenerator`).
+  - Decomposed both monoliths into clean, SRP-compliant domain packages (`intelligent_tracker/tracker/` and `intelligent_tracker/video/`) with a forwarding alias `intelligent_tracker/tracking.py`.
+  - All files strictly adhere to modularity budgets ($\le 307$ lines across all 15 submodules; classes $\le 10$ methods; functions $\le 38$ lines; 0 critical breaches).
+- **Zero-Breaking-Import Facades**:
+  - `intelligent_tracker/tracker/__init__.py` (30 lines) re-exports 100% of tracking primitives, filters, association algorithms, and factories.
+  - `intelligent_tracker/tracking.py` (27 lines) provides an ergonomic forwarding alias for callers importing `intelligent_tracker.tracking`.
+  - `intelligent_tracker/video/__init__.py` (23 lines) re-exports 100% of video ingestion sources, synthetic generators, and physical camera resolvers.
+  - Preserved all OpenCV coordinate mathematics, IoU formulas, Kalman state transition proofs, and thread-safety invariants verbatim.
+
+### 2. Files Modified & Created
+- `intelligent_tracker/tracker/__init__.py` (Created, 30 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/tracker/utils.py` (Created, 81 lines): `compute_iou`, `compute_iou_matrix`, `greedy_assignment`, Hungarian SciPy import/fallback.
+- `intelligent_tracker/tracker/occlusion.py` (Created, 93 lines): `check_track_occlusions`, `_find_cluttered_pairs`, `_evaluate_track_separation` for Milestone 9 clutter reasoning.
+- `intelligent_tracker/tracker/track.py` (Created, 158 lines): `Track` object tracking representation, velocity smoothing, dead-reckoning extrapolation, and session telemetry.
+- `intelligent_tracker/tracker/centroid.py` (Created, 263 lines): `CentroidTracker` two-stage IoU and Euclidean association engine with decomposed helper methods ($\le 37$ lines each).
+- `intelligent_tracker/tracker/sort.py` (Created, 259 lines): `KalmanBoxTracker` 7-state kinematic filter and `SortTracker` online association engine.
+- `intelligent_tracker/tracker/factory.py` (Created, 38 lines): `TrackerFactory` dynamic registration registry.
+- `intelligent_tracker/tracking.py` (Created, 27 lines): Ergonomic package forwarding facade.
+- `intelligent_tracker/video/__init__.py` (Created, 23 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/video/devices.py` (Created, 72 lines): `is_physical_camera`, `find_physical_cameras`, `find_first_real_camera`, `resolve_camera_source`.
+- `intelligent_tracker/video/synthetic.py` (Created, 81 lines): `SyntheticFrameGenerator` high-fidelity automated testing and CI simulation generator.
+- `intelligent_tracker/video/hibernation.py` (Created, 37 lines): `StreamHibernationMixin` pause/resume capture thread control.
+- `intelligent_tracker/video/lifecycle.py` (Created, 128 lines): `CaptureLifecycleMixin` thread startup, wait_ready, signal_stop, safe release, and context management.
+- `intelligent_tracker/video/capture_worker.py` (Created, 307 lines): `CaptureWorkerMixin` capture loop, source classification, auto-reconnect backoff, and frame buffer queueing.
+- `intelligent_tracker/video/source.py` (Created, 122 lines): `VideoSource` thread-safe non-blocking reader and telemetry metrics provider.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/tracker/ intelligent_tracker/tracking.py intelligent_tracker/video/ --show-methods`:
+  - Result: 15/15 files OK, 0 Critical breaches across all files, functions, and classes.
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions).
+- **Targeted Test Suites**:
+  - `tests/test_tracker.py` (9/9 OK in 0.002s)
+  - `tests/test_occlusion_and_ema.py` (4/4 OK in 0.47s)
+  - `tests/test_video.py` (10/10 OK in 0.44s)
+  - `tests/test_camera_device.py` (41/41 OK in 19.75s)
+  - `tests/test_hibernation.py` (6/6 OK in 1.87s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 48.280s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
