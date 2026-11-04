@@ -427,9 +427,9 @@ class StreamManager:
     def stop(self):
         """Stop background worker cleanly."""
         self.signal_stop()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.6)
         with self._lock:
-            if self._thread and self._thread.is_alive():
-                self._thread.join(timeout=0.6)
             if self.video_source:
                 self.video_source.release()
             if self.event_pipeline:

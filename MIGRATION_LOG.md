@@ -2593,3 +2593,52 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
 
+
+## 2026-11-04: Refactor Monolith - Phase 5 (Sub-Phase 5.3): Camera Auto-Discovery & Source Diagnostics (intelligent_tracker/discovery/)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/discovery.py` was a 560-line God module combining multi-protocol camera auto-discovery: physical USB hardware indexing, ONVIF WS-Discovery UDP multicast probes, TCP port reachability checking, subnet IP candidate generation, concurrent RTSP LAN port scanning, vendor preset RTSP URL builders with credential encoding (Hikvision, Tapo, EZVIZ, Dahua, Generic), and live connection diagnostics with base64 JPEG snapshot extraction.
+  - Several functions exceeded quantitative modularity limits: `test_camera_connection` (106 lines), `probe_onvif_devices` (79 lines), `build_preset_rtsp_url` (65 lines), and `discover_all_cameras` (50 lines).
+  - Decomposed the monolith into a clean, SRP-compliant domain package (`intelligent_tracker/discovery/`) across 9 cohesive submodules with 0 critical breaches. All files are $\le 142$ lines (healthy budget $\le 350$ lines), and all functions are $\le 40$ lines.
+- **Zero-Breaking-Import Facade**:
+  - `intelligent_tracker/discovery/__init__.py` (47 lines) re-exports 100% of public dataclasses, probe functions, multicast constants, and vendor presets with complete backwards compatibility and explicit `__all__` registry.
+  - Maintained zero broken imports across all callers (`tests/test_discovery.py`, `tests/test_vms_api.py`, `dashboard/routers/cameras.py`, `dashboard/routers/camera_diagnostics.py`).
+- **Shutdown Deadlock Remediation**:
+  - Resolved lock contention in `StreamManager.stop()` where `self._thread.join()` was invoked while holding `self._lock`, preventing the worker thread from acquiring `self._lock` during termination and causing a 0.6s join timeout. Moving `join()` outside `self._lock` reduced shutdown latency to 7ms.
+
+### 2. Files Modified & Created
+- `intelligent_tracker/discovery/__init__.py` (Created, 47 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/discovery/types.py` (Created, 28 lines): `DiscoveredCamera` dataclass representation and `to_dict()` serializer.
+- `intelligent_tracker/discovery/usb.py` (Created, 47 lines): `find_physical_cameras` local hardware probing across DirectShow, V4L2, and AVFoundation.
+- `intelligent_tracker/discovery/onvif.py` (Created, 138 lines): `WS_DISCOVERY_PROBE_XML`, `WS_DISCOVERY_MULTICAST_GROUP`, `WS_DISCOVERY_PORT`, `probe_onvif_devices`, `_create_multicast_socket`, `_parse_onvif_packet`, `_collect_onvif_responses`.
+- `intelligent_tracker/discovery/network.py` (Created, 82 lines): `check_port_open`, `get_local_subnet_ips`, `_determine_local_ip`, `_generate_subnet_candidates`.
+- `intelligent_tracker/discovery/rtsp.py` (Created, 57 lines): `discover_rtsp_devices` concurrent multi-threaded port scanner.
+- `intelligent_tracker/discovery/presets.py` (Created, 123 lines): `build_preset_rtsp_url`, `_format_auth_prefix`, `_build_netloc`, `_build_vendor_path`, `CAMERA_PRESETS`.
+- `intelligent_tracker/discovery/connection.py` (Created, 142 lines): `test_camera_connection`, `_test_synthetic_source`, `_check_network_reachability`, `_format_capture_open_error`, `_decode_snapshot`.
+- `intelligent_tracker/discovery/scanner.py` (Created, 83 lines): `discover_all_cameras`, `_resolve_empty_fallbacks`.
+- `intelligent_tracker/discovery.py` (Deleted, 560 lines): Superseded by `intelligent_tracker/discovery/` package.
+- `dashboard/stream_manager.py` (Modified): Moved worker thread join out of `self._lock` in `stop()` to eliminate join timeout deadlock.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/discovery --show-methods`:
+  - Result: 9/9 files OK (all $\le 142$ lines, healthy budget $\le 350$ lines), 0 Critical breaches, 0 God classes.
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions, 0 discrepancies).
+- **Targeted Discovery Tests**:
+  - `tests/test_discovery.py` (11/11 OK in 0.43s)
+  - `tests/test_vms_api.py` (6/6 OK in 10.8s)
+  - `tests/test_camera_pool.py` (8/8 OK in 1.47s)
+  - `tests/test_graceful_shutdown_perf.py` (7/7 OK in 0.68s)
+  - `tests/test_tracker.py` (9/9 OK in 0.01s)
+  - `tests/test_matcher.py` (7/7 OK in 0.03s)
+  - `tests/test_reid.py` (8/8 OK in 0.50s)
+  - `tests/test_video.py` (10/10 OK in 0.49s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 55.512s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
