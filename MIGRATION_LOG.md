@@ -2543,3 +2543,53 @@ Across all 4 phases of the dashboard modernization campaign:
   - `python -m unittest discover tests`: Ran 304 tests in 48.280s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
+
+## 2026-11-04: Refactor Monolith - Phase 5 (Sub-Phase 5.2): Visual Re-ID Feature Extractors & Gallery Matcher (intelligent_tracker/reid/ & intelligent_tracker/matching/)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `intelligent_tracker/reid.py` was a 555-line God module combining cosine similarity matrix utilities, abstract extractor contracts (`BaseFeatureExtractor`), spatial HSV color histogram extractors (`ColorHistogramExtractor`), deep ONNX model inference with multi-provider cascade (`OnnxReIDExtractor`), synthetic test extractors (`MockFeatureExtractor`), dual-model appearance & localized face extractors (`DualModelFeatureExtractor`), and extractor registry factories (`ReIDExtractorFactory`).
+  - `intelligent_tracker/matcher.py` was a 624-line God module containing identification event and session entity dataclasses (`EntityIdentifiedEvent`, `SessionEntity`), bounded exponential moving average adaptive memory (`_apply_bounded_ema_update` of 78 lines), and a monolithic 543-line `GalleryMatcher` class with a 236-line `match_track` method combining active learning, cross-camera topology spatial priors, database sighting logging, and in-memory dead-reckoning session tracking.
+  - Decomposed both monoliths into clean, SRP-compliant domain packages (`intelligent_tracker/reid/` and `intelligent_tracker/matching/`) with a 100% backward-compatible facade in `intelligent_tracker/matcher.py` and `intelligent_tracker/reid/__init__.py`.
+  - All extracted modules adhere to quantitative modularity budgets: files $\le 426$ lines (healthy targets $\le 350-500$ lines), `GalleryMatcher` class reduced to 10 methods (exact healthy target budget $\le 10$), and all functions and helper methods $\le 38$ lines.
+- **Zero-Breaking-Import Facades**:
+  - `intelligent_tracker/reid/__init__.py` (25 lines) re-exports 100% of visual feature extractors, cosine similarity metrics, and extractor factories with complete `__all__` registry.
+  - `intelligent_tracker/matcher.py` (21 lines) re-exports 100% of public gallery matching coordinators, session entities, and identification events from `intelligent_tracker.matching`.
+  - Preserved all OpenCV image preprocessing, ImageNet normalization vectors, ONNX session provider cascade hierarchy (CUDA -> DirectML -> OpenVINO -> CoreML -> CPU), cosine similarity proofs, and locked-anchor drift bounds verbatim.
+
+### 2. Files Modified & Created
+- `intelligent_tracker/reid/__init__.py` (Created, 25 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/reid/metrics.py` (Created, 60 lines): `cosine_similarity` and `batch_cosine_similarity` vector distance metrics.
+- `intelligent_tracker/reid/base.py` (Created, 50 lines): `BaseFeatureExtractor` abstract base interface.
+- `intelligent_tracker/reid/color.py` (Created, 88 lines): `ColorHistogramExtractor` spatial-grid HSV descriptor with sub-millisecond execution.
+- `intelligent_tracker/reid/onnx_extractor.py` (Created, 171 lines): `OnnxReIDExtractor` deep visual feature extractor running ONNX models with multi-provider execution cascade.
+- `intelligent_tracker/reid/mock.py` (Created, 42 lines): `MockFeatureExtractor` deterministic synthetic feature extractor for tests and headless CI.
+- `intelligent_tracker/reid/dual.py` (Created, 92 lines): `DualModelFeatureExtractor` combining body visual appearance with localized YuNet face intelligence.
+- `intelligent_tracker/reid/factory.py` (Created, 39 lines): `ReIDExtractorFactory` decoupled registry and factory for feature extractors.
+- `intelligent_tracker/matching/__init__.py` (Created, 18 lines): Re-export facade with complete `__all__` registry.
+- `intelligent_tracker/matching/types.py` (Created, 60 lines): `EntityIdentifiedEvent` and `SessionEntity` tracking identity dataclasses.
+- `intelligent_tracker/matching/adaptive_memory.py` (Created, 102 lines): `apply_bounded_ema_update` with anchor drift guard and SQLite signature update helpers.
+- `intelligent_tracker/matching/session_gallery.py` (Created, 151 lines): `SessionGalleryManager` automatic session identities, dropout re-linking, and exit telemetry.
+- `intelligent_tracker/matching/gallery.py` (Created, 423 lines): `GalleryMatcher` class (10 methods) coordinating database gallery, cross-camera topology priors, active learning triage, and session tracking.
+- `intelligent_tracker/matcher.py` (Modified, 21 lines): Facade re-exporting `GalleryMatcher`, `EntityIdentifiedEvent`, `SessionEntity`, `SessionGalleryManager`, `apply_bounded_ema_update`.
+- `intelligent_tracker/reid.py` (Deleted, 555 lines): Superseded by `intelligent_tracker/reid/` package.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `python <skill_dir>/scripts/code_health_audit.py --path intelligent_tracker/reid intelligent_tracker/matching intelligent_tracker/matcher.py --show-methods`:
+  - Result: 14/14 files within budget, `GalleryMatcher` class down from 543L to 10 methods (healthy target $\le 10$).
+- **Contract & Regression Parity**:
+  - `python <skill_dir>/scripts/contract_snapshot.py verify --path . --strict`:
+  - Result: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions, 0 discrepancies).
+- **Targeted Test Suites**:
+  - `tests/test_reid.py` (8/8 OK in 0.19s)
+  - `tests/test_enrollment.py` (3/3 OK in 0.78s)
+  - `tests/test_matcher.py` (7/7 OK in 0.02s)
+  - `tests/test_occlusion_and_ema.py` (4/4 OK in 0.27s)
+  - `tests/test_topology.py` (8/8 OK in 0.003s)
+- **Full Test Suite**:
+  - `python -m unittest discover tests`: Ran 304 tests in 45.419s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
+
