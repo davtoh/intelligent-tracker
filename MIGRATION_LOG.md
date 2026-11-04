@@ -2641,4 +2641,41 @@ Across all 4 phases of the dashboard modernization campaign:
 - **Sphinx Documentation**:
   - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`: Clean build with **0 warnings**.
 
+## [Sub-Phase 6.1] - 2026-11-04 - Application Entrypoint & CLI Subsystem Decomposition (`main.py` -> `intelligent_tracker/cli/`)
+
+### 1. Summary of Changes
+- **Monolith Deconstruction**:
+  - `main.py` was a 710-line monolith housing a 511-line `main()` function and a 95-line `parse_args()` function combining CLI argument parsing, configuration loading, resolution parsing, subsystem wiring (detector, tracker, analytics, reid, alerting, writer), GUI window setup, mouse interaction callbacks, interactive keyboard dispatch, and clean shutdown summary printing.
+  - Decomposed the monolith into a clean, SRP-compliant CLI package (`intelligent_tracker/cli/`) across 5 focused modules with 0 critical breaches.
+  - `main.py` was reduced from 710 lines down to a clean 32-line bootstrap and re-export facade with 100% backwards compatibility.
+- **CLI Architecture**:
+  - `intelligent_tracker/cli/arguments.py` (171 lines): Argument parser construction with focused argument groups (`_add_detector_args`, `_add_reid_args`, `_add_pipeline_args`, `_add_runtime_args`), `load_config`, and `parse_resolution`.
+  - `intelligent_tracker/cli/pipeline_builder.py` (292 lines): `PipelineContext` dataclass, configuration resolution, and modular builder functions (`_build_detector`, `_build_tracker`, `_build_analytics`, `_build_reid`, `_build_alerting`, `_build_writer`).
+  - `intelligent_tracker/cli/display.py` (167 lines): `CliUiController` managing OpenCV HUD overlay rendering, mouse inspection callbacks, interactive keyboard dispatch, entity gallery enrollment, snapshot exports, and window lifecycle.
+  - `intelligent_tracker/cli/runner.py` (234 lines): `CliAppRunner` coordinating video ingestion, inference, Re-ID alerts, MQTT telemetry publishing, FPS calculation, and clean resource teardown, plus legacy Matplotlib GUI fallback.
+  - `intelligent_tracker/cli/__init__.py` (41 lines): Domain re-export facade with complete `__all__` registry.
+- **Modernization & Invariants**:
+  - Zero `__future__` imports, zero obsolete shims, all classes $\le 10$ methods, all functions $\le 33$ lines.
+
+### 2. Files Modified & Created
+- `intelligent_tracker/cli/__init__.py` (Created, 41 lines)
+- `intelligent_tracker/cli/arguments.py` (Created, 171 lines)
+- `intelligent_tracker/cli/pipeline_builder.py` (Created, 292 lines)
+- `intelligent_tracker/cli/display.py` (Created, 167 lines)
+- `intelligent_tracker/cli/runner.py` (Created, 234 lines)
+- `main.py` (Modified, 710 -> 32 lines)
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `code_health_audit.py --path main.py intelligent_tracker/cli --show-methods`:
+  - Result: 6/6 files OK, 0 Critical breaches, all classes $\le 10$ methods, all functions $\le 33$ lines.
+- **Contract & Regression Parity**:
+  - `contract_snapshot.py verify --path . --strict`: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero regressions).
+- **Execution Smoke Tests**:
+  - `.venv\Scripts\python.exe main.py --help`: OK (Clean usage & option listings)
+  - `.venv\Scripts\python.exe main.py --source synthetic --headless --frames 5`: OK (Processed 5 frames, clean shutdown)
+- **Modernization Suite**:
+  - `python -m unittest discover tests -p "test_modernization.py"`: 2/2 tests OK.
+
+
 
