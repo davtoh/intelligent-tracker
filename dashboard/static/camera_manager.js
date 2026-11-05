@@ -17,7 +17,7 @@
   let editingCameraId = null;
   let selectedDeviceName = null;
 
-  // Modal Elements
+  // Modal Elements & Inputs
   const modalCameraManager = document.getElementById('modal-camera-manager');
   const btnOpenCamManager = document.getElementById('btn-manage-cameras');
   const btnCloseCamManager = document.getElementById('modal-cam-close');
@@ -27,8 +27,6 @@
   const camForm = document.getElementById('camera-config-form');
   const btnTestConnection = document.getElementById('btn-test-connection');
   const cameraSelectDropdown = document.getElementById('active-camera-select');
-
-  // Input Fields
   const inputCamId = document.getElementById('cam-id-input');
   const inputCamName = document.getElementById('cam-name-input');
   const inputCamIp = document.getElementById('cam-ip-input');
@@ -62,26 +60,7 @@
     await refreshCameras();
   }
 
-  function bindEvents() {
-    document.querySelectorAll('.grid-switch-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const mode = e.currentTarget.getAttribute('data-grid');
-        setGridMode(mode);
-      });
-    });
-
-    if (cameraSelectDropdown) {
-      cameraSelectDropdown.addEventListener('change', (e) => focusCamera(e.target.value));
-    }
-
-    if (btnOpenCamManager) btnOpenCamManager.addEventListener('click', openModal);
-    if (btnCloseCamManager) btnCloseCamManager.addEventListener('click', closeModal);
-    if (modalCameraManager) {
-      modalCameraManager.addEventListener('click', (e) => {
-        if (e.target === modalCameraManager) closeModal();
-      });
-    }
-
+  function bindDiscoveryControls() {
     if (btnScanDevices) {
       btnScanDevices.addEventListener('click', () => {
         window.CameraDiscovery?.scanDevices(({ id, name, source, device_name }) => {
@@ -111,7 +90,26 @@
     if (btnTestConnection) {
       btnTestConnection.addEventListener('click', () => window.CameraDiscovery?.testConnection());
     }
+  }
 
+  function bindEvents() {
+    document.querySelectorAll('.grid-switch-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => setGridMode(e.currentTarget.getAttribute('data-grid')));
+    });
+
+    if (cameraSelectDropdown) {
+      cameraSelectDropdown.addEventListener('change', (e) => focusCamera(e.target.value));
+    }
+
+    if (btnOpenCamManager) btnOpenCamManager.addEventListener('click', openModal);
+    if (btnCloseCamManager) btnCloseCamManager.addEventListener('click', closeModal);
+    if (modalCameraManager) {
+      modalCameraManager.addEventListener('click', (e) => {
+        if (e.target === modalCameraManager) closeModal();
+      });
+    }
+
+    bindDiscoveryControls();
     if (camForm) camForm.addEventListener('submit', saveCamera);
   }
 
@@ -126,10 +124,17 @@
   }
 
   function resetForm() {
+    editingCameraId = null;
+    selectedDeviceName = null;
     if (camForm) camForm.reset();
-    if (inputCamId) inputCamId.readOnly = false;
+    if (inputCamId) {
+      inputCamId.readOnly = false;
+      inputCamId.disabled = false;
+    }
     if (inputCamPort) inputCamPort.value = '554';
     if (inputCamChannel) inputCamChannel.value = '1';
+    const btnSave = document.getElementById('btn-save-camera');
+    if (btnSave) btnSave.textContent = '💾 Save Camera to VMS';
     const testImg = document.getElementById('test-preview-img');
     const testMeta = document.getElementById('test-preview-meta');
     if (testImg) {
@@ -145,7 +150,7 @@
       if (resp.ok) {
         cameraPresets = await resp.json();
         if (presetSelect) {
-          presetSelect.innerHTML = cameraPresets.map(p => 
+          presetSelect.innerHTML = cameraPresets.map(p =>
             `<option value="${p.id}">${escapeHtml(p.name)}</option>`
           ).join('');
         }
@@ -171,7 +176,7 @@
 
   function updateCameraDropdown() {
     if (!cameraSelectDropdown) return;
-    cameraSelectDropdown.innerHTML = activeCameras.map(c => 
+    cameraSelectDropdown.innerHTML = activeCameras.map(c =>
       `<option value="${c.id}" ${c.id === focusedCameraId ? 'selected' : ''}>${escapeHtml(c.name)} (${c.id})</option>`
     ).join('');
   }
@@ -227,46 +232,30 @@
 
     const btnSave = document.getElementById('btn-save-camera');
     if (btnSave) btnSave.textContent = '💾 Update Camera';
-
     showToast(`Editing camera '${cam.name}' (${id})`, 'info');
-  }
-
-  function resetForm() {
-    editingCameraId = null;
-    selectedDeviceName = null;
-    if (camForm) camForm.reset();
-    if (inputCamId) inputCamId.disabled = false;
-    const btnSave = document.getElementById('btn-save-camera');
-    if (btnSave) btnSave.textContent = '💾 Save Camera to VMS';
   }
 
   function bindTableActionButtons() {
     activeCamerasTableBody.querySelectorAll('.btn-edit-cam').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        editCamera(id);
-      });
+      btn.addEventListener('click', () => editCamera(btn.getAttribute('data-id')));
     });
 
     activeCamerasTableBody.querySelectorAll('.btn-diag-cam').forEach(btn => {
       btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        window.CameraDiagnosticsUI?.openDiagnosticModal(id);
+        window.CameraDiagnosticsUI?.openDiagnosticModal(btn.getAttribute('data-id'));
       });
     });
 
     activeCamerasTableBody.querySelectorAll('.btn-toggle-cam').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-id');
-        await fetch(`/api/cameras/${id}/toggle`, { method: 'POST' });
+        await fetch(`/api/cameras/${btn.getAttribute('data-id')}/toggle`, { method: 'POST' });
         await refreshCameras();
       });
     });
 
     activeCamerasTableBody.querySelectorAll('.btn-focus-cam').forEach(btn => {
       btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        focusCamera(id);
+        focusCamera(btn.getAttribute('data-id'));
         closeModal();
       });
     });
@@ -282,6 +271,19 @@
     });
   }
 
+  function buildCameraPayload(id, name, source) {
+    return {
+      id: id,
+      name: name,
+      source: source,
+      type: presetSelect.value || 'rtsp',
+      detector: document.getElementById('cam-detector-select')?.value || 'mock',
+      tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
+      enabled: true,
+      device_name: selectedDeviceName,
+    };
+  }
+
   async function saveCamera(e) {
     e.preventDefault();
     const id = inputCamId.value.trim();
@@ -293,32 +295,15 @@
       return;
     }
 
-    const payload = {
-      id: id,
-      name: name,
-      source: source,
-      type: presetSelect.value || 'rtsp',
-      detector: document.getElementById('cam-detector-select')?.value || 'mock',
-      tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
-      enabled: true,
-      device_name: selectedDeviceName,
-    };
-
+    const payload = buildCameraPayload(id, name, source);
     try {
-      let resp;
-      if (editingCameraId) {
-        resp = await fetch(`/api/cameras/${encodeURIComponent(editingCameraId)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        resp = await fetch('/api/cameras', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      }
+      const url = editingCameraId ? `/api/cameras/${encodeURIComponent(editingCameraId)}` : '/api/cameras';
+      const method = editingCameraId ? 'PUT' : 'POST';
+      const resp = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
       if (resp.ok) {
         showToast(editingCameraId ? `Camera '${name}' updated!` : `Camera '${name}' added!`, 'success');
@@ -344,14 +329,12 @@
     window.CameraGrid?.setGridMode(mode, activeCameras, focusedCameraId, focusCamera);
   }
 
-  window.addEventListener('beforeunload', () => {
+  const cleanupMultiGrid = () => {
     const mg = document.getElementById('multi-grid-container');
     if (mg) mg.innerHTML = '';
-  });
-  window.addEventListener('pagehide', () => {
-    const mg = document.getElementById('multi-grid-container');
-    if (mg) mg.innerHTML = '';
-  });
+  };
+  window.addEventListener('beforeunload', cleanupMultiGrid);
+  window.addEventListener('pagehide', cleanupMultiGrid);
 
   window.CameraManager = {
     init: init,

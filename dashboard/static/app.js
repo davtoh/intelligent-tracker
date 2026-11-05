@@ -26,10 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Modern Toast Notification Dispatcher (Milestone 10)
   function showToast(titleOrMsg, bodyOrType = 'info', type = 'info', actionText = null, onAction = null) {
-    let title = titleOrMsg;
-    let body = bodyOrType;
-    let toastType = type;
-
+    let title = titleOrMsg, body = bodyOrType, toastType = type;
     if (['info', 'success', 'warning', 'error', 'alert', 'review'].includes(bodyOrType) && type === 'info') {
       toastType = bodyOrType;
       body = titleOrMsg;
@@ -42,7 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const toast = document.createElement('div');
     toast.className = `toast-message ${toastType}`;
     const actionHtml = actionText ? `<div class="toast-action">${escapeHtml(actionText)}</div>` : '';
-
     toast.innerHTML = `
       <div class="toast-header">
         <span class="toast-title">${escapeHtml(title)}</span>
@@ -54,10 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     toast.querySelector('.toast-close')?.addEventListener('click', () => toast.remove());
     if (actionText && onAction) {
-      toast.querySelector('.toast-action')?.addEventListener('click', () => {
-        onAction();
-        toast.remove();
-      });
+      toast.querySelector('.toast-action')?.addEventListener('click', () => { onAction(); toast.remove(); });
     }
 
     container.appendChild(toast);
@@ -76,12 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function escapeHtml(str) {
     if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
   // Tab Navigation & Hash Routing
@@ -164,20 +152,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleHashRoute() {
     const raw = (window.location.hash || '').replace('#', '').trim().toLowerCase();
     if (!raw) return;
-
     const modalMap = {
       cameras: 'modal-camera-manager',
       enroll: 'modal-universal-enrollment',
       backup: 'modal-backup-manager',
       versions: 'modal-descriptor-versions',
     };
-
     if (modalMap[raw]) {
       const m = document.getElementById(modalMap[raw]);
       if (m) m.style.display = 'flex';
       return;
     }
-
     const tabId = 'tab-' + raw;
     if (document.getElementById(tabId)) switchTab(tabId, false);
   }

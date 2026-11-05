@@ -2725,3 +2725,59 @@ Across all 4 phases of the dashboard modernization campaign:
   - Ran 304 tests in 41.2s — **OK (100% green, 0 failures, 0 errors)**.
 - **Sphinx Documentation**:
   - Clean build with **0 warnings**.
+
+---
+
+## [Phase 7 Complete] - 2026-11-04 - Test Suite De-crufting, Parallel Tests & Warning Remediations
+
+### 1. Root Cause & Architectural Triage
+- **Overloaded Test Monoliths**:
+  - `tests/test_core.py` was a 760-line test monolith containing `SpaceTestCase`, `WeakDictionaryTestCase`, `GroupTestCase`, `CompleteGroupTestCase`, and a 216-line `GroupEfficiencyTestCase` with a 207-line micro-benchmark method `test_compare`.
+  - `tests/test_events.py` was a 720-line test monolith mixing event dataclass tests, base64 JPEG encoding/decoding, async worker pub/sub tests, HTTP echo server fixtures, Webhook delivery with HMAC signatures, Telegram bot command dispatchers, MQTT topic publishers, QuietHours schedules, AlertRuleEngine filters, and full pipeline integration.
+- **Decomposition Architecture**:
+  - Decomposed `tests/test_core.py` into focused, domain-aligned test modules:
+    1. `tests/test_core_spaces.py` (198 lines): Space hierarchy, parenting constraints, circular reference prevention, and `WeakWatcherDictionary` / `WeakRefDictionary` lifecycle.
+    2. `tests/test_core_groups.py` (212 lines): `Group` / `CompleteGroup` inclusion, hierarchy conflict resolution, thread-safe iteration under with-statement context, and space deletions.
+    3. `tests/test_core_efficiency.py` (230 lines): Micro-benchmarks, retrieval scaling, discard scaling, and memory footprint comparisons for Group and CompleteGroup.
+  - Decomposed `tests/test_events.py` into focused, domain-aligned test modules:
+    1. `tests/events_helpers.py` (62 lines): Shared local HTTP echo test server fixture (`WebhookTestServerHandler`, `WebhookTestServer`).
+    2. `tests/test_events_bus.py` (203 lines): Base and typed dataclasses, base64 frame/crop encoding, synchronous & async pub/sub worker dispatch, and subscriber error containment.
+    3. `tests/test_events_dispatchers.py` (236 lines): `WebhookDispatcher` (HTTP POST, bearer auth, backoff retry, HMAC sha256 signature), `TelegramDispatcher` (formatting, cooldown, bot commands), and `MqttPublisher` (occupancy, events, sightings, LWT).
+    4. `tests/test_events_rules.py` (172 lines): `QuietHours` overnight/daytime evaluation, `AlertRule` criteria matching, `AlertRuleEngine` snapshot generation, and full pipeline integration with `AnalyticsEngine` and capacity breach alerts.
+  - All test files now strictly comply with the quantitative budget ($\le 236$ lines, well below the 350-line target).
+- **Frontend Controller Polish**:
+  - `dashboard/static/camera_manager.js` (371L -> 347 lines): Merged duplicate `resetForm` declarations, extracted `bindDiscoveryControls` and `buildCameraPayload`, eliminating redundant handlers.
+  - `dashboard/static/app.js` (370L -> 348 lines): Compacted `showToast`, `escapeHtml`, and `handleHashRoute` mapping, eliminated redundant `window.App.switchCamera` assignment.
+  - `dashboard/static/video_scrubber.js` (353L -> 352 lines): Extracted `bindPlaybackControls` and `updateScrubberLoadedTitle`, cleaned DOM lookup block, preserved `window.VideoScrubber.onTabEnter`/`onTabLeave` export contracts.
+
+### 2. Files Modified & Created
+- `tests/test_core_spaces.py` (Created, 198 lines)
+- `tests/test_core_groups.py` (Created, 212 lines)
+- `tests/test_core_efficiency.py` (Created, 230 lines)
+- `tests/events_helpers.py` (Created, 62 lines)
+- `tests/test_events_bus.py` (Created, 203 lines)
+- `tests/test_events_dispatchers.py` (Created, 236 lines)
+- `tests/test_events_rules.py` (Created, 172 lines)
+- `tests/test_core.py` (Deleted, superseded 760L monolith)
+- `tests/test_events.py` (Deleted, superseded 720L monolith)
+- `dashboard/static/camera_manager.js` (Modified, 371 -> 347 lines)
+- `dashboard/static/app.js` (Modified, 370 -> 348 lines)
+- `dashboard/static/video_scrubber.js` (Modified, 353 -> 352 lines)
+- `.refactor/plan.md` (Updated, Phase 7 status marked completed)
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `code_health_audit.py --path dashboard/static/app.js dashboard/static/camera_manager.js dashboard/static/video_scrubber.js tests/test_core_spaces.py tests/test_core_groups.py tests/test_core_efficiency.py tests/events_helpers.py tests/test_events_bus.py tests/test_events_dispatchers.py tests/test_events_rules.py`:
+  - Result: 10/10 files OK, 0 Critical breaches, all files $\le 352$ lines, all functions $\le 40$ lines.
+- **Contract & Regression Parity**:
+  - `contract_snapshot.py verify --path . --strict`: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero discrepancies).
+- **Targeted Subsystem Tests**:
+  - `tests/test_core_*.py` (17/17 OK in 1.70s)
+  - `tests/test_events_*.py` (21/21 OK in 1.22s)
+  - `tests/test_modernization.py` (2/2 OK in 0.88s)
+  - `tests/test_refactor_contract.py` (3/3 OK in 0.01s)
+- **Full Test Suite**:
+  - Ran 306 tests in 39.5s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - Clean build with **0 warnings**.
+
