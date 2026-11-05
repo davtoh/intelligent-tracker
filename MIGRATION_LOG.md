@@ -2679,3 +2679,49 @@ Across all 4 phases of the dashboard modernization campaign:
 
 
 
+
+## [Phase 6 Complete] - 2026-11-04 - Application Entrypoint & Streaming Service Orchestration (`stream_manager.py` Decomposition)
+
+### 1. Root Cause & Architectural Triage
+- **Monolith Deconstruction**:
+  - `dashboard/stream_manager.py` was a 748-line God module containing a 696-line `StreamManager` class with 32 items/methods, a 240-line `_worker_loop`, a 153-line `_init_subsystems`, and an 86-line `__init__`. It violated the Single Responsibility Principle by mixing configuration parsing, computer vision pipeline construction, background worker threading, self-healing leased subscriber eviction, frame overlays, spatial occupancy heatmap rendering, JPEG encoding, and click-to-tag Re-ID registration.
+  - Decomposed the monolith into focused, SRP-compliant services in `dashboard/services/` with 0 critical breaches:
+    1. `dashboard/services/pipeline_factory.py` (270 lines): `StreamPipelineFactory` and `StreamPipelineBundle` dataclass handling configuration loading, video source initialization, detector/tracker instantiation, spatial analytics zones and tripwires, Re-ID matcher, and event bus wiring.
+    2. `dashboard/services/stream_media.py` (108 lines): `StreamMediaMixin` providing video frame rendering, overlay toggling (`set_overlays`/`get_overlays`), BEV minimap generation, accumulated heatmap encoding, telemetry snapshots, and interactive entity tagging delegation.
+    3. `dashboard/services/stream_subscribers.py` (172 lines): Enhanced with `StreamSubscriberMixin` delegating viewer leases, TTL eviction, and WebSocket telemetry broadcasting to `StreamSubscriberRegistry`.
+    4. `dashboard/services/stream_worker.py` (337 lines): `StreamWorker` executing the continuous frame ingestion, computer vision inference, spatial analytics, Re-ID matching, and telemetry distribution loop with pure module-level helpers (`_diagnose_source_error`, `_resize_frame_if_needed`, `_measure_fps`, `_extract_recent_alerts`, `_extract_track_telemetry`, `_build_zones_data`, `_build_tripwires_data`).
+    5. `dashboard/stream_manager.py` (224 lines): Clean facade class inheriting from `StreamSubscriberMixin` and `StreamMediaMixin`, delegating pipeline initialization to `StreamPipelineFactory` and the background loop to `StreamWorker`. Method count reduced from 32 items down to 10 items (healthy target $\le 10$).
+- **Zero-Breaking-API Invariant**:
+  - Preserved 100% of public attributes and methods on `StreamManager` (`camera_id`, `name`, `db`, `video_source`, `detector`, `tracker`, `analytics`, `reid_extractor`, `gallery_matcher`, `rsac_manager`, `event_bus`, `overlays`, `subscriber_count`, `is_hibernating`, `is_running`, `width`, `height`, `start`, `stop`, `signal_stop`, `set_overlays`, `get_overlays`, `get_bev_minimap_jpeg`, `get_latest_frame_jpeg`, `get_latest_telemetry`, `get_heatmap_jpeg`, `toggle_heatmap`, `tag_entity`, etc.).
+  - Preserved backward-compatible subscriber aliases (`self._subscribers`, `self._ws_subscribers`, `self._subscriber_lock`, `self._is_hibernating`).
+- **Complete Phase 6 Milestones**:
+  - Sub-Phase 6.1: `main.py` decomposed into `intelligent_tracker/cli/` (Arguments, Pipeline Builder, Display, Runner).
+  - Sub-Phase 6.2: `dashboard/stream_manager.py` decomposed into `dashboard/services/` (Pipeline Factory, Stream Worker, Stream Media, Stream Subscribers).
+  - All Phase 6 targets now satisfy the quantitative modularity budgets.
+
+### 2. Files Modified & Created
+- `dashboard/services/pipeline_factory.py` (Created, 270 lines): Subsystem builder and pipeline bundle.
+- `dashboard/services/stream_media.py` (Created, 108 lines): Media export and overlay mixin.
+- `dashboard/services/stream_worker.py` (Created, 337 lines): Background worker pipeline loop.
+- `dashboard/services/stream_subscribers.py` (Modified, 172 lines): Added `StreamSubscriberMixin`.
+- `dashboard/services/__init__.py` (Modified, 28 lines): Exported new services.
+- `dashboard/stream_manager.py` (Modified, 224 lines): Clean coordinator facade.
+- `intelligent_tracker/cli/pipeline_builder.py` (Modified, 291 lines): Minor formatting optimization to keep all functions $\le 40$ lines.
+
+### 3. Verification & Testing
+- **Modularity Audit**:
+  - `code_health_audit.py --path main.py intelligent_tracker/cli dashboard/stream_manager.py dashboard/services/pipeline_factory.py dashboard/services/stream_media.py dashboard/services/stream_subscribers.py dashboard/services/stream_worker.py dashboard/services/__init__.py --show-methods`:
+  - Result: 12/12 files OK, 0 Critical breaches, all classes $\le 10-11$ methods, all functions $\le 40$ lines.
+- **Contract & Regression Parity**:
+  - `contract_snapshot.py verify --path . --strict`: Tier 1 AST & DOM Invariant Parity: VERIFIED (Zero discrepancies).
+- **Targeted Subsystem Tests**:
+  - `tests/test_graceful_shutdown_perf.py` (7/7 OK in 0.63s)
+  - `tests/test_hibernation.py` (6/6 OK in 1.88s)
+  - `tests/test_camera_pool.py` (8/8 OK in 1.80s)
+  - `tests/test_dashboard.py` (12/12 OK in 0.71s)
+  - `tests/test_vms_api.py` (6/6 OK in 6.21s)
+  - `tests/test_modernization.py` (2/2 OK in 0.89s)
+- **Full Test Suite**:
+  - Ran 304 tests in 41.2s — **OK (100% green, 0 failures, 0 errors)**.
+- **Sphinx Documentation**:
+  - Clean build with **0 warnings**.

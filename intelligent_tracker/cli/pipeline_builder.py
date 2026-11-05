@@ -75,8 +75,7 @@ def resolve_pipeline_params(args, cfg: Dict[str, Any]) -> Dict[str, Any]:
         "output": args.output,
         "headless": args.headless,
         "gui": args.gui,
-        "frames": args.frames,
-        "config": args.config,
+        "frames": args.frames, "config": args.config,
     }
 
 

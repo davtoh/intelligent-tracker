@@ -123,3 +123,50 @@ class StreamSubscriberRegistry:
                     if d in self._ws_subscribers:
                         self._ws_subscribers.remove(d)
 
+
+class StreamSubscriberMixin:
+    """Mixin delegating subscriber lifecycle and telemetry distribution to _subscriber_registry."""
+
+    def add_subscriber(self, sub_id: Optional[str] = None) -> str:
+        """Register an active client subscriber with a leased token."""
+        return self._subscriber_registry.add_subscriber(sub_id)
+
+    def heartbeat_subscriber(self, sub_id: str) -> None:
+        """Update last-seen timestamp for an active leased subscriber."""
+        self._subscriber_registry.heartbeat_subscriber(sub_id)
+
+    def remove_subscriber(self, sub_id: Optional[str] = None) -> int:
+        """Unregister an active client subscriber by token or pop one."""
+        return self._subscriber_registry.remove_subscriber(sub_id)
+
+    def _active_subscriber_count_unlocked(self) -> int:
+        """Internal helper to prune expired subscriber leases and count active viewers."""
+        return self._subscriber_registry._active_subscriber_count_unlocked()
+
+    @property
+    def subscriber_count(self) -> int:
+        """Current number of active, non-expired subscribers."""
+        return self._subscriber_registry.subscriber_count
+
+    @property
+    def is_hibernating(self) -> bool:
+        """Returns True if the stream is currently hibernating due to zero subscribers."""
+        return self._subscriber_registry.is_hibernating
+
+    @is_hibernating.setter
+    def is_hibernating(self, val: bool) -> None:
+        self._subscriber_registry.is_hibernating = val
+
+    _is_hibernating = is_hibernating
+
+    def register_ws_subscriber(self, sub: Any) -> None:
+        """Register an active WebSocket subscriber queue."""
+        self._subscriber_registry.register_ws_subscriber(sub)
+
+    def unregister_ws_subscriber(self, sub: Any) -> None:
+        """Unregister an active WebSocket subscriber."""
+        self._subscriber_registry.unregister_ws_subscriber(sub)
+
+    def _broadcast_telemetry(self, telemetry: Dict[str, Any]) -> None:
+        """Distribute telemetry to registered async queues."""
+        self._subscriber_registry.broadcast_telemetry(telemetry)
