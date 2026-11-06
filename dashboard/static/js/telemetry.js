@@ -30,7 +30,9 @@
     if (activeWs) {
       activeWs.onclose = null;
       activeWs.onerror = null;
-      try { activeWs.close(); } catch (e) {}
+      try { activeWs.close(); } catch (e) {
+        console.debug('[Telemetry] Clean close of existing WebSocket ignored error:', e);
+      }
     }
 
     try {
@@ -65,7 +67,9 @@
 
   function closeWebSocket() {
     if (activeWs) {
-      try { activeWs.close(); } catch (_) {}
+      try { activeWs.close(); } catch (err) {
+        console.debug('[Telemetry] WebSocket shutdown close ignored error:', err);
+      }
       activeWs = null;
     }
   }

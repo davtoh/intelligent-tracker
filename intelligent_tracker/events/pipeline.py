@@ -65,7 +65,7 @@ def setup_event_pipeline(
     mqtt_cfg = alert_cfg.get("mqtt")
     if mqtt_cfg and mqtt_cfg.get("enabled", True):
         mqtt_pub = MqttPublisher(
-            broker=mqtt_cfg.get("broker", "localhost"),
+            broker=mqtt_cfg.get("broker"),
             port=mqtt_cfg.get("port", 1883),
             username=mqtt_cfg.get("username"),
             password=mqtt_cfg.get("password"),

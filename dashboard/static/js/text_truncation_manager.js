@@ -216,7 +216,9 @@
       };
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(performFeedback).catch(() => {});
+        navigator.clipboard.writeText(text).then(performFeedback).catch((err) => {
+          console.debug('[TextTruncation] Clipboard write error:', err);
+        });
       } else {
         const textarea = document.createElement('textarea');
         textarea.value = text;
@@ -227,7 +229,9 @@
         try {
           document.execCommand('copy');
           performFeedback();
-        } catch (_) {}
+        } catch (err) {
+          console.debug('[TextTruncation] Fallback execCommand copy failed:', err);
+        }
         document.body.removeChild(textarea);
       }
     }

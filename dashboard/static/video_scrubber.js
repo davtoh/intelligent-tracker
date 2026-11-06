@@ -218,7 +218,9 @@
 
     try {
       videoPlayer.pause();
-    } catch (_) {}
+    } catch (e) {
+      console.debug('[VideoScrubber] Pause error ignored:', e);
+    }
     videoPlayer.currentTime = 0;
 
     if (btnPlayPause) btnPlayPause.textContent = '▶ Play';

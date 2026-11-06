@@ -40,6 +40,7 @@ class StreamLifecycleManager:
         self.sample_interval = float(sample_interval)
         self._lock = threading.RLock()
         self._running = False
+        self._stop_event = threading.Event()
         self._sampler_thread: Optional[threading.Thread] = None
 
         if autostart_sampler:
@@ -56,6 +57,7 @@ class StreamLifecycleManager:
             if self._running:
                 return
             self._running = True
+            self._stop_event.clear()
             self._sampler_thread = threading.Thread(
                 target=self._sampler_worker,
                 name="LifecycleTelemetrySampler",
@@ -65,26 +67,26 @@ class StreamLifecycleManager:
             logger.info("LifecycleTelemetrySampler daemon started (interval=%.1fs)", self.sample_interval)
 
     def stop_sampler(self):
-        """Stop the background telemetry sampling daemon cleanly."""
+        """Stop the background telemetry sampling daemon cleanly without holding lock across join."""
         with self._lock:
             self._running = False
-            if self._sampler_thread and self._sampler_thread.is_alive():
-                self._sampler_thread.join(timeout=2.0)
-                self._sampler_thread = None
+            self._stop_event.set()
+            thread = self._sampler_thread
+            self._sampler_thread = None
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=2.0)
 
     def _sampler_worker(self):
         """Periodic background thread that samples CPU, RAM, and stream states into SQLite."""
-        while self._running:
+        while self._running and not self._stop_event.is_set():
             try:
                 self.record_sample()
             except Exception as e:
                 logger.debug("Telemetry sample error: %s", e)
 
-            # Sleep in small increments for responsive shutdown
-            slept = 0.0
-            while self._running and slept < self.sample_interval:
-                time.sleep(0.5)
-                slept += 0.5
+            # Interruptible event wait for instant shutdown (<10ms)
+            if self._stop_event.wait(timeout=self.sample_interval):
+                break
 
     def record_sample(self) -> Optional[int]:
         """Sample current hardware and stream pool status and persist to TrackerDB."""

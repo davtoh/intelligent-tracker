@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -45,6 +46,7 @@ class WebhookDispatcher:
         event_types: Optional[List[str]] = None,
         headers: Optional[Dict[str, str]] = None,
         custom_headers: Optional[Dict[str, str]] = None,
+        stop_event: Optional[threading.Event] = None,
     ):
         self.url = str(url)
         self.auth_header = auth_header
@@ -55,6 +57,7 @@ class WebhookDispatcher:
         self.include_snapshot = bool(include_snapshot)
         self.event_types = set(event_types) if event_types else None
         self.custom_headers = dict(headers or custom_headers or {})
+        self.stop_event = stop_event or threading.Event()
 
         # Telemetry metrics
         self.sent_count = 0
@@ -116,13 +119,18 @@ class WebhookDispatcher:
                     h["Authorization"] = f"Bearer {self.auth_header}"
         return h
 
-    def send(self, event: BaseEvent) -> bool:
+    def send(self, event: BaseEvent, stop_event: Optional[threading.Event] = None) -> bool:
         """
         Send event via HTTP POST with retries and exponential backoff.
 
         :param event: BaseEvent to dispatch.
+        :param stop_event: Optional threading.Event to interrupt retry backoffs.
         :return: True if delivered successfully (HTTP 2xx), False otherwise.
         """
+        cancel_signal = stop_event or self.stop_event
+        if cancel_signal and cancel_signal.is_set():
+            return False
+
         if self.event_types and event.event_type not in self.event_types:
             return False
 
@@ -131,6 +139,9 @@ class WebhookDispatcher:
         headers = self._prepare_headers(json_data=json_data)
 
         for attempt in range(1, self.max_retries + 1):
+            if cancel_signal and cancel_signal.is_set():
+                logger.info("Webhook send aborted due to cancellation signal")
+                return False
             try:
                 # 1. Try requests if installed
                 if requests is not None:
@@ -168,10 +179,16 @@ class WebhookDispatcher:
                 if attempt < self.max_retries:
                     self.retry_count += 1
                     sleep_time = self.backoff_factor * (2 ** (attempt - 1))
-                    time.sleep(sleep_time)
+                    if cancel_signal.wait(timeout=sleep_time):
+                        logger.info("Webhook retry backoff aborted due to cancellation signal")
+                        return False
                 else:
                     self.failed_count += 1
                     logger.warning("Webhook failed to %s after %d retries: %s", self.url, attempt, e)
 
         return False
+
+    def close(self) -> None:
+        """Signal any in-flight retry waits to abort immediately."""
+        self.stop_event.set()
 

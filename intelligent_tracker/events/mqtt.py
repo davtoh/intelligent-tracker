@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
@@ -28,7 +30,7 @@ class MqttPublisher:
 
     def __init__(
         self,
-        broker: str = "localhost",
+        broker: Optional[str] = None,
         port: int = 1883,
         username: Optional[str] = None,
         password: Optional[str] = None,
@@ -38,8 +40,9 @@ class MqttPublisher:
         retain_occupancy: bool = True,
         retain_sightings: bool = True,
         mock: bool = False,
+        stop_event: Optional[threading.Event] = None,
     ):
-        self.broker = str(broker)
+        self.broker = str(broker if broker is not None else os.getenv("MQTT_BROKER", "localhost"))
         self.port = int(port)
         self.username = username
         self.password = password
@@ -49,6 +52,7 @@ class MqttPublisher:
         self.retain_occupancy = bool(retain_occupancy)
         self.retain_sightings = bool(retain_sightings)
         self.mock = bool(mock) or (mqtt is None)
+        self._stop_event = stop_event or threading.Event()
 
         self._client = None
         self._connected = False
@@ -94,7 +98,10 @@ class MqttPublisher:
 
             t0 = time.time()
             while not self._connected and (time.time() - t0 < timeout):
-                time.sleep(0.05)
+                if self._stop_event.wait(timeout=0.05):
+                    logger.info("MQTT connection attempt aborted due to stop signal")
+                    self._client.loop_stop()
+                    return False
 
             return self._connected
 
@@ -109,6 +116,7 @@ class MqttPublisher:
 
     def disconnect(self):
         """Publish offline status and disconnect from broker."""
+        self._stop_event.set()
         if self._client and not self.mock:
             try:
                 status_topic = f"{self.base_topic}/system/status"

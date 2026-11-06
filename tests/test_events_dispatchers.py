@@ -12,6 +12,9 @@ Tests:
 import json
 import hmac
 import hashlib
+import os
+import threading
+import time
 import unittest
 
 from intelligent_tracker.events import (
@@ -119,6 +122,27 @@ class TestWebhookDispatcher(unittest.TestCase):
         self.assertEqual(req["headers"]["x-tracker-signature"], expected_sig)
         self.assertIn("timestamp", req["body"])
         self.assertIn("timestamp_epoch", req["body"])
+
+    def test_webhook_cancellation_with_stop_event(self):
+        """Test pre-flight and mid-backoff cancellation via stop_event / close()."""
+        dispatcher = WebhookDispatcher(
+            url=self.server.url,
+            max_retries=5,
+            backoff_factor=2.0,
+        )
+        self.server.httpd.fail_next_n = 5
+        ev = ZoneEvent(zone_id="dock", track_id=99, action="enter")
+
+        timer = threading.Timer(0.04, dispatcher.close)
+        timer.start()
+        t0 = time.time()
+        success = dispatcher.send(ev)
+        elapsed = time.time() - t0
+        timer.cancel()
+
+        self.assertFalse(success)
+        self.assertEqual(dispatcher.retry_count, 1)
+        self.assertLess(elapsed, 0.5, f"Expected mid-backoff abort in <500ms, took {elapsed:.3f}s")
 
 
 class TestTelegramDispatcher(unittest.TestCase):
@@ -229,6 +253,26 @@ class TestMqttPublisher(unittest.TestCase):
         self._verify_mqtt_messages(mqtt_pub.published_messages)
         mqtt_pub.disconnect()
         self.assertFalse(mqtt_pub.is_connected)
+
+    def test_mqtt_broker_env_variable(self):
+        """Test that MqttPublisher resolves broker from MQTT_BROKER env variable."""
+        original = os.environ.get("MQTT_BROKER")
+        try:
+            os.environ["MQTT_BROKER"] = "192.168.1.100"
+            pub = MqttPublisher(mock=True)
+            self.assertEqual(pub.broker, "192.168.1.100")
+
+            pub_explicit = MqttPublisher(broker="custom.broker.local", mock=True)
+            self.assertEqual(pub_explicit.broker, "custom.broker.local")
+
+            from intelligent_tracker.events.pipeline import setup_event_pipeline
+            disps = setup_event_pipeline({"alerting": {"mqtt": {"enabled": True, "mock": True}}})
+            self.assertEqual(disps["mqtt"].broker, "192.168.1.100")
+        finally:
+            if original is not None:
+                os.environ["MQTT_BROKER"] = original
+            else:
+                os.environ.pop("MQTT_BROKER", None)
 
 
 if __name__ == "__main__":
