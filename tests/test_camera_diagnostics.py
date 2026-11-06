@@ -18,6 +18,26 @@ class TestCameraDiagnostics(unittest.TestCase):
 
     def setUp(self):
         self.health_mgr = CameraHealthManager()
+        from dashboard.dependencies import get_camera_pool, set_camera_pool
+        from dashboard.camera_pool import CameraPool
+        pool = get_camera_pool()
+        if pool is None:
+            pool = CameraPool(autostart=False)
+            set_camera_pool(pool)
+        pool.camera_configs["synthetic_01"] = {
+            "id": "synthetic_01",
+            "name": "Synthetic Test Feed (Simulation)",
+            "source": "synthetic",
+            "type": "synthetic",
+            "enabled": True,
+        }
+        pool.camera_configs["usb_0"] = {
+            "id": "usb_0",
+            "name": "USB Camera 0",
+            "source": "0",
+            "type": "hikvision",
+            "enabled": True,
+        }
         self.client = TestClient(app)
 
     @classmethod
@@ -66,13 +86,16 @@ class TestCameraDiagnostics(unittest.TestCase):
 
     def test_api_camera_diagnostics_detail(self):
         """Verify GET /api/cameras/{id}/diagnostics returns structured report."""
-        # Use existing configured camera from cameras.json
         resp = self.client.get("/api/cameras/synthetic_01/diagnostics")
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data.get("camera_id"), "synthetic_01")
         self.assertIn("status", data)
         self.assertIn("error_code", data)
+
+        # Missing camera returns 404
+        resp_404 = self.client.get("/api/cameras/missing_cam_xyz/diagnostics")
+        self.assertEqual(resp_404.status_code, 404)
 
     def test_api_camera_release(self):
         """Verify POST /api/cameras/{id}/release executes targeted hardware unlock."""
@@ -83,6 +106,10 @@ class TestCameraDiagnostics(unittest.TestCase):
                 data = resp.json()
                 self.assertEqual(data.get("status"), "success")
                 self.assertIn("release_result", data)
+
+        # Missing camera returns 404
+        resp_404 = self.client.post("/api/cameras/missing_cam_xyz/release")
+        self.assertEqual(resp_404.status_code, 404)
 
 
 if __name__ == "__main__":

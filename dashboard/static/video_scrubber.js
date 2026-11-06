@@ -20,7 +20,7 @@
   const btnUploadVideo = document.getElementById('btn-upload-video');
   const videoFilesList = document.getElementById('video-recordings-list');
 
-  // Scrubber Controls
+  // Scrubber Controls & Speed Buttons
   const btnPlayPause = document.getElementById('scrubber-btn-play');
   const btnStepBack = document.getElementById('scrubber-btn-prev');
   const btnStepForward = document.getElementById('scrubber-btn-next');
@@ -30,8 +30,6 @@
   const btnSpeed2x = document.getElementById('speed-btn-2x');
   const btnSpeed4x = document.getElementById('speed-btn-4x');
   const btnSpeed8x = document.getElementById('speed-btn-8x');
-
-  // Video Actions
   const btnAddAsCamera = document.getElementById('btn-video-add-camera');
   const btnAnalyzeVideo = document.getElementById('btn-video-analyze');
   const selectTabPolicy = document.getElementById('scrubber-tab-policy');
@@ -44,6 +42,31 @@
   function init() {
     bindEvents();
     loadVideosList();
+  }
+
+  function bindPlaybackControls() {
+    const updatePlayState = () => {
+      if (btnPlayPause) btnPlayPause.textContent = videoPlayer.paused ? '▶ Play' : '⏸ Pause';
+    };
+    if (videoPlayer) {
+      videoPlayer.addEventListener('timeupdate', updateTimeline);
+      videoPlayer.addEventListener('loadedmetadata', onVideoLoaded);
+      videoPlayer.addEventListener('play', updatePlayState);
+      videoPlayer.addEventListener('pause', updatePlayState);
+      videoPlayer.addEventListener('ended', updatePlayState);
+      videoPlayer.addEventListener('error', handleVideoPlayerError);
+    }
+    if (btnPlayPause) btnPlayPause.addEventListener('click', togglePlayPause);
+    if (btnStepBack) btnStepBack.addEventListener('click', () => stepFrame(-1));
+    if (btnStepForward) btnStepForward.addEventListener('click', () => stepFrame(1));
+    if (timelineSlider) {
+      timelineSlider.addEventListener('input', (e) => {
+        if (videoPlayer && videoPlayer.duration) {
+          videoPlayer.currentTime = (e.target.value / 100) * videoPlayer.duration;
+        }
+      });
+    }
+    bindSpeedButtons();
   }
 
   function bindEvents() {
@@ -65,34 +88,7 @@
       });
     }
 
-    if (videoPlayer) {
-      videoPlayer.addEventListener('timeupdate', updateTimeline);
-      videoPlayer.addEventListener('loadedmetadata', onVideoLoaded);
-      videoPlayer.addEventListener('play', () => {
-        if (btnPlayPause && !videoPlayer.paused) btnPlayPause.textContent = '⏸ Pause';
-      });
-      videoPlayer.addEventListener('pause', () => {
-        if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
-      });
-      videoPlayer.addEventListener('ended', () => {
-        if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
-      });
-      videoPlayer.addEventListener('error', handleVideoPlayerError);
-    }
-
-    if (btnPlayPause) btnPlayPause.addEventListener('click', togglePlayPause);
-    if (btnStepBack) btnStepBack.addEventListener('click', () => stepFrame(-1));
-    if (btnStepForward) btnStepForward.addEventListener('click', () => stepFrame(1));
-
-    if (timelineSlider) {
-      timelineSlider.addEventListener('input', (e) => {
-        if (videoPlayer && videoPlayer.duration) {
-          videoPlayer.currentTime = (e.target.value / 100) * videoPlayer.duration;
-        }
-      });
-    }
-
-    bindSpeedButtons();
+    bindPlaybackControls();
 
     if (btnAddAsCamera) {
       btnAddAsCamera.addEventListener('click', () => {
@@ -197,6 +193,24 @@
     });
   }
 
+  function updateScrubberLoadedTitle(filename) {
+    const titleEl = document.getElementById('scrubber-loaded-title');
+    if (!titleEl) return;
+    const fullTitle = 'Loaded: ' + filename;
+    if (window.TextTruncationManager) {
+      window.TextTruncationManager.apply(titleEl, {
+        fullText: fullTitle,
+        mode: 'middle',
+        maxLength: 38,
+        preserveExt: true,
+        label: 'Loaded Video File'
+      });
+    } else {
+      titleEl.textContent = fullTitle;
+      titleEl.title = fullTitle;
+    }
+  }
+
   function loadVideoIntoPlayer(url, filename, isWebCompatible, codec) {
     if (!videoPlayer) return;
     currentVideoUrl = url;
@@ -214,22 +228,7 @@
     videoPlayer.src = url;
     videoPlayer.load();
 
-    const titleEl = document.getElementById('scrubber-loaded-title');
-    if (titleEl) {
-      const fullTitle = 'Loaded: ' + filename;
-      if (window.TextTruncationManager) {
-        window.TextTruncationManager.apply(titleEl, {
-          fullText: fullTitle,
-          mode: 'middle',
-          maxLength: 38,
-          preserveExt: true,
-          label: 'Loaded Video File'
-        });
-      } else {
-        titleEl.textContent = fullTitle;
-        titleEl.title = fullTitle;
-      }
-    }
+    updateScrubberLoadedTitle(filename);
     if (btnAddAsCamera) btnAddAsCamera.disabled = false;
     if (btnAnalyzeVideo) btnAnalyzeVideo.disabled = false;
 
