@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-06] feat: Universal Runtime Trace Recorder & Dashboard Boot Resilience
+- **Type**: feat
+- **Summary**: Integrated global trace_recorder engine into system-diagnostics and wired FastAPI exception middleware. Fixed uvicorn reload directory watcher bounds, camera pool offline state handling, and spawned process PYTHONPATH propagation on Windows.
+- **Files** (4):
+  - `dashboard/app.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/services/diagnostic_bridge.py`
+  - `scripts/run_dashboard.py`
+- **Verification**: 308 tests passed in intelligent_tracker (36.99s); 116 tests passed in system-diagnostics (3.64s)
+
 ## [2026-11-05] fix: Thread Safety, 12-Factor Env and Defensive Logging Fixes
 - **Type**: fix
 - **Summary**: Implemented interruptible Event.wait in WebhookDispatcher, MqttPublisher, and LifecycleManager; parameterized MQTT_BROKER; replaced JS empty catch blocks with console.debug

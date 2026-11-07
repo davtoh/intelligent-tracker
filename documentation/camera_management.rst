@@ -59,6 +59,16 @@ The ``intelligent_tracker.camera_device`` module inspects attached video capture
    - ``--source 0``, ``--source 1``, etc.: Standard numerical index binding.
    - ``--source synthetic``: Generates animated synthetic test frames without hardware.
 
+Camera Pool Dynamic Resolution & Offline State Handling
+-------------------------------------------------------
+
+When cameras are registered dynamically via ``CameraPool.add_camera()``:
+
+1. **Resolution & Offline Fault-Tolerance**:
+   The engine uses ``CameraPathResolver.resolve_camera_source()`` to validate the provided source. If a source file or device is unreachable (e.g. absent file or disconnected RTSP URI), the resolver returns ``status: error``. The camera is registered offline in ``CameraHealthManager`` with error code ``FILE_NOT_FOUND`` and attempted paths, allowing the dashboard to boot successfully without throwing fatal startup exceptions.
+2. **DirectShow / MSMF Acquisition Staggering**:
+   When opening physical capture indices on Windows, rapid concurrent acquisitions can trigger kernel pin locks in Microsoft Media Foundation. ``CameraPool`` introduces a 150ms delay between hardware stream initializations, ensuring clean driver unbinding and acquisition.
+
 Camera Manager Tool (CLI)
 -------------------------
 

@@ -143,3 +143,16 @@ async def probe_camera_channel(camera_id: str) -> Dict[str, Any]:
         "probe": probe_result,
     }
 
+
+@router.get("/diagnostics/traces/recent")
+async def get_recent_crash_traces(limit: int = 10) -> Dict[str, Any]:
+    """Retrieve recent crash events and runtime trace issues from trace catalog."""
+    from dashboard.services.diagnostic_bridge import get_recent_traces
+
+    traces = get_recent_traces(limit=limit)
+    return {
+        "status": "success",
+        "total": len(traces),
+        "traces": traces,
+    }
+

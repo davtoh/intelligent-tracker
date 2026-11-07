@@ -87,6 +87,10 @@ from dashboard.schemas import (
     TripwireCreateRequest,
     ZoneCreateRequest,
 )
+from dashboard.services.diagnostic_bridge import (
+    DiagnosticTraceMiddleware,
+    init_diagnostic_tracer,
+)
 from dashboard.services.shutdown_handler import (
     GracefulCancellationMiddleware,
     async_shutdown_pool,
@@ -102,6 +106,9 @@ logger = logging.getLogger("intelligent_tracker.dashboard")
 
 # Apply Windows IOCP Proactor socket resilience for transient drops on startup
 apply_windows_iocp_patch()
+
+# Initialize runtime diagnostic trace recorder for structured crash capture
+init_diagnostic_tracer()
 
 # Global module references for test fixtures and backward-compatibility
 camera_pool: Optional[CameraPool] = None
@@ -164,6 +171,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     application.add_middleware(GracefulCancellationMiddleware)
+    application.add_middleware(DiagnosticTraceMiddleware)
 
     # Mount static assets and crops
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

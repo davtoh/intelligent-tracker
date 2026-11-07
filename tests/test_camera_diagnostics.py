@@ -111,6 +111,16 @@ class TestCameraDiagnostics(unittest.TestCase):
         resp_404 = self.client.post("/api/cameras/missing_cam_xyz/release")
         self.assertEqual(resp_404.status_code, 404)
 
+    def test_api_recent_crash_traces(self):
+        """Verify GET /api/cameras/diagnostics/traces/recent returns structured crash events."""
+        resp = self.client.get("/api/cameras/diagnostics/traces/recent?limit=5")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data.get("status"), "success")
+        self.assertIn("total", data)
+        self.assertIn("traces", data)
+        self.assertIsInstance(data.get("traces"), list)
+
 
 if __name__ == "__main__":
     unittest.main()

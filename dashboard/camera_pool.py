@@ -154,7 +154,10 @@ class CameraPool:
         name = cfg.get("name", f"Camera {camera_id.upper()}")
 
         from intelligent_tracker.camera_resolver import CameraPathResolver
-        resolved_source, _ = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
+        from dashboard.services.camera_diagnostics import CameraHealthManager
+
+        resolved_source, meta = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
+        is_source_error = meta.get("status") == "error"
 
         custom_cfg = {}
         if cfg.get("detector"):
@@ -172,7 +175,18 @@ class CameraPool:
         )
 
         self.streams[camera_id] = mgr
-        if start:
+        if is_source_error:
+            CameraHealthManager().set_error(
+                camera_id,
+                f"Source not found: {raw_source}",
+                error_code=meta.get("error_code", "FILE_NOT_FOUND"),
+                attempted_paths=meta.get("attempted_paths"),
+            )
+            logger.warning("Camera stream [%s] '%s' registered offline: source not found (%s)", camera_id, name, raw_source)
+        elif start:
+            # Stagger physical hardware acquisitions to prevent DirectShow MSMF lockups on Windows
+            if isinstance(resolved_source, int) or (isinstance(resolved_source, str) and resolved_source.isdigit()):
+                threading.Event().wait(0.15)
             mgr.start()
             logger.info("Started camera stream [%s] '%s' (%s -> %s)", camera_id, name, raw_source, resolved_source)
         return mgr

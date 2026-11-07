@@ -165,13 +165,19 @@ python scripts/download_models.py --model yolo11n
 # 2. Check camera hardware indices and ONNX execution providers
 .\.venv\Scripts\python.exe scripts/diagnostics.py
 
-# 3. Run full automated test suite (all 63 tests)
+# 3. Run full automated test suite
 $env:MPLBACKEND="Agg"
 .\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
 ### Sample Executions
 ```powershell
+# Windows: Start resilient Web Dashboard with reload bounds & trace recorder
+.\.venv\Scripts\python.exe scripts/run_dashboard.py
+
+# Windows / Linux: Start Web Dashboard on custom port without auto-reload
+$env:PORT="8080"; $env:RELOAD="false"; .\.venv\Scripts\python.exe scripts/run_dashboard.py
+
 # Windows: Run YAML-configured synthetic demo with tripwires & zones
 .\.venv\Scripts\python.exe main.py --config configs/demo.yaml
 
@@ -197,6 +203,8 @@ $env:MPLBACKEND="Agg"
 ### Scenario Combinations Matrix
 | Scenario / Objective | Detector | Tracker | Source (`--source`) | Config File | Key Parameters | Mode | Full Runnable PowerShell Command |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Resilient Web Dashboard** | `yolov8` | `centroid` | Multi-camera | `configs/demo.yaml` | Reload bounds (excludes DB/logs) | Web Server (8000) | `.\.venv\Scripts\python.exe scripts/run_dashboard.py` |
+| **Dashboard Custom Port** | `yolov8` | `centroid` | Multi-camera | `configs/demo.yaml` | `PORT=8080 RELOAD=false` | Production ASGI | `$env:PORT="8080"; $env:RELOAD="false"; .\.venv\Scripts\python.exe scripts/run_dashboard.py` |
 | **Physical Webcam Auto-Detect** | `yolov8` | `centroid` | `real` | - | `--classes person --conf 0.40` | Interactive GUI | `.\.venv\Scripts\python.exe main.py --detector yolov8 --source real --classes person --conf 0.40` |
 | **Synthetic CI Smoke Test** | `mock` | `centroid` | `synthetic` | `configs/demo.yaml` | `--headless --frames 30` | Headless (30f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --headless --frames 30` |
 | **YOLOv8 Edge AI Benchmark** | `yolov8` | `centroid` | `synthetic` | `configs/demo.yaml` | `--detector yolov8 --headless --frames 60` | Headless (60f) | `.\.venv\Scripts\python.exe main.py --config configs/demo.yaml --detector yolov8 --headless --frames 60` |

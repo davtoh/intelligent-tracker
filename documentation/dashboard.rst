@@ -133,6 +133,28 @@ Modernized Responsive UI & Ergonomics (Milestone 10)
 4. **Structured In-Page Modal Forms & Toast Notifications**:
    Eliminated blocking ``prompt()`` and sequential ``confirm()`` chains in Scenario Studio and Review & Learn, replacing them with dedicated modal forms for Zones, Directional Tripwires, Homography Calibration, Spatial Topology Transitions, and Quick-Enrollment. Replaced blocking ``alert()`` popups with non-intrusive toast notifications.
 
+Diagnostic Trace Bridge & Crash Recording
+-----------------------------------------
+
+The dashboard incorporates the **Universal Runtime Diagnostic Trace Recorder** via ``dashboard.services.diagnostic_bridge``:
+
+1. **Global Unhandled Panic Hook**:
+   ``init_diagnostic_tracer()`` installs unhandled exception interceptors on process startup, capturing unexpected crashes and thread termination into ``.diagnostics/traces/`` and ``.diagnostics/trace_catalog.json``.
+2. **FastAPI Exception Middleware**:
+   ``DiagnosticTraceMiddleware`` catches unhandled HTTP 500 exceptions, logging contextual request metadata (``http_method``, ``http_path``, ``client_host``) and stack traces for automated root-cause analysis.
+3. **Explicit Exception Logging**:
+   ``capture_runtime_exception(exc, context)`` enables background tasks and streaming workers to record structured diagnostics without terminating the event loop.
+
+Camera Pool Fault Tolerance & Hardware Staggering
+-------------------------------------------------
+
+The multi-camera pool (``dashboard.camera_pool.CameraPool``) provides fault-tolerant initialization:
+
+1. **Graceful Offline Registration**:
+   If a configured camera source path or stream is unreachable or missing, ``CameraPathResolver`` marks ``status: error``. The camera is registered offline in ``CameraHealthManager`` with error code ``FILE_NOT_FOUND`` rather than aborting the dashboard boot.
+2. **DirectShow / MSMF Pin Lock Mitigation**:
+   On Windows, rapid concurrent hardware camera acquisitions can cause driver deadlocks in Microsoft Media Foundation / DirectShow. Physical device acquisitions (integer or digit indices) are staggered by 150ms to ensure clean pin unbinding.
+
 Scenario Combinations Matrix
 ----------------------------
 
@@ -144,6 +166,14 @@ Scenario Combinations Matrix
      - Mode / Inputs
      - Key Parameters
      - Exact Runnable Command
+   * - Resilient Dev Dashboard
+     - Bounded reload watcher
+     - Watch source dirs only
+     - ``python scripts/run_dashboard.py``
+   * - Custom Port / Production
+     - Headless / No reload
+     - ``PORT=8080 RELOAD=false``
+     - ``python scripts/run_dashboard.py``
    * - Interactive Local VMS
      - Web UI + synthetic stream
      - ``--source synthetic``
@@ -164,11 +194,21 @@ Scenario Combinations Matrix
 Quickstart
 ----------
 
-To launch the dashboard server locally:
+To launch the dashboard server with defensive reload boundaries and auto-configured ``PYTHONPATH``:
 
 .. code-block:: bash
 
-   # Start Uvicorn ASGI server
+   # Recommended: Run with reload bounds (excludes database and log churn)
+   python scripts/run_dashboard.py
+
+   # Or specify host, port, and reload via environment variables:
+   HOST=0.0.0.0 PORT=8000 RELOAD=true python scripts/run_dashboard.py
+
+Alternatively, launch directly via Uvicorn:
+
+.. code-block:: bash
+
+   # Direct Uvicorn ASGI server
    python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000 --reload
 
-Open your browser at ``http://localhost:8000``.
+Open your browser at ``http://127.0.0.1:8000``.

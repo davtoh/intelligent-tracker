@@ -22,6 +22,9 @@
 | 8 | World Scenario Studio, Space Awareness & Homography BEV | ✅ **COMPLETE** |
 | 9 | Artifact & Face Intelligence, Active Learning & Adaptive Memory | ✅ **COMPLETE** |
 | 10 | VMS Dashboard Responsive Redesign, Ergonomics & Enterprise Hub Integration Readiness | ✅ **COMPLETE** |
+| 11 | Process Lifecycle Management, Zero-Load Hibernation & Runtime Diagnostics | ✅ **COMPLETE** |
+| 12 | Dashboard Architecture & Domain Services Decoupling (Phase 1) | ✅ **COMPLETE** |
+| 13 | Universal Runtime Trace Recorder & Dashboard Boot Resilience | ✅ **COMPLETE** |
 
 ---
 
@@ -624,6 +627,16 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 6. **Contract Smoke Test (`tests/test_refactor_contract.py`):** Locks in DOM `<select>` dropdown and CSS `!important` parity.
 7. **Architectural Roadmap (`dashboard_refactor_plan.md`):** Complete 4-phase plan with 1-phase turn gates.
 
+## ✅ [Milestone 13] — Universal Runtime Trace Recorder & Dashboard Boot Resilience (COMPLETE)
+**Status: COMPLETE** — Verified: 308/308 tests pass in intelligent_tracker (36.99s); 116 tests pass in system-diagnostics (3.64s)
+**Scope:** Integration of the Universal Runtime Diagnostic Trace Recorder (`dashboard/services/diagnostic_bridge.py`) with FastAPI, global unhandled panic hooks, HTTP 500 trace middleware, camera pool offline fault-tolerance, Windows DirectShow pin lock mitigation, and defensive dashboard launcher (`scripts/run_dashboard.py`).
+
+### Deliverables Completed:
+1. **Diagnostic Trace Bridge (`dashboard/services/diagnostic_bridge.py`):** 78L service integrating trace recording hooks (`init_diagnostic_tracer`) and Starlette middleware (`DiagnosticTraceMiddleware`) capturing unhandled HTTP 500 exceptions and request context into `.diagnostics/trace_catalog.json`.
+2. **FastAPI Application Wiring (`dashboard/app.py`):** Registered diagnostic tracer initialization and exception middleware in application startup pipeline.
+3. **Camera Pool Offline Resilience & DirectShow Stabilization (`dashboard/camera_pool.py`):** Automatically registers offline error states in `CameraHealthManager` for missing / unreachable sources rather than aborting server startup. Added 150ms staggered acquisition between physical devices on Windows to avoid kernel pin contention.
+4. **Resilient Dashboard Launcher (`scripts/run_dashboard.py`):** 55L Uvicorn runner constraining reload file watching strictly to `dashboard` and `intelligent_tracker`, excluding `data/*`, `logs/*`, and SQLite database files (`*.db*`) from triggering reload loops. Propagates `PYTHONPATH` across spawned Windows reloader subprocesses.
+
 ## Dependency Graph
 
 ```
@@ -639,6 +652,7 @@ M1 (Env & Core) ✅
                                                   └── M10 (VMS Dashboard Responsive Redesign & Hub Integration) ✅
                                                         └── M11 (Process Lifecycle Management & Zero-Load Hibernation) ✅
                                                               └── M12 (Dashboard Architecture Decoupling - Phase 1) ✅
+                                                                    └── M13 (Universal Trace Recorder & Boot Resilience) ✅
 ```
 
 ---
