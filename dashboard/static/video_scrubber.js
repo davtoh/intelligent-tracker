@@ -92,13 +92,25 @@
 
     if (btnAddAsCamera) {
       btnAddAsCamera.addEventListener('click', () => {
-        if (currentVideoFilename) window.VideoLibrary?.addVideoToCameraPool(currentVideoFilename);
+        if (currentVideoFilename) {
+          if (window.VideoLibrary?.openFeedPromotionModal) {
+            window.VideoLibrary.openFeedPromotionModal(currentVideoFilename, currentVideoUrl);
+          } else {
+            window.VideoLibrary?.addVideoToCameraPool(currentVideoFilename);
+          }
+        }
       });
     }
 
     if (btnAnalyzeVideo) {
       btnAnalyzeVideo.addEventListener('click', () => {
-        if (currentVideoFilename) window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
+        if (currentVideoFilename) {
+          if (window.VideoBatch?.openBatchModal) {
+            window.VideoBatch.openBatchModal(currentVideoFilename);
+          } else {
+            window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
+          }
+        }
       });
     }
   }

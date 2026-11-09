@@ -1419,6 +1419,166 @@
     </div>
   </div>
 
+  <!-- Modal: Batch Video Occurrence Analytics (Milestone 3) -->
+  <div class="modal-backdrop" id="modal-video-batch-analyze" style="display: none;">
+    <div class="modal-card glass-panel modal-md">
+      <div class="modal-header">
+        <div>
+          <h3>⚡ Batch Video Analytics</h3>
+          <div class="modal-subtitle text-truncate" id="batch-modal-filename-sub" title="Target Video File">Target: video.mp4</div>
+        </div>
+        <button class="modal-close-btn" id="modal-batch-close" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="video-batch-analyze-form">
+        <div class="modal-body-scroll">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="batch-detector-select">Detector Model</label>
+              <select id="batch-detector-select" class="form-input">
+                <option value="yolov8" selected>YOLOv8 (High Accuracy)</option>
+                <option value="yolo11">YOLO11 (SOTA Real-time)</option>
+                <option value="haar">Haar Cascade (Ultra Fast)</option>
+                <option value="face_yunet">YuNet (Face Detection)</option>
+                <option value="movementdetector">Movement (Frame Diff)</option>
+                <option value="mock">Synthetic Mock (Testing)</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="batch-sample-rate-select">Frame Stride (Sample Rate)</label>
+              <select id="batch-sample-rate-select" class="form-input">
+                <option value="1" selected>Every Frame (1:1 - Most Accurate)</option>
+                <option value="2">Every 2nd Frame (2x Faster)</option>
+                <option value="5">Every 5th Frame (5x Faster)</option>
+                <option value="10">Every 10th Frame (Fast Scrubber Index)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="batch-conf-range" style="margin-bottom: 0;">Detection Confidence Threshold</label>
+              <span id="batch-conf-display"
+                style="font-size: 0.82rem; font-weight: 700; color: var(--accent-color, #38bdf8); font-family: monospace;">0.40</span>
+            </div>
+            <div class="slider-container">
+              <input type="range" id="batch-conf-range" class="slider-range-input" min="0.05" max="1.00" step="0.05"
+                value="0.40" />
+              <input type="number" id="batch-conf-input" class="form-input slider-number-input" min="0.05"
+                max="1.00" step="0.01" value="0.40" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="batch-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+            <input type="text" id="batch-classes-input" class="form-input" placeholder="e.g. person, car" />
+            <div class="class-presets-bar">
+              <button type="button" class="btn-tag-preset" data-target="batch" data-classes="person">👤 Person</button>
+              <button type="button" class="btn-tag-preset" data-target="batch" data-classes="car, motorcycle, bus, truck, bicycle">🚗 Vehicles</button>
+              <button type="button" class="btn-tag-preset" data-target="batch" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
+              <button type="button" class="btn-tag-preset" data-target="batch" data-classes="">🌐 All Classes</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-batch-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-batch-modal-submit">⚡ Run Occurrence Report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Video Feed Promotion (Milestone 3) -->
+  <div class="modal-backdrop" id="modal-feed-promotion" style="display: none;">
+    <div class="modal-card glass-panel modal-md">
+      <div class="modal-header">
+        <div>
+          <h3>➕ Add Video as Active Camera Stream</h3>
+          <div class="modal-subtitle text-truncate" id="feed-modal-filename-sub" title="Recording File">Recording: video.mp4</div>
+        </div>
+        <button class="modal-close-btn" id="modal-feed-close" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="feed-promotion-form">
+        <div class="modal-body-scroll">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="feed-cam-id-input">Camera Channel ID *</label>
+              <input type="text" id="feed-cam-id-input" class="form-input" placeholder="e.g. vid_clip_01" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="feed-cam-name-input">Display Label *</label>
+              <input type="text" id="feed-cam-name-input" class="form-input" placeholder="e.g. Video (clip.mp4)" required />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="feed-cam-source-input">Video Recording Source</label>
+            <input type="text" id="feed-cam-source-input" class="form-input" readonly />
+          </div>
+
+          <!-- AI Detector & Tracking Intelligence -->
+          <div class="ai-config-section" style="margin-top: 12px;">
+            <div class="ai-config-header">
+              <h4 class="ai-config-title">🧠 Stream Intelligence & Filters</h4>
+              <span class="ai-config-badge">Live Inference</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group col-6">
+                <label for="feed-detector-select">Detector Model</label>
+                <select id="feed-detector-select" class="form-input">
+                  <option value="yolov8" selected>YOLOv8 (High Accuracy)</option>
+                  <option value="yolo11">YOLO11 (SOTA Real-time)</option>
+                  <option value="haar">Haar Cascade (Ultra Fast)</option>
+                  <option value="face_yunet">YuNet (Face Detection)</option>
+                  <option value="movementdetector">Movement (Frame Diff)</option>
+                  <option value="mock">Synthetic Mock (Testing)</option>
+                </select>
+              </div>
+              <div class="form-group col-6">
+                <label for="feed-tracker-select">Tracking Engine</label>
+                <select id="feed-tracker-select" class="form-input">
+                  <option value="centroid" selected>Centroid (Fast Distance)</option>
+                  <option value="sort">SORT (Kalman + Hungarian)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <label for="feed-conf-range" style="margin-bottom: 0;">Detection Confidence Threshold</label>
+                <span id="feed-conf-display"
+                  style="font-size: 0.82rem; font-weight: 700; color: var(--accent-color, #38bdf8); font-family: monospace;">0.40</span>
+              </div>
+              <div class="slider-container">
+                <input type="range" id="feed-conf-range" class="slider-range-input" min="0.05" max="1.00" step="0.05"
+                  value="0.40" />
+                <input type="number" id="feed-conf-input" class="form-input slider-number-input" min="0.05"
+                  max="1.00" step="0.01" value="0.40" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="feed-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+              <input type="text" id="feed-classes-input" class="form-input" placeholder="e.g. person, car" />
+              <div class="class-presets-bar">
+                <button type="button" class="btn-tag-preset" data-target="feed" data-classes="person">👤 Person</button>
+                <button type="button" class="btn-tag-preset" data-target="feed" data-classes="car, motorcycle, bus, truck, bicycle">🚗 Vehicles</button>
+                <button type="button" class="btn-tag-preset" data-target="feed" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
+                <button type="button" class="btn-tag-preset" data-target="feed" data-classes="">🌐 All Classes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-feed-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-feed-modal-submit">➕ Register as Active Camera</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Mobile Slide-out Drawer (<1024px) (Slice 2) -->
   <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop" style="display: none;"></div>
   <aside class="mobile-nav-drawer" id="mobile-nav-drawer" aria-hidden="true">
@@ -1489,6 +1649,7 @@
   <script src="/static/js/camera_grid.js"></script>
   <script src="/static/js/video_batch.js"></script>
   <script src="/static/js/video_library.js"></script>
+  <script src="/static/js/video_feed_modal.js"></script>
   <script src="/static/js/studio_canvas.js"></script>
   <script src="/static/js/studio_overlays.js"></script>
   <script src="/static/js/bev_minimap.js"></script>

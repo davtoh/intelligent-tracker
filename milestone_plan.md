@@ -27,6 +27,7 @@
 | 13 | Universal Runtime Trace Recorder & Dashboard Boot Resilience | ✅ **COMPLETE** |
 | 14 | Dynamic Detector & Pipeline Configuration (Phase 1) | ✅ **COMPLETE** |
 | 15 | System Capabilities Discovery & Camera AI Config Modal (Phase 2) | ✅ **COMPLETE** |
+| 16 | Video Library & Batch Analysis UI Integration (Phase 3) | ✅ **COMPLETE** |
 
 ---
 
@@ -651,6 +652,18 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 5. **Batch Video Indexer Enhancements (`intelligent_tracker/batch.py`):** Added support for `yolov8n`, `yolo11n`, and `mock` with `confidence` in `VideoIndexer`.
 6. **Automated Regression Suite (`tests/test_camera_detector_config.py`):** Added 6 unit tests covering Pydantic validation, CameraPool persistence, StreamPipelineFactory instantiation, API feed promotion, and offline batch occurrence indexing.
 
+## ✅ [Milestone 16] — Video Library & Batch Analysis UI Integration (Phase 3) (COMPLETE)
+**Status: COMPLETE** — Verified: 322/322 tests pass; Sphinx docs built cleanly with 0 warnings.
+**Scope:** Completes the dynamic detector & pipeline configuration roadmap by integrating offline batch occurrence analytics and dynamic feed promotion with AI model, confidence, and target class configuration modals.
+
+### Deliverables Completed:
+1. **Batch Video Occurrence Analytics Modal (`dashboard/static/index.html`):** Added `#modal-video-batch-analyze` providing detector model selection (`yolov8`, `yolo11`, `haar`, `mock`), frame stride / sample rate (1:1, 1:2, 1:5, 1:10), two-way synchronized confidence slider & numeric inputs ($0.05 - 1.00$), and quick-preset class filter pills.
+2. **Video Batch Analytics Submodule (`dashboard/static/js/video_batch.js`):** Implemented `openBatchModal`, two-way confidence synchronization, preset filter buttons, JSON body POST to `/api/videos/{filename}/analyze`, and enriched occurrence report card rendering with metadata badges for model, stride, confidence, and target classes.
+3. **Video Feed Promotion Submodule (`dashboard/static/js/video_feed_modal.js`):** Extracted dedicated module adhering to Split-Before-You-Grow rules (218 lines) managing `#modal-feed-promotion`, auto-formatting channel IDs (`vid_<name>`) and labels, detector and tracker selection (`centroid`, `sort`), confidence and class filters, and live VMS camera pool registration via POST `/api/videos/{filename}/add_as_camera`.
+4. **Video Library Submodule Refactoring (`dashboard/static/js/video_library.js`):** Refactored to delegate feed promotion to `VideoFeedModal`, maintaining a lean 201-line footprint within modularity budgets.
+5. **Video Scrubber UI Coordinator (`dashboard/static/video_scrubber.js`):** Updated `#btn-video-add-camera` and `#btn-video-analyze` click handlers to open interactive configuration modals with graceful fallbacks.
+6. **Automated Unit & Integration Regression Suite (`tests/test_video_batch_feed_ui.py`):** Added 5 unit tests verifying batch analysis JSON payloads, query parameter fallbacks, feed promotion stream registration in `CameraPool`, Pydantic validation bounds, and 404 error handling.
+
 ## Dependency Graph
 
 ```
@@ -669,6 +682,7 @@ M1 (Env & Core) ✅
                                                                     └── M13 (Universal Trace Recorder & Boot Resilience) ✅
                                                                           └── M14 (Dynamic Detector & Pipeline Configuration) ✅
                                                                                  └── M15 (System Capabilities & Camera AI Config Modal) ✅
+                                                                                        └── M16 (Video Library & Batch Analysis UI Integration) ✅
 ```
 
 ---

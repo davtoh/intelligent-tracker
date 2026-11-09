@@ -130,8 +130,20 @@
     }
   }
 
+  function openFeedPromotionModal(filename, videoPath) {
+    if (window.VideoFeedModal) {
+      window.VideoFeedModal.open(filename, videoPath);
+    } else {
+      addVideoToCameraPool(filename);
+    }
+  }
+
   async function addVideoToCameraPool(filename) {
     if (!filename) return;
+    if (window.VideoFeedModal) {
+      window.VideoFeedModal.open(filename);
+      return;
+    }
     try {
       const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/add_as_camera`, {
         method: 'POST'
@@ -184,6 +196,6 @@
     transcodeVideo: transcodeVideo,
     uploadSelectedVideo: uploadSelectedVideo,
     addVideoToCameraPool: addVideoToCameraPool,
+    openFeedPromotionModal: openFeedPromotionModal,
   };
 })();
-

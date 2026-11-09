@@ -183,6 +183,7 @@ class VideoIndexer:
 
         finally:
             cap.release()
+            del cap
 
         elapsed_wall_time = time.time() - start_wall_time
         if verbose:
