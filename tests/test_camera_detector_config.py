@@ -242,6 +242,90 @@ class TestCameraDetectorConfig(unittest.TestCase):
         res2 = self.client.post("/api/videos/ghost_clip_404.mp4/analyze")
         self.assertEqual(res2.status_code, 404)
 
+    def test_07_api_system_capabilities(self):
+        """Verify GET /api/system/capabilities returns detectors, trackers, Re-ID and COCO classes."""
+        resp = self.client.get("/api/system/capabilities")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+
+        # 1. Detectors
+        self.assertIn("detectors", data)
+        self.assertIn("yolov8", data["detectors"])
+        self.assertIn("mock", data["detectors"])
+        self.assertIn("primary_detectors", data)
+        self.assertTrue(len(data["primary_detectors"]) > 0)
+
+        # 2. Trackers
+        self.assertIn("trackers", data)
+        self.assertIn("centroid", data["trackers"])
+        self.assertIn("sort", data["trackers"])
+
+        # 3. Re-ID Extractors
+        self.assertIn("reid_extractors", data)
+        self.assertIn("mock", data["reid_extractors"])
+
+        # 4. COCO Classes & Presets
+        self.assertIn("coco_classes", data)
+        self.assertGreaterEqual(len(data["coco_classes"]), 80)
+        self.assertIn("person", data["coco_classes"])
+        self.assertIn("car", data["coco_classes"])
+
+        self.assertIn("class_presets", data)
+        self.assertEqual(data["class_presets"]["person"], ["person"])
+        self.assertIn("car", data["class_presets"]["vehicles"])
+
+        # 5. Source Presets
+        self.assertIn("source_presets", data)
+        source_values = [p["value"] for p in data["source_presets"]]
+        self.assertIn("real", source_values)
+        self.assertIn("0", source_values)
+
+    def test_08_camera_pool_list_cameras_detection_fields(self):
+        """Verify GET /api/cameras exposes detector, tracker, confidence and classes."""
+        cam_id = "test_cap_cam_01"
+        payload = {
+            "id": cam_id,
+            "name": "Capabilities Test Camera",
+            "source": "synthetic",
+            "type": "synthetic",
+            "detector": "mock",
+            "tracker": "sort",
+            "confidence": 0.45,
+            "classes": ["person", "car"],
+            "enabled": True,
+        }
+        res_add = self.client.post("/api/cameras", json=payload)
+        self.assertEqual(res_add.status_code, 200)
+
+        # Retrieve list of cameras
+        res_list = self.client.get("/api/cameras")
+        self.assertEqual(res_list.status_code, 200)
+        cameras = res_list.json()
+        target = next((c for c in cameras if c["id"] == cam_id), None)
+        self.assertIsNotNone(target)
+        self.assertEqual(target["detector"], "mock")
+        self.assertEqual(target["tracker"], "sort")
+        self.assertEqual(target["confidence"], 0.45)
+        self.assertEqual(target["classes"], ["person", "car"])
+
+        # Update via PUT /api/cameras/{id}
+        res_update = self.client.put(
+            f"/api/cameras/{cam_id}",
+            json={"confidence": 0.72, "classes": "dog, cat", "tracker": "centroid"},
+        )
+        self.assertEqual(res_update.status_code, 200)
+
+        res_list_after = self.client.get("/api/cameras")
+        cameras_after = res_list_after.json()
+        target_after = next((c for c in cameras_after if c["id"] == cam_id), None)
+        self.assertIsNotNone(target_after)
+        self.assertEqual(target_after["confidence"], 0.72)
+        self.assertEqual(target_after["classes"], ["dog", "cat"])
+        self.assertEqual(target_after["tracker"], "centroid")
+
+        # Clean up
+        self.pool.remove_camera(cam_id)
+
 
 if __name__ == "__main__":
     unittest.main()

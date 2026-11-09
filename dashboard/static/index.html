@@ -1,23 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Intelligent Tracker - Edge AI Retail & Security Analytics VMS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
   <!-- Chart.js CDN for zero-dependency real-time time-series -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/css/responsive_patterns.css">
   <link rel="stylesheet" href="/static/css/camera_diagnostics.css">
+  <link rel="stylesheet" href="/static/css/camera_ai_config.css">
 </head>
+
 <body class="dark-theme">
   <!-- Header & Navigation -->
   <header class="app-header">
     <div class="header-left">
-      <button class="hamburger-btn" id="btn-mobile-menu" aria-label="Toggle navigation menu" title="Toggle Navigation Menu">
+      <button class="hamburger-btn" id="btn-mobile-menu" aria-label="Toggle navigation menu"
+        title="Toggle Navigation Menu">
         <span></span>
         <span></span>
         <span></span>
@@ -43,61 +49,75 @@
 
     <!-- Navigation Tabs Container (Scroll buttons, Auto-Scroll Strip & Quick Tab Selector) -->
     <div class="nav-tabs-container">
-      <button class="nav-scroll-btn prev" id="nav-tabs-prev" aria-label="Scroll tabs left" title="Scroll tabs left" disabled>‹</button>
+      <button class="nav-scroll-btn prev" id="nav-tabs-prev" aria-label="Scroll tabs left" title="Scroll tabs left"
+        disabled>‹</button>
       <div class="nav-tabs-wrapper" id="nav-tabs-wrapper">
         <nav class="nav-tabs" role="tablist">
-          <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab" aria-selected="true" tabindex="0">
+          <button class="nav-tab active" id="tab-btn-live" data-tab="tab-live" role="tab" aria-selected="true"
+            tabindex="0">
             <span class="tab-icon">📹</span>
             <span>Live Monitor</span>
           </button>
-          <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-videos" data-tab="tab-videos" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">📼</span>
             <span>Video Studio</span>
           </button>
-          <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-gallery" data-tab="tab-gallery" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">👥</span>
             <span>Entity Gallery</span>
           </button>
-          <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-timeline" data-tab="tab-timeline" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">⏱️</span>
             <span>Sighting Timeline</span>
           </button>
-          <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-analytics" data-tab="tab-analytics" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">📊</span>
             <span>Analytics & Heatmap</span>
           </button>
-          <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-alerts" data-tab="tab-alerts" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">🚨</span>
             <span>Security Alerts</span>
             <span class="badge alert-count-badge" id="header-alert-badge">0</span>
           </button>
-          <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-studio" data-tab="tab-studio" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">📐</span>
             <span>Scenario Studio</span>
           </button>
-          <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-journey" data-tab="tab-journey" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">🚶</span>
             <span>Journey Search</span>
           </button>
-          <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab" aria-selected="false" tabindex="-1">
+          <button class="nav-tab" id="tab-btn-review" data-tab="tab-review" role="tab" aria-selected="false"
+            tabindex="-1">
             <span class="tab-icon">🧠</span>
             <span>Review & Learn</span>
             <span class="badge review-count-badge" id="header-review-badge" style="display:none;">0</span>
           </button>
         </nav>
       </div>
-      <button class="nav-scroll-btn next" id="nav-tabs-next" aria-label="Scroll tabs right" title="Scroll tabs right">›</button>
+      <button class="nav-scroll-btn next" id="nav-tabs-next" aria-label="Scroll tabs right"
+        title="Scroll tabs right">›</button>
     </div>
 
     <!-- Header Telemetry Controls & VMS Actions -->
     <div class="header-right">
-      <button class="btn btn-sm btn-primary header-action-btn" id="btn-open-enrollment" title="Universal Freeze-Frame Artifact & Face Enrollment">
+      <button class="btn btn-sm btn-primary header-action-btn" id="btn-open-enrollment"
+        title="Universal Freeze-Frame Artifact & Face Enrollment">
         <span>✨</span><span class="btn-text"> Enroll</span>
       </button>
-      <button class="btn btn-sm btn-outline header-action-btn" id="btn-manage-cameras" title="Camera Auto-Discovery & Stream Manager">
+      <button class="btn btn-sm btn-outline header-action-btn" id="btn-manage-cameras"
+        title="Camera Auto-Discovery & Stream Manager">
         <span>📹</span><span class="btn-text"> Cameras</span>
       </button>
-      <button class="btn btn-sm btn-outline header-action-btn" id="btn-backup-manager" title="Export / Import System State Snapshot">
+      <button class="btn btn-sm btn-outline header-action-btn" id="btn-backup-manager"
+        title="Export / Import System State Snapshot">
         <span>💾</span><span class="btn-text"> Backup</span>
       </button>
       <div class="telemetry-pill">
@@ -134,9 +154,12 @@
 
               <!-- Multi-Grid Switcher -->
               <div class="grid-switcher-group" title="Multi-Camera Grid Layout">
-                <button class="btn btn-sm btn-outline grid-switch-btn active" data-grid="1x1" title="Single Focused View (1x1)">1x1</button>
-                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="2x2" title="Quad Multi-View (2x2)">2x2</button>
-                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="3x3" title="Matrix Multi-View (3x3)">3x3</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn active" data-grid="1x1"
+                  title="Single Focused View (1x1)">1x1</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="2x2"
+                  title="Quad Multi-View (2x2)">2x2</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="3x3"
+                  title="Matrix Multi-View (3x3)">3x3</button>
               </div>
 
               <span class="resolution-badge" id="stream-res-badge">640x480</span>
@@ -169,7 +192,8 @@
           <!-- Live Player HUD Toolbar (Milestone 10) -->
           <div class="live-player-hud glass-panel">
             <div class="hud-left">
-              <button class="btn btn-sm btn-outline hud-btn" id="btn-stream-pause-play" title="Pause / Resume Live MJPEG Feed">
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-stream-pause-play"
+                title="Pause / Resume Live MJPEG Feed">
                 <span class="hud-icon" id="stream-pause-icon">⏸️</span>
                 <span id="stream-pause-text">Pause Feed</span>
               </button>
@@ -184,10 +208,12 @@
               <span class="stream-telemetry-text" id="stream-telemetry-hud">CAM_01 • 640x480 • 0.0 FPS</span>
             </div>
             <div class="hud-right">
-              <button class="btn btn-sm btn-primary hud-btn" id="btn-quick-tag" title="Click-to-Tag detected track directly on feed">
+              <button class="btn btn-sm btn-primary hud-btn" id="btn-quick-tag"
+                title="Click-to-Tag detected track directly on feed">
                 🏷️ Click-to-Tag
               </button>
-              <button class="btn btn-sm btn-outline hud-btn" id="btn-snapshot-save" title="Save Instant Evidence Snapshot">
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-snapshot-save"
+                title="Save Instant Evidence Snapshot">
                 📸 Snapshot
               </button>
               <button class="btn btn-sm btn-outline hud-btn" id="btn-fullscreen-toggle" title="Toggle Fullscreen">
@@ -303,13 +329,15 @@
       <div class="scrubber-grid">
         <div class="glass-panel video-player-card">
           <div class="card-header">
-            <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback Scrubber</h3>
+            <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback
+              Scrubber</h3>
             <div class="card-actions">
-              <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera Feed</button>
+              <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera
+                Feed</button>
               <button class="btn btn-sm btn-outline" id="btn-video-analyze" disabled>⚡ Run Batch Analytics</button>
             </div>
           </div>
-          
+
           <div class="scrubber-viewport">
             <video id="scrubber-video-player" playsinline></video>
           </div>
@@ -322,9 +350,11 @@
             </div>
             <div class="scrubber-controls-row">
               <div class="scrubber-buttons-left">
-                <button class="btn btn-sm btn-outline" id="scrubber-btn-prev" title="Step Back 1 Frame">&lt; -1 Frame</button>
+                <button class="btn btn-sm btn-outline" id="scrubber-btn-prev" title="Step Back 1 Frame">&lt; -1
+                  Frame</button>
                 <button class="btn btn-sm btn-primary" id="scrubber-btn-play">▶ Play</button>
-                <button class="btn btn-sm btn-outline" id="scrubber-btn-next" title="Step Forward 1 Frame">&gt; +1 Frame</button>
+                <button class="btn btn-sm btn-outline" id="scrubber-btn-next" title="Step Forward 1 Frame">&gt; +1
+                  Frame</button>
               </div>
               <div class="scrubber-speed-group">
                 <span class="speed-label">Speed:</span>
@@ -335,7 +365,8 @@
               </div>
               <div class="scrubber-tab-policy-group">
                 <label for="scrubber-tab-policy" class="policy-label">⚡ Tab Switch:</label>
-                <select id="scrubber-tab-policy" class="form-select-sm" title="Choose player behavior when navigating away from Video Studio">
+                <select id="scrubber-tab-policy" class="form-select-sm"
+                  title="Choose player behavior when navigating away from Video Studio">
                   <option value="auto-resume">Auto-Pause & Resume</option>
                   <option value="keep-paused">Pause & Hold</option>
                   <option value="reset">Pause & Reset</option>
@@ -463,7 +494,8 @@
             <h3>Cumulative Spatial Density Heatmap</h3>
             <div class="heatmap-actions">
               <button class="btn btn-sm btn-outline" id="btn-refresh-heatmap">🔄 Refresh Heatmap</button>
-              <a class="btn btn-sm btn-secondary" id="btn-download-heatmap" href="/analytics/heatmap" target="_blank">📥 Export High-Res</a>
+              <a class="btn btn-sm btn-secondary" id="btn-download-heatmap" href="/analytics/heatmap" target="_blank">📥
+                Export High-Res</a>
             </div>
           </div>
           <div class="heatmap-viewport">
@@ -511,13 +543,16 @@
           <div class="studio-toolbar">
             <div class="toolbar-group">
               <span class="toolbar-title">🎨 Tools:</span>
-              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-zone" title="Draw Polygonal Zone (Click vertices, double click to close)">
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-zone"
+                title="Draw Polygonal Zone (Click vertices, double click to close)">
                 🟢 Draw Zone
               </button>
-              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-tripwire" title="Draw Virtual Tripwire Line">
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-tripwire"
+                title="Draw Virtual Tripwire Line">
                 ⚡ Draw Tripwire
               </button>
-              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-homography" title="Calibrate 4-point Ground Plane Homography">
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-homography"
+                title="Calibrate 4-point Ground Plane Homography">
                 📐 Calibrate BEV (4 Pts)
               </button>
               <button class="btn btn-sm btn-outline" id="btn-studio-clear" title="Clear current points and exit mode">
@@ -534,7 +569,8 @@
 
           <!-- Studio Status Notification Banner -->
           <div class="studio-status-banner" id="studio-status-banner">
-            Click a tool above to start drawing zones, directional tripwires, or calibrating the ground plane homography.
+            Click a tool above to start drawing zones, directional tripwires, or calibrating the ground plane
+            homography.
           </div>
 
           <!-- Studio Interactive Viewport with Drawing Canvas -->
@@ -601,7 +637,8 @@
           <div class="toolbar-left">
             <div class="search-box journey-search-box">
               <span class="search-icon">🔍</span>
-              <input type="text" id="journey-search-query" placeholder="Enter Entity Name (e.g. Alice) or Track ID (e.g. 42)..." />
+              <input type="text" id="journey-search-query"
+                placeholder="Enter Entity Name (e.g. Alice) or Track ID (e.g. 42)..." />
             </div>
             <button class="btn btn-primary" id="btn-journey-search">🔎 Search Journey</button>
           </div>
@@ -614,7 +651,8 @@
 
         <!-- Trajectory Journey Results Container -->
         <div id="journey-results-container" class="journey-results-container">
-          <div class="empty-state">Enter an entity name or track ID above to reconstruct their cross-camera trajectory journey.</div>
+          <div class="empty-state">Enter an entity name or track ID above to reconstruct their cross-camera trajectory
+            journey.</div>
         </div>
       </div>
     </section>
@@ -643,7 +681,8 @@
 
         <!-- Review Grid Container -->
         <div id="review-queue-container" class="review-queue-grid">
-          <div class="empty-state">No pending review candidates in queue. Borderline detections (0.45 &lt; sim &lt; 0.70) are automatically routed here for human-in-the-loop verification.</div>
+          <div class="empty-state">No pending review candidates in queue. Borderline detections (0.45 &lt; sim &lt;
+            0.70) are automatically routed here for human-in-the-loop verification.</div>
         </div>
       </div>
     </section>
@@ -666,7 +705,8 @@
         <div class="modal-body-scroll">
           <div class="form-group">
             <label for="tag-name-input">Full Name / Label *</label>
-            <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. John Doe (VIP), Guard #1" required />
+            <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. John Doe (VIP), Guard #1"
+              required />
           </div>
 
           <div class="form-group">
@@ -681,7 +721,8 @@
 
           <div class="form-group">
             <label for="tag-notes-input">Security Notes</label>
-            <textarea id="tag-notes-input" class="form-input" rows="2" placeholder="Badge number, clearance details, or reason for restriction..."></textarea>
+            <textarea id="tag-notes-input" class="form-input" rows="2"
+              placeholder="Badge number, clearance details, or reason for restriction..."></textarea>
           </div>
         </div>
 
@@ -705,7 +746,8 @@
         <div class="snapshot-modal-meta" id="snapshot-modal-meta"></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-snapshot-view').style.display='none'">Close</button>
+        <button type="button" class="btn btn-outline"
+          onclick="document.getElementById('modal-snapshot-view').style.display='none'">Close</button>
       </div>
     </div>
   </div>
@@ -738,7 +780,9 @@
                   </tr>
                 </thead>
                 <tbody id="active-cameras-table-body">
-                  <tr><td colspan="6" class="text-center">Loading cameras...</td></tr>
+                  <tr>
+                    <td colspan="6" class="text-center">Loading cameras...</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -747,7 +791,8 @@
               <h4>Hardware & LAN Auto-Discovery</h4>
               <div style="display: flex; gap: 8px;">
                 <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
-                <button class="btn btn-xs btn-outline" id="btn-release-cameras" title="Release locked camera handles and reset DirectShow driver">🔓 Release Blocked</button>
+                <button class="btn btn-xs btn-outline" id="btn-release-cameras"
+                  title="Release locked camera handles and reset DirectShow driver">🔓 Release Blocked</button>
               </div>
             </div>
             <div class="discovered-devices-list" id="discovered-devices-list">
@@ -768,7 +813,8 @@
                 </div>
                 <div class="form-group col-6">
                   <label for="cam-name-input">Display Label *</label>
-                  <input type="text" id="cam-name-input" class="form-input" placeholder="e.g. Warehouse North" required />
+                  <input type="text" id="cam-name-input" class="form-input" placeholder="e.g. Warehouse North"
+                    required />
                 </div>
               </div>
 
@@ -821,24 +867,92 @@
 
               <div class="form-group">
                 <label for="cam-source-input">Resolved Stream URI / Device Source *</label>
-                <input type="text" id="cam-source-input" class="form-input" placeholder="rtsp://... or 0 for USB" required />
+                <div class="quick-source-row">
+                  <input type="text" id="cam-source-input" class="form-input" placeholder="rtsp://... or 0 for USB"
+                    required />
+                  <button type="button" class="btn btn-quick-source" id="btn-quick-real-cam"
+                    title="Auto-detect and use first working physical webcam ('real')">📷 Real Cam</button>
+                </div>
+              </div>
+
+              <!-- AI Detector & Tracking Intelligence -->
+              <div class="ai-config-section">
+                <div class="ai-config-header">
+                  <h4 class="ai-config-title">
+                    🧠 AI Detector & Tracking Intelligence
+                  </h4>
+                  <span class="ai-config-badge">Hardware Accelerated</span>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group col-6">
+                    <label for="cam-detector-select">Detector Model</label>
+                    <select id="cam-detector-select" class="form-input">
+                      <option value="yolov8" selected>YOLOv8 (High Accuracy)</option>
+                      <option value="yolo11">YOLO11 (SOTA Real-time)</option>
+                      <option value="haar">Haar Cascade (Ultra Fast)</option>
+                      <option value="face_yunet">YuNet (Face Detection)</option>
+                      <option value="movementdetector">Movement (Frame Diff)</option>
+                      <option value="mock">Synthetic Mock (Testing)</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-6">
+                    <label for="cam-tracker-select">Tracking Engine</label>
+                    <select id="cam-tracker-select" class="form-input">
+                      <option value="centroid" selected>Centroid (Fast Distance)</option>
+                      <option value="sort">SORT (Kalman + Hungarian)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label for="cam-conf-range" style="margin-bottom: 0;">Detection Confidence Threshold</label>
+                    <span id="cam-conf-display"
+                      style="font-size: 0.82rem; font-weight: 700; color: var(--accent-color, #38bdf8); font-family: monospace;">0.40</span>
+                  </div>
+                  <div class="slider-container">
+                    <input type="range" id="cam-conf-range" class="slider-range-input" min="0.05" max="1.00" step="0.05"
+                      value="0.40" />
+                    <input type="number" id="cam-conf-input" class="form-input slider-number-input" min="0.05"
+                      max="1.00" step="0.01" value="0.40" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="cam-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+                  <input type="text" id="cam-classes-input" class="form-input" placeholder="e.g. person, car" />
+                  <div class="class-presets-bar">
+                    <button type="button" class="btn-tag-preset" data-classes="person">👤 Person</button>
+                    <button type="button" class="btn-tag-preset" data-classes="car, motorcycle, bus, truck, bicycle">🚗
+                      Vehicles</button>
+                    <button type="button" class="btn-tag-preset"
+                      data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
+                    <button type="button" class="btn-tag-preset" data-classes="">🌐 All Classes</button>
+                  </div>
+                </div>
               </div>
 
               <!-- Live Snapshot Connection Preview Box -->
               <div class="connection-test-box glass-panel">
                 <div class="test-box-header">
-                  <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test Connection</button>
-                  <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify source.</span>
+                  <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test
+                    Connection</button>
+                  <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify
+                    source.</span>
                 </div>
-                <img id="test-preview-img" src="" alt="Test Snapshot" style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
+                <img id="test-preview-img" src="" alt="Test Snapshot"
+                  style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
               </div>
             </form>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" id="modal-cam-cancel" onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
-        <button type="submit" form="camera-config-form" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to VMS</button>
+        <button type="button" class="btn btn-outline" id="modal-cam-cancel"
+          onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
+        <button type="submit" form="camera-config-form" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to
+          VMS</button>
       </div>
     </div>
   </div>
@@ -891,7 +1005,8 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="modal-diag-cancel">Close</button>
         <button type="button" class="btn btn-outline" id="diag-btn-probe-channel">⚡ Probe Hardware</button>
-        <button type="button" class="btn btn-outline" id="diag-btn-release-lock" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">🔓 Release Device Lock</button>
+        <button type="button" class="btn btn-outline" id="diag-btn-release-lock"
+          style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">🔓 Release Device Lock</button>
         <button type="button" class="btn btn-primary" id="diag-btn-edit-manager">✏️ Edit in Camera Manager</button>
       </div>
     </div>
@@ -906,7 +1021,8 @@
       </div>
       <div class="modal-body-scroll backup-modal-body">
         <p style="color: #94a3b8; font-size: 14px; margin-bottom: 20px;">
-          Create a full portable snapshot of your entire security system including SQLite database (<code>tracker.db</code>), 
+          Create a full portable snapshot of your entire security system including SQLite database
+          (<code>tracker.db</code>),
           enrolled identities, thumbnail signatures, camera topologies, and alerting rules.
         </p>
 
@@ -929,7 +1045,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-backup-manager').style.display='none'">Close</button>
+        <button type="button" class="btn btn-outline"
+          onclick="document.getElementById('modal-backup-manager').style.display='none'">Close</button>
       </div>
     </div>
   </div>
@@ -953,14 +1070,20 @@
                 <input type="file" id="enroll-file-input" accept="image/*" style="display: none;" />
               </div>
             </div>
-            <div class="enroll-canvas-wrapper" style="position: relative; background: #0b0f19; border-radius: 6px; overflow: hidden; min-height: 240px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle);">
-              <canvas id="enroll-bbox-canvas" style="max-width: 100%; height: auto; cursor: crosshair; display: none;"></canvas>
-              <div id="enroll-canvas-placeholder" style="color: #64748b; font-size: 13px; text-align: center; padding: 24px;">
-                Click <strong>"Grab Frame"</strong> to freeze live camera stream and drag a bounding box around any human face, person, vehicle, or artifact.
+            <div class="enroll-canvas-wrapper"
+              style="position: relative; background: #0b0f19; border-radius: 6px; overflow: hidden; min-height: 240px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-subtle);">
+              <canvas id="enroll-bbox-canvas"
+                style="max-width: 100%; height: auto; cursor: crosshair; display: none;"></canvas>
+              <div id="enroll-canvas-placeholder"
+                style="color: #64748b; font-size: 13px; text-align: center; padding: 24px;">
+                Click <strong>"Grab Frame"</strong> to freeze live camera stream and drag a bounding box around any
+                human face, person, vehicle, or artifact.
               </div>
             </div>
-            <div id="enroll-crop-preview-box" style="margin-top: 10px; display: none; align-items: center; gap: 12px; background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3);">
-              <img id="enroll-crop-preview-img" src="" alt="Selected Crop" style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #06b6d4;" />
+            <div id="enroll-crop-preview-box"
+              style="margin-top: 10px; display: none; align-items: center; gap: 12px; background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 6px; border: 1px solid rgba(6, 182, 212, 0.3);">
+              <img id="enroll-crop-preview-img" src="" alt="Selected Crop"
+                style="width: 70px; height: 70px; object-fit: cover; border-radius: 6px; border: 1px solid #06b6d4;" />
               <div style="font-size: 12px; color: #94a3b8;">
                 <span id="enroll-crop-meta" style="color: #06b6d4; font-weight: 600;">Crop Region Selected</span><br>
                 Dual-Model Biometric Extraction (YuNet ONNX Face + Deep Re-ID) will generate a versioned descriptor.
@@ -976,7 +1099,8 @@
             <form id="universal-enrollment-form">
               <div class="form-group">
                 <label for="enroll-name-input">Entity Full Name / Artifact Label *</label>
-                <input type="text" id="enroll-name-input" class="form-input" placeholder="e.g. Dr. Jane Foster, Delivery Van #4, Security Guard Max" required />
+                <input type="text" id="enroll-name-input" class="form-input"
+                  placeholder="e.g. Dr. Jane Foster, Delivery Van #4, Security Guard Max" required />
               </div>
 
               <div class="form-group">
@@ -996,7 +1120,8 @@
               <div class="form-row">
                 <div class="form-group col-6">
                   <label for="enroll-role-input">Security Role / Clearance</label>
-                  <input type="text" id="enroll-role-input" class="form-input" placeholder="e.g. resident, courier, maintenance" />
+                  <input type="text" id="enroll-role-input" class="form-input"
+                    placeholder="e.g. resident, courier, maintenance" />
                 </div>
                 <div class="form-group col-6">
                   <label for="enroll-camera-select">Camera Source</label>
@@ -1007,7 +1132,8 @@
               </div>
 
               <div class="form-group">
-                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
+                <label
+                  style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
                   <input type="checkbox" id="enroll-locked-anchor-cb" checked style="accent-color: #06b6d4;" />
                   <span><strong>Lock as Ground Truth Anchor</strong> (Protects against adaptive drift)</span>
                 </label>
@@ -1015,7 +1141,8 @@
 
               <div class="form-group">
                 <label for="enroll-notes-input">Notes & Access Permissions</label>
-                <textarea id="enroll-notes-input" class="form-input" rows="2" placeholder="Vehicle license plate, access schedule, or security notes..."></textarea>
+                <textarea id="enroll-notes-input" class="form-input" rows="2"
+                  placeholder="Vehicle license plate, access schedule, or security notes..."></textarea>
               </div>
             </form>
           </div>
@@ -1023,7 +1150,8 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline" id="modal-enroll-cancel">Cancel</button>
-        <button type="submit" form="universal-enrollment-form" class="btn btn-primary" id="btn-submit-enrollment">✨ Enroll & Lock Anchor</button>
+        <button type="submit" form="universal-enrollment-form" class="btn btn-primary" id="btn-submit-enrollment">✨
+          Enroll & Lock Anchor</button>
       </div>
     </div>
   </div>
@@ -1037,15 +1165,18 @@
       </div>
       <div class="modal-body-scroll versions-modal-body" style="padding: 16px 24px;">
         <p style="color: #94a3b8; font-size: 13px; margin-bottom: 16px;">
-          Chronological audit trail of adaptive visual feature descriptors. If appearance drift or misidentification occurs, 
+          Chronological audit trail of adaptive visual feature descriptors. If appearance drift or misidentification
+          occurs,
           click <strong>"Rollback"</strong> to restore an earlier verified descriptor state.
         </p>
-        <div id="versions-timeline-container" class="versions-timeline-container" style="max-height: 420px; overflow-y: auto;">
+        <div id="versions-timeline-container" class="versions-timeline-container"
+          style="max-height: 420px; overflow-y: auto;">
           <div class="empty-state">Loading version history...</div>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-descriptor-versions').style.display='none'">Close</button>
+        <button type="button" class="btn btn-outline"
+          onclick="document.getElementById('modal-descriptor-versions').style.display='none'">Close</button>
       </div>
     </div>
   </div>
@@ -1068,7 +1199,8 @@
           </div>
           <div class="form-group">
             <label for="reassign-notes-input">Correction Reason / Operator Notes</label>
-            <input type="text" id="reassign-notes-input" class="form-input" placeholder="e.g. Corrected mistaken identity, appearance variation" />
+            <input type="text" id="reassign-notes-input" class="form-input"
+              placeholder="e.g. Corrected mistaken identity, appearance variation" />
           </div>
         </div>
         <div class="modal-footer">
@@ -1090,7 +1222,8 @@
         <div class="modal-body-scroll">
           <div class="form-group">
             <label for="modal-zone-name-input">Zone Name *</label>
-            <input type="text" id="modal-zone-name-input" class="form-input" placeholder="e.g. Vault Perimeter, Door Exit" required />
+            <input type="text" id="modal-zone-name-input" class="form-input"
+              placeholder="e.g. Vault Perimeter, Door Exit" required />
           </div>
           <div class="form-group">
             <label for="modal-zone-category-select">Category Filter</label>
@@ -1110,7 +1243,8 @@
             </div>
             <div class="form-group col-6">
               <label for="modal-zone-capacity-input">Capacity Limit</label>
-              <input type="number" id="modal-zone-capacity-input" class="form-input" placeholder="0 = Unlimited" min="0" value="0" />
+              <input type="number" id="modal-zone-capacity-input" class="form-input" placeholder="0 = Unlimited" min="0"
+                value="0" />
             </div>
           </div>
         </div>
@@ -1133,7 +1267,8 @@
         <div class="modal-body-scroll">
           <div class="form-group">
             <label for="modal-tripwire-name-input">Tripwire Name *</label>
-            <input type="text" id="modal-tripwire-name-input" class="form-input" placeholder="e.g. Entrance Line, Hallway A" required />
+            <input type="text" id="modal-tripwire-name-input" class="form-input"
+              placeholder="e.g. Entrance Line, Hallway A" required />
           </div>
           <div class="form-group">
             <label for="modal-tripwire-bidir-select">Detection Crossing Direction</label>
@@ -1166,17 +1301,20 @@
           <div class="form-row">
             <div class="form-group col-6">
               <label for="modal-homography-width-input">Ground Width (m) *</label>
-              <input type="number" id="modal-homography-width-input" class="form-input" value="10.0" min="0.5" step="0.1" required />
+              <input type="number" id="modal-homography-width-input" class="form-input" value="10.0" min="0.5"
+                step="0.1" required />
             </div>
             <div class="form-group col-6">
               <label for="modal-homography-height-input">Ground Height (m) *</label>
-              <input type="number" id="modal-homography-height-input" class="form-input" value="10.0" min="0.5" step="0.1" required />
+              <input type="number" id="modal-homography-height-input" class="form-input" value="10.0" min="0.5"
+                step="0.1" required />
             </div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" id="modal-homography-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-modal-homography-save">📐 Calibrate Ground Plane</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-homography-save">📐 Calibrate Ground
+            Plane</button>
         </div>
       </form>
     </div>
@@ -1198,7 +1336,8 @@
             </div>
             <div class="form-group col-6">
               <label for="modal-trans-src-zone-input">Source Zone Name *</label>
-              <input type="text" id="modal-trans-src-zone-input" class="form-input" placeholder="e.g. Door Exit" required />
+              <input type="text" id="modal-trans-src-zone-input" class="form-input" placeholder="e.g. Door Exit"
+                required />
             </div>
           </div>
           <div class="form-row">
@@ -1208,7 +1347,8 @@
             </div>
             <div class="form-group col-6">
               <label for="modal-trans-tgt-zone-input">Target Zone Name *</label>
-              <input type="text" id="modal-trans-tgt-zone-input" class="form-input" placeholder="e.g. Door Entrance" required />
+              <input type="text" id="modal-trans-tgt-zone-input" class="form-input" placeholder="e.g. Door Entrance"
+                required />
             </div>
           </div>
           <div class="form-row">
@@ -1223,10 +1363,12 @@
           </div>
           <div class="form-group">
             <label for="modal-trans-boost-input">Spatial Prior Bonus (0.1 to 0.5)</label>
-            <input type="number" id="modal-trans-boost-input" class="form-input" value="0.35" min="0.05" max="0.9" step="0.05" />
+            <input type="number" id="modal-trans-boost-input" class="form-input" value="0.35" min="0.05" max="0.9"
+              step="0.05" />
           </div>
           <div class="form-group">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
+            <label
+              style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
               <input type="checkbox" id="modal-trans-bidir-cb" style="accent-color: #06b6d4;" />
               <span>Make transition link bidirectional</span>
             </label>
@@ -1234,7 +1376,8 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" id="modal-transition-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="btn-modal-transition-save">🔗 Create Transition Link</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-transition-save">🔗 Create Transition
+            Link</button>
         </div>
       </form>
     </div>
@@ -1252,7 +1395,8 @@
         <div class="modal-body-scroll">
           <div class="form-group">
             <label for="quick-enroll-name-input">Full Entity Name *</label>
-            <input type="text" id="quick-enroll-name-input" class="form-input" placeholder="e.g. John Doe, Delivery Van #3" required />
+            <input type="text" id="quick-enroll-name-input" class="form-input"
+              placeholder="e.g. John Doe, Delivery Van #3" required />
           </div>
           <div class="form-group">
             <label for="quick-enroll-category-select">Semantic Category</label>
@@ -1292,15 +1436,24 @@
     </div>
     <div class="drawer-body">
       <nav class="drawer-nav" role="tablist">
-        <button class="drawer-tab active" data-tab="tab-live"><span class="tab-icon">📹</span><span>Live Monitor</span></button>
-        <button class="drawer-tab" data-tab="tab-videos"><span class="tab-icon">📼</span><span>Video Studio</span></button>
-        <button class="drawer-tab" data-tab="tab-gallery"><span class="tab-icon">👥</span><span>Entity Gallery</span></button>
-        <button class="drawer-tab" data-tab="tab-timeline"><span class="tab-icon">⏱️</span><span>Sighting Timeline</span></button>
-        <button class="drawer-tab" data-tab="tab-analytics"><span class="tab-icon">📊</span><span>Analytics & Heatmap</span></button>
-        <button class="drawer-tab" data-tab="tab-alerts"><span class="tab-icon">🚨</span><span>Security Alerts</span><span class="badge" id="drawer-alert-badge">0</span></button>
-        <button class="drawer-tab" data-tab="tab-studio"><span class="tab-icon">📐</span><span>Scenario Studio</span></button>
-        <button class="drawer-tab" data-tab="tab-journey"><span class="tab-icon">🚶</span><span>Journey Search</span></button>
-        <button class="drawer-tab" data-tab="tab-review"><span class="tab-icon">🧠</span><span>Review & Learn</span><span class="badge" id="drawer-review-badge" style="display:none;">0</span></button>
+        <button class="drawer-tab active" data-tab="tab-live"><span class="tab-icon">📹</span><span>Live
+            Monitor</span></button>
+        <button class="drawer-tab" data-tab="tab-videos"><span class="tab-icon">📼</span><span>Video
+            Studio</span></button>
+        <button class="drawer-tab" data-tab="tab-gallery"><span class="tab-icon">👥</span><span>Entity
+            Gallery</span></button>
+        <button class="drawer-tab" data-tab="tab-timeline"><span class="tab-icon">⏱️</span><span>Sighting
+            Timeline</span></button>
+        <button class="drawer-tab" data-tab="tab-analytics"><span class="tab-icon">📊</span><span>Analytics &
+            Heatmap</span></button>
+        <button class="drawer-tab" data-tab="tab-alerts"><span class="tab-icon">🚨</span><span>Security
+            Alerts</span><span class="badge" id="drawer-alert-badge">0</span></button>
+        <button class="drawer-tab" data-tab="tab-studio"><span class="tab-icon">📐</span><span>Scenario
+            Studio</span></button>
+        <button class="drawer-tab" data-tab="tab-journey"><span class="tab-icon">🚶</span><span>Journey
+            Search</span></button>
+        <button class="drawer-tab" data-tab="tab-review"><span class="tab-icon">🧠</span><span>Review &
+            Learn</span><span class="badge" id="drawer-review-badge" style="display:none;">0</span></button>
       </nav>
       <div class="drawer-actions">
         <button class="btn btn-primary btn-block" id="drawer-btn-enroll">✨ Enroll Entity</button>
@@ -1332,6 +1485,7 @@
   <script src="/static/js/gallery_timeline.js"></script>
   <script src="/static/js/analytics_view.js"></script>
   <script src="/static/js/camera_discovery.js"></script>
+  <script src="/static/js/camera_ai_config.js"></script>
   <script src="/static/js/camera_grid.js"></script>
   <script src="/static/js/video_batch.js"></script>
   <script src="/static/js/video_library.js"></script>
@@ -1351,4 +1505,5 @@
   <script src="/static/studio.js"></script>
   <script src="/static/review_and_rsac.js"></script>
 </body>
+
 </html>

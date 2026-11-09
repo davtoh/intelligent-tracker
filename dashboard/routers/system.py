@@ -116,6 +116,63 @@ async def get_system_processes():
     return lm.get_diagnostics()
 
 
+@router.get("/api/system/capabilities")
+async def get_system_capabilities():
+    """Expose available detectors, trackers, Re-ID extractors, target classes, and presets."""
+    from intelligent_tracker.detectors import DetectorFactory
+    from intelligent_tracker.detectors.coco_classes import COCO_CLASSES
+    from intelligent_tracker.reid import ReIDExtractorFactory
+    from intelligent_tracker.tracker import TrackerFactory
+
+    try:
+        detectors = DetectorFactory.available()
+    except Exception as e:
+        logger.warning("Failed to fetch available detectors: %s", e)
+        detectors = ["yolov8", "mock"]
+
+    try:
+        trackers = TrackerFactory.available_trackers()
+    except Exception as e:
+        logger.warning("Failed to fetch available trackers: %s", e)
+        trackers = ["centroid", "sort"]
+
+    try:
+        reid_extractors = list(getattr(ReIDExtractorFactory, "_registry", {}).keys())
+    except Exception as e:
+        logger.warning("Failed to fetch available reid extractors: %s", e)
+        reid_extractors = ["color", "hsv", "onnx", "mock"]
+
+    primary_detectors = [
+        d for d in ["yolov8", "yolo11", "haar", "face_yunet", "movementdetector", "color", "mock"]
+        if d in detectors
+    ]
+    if not primary_detectors:
+        primary_detectors = detectors[:6]
+
+    return {
+        "detectors": detectors,
+        "primary_detectors": primary_detectors,
+        "trackers": trackers,
+        "reid_extractors": reid_extractors,
+        "coco_classes": COCO_CLASSES,
+        "default_classes": [
+            "person", "car", "bicycle", "motorcycle", "bus", "truck", "dog", "cat"
+        ],
+        "class_presets": {
+            "person": ["person"],
+            "vehicles": ["car", "motorcycle", "bus", "truck", "bicycle"],
+            "security": ["person", "car", "truck", "motorcycle", "backpack", "suitcase"],
+            "all": [],
+        },
+        "source_presets": [
+            {"label": "Real Physical Webcam (auto-detect)", "value": "real"},
+            {"label": "USB Device #0", "value": "0"},
+            {"label": "USB Device #1", "value": "1"},
+            {"label": "Synthetic / Mock Source", "value": "synthetic"},
+        ],
+    }
+
+
 @router.post("/api/system/streams/{camera_id}/evict")
 async def evict_stream_subscribers(
     camera_id: str, reason: Optional[str] = Query("Admin eviction")

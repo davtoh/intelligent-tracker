@@ -182,11 +182,24 @@ class StreamPipelineFactory:
     @staticmethod
     def _init_tracker(tracker_cfg: Dict[str, Any]) -> Any:
         """Instantiate tracking engine."""
+        tracker_type = tracker_cfg.get("type", "centroid").lower()
+        min_hits = int(tracker_cfg.get("min_hits", 2))
+        iou_threshold = float(tracker_cfg.get("iou_threshold", 0.3 if tracker_type == "sort" else 0.2))
+
+        if tracker_type == "sort":
+            max_age = int(tracker_cfg.get("max_age", tracker_cfg.get("max_disappeared", 30)))
+            return TrackerFactory.create(
+                "sort",
+                max_age=max_age,
+                min_hits=min_hits,
+                iou_threshold=iou_threshold,
+            )
+        max_disappeared = int(tracker_cfg.get("max_disappeared", tracker_cfg.get("max_age", 30)))
         return TrackerFactory.create(
-            tracker_cfg.get("type", "centroid"),
-            max_disappeared=int(tracker_cfg.get("max_disappeared", 30)),
-            min_hits=int(tracker_cfg.get("min_hits", 2)),
-            iou_threshold=float(tracker_cfg.get("iou_threshold", 0.2)),
+            tracker_type,
+            max_disappeared=max_disappeared,
+            min_hits=min_hits,
+            iou_threshold=iou_threshold,
         )
 
     @staticmethod

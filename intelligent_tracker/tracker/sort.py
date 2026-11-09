@@ -122,7 +122,16 @@ class KalmanBoxTracker:
 class SortTracker:
     """SORT (Simple Online and Realtime Tracking) implementation using pure NumPy Kalman filtering."""
 
-    def __init__(self, max_age: int = 30, min_hits: int = 3, iou_threshold: float = 0.3):
+    def __init__(
+        self,
+        max_age: int = 30,
+        min_hits: int = 3,
+        iou_threshold: float = 0.3,
+        max_disappeared: Optional[int] = None,
+        **kwargs: Any,
+    ):
+        if max_disappeared is not None:
+            max_age = max_disappeared
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
         self.iou_threshold = float(iou_threshold)

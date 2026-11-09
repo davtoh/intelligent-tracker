@@ -26,6 +26,7 @@
 | 12 | Dashboard Architecture & Domain Services Decoupling (Phase 1) | ✅ **COMPLETE** |
 | 13 | Universal Runtime Trace Recorder & Dashboard Boot Resilience | ✅ **COMPLETE** |
 | 14 | Dynamic Detector & Pipeline Configuration (Phase 1) | ✅ **COMPLETE** |
+| 15 | System Capabilities Discovery & Camera AI Config Modal (Phase 2) | ✅ **COMPLETE** |
 
 ---
 
@@ -667,6 +668,7 @@ M1 (Env & Core) ✅
                                                               └── M12 (Dashboard Architecture Decoupling - Phase 1) ✅
                                                                     └── M13 (Universal Trace Recorder & Boot Resilience) ✅
                                                                           └── M14 (Dynamic Detector & Pipeline Configuration) ✅
+                                                                                 └── M15 (System Capabilities & Camera AI Config Modal) ✅
 ```
 
 ---

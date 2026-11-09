@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-09] feat: System Capabilities API & Camera AI Configuration Modal (Milestone 2)
+- **Type**: feat
+- **Summary**: Implemented dynamic AI capabilities discovery endpoint (`/api/system/capabilities`) exposing detectors, trackers, Re-ID extractors, and COCO classes. Extended the VMS camera modal with an AI Detector & Tracking Intelligence section, bidirectional confidence slider/numeric inputs, class filter presets, and quick physical webcam presets. Normalized SortTracker and CentroidTracker kwargs (`max_age` / `max_disappeared`).
+- **Files** (8):
+  - `dashboard/routers/system.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/services/pipeline_factory.py`
+  - `intelligent_tracker/tracker/sort.py`
+  - `dashboard/static/css/camera_ai_config.css`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/camera_manager.js`
+  - `dashboard/static/index.html`
+  - `tests/test_camera_detector_config.py`
+- **Verification**: 317/317 tests pass (36.71s); 0 warnings Sphinx HTML build.
+
 ## [2026-11-09] feat: Dynamic Detector & Pipeline Configuration (Milestone 1)
 - **Type**: feat
 - **Summary**: Implemented dynamic Edge AI detector selection, confidence thresholds, and class filtering contracts across Pydantic schemas, CameraPool orchestrator, StreamPipelineFactory, and VideoRouter. Fixed broken VideoIndexer offline batch occurrence analytics import and parameterized feed promotion.

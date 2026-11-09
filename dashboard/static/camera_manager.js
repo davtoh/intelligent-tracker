@@ -115,6 +115,7 @@
 
   function openModal() {
     if (modalCameraManager) modalCameraManager.style.display = 'flex';
+    window.CameraAIConfig?.loadCapabilities?.();
     refreshCameras();
   }
 
@@ -127,6 +128,7 @@
     editingCameraId = null;
     selectedDeviceName = null;
     if (camForm) camForm.reset();
+    window.CameraAIConfig?.resetValues?.();
     if (inputCamId) {
       inputCamId.readOnly = false;
       inputCamId.disabled = false;
@@ -229,6 +231,7 @@
     if (inputCamName) inputCamName.value = cam.name || '';
     if (inputCamSource) inputCamSource.value = cam.source || '';
     if (presetSelect && cam.type) presetSelect.value = cam.type;
+    window.CameraAIConfig?.setValues?.(cam);
 
     const btnSave = document.getElementById('btn-save-camera');
     if (btnSave) btnSave.textContent = '💾 Update Camera';
@@ -272,13 +275,22 @@
   }
 
   function buildCameraPayload(id, name, source) {
+    const aiConfig = window.CameraAIConfig?.getValues?.() || {
+      detector: document.getElementById('cam-detector-select')?.value || 'yolov8',
+      tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
+      confidence: 0.40,
+      classes: null,
+    };
+
     return {
       id: id,
       name: name,
       source: source,
       type: presetSelect.value || 'rtsp',
-      detector: document.getElementById('cam-detector-select')?.value || 'mock',
-      tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
+      detector: aiConfig.detector || 'yolov8',
+      tracker: aiConfig.tracker || 'centroid',
+      confidence: aiConfig.confidence !== undefined ? aiConfig.confidence : 0.40,
+      classes: aiConfig.classes,
       enabled: true,
       device_name: selectedDeviceName,
     };
