@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-09] feat: Dynamic Detector & Pipeline Configuration (Milestone 1)
+- **Type**: feat
+- **Summary**: Implemented dynamic Edge AI detector selection, confidence thresholds, and class filtering contracts across Pydantic schemas, CameraPool orchestrator, StreamPipelineFactory, and VideoRouter. Fixed broken VideoIndexer offline batch occurrence analytics import and parameterized feed promotion.
+- **Files** (7):
+  - `dashboard/schemas.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/routers/videos.py`
+  - `dashboard/services/pipeline_factory.py`
+  - `intelligent_tracker/batch.py`
+  - `tests/test_camera_detector_config.py`
+- **Verification**: 315/315 tests pass (36.01s); Sphinx HTML build succeeds with 0 warnings.
+
 ## [2026-11-06] feat: Universal Runtime Trace Recorder & Dashboard Boot Resilience
 - **Type**: feat
 - **Summary**: Integrated global trace_recorder engine into system-diagnostics and wired FastAPI exception middleware. Fixed uvicorn reload directory watcher bounds, camera pool offline state handling, and spawned process PYTHONPATH propagation on Windows.

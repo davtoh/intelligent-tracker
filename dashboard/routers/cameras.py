@@ -89,6 +89,8 @@ async def add_camera(req: CameraAddRequest):
         cam_type=req.type or "rtsp",
         detector=req.detector,
         tracker=req.tracker,
+        confidence=req.confidence,
+        classes=req.classes,
         enabled=req.enabled if req.enabled is not None else True,
         autostart=True,
         details=req.details,
@@ -258,6 +260,8 @@ async def update_camera(camera_id: str, req: CameraUpdateRequest):
         enabled=req.enabled,
         detector=req.detector,
         tracker=req.tracker,
+        confidence=req.confidence,
+        classes=req.classes,
     )
     return {
         "status": "success" if success else "failed",

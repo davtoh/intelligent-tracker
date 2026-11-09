@@ -60,10 +60,13 @@ class VideoIndexer:
 
         # Initialize detector
         det_kwargs = {}
-        if detector_name in ("yolov8", "yolo11", "onnx"):
+        det_name_clean = str(detector_name).lower().strip()
+        if det_name_clean in ("yolov8", "yolov8n", "yolo11", "yolo11n", "onnx"):
             det_kwargs["conf_threshold"] = conf_threshold
             if classes:
                 det_kwargs["classes"] = classes
+        elif det_name_clean in ("mock", "mockdetector"):
+            det_kwargs["confidence"] = conf_threshold
         self.detector = DetectorFactory.create(detector_name, **det_kwargs)
 
         # Initialize tracker

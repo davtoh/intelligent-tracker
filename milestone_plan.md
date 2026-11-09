@@ -25,6 +25,7 @@
 | 11 | Process Lifecycle Management, Zero-Load Hibernation & Runtime Diagnostics | ✅ **COMPLETE** |
 | 12 | Dashboard Architecture & Domain Services Decoupling (Phase 1) | ✅ **COMPLETE** |
 | 13 | Universal Runtime Trace Recorder & Dashboard Boot Resilience | ✅ **COMPLETE** |
+| 14 | Dynamic Detector & Pipeline Configuration (Phase 1) | ✅ **COMPLETE** |
 
 ---
 
@@ -637,6 +638,18 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 3. **Camera Pool Offline Resilience & DirectShow Stabilization (`dashboard/camera_pool.py`):** Automatically registers offline error states in `CameraHealthManager` for missing / unreachable sources rather than aborting server startup. Added 150ms staggered acquisition between physical devices on Windows to avoid kernel pin contention.
 4. **Resilient Dashboard Launcher (`scripts/run_dashboard.py`):** 55L Uvicorn runner constraining reload file watching strictly to `dashboard` and `intelligent_tracker`, excluding `data/*`, `logs/*`, and SQLite database files (`*.db*`) from triggering reload loops. Propagates `PYTHONPATH` across spawned Windows reloader subprocesses.
 
+## ✅ [Milestone 14] — Dynamic Detector & Pipeline Configuration (Phase 1: Backend Contracts & VideoIndexer Fix) (COMPLETE)
+**Status: COMPLETE** — Verified: 315/315 tests pass (36.01s); Sphinx docs built cleanly with 0 warnings.
+**Scope:** Propagates dynamic Edge AI detector architecture (`yolov8`, `yolo11`, `haar`, `mock`), confidence thresholds ($0.01 - 1.0$), and target class filters across REST Pydantic transfer schemas, `CameraPool` orchestrator, `StreamPipelineFactory`, and `VideoRouter`. Fixed broken `VideoIndexer` import in offline batch occurrence analytics and parameterized video stream promotion.
+
+### Deliverables Completed:
+1. **Pydantic Contract Schemas (`dashboard/schemas.py`):** Extended `CameraAddRequest`, `CameraUpdateRequest`, `VideoAnalyzeRequest`, and `VideoAddAsCameraRequest` with `confidence` and `classes` fields. Added `@field_validator` with defensive string/list conversion for class filter lists (`"person, car"` -> `["person", "car"]`).
+2. **CameraPool Orchestrator & Dynamic Stream Reload (`dashboard/camera_pool.py`):** Updated `add_camera` and `update_camera` to persist confidence and classes into `configs/cameras.json` and propagate them into `custom_cfg["detector"]`. Added dynamic pipeline change detection (`pipeline_changed`) to hot-reload stream workers when detector architecture, confidence, or class filters are updated.
+3. **Pipeline Factory Detector Instantiation (`dashboard/services/pipeline_factory.py`):** Extended `_init_detector` to pass `conf_threshold` and `classes` to `DetectorFactory.create()`. Configured graceful fallback to mock detector on failure.
+4. **Video Analysis & Feed Promotion Router Fixes (`dashboard/routers/videos.py`):** Replaced non-existent `BatchVideoIndexer` import with `VideoIndexer`, wired `process_video()`, and generated complete occurrence reports matching frontend card expectations (`frames_processed`, `total_detections`, `total_sightings`, `unique_entities_identified`). Parameterized `/api/videos/{filename}/add_as_camera`.
+5. **Batch Video Indexer Enhancements (`intelligent_tracker/batch.py`):** Added support for `yolov8n`, `yolo11n`, and `mock` with `confidence` in `VideoIndexer`.
+6. **Automated Regression Suite (`tests/test_camera_detector_config.py`):** Added 6 unit tests covering Pydantic validation, CameraPool persistence, StreamPipelineFactory instantiation, API feed promotion, and offline batch occurrence indexing.
+
 ## Dependency Graph
 
 ```
@@ -653,6 +666,7 @@ M1 (Env & Core) ✅
                                                         └── M11 (Process Lifecycle Management & Zero-Load Hibernation) ✅
                                                               └── M12 (Dashboard Architecture Decoupling - Phase 1) ✅
                                                                     └── M13 (Universal Trace Recorder & Boot Resilience) ✅
+                                                                          └── M14 (Dynamic Detector & Pipeline Configuration) ✅
 ```
 
 ---

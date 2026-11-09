@@ -160,8 +160,16 @@ class CameraPool:
         is_source_error = meta.get("status") == "error"
 
         custom_cfg = {}
+        det_dict = {}
         if cfg.get("detector"):
-            custom_cfg["detector"] = {"model": cfg["detector"]}
+            det_dict["model"] = cfg["detector"]
+        if cfg.get("confidence") is not None:
+            det_dict["confidence"] = cfg["confidence"]
+        if cfg.get("classes") is not None:
+            det_dict["classes"] = cfg["classes"]
+        if det_dict:
+            custom_cfg["detector"] = det_dict
+
         if cfg.get("tracker"):
             custom_cfg["tracker"] = {"type": cfg["tracker"]}
 
@@ -199,6 +207,8 @@ class CameraPool:
         cam_type: str = "rtsp",
         detector: Optional[str] = None,
         tracker: Optional[str] = None,
+        confidence: Optional[float] = None,
+        classes: Optional[List[str]] = None,
         enabled: bool = True,
         autostart: bool = True,
         details: Optional[Dict[str, Any]] = None,
@@ -214,6 +224,8 @@ class CameraPool:
             cam_type: 'rtsp', 'usb', 'video_file', 'synthetic'.
             detector: Model detector override ('yolov8', 'mock', etc.).
             tracker: Tracker algorithm override ('sort', 'centroid').
+            confidence: Optional detection confidence threshold.
+            classes: Optional target class filter list.
             enabled: Whether stream is active immediately.
             autostart: Whether to start worker thread immediately.
             details: Optional extra metadata (ip, port, vendor, etc.).
@@ -228,6 +240,7 @@ class CameraPool:
                 self.remove_camera(camera_id)
 
             resolved_device_name = device_name or (details.get("device_name") if details else None)
+            det_default = "mock" if (str(cam_type).lower() in ("synthetic", "mock") or str(source).lower() in ("synthetic", "mock")) else "yolov8"
 
             cam_entry = {
                 "id": camera_id,
@@ -235,8 +248,10 @@ class CameraPool:
                 "source": source,
                 "type": cam_type,
                 "enabled": enabled,
-                "detector": detector or "mock",
+                "detector": detector or det_default,
                 "tracker": tracker or "centroid",
+                "confidence": float(confidence) if confidence is not None else 0.40,
+                "classes": classes,
                 "details": details or {},
                 "device_name": resolved_device_name,
                 "created_at": time.time(),
@@ -268,12 +283,14 @@ class CameraPool:
         enabled: Optional[bool] = None,
         detector: Optional[str] = None,
         tracker: Optional[str] = None,
+        confidence: Optional[float] = None,
+        classes: Optional[List[str]] = None,
         device_name: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Updates an existing camera configuration dynamically.
-        Restarts the background worker if source or enabled status changed.
+        Restarts the background worker if source, pipeline, or enabled status changed.
         """
         with self._lock:
             if camera_id not in self.camera_configs:
@@ -283,6 +300,12 @@ class CameraPool:
             source_changed = (source is not None and source != cfg.get("source"))
             enabled_changed = (enabled is not None and enabled != cfg.get("enabled"))
             device_name_changed = (device_name is not None and device_name != cfg.get("device_name"))
+            pipeline_changed = (
+                (detector is not None and detector != cfg.get("detector"))
+                or (tracker is not None and tracker != cfg.get("tracker"))
+                or (confidence is not None and confidence != cfg.get("confidence"))
+                or (classes is not None and classes != cfg.get("classes"))
+            )
 
             if name is not None:
                 cfg["name"] = name
@@ -296,6 +319,10 @@ class CameraPool:
                 cfg["detector"] = detector
             if tracker is not None:
                 cfg["tracker"] = tracker
+            if confidence is not None:
+                cfg["confidence"] = float(confidence)
+            if classes is not None:
+                cfg["classes"] = classes
             if device_name is not None:
                 cfg["device_name"] = device_name
             if details is not None:
@@ -304,7 +331,7 @@ class CameraPool:
             self.save_cameras()
 
             # Hot reload stream if necessary
-            if source_changed or enabled_changed or device_name_changed:
+            if source_changed or enabled_changed or device_name_changed or pipeline_changed:
                 if camera_id in self.streams:
                     old_mgr = self.streams.pop(camera_id)
                     old_mgr.stop()

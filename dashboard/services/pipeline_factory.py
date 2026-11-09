@@ -155,9 +155,24 @@ class StreamPipelineFactory:
     @staticmethod
     def _init_detector(detector_cfg: Dict[str, Any]) -> Any:
         """Instantiate detector model with fallback to mock detector."""
-        det_name = detector_cfg.get("model", "mock")
+        det_name = str(detector_cfg.get("model", "mock")).lower().strip()
         det_conf = float(detector_cfg.get("confidence", 0.25))
-        det_kwargs = {"conf_threshold": det_conf} if det_name in ("yolov8", "yolo11", "onnx") else {}
+        raw_classes = detector_cfg.get("classes")
+        if isinstance(raw_classes, str):
+            classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
+        elif isinstance(raw_classes, (list, tuple, set)):
+            classes = [str(c).strip() for c in raw_classes if str(c).strip()]
+        else:
+            classes = None
+
+        det_kwargs: Dict[str, Any] = {}
+        if det_name in ("yolov8", "yolov8n", "yolo11", "yolo11n", "onnx"):
+            det_kwargs["conf_threshold"] = det_conf
+            if classes:
+                det_kwargs["classes"] = classes
+        elif det_name in ("mock", "mockdetector"):
+            det_kwargs["confidence"] = det_conf
+
         try:
             return DetectorFactory.create(det_name, **det_kwargs)
         except Exception as e:

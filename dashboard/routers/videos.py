@@ -22,6 +22,7 @@ from dashboard.dependencies import (
     get_camera_pool,
     set_camera_pool,
 )
+from dashboard.schemas import VideoAddAsCameraRequest, VideoAnalyzeRequest
 from dashboard.services.video_transcoder import VideoTranscodeService
 from intelligent_tracker.database import TrackerDB
 
@@ -173,6 +174,11 @@ async def add_video_as_camera(
     filename: str,
     camera_id: Optional[str] = None,
     name: Optional[str] = None,
+    detector: Optional[str] = Query("yolov8", description="Detector architecture (e.g. yolov8, mock)"),
+    tracker: Optional[str] = Query("centroid", description="Tracker algorithm (e.g. centroid, sort)"),
+    confidence: Optional[float] = Query(0.40, ge=0.01, le=1.0, description="Confidence threshold"),
+    classes: Optional[str] = Query(None, description="Comma-separated class filter (e.g. person,car)"),
+    req: Optional[VideoAddAsCameraRequest] = None,
 ):
     """Dynamically register an uploaded video file as an active camera stream."""
     safe_name = os.path.basename(filename)
@@ -181,8 +187,19 @@ async def add_video_as_camera(
         raise HTTPException(status_code=404, detail="Video file not found")
 
     base_id = os.path.splitext(safe_name)[0].replace(" ", "_").replace("-", "_")
-    cam_id = camera_id or f"vid_{base_id}"
-    cam_name = name or f"Video ({safe_name})"
+    cam_id = (req.camera_id if req and req.camera_id else None) or camera_id or f"vid_{base_id}"
+    cam_name = (req.name if req and req.name else None) or name or f"Video ({safe_name})"
+    det = (req.detector if req and req.detector else None) or detector or "yolov8"
+    trk = (req.tracker if req and req.tracker else None) or tracker or "centroid"
+    conf = (req.confidence if req and req.confidence is not None else None) or confidence or 0.40
+    raw_classes = (req.classes if req and req.classes is not None else None) or classes
+
+    if isinstance(raw_classes, str):
+        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
+    elif isinstance(raw_classes, (list, tuple, set)):
+        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
+    else:
+        target_classes = None
 
     pool = get_camera_pool()
     if not pool:
@@ -194,34 +211,82 @@ async def add_video_as_camera(
         name=cam_name,
         source=path,
         cam_type="video_file",
-        detector="mock",
-        tracker="centroid",
+        detector=det,
+        tracker=trk,
+        confidence=conf,
+        classes=target_classes,
         enabled=True,
     )
-    return {"status": "success", "camera_id": cam_id, "name": cam_name}
+    return {
+        "status": "success",
+        "camera_id": cam_id,
+        "name": cam_name,
+        "detector": det,
+        "confidence": conf,
+        "classes": target_classes,
+    }
 
 
 @router.post("/api/videos/{filename}/analyze")
-async def analyze_video(filename: str, sample_rate: int = 1):
+async def analyze_video(
+    filename: str,
+    sample_rate: int = Query(1, ge=1),
+    detector: Optional[str] = Query(None, description="Detector model name (e.g. yolov8, mock)"),
+    confidence: Optional[float] = Query(None, ge=0.01, le=1.0, description="Detection confidence threshold"),
+    classes: Optional[str] = Query(None, description="Comma-separated class filter names (e.g. person,car)"),
+    req: Optional[VideoAnalyzeRequest] = None,
+):
     """Run offline occurrence indexer and entity analytics on a video recording."""
     safe_name = os.path.basename(filename)
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
-    from intelligent_tracker.batch import BatchVideoIndexer
+    from intelligent_tracker.batch import VideoIndexer
+
+    sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
+    det = req.detector if (req and req.detector is not None) else (detector or "yolov8")
+    conf = req.confidence if (req and req.confidence is not None) else (confidence if confidence is not None else 0.40)
+    raw_classes = (req.classes if req and req.classes is not None else None) or classes
+
+    if isinstance(raw_classes, str):
+        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
+    elif isinstance(raw_classes, (list, tuple, set)):
+        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
+    else:
+        target_classes = None
 
     mgr = get_active_stream_manager()
     db = mgr.db if (mgr and mgr.db) else TrackerDB("data/tracker.db")
 
-    indexer = BatchVideoIndexer(
-        video_path=path,
-        db=db,
-        detector=mgr.detector if mgr else None,
-        sample_rate=sample_rate,
-        headless=True,
-    )
-    report = indexer.process()
+    try:
+        indexer = VideoIndexer(
+            db=db,
+            detector_name=det,
+            sample_rate=sr,
+            conf_threshold=conf,
+            classes=target_classes,
+        )
+    except Exception as e:
+        logger.warning(
+            "VideoIndexer initialization with detector '%s' failed (%s), falling back to mock",
+            det,
+            e,
+        )
+        indexer = VideoIndexer(
+            db=db,
+            detector_name="mock",
+            sample_rate=sr,
+            conf_threshold=conf,
+            classes=target_classes,
+        )
+
+    summary = indexer.process_video(video_path=path, verbose=False)
+    report = indexer.generate_occurrence_report()
+    report["frames_processed"] = summary.get("processed_frames", 0)
+    report["total_detections"] = summary.get("identifications_count", 0)
+    report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
+    report["execution_summary"] = summary
     return {"status": "success", "report": report}
 
 

@@ -7,8 +7,8 @@ Defines validated data transfer schemas for REST endpoints across cameras,
 zones, tripwires, homography, RSAC access control, and active learning candidate reviews.
 """
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 class EntityCreateRequest(BaseModel):
@@ -38,10 +38,25 @@ class CameraAddRequest(BaseModel):
     name: str = Field(..., min_length=1, description="Friendly display label")
     source: str = Field(..., description="RTSP URL, video file path, or USB index")
     type: Optional[str] = "rtsp"
-    detector: Optional[str] = "mock"
-    tracker: Optional[str] = "centroid"
+    detector: Optional[str] = Field("yolov8", description="Detector model name (yolov8, yolo11, haar, mock, etc.)")
+    tracker: Optional[str] = Field("centroid", description="Tracking algorithm (centroid, sort)")
+    confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold (0.01 - 1.0)")
+    classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list (e.g. ['person', 'car'])")
     enabled: Optional[bool] = True
     details: Optional[Dict[str, Any]] = None
+
+    @field_validator("classes", mode="before")
+    @classmethod
+    def _parse_classes(cls, v: Any) -> Optional[List[str]]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            res = [c.strip() for c in v.split(",") if c.strip()]
+            return res if res else None
+        if isinstance(v, (list, tuple, set)):
+            res = [str(c).strip() for c in v if str(c).strip()]
+            return res if res else None
+        return v
 
 
 class CameraUpdateRequest(BaseModel):
@@ -51,6 +66,63 @@ class CameraUpdateRequest(BaseModel):
     enabled: Optional[bool] = None
     detector: Optional[str] = None
     tracker: Optional[str] = None
+    confidence: Optional[float] = Field(None, ge=0.01, le=1.0, description="Updated confidence threshold")
+    classes: Optional[Union[List[str], str]] = Field(None, description="Updated target class filters")
+
+    @field_validator("classes", mode="before")
+    @classmethod
+    def _parse_classes(cls, v: Any) -> Optional[List[str]]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            res = [c.strip() for c in v.split(",") if c.strip()]
+            return res if res else None
+        if isinstance(v, (list, tuple, set)):
+            res = [str(c).strip() for c in v if str(c).strip()]
+            return res if res else None
+        return v
+
+
+class VideoAnalyzeRequest(BaseModel):
+    sample_rate: Optional[int] = Field(1, ge=1, description="Frame sample rate for offline analysis")
+    detector: Optional[str] = Field("yolov8", description="Detector model name (yolov8, mock, etc.)")
+    confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
+    classes: Optional[Union[List[str], str]] = Field(None, description="Optional target class filters")
+
+    @field_validator("classes", mode="before")
+    @classmethod
+    def _parse_classes(cls, v: Any) -> Optional[List[str]]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            res = [c.strip() for c in v.split(",") if c.strip()]
+            return res if res else None
+        if isinstance(v, (list, tuple, set)):
+            res = [str(c).strip() for c in v if str(c).strip()]
+            return res if res else None
+        return v
+
+
+class VideoAddAsCameraRequest(BaseModel):
+    camera_id: Optional[str] = Field(None, description="Optional custom camera ID")
+    name: Optional[str] = Field(None, description="Optional display label")
+    detector: Optional[str] = Field("yolov8", description="Detector model name")
+    tracker: Optional[str] = Field("centroid", description="Tracker algorithm")
+    confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
+    classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list")
+
+    @field_validator("classes", mode="before")
+    @classmethod
+    def _parse_classes(cls, v: Any) -> Optional[List[str]]:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            res = [c.strip() for c in v.split(",") if c.strip()]
+            return res if res else None
+        if isinstance(v, (list, tuple, set)):
+            res = [str(c).strip() for c in v if str(c).strip()]
+            return res if res else None
+        return v
 
 
 class CameraTestRequest(BaseModel):
