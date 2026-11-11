@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-10] feat: Video Studio SOTA Analytics, Canvas Overlay & Stacked Persistence Architecture
+- **Type**: feat
+- **Summary**: Implemented disk-backed stacked report history (`data/reports/{video}_reports.json`) and per-frame detection streaming (`data/reports/{video}_{run_id}_detections.json`). Separated raw detected objects (`total_detections`) from enrolled gallery sightings (`identifications_count`). Added synchronized real-time canvas bounding box overlay (`#scrubber-overlay-canvas`) over Scrubber player. Hardened `.video-file-card` selection, history run switcher dropdown, and active job container isolation.
+- **Files** (8):
+  - `intelligent_tracker/batch.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/services/video_report_store.py`
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `dashboard/static/js/video_batch.js`
+  - `dashboard/static/js/video_library.js`
+  - `dashboard/static/video_scrubber.js`
+  - `tests/test_video_jobs.py`
+- **Verification**: 337/337 tests pass (36.96s); 15/15 dedicated video jobs tests pass (1.09s); 0 warnings Sphinx HTML documentation build
+
 ## [2026-11-10] feat: Video Job Concurrency, Progress Engine & Interactive Cancellation (Milestone 17)
 - **Type**: feat
 - **Summary**: Implemented thread-safe VideoJobManager coordinator with BoundedSemaphore(2), per-video mutual exclusion, joinable cancellation, and job polling. Decoupled async job router into video_jobs.py. Added VideoJobClient frontend coordinator with animated progress bars, background task pills, and interactive 409 conflict modal. Added 12 unit and integration tests.
