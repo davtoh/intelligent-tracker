@@ -13,7 +13,7 @@ import subprocess
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
@@ -23,6 +23,7 @@ from dashboard.dependencies import (
     set_camera_pool,
 )
 from dashboard.schemas import VideoAddAsCameraRequest, VideoAnalyzeRequest
+from dashboard.services.video_jobs_service import get_video_job_manager
 from dashboard.services.video_transcoder import VideoTranscodeService
 from intelligent_tracker.database import TrackerDB
 
@@ -121,7 +122,9 @@ async def upload_video(
 
 @router.post("/api/videos/{filename}/transcode")
 async def transcode_video(
-    filename: str, target_resolution: Optional[str] = "1080p"
+    filename: str,
+    target_resolution: Optional[str] = "1080p",
+    async_mode: bool = Query(True),
 ):
     """Transcodes a video recording (e.g. HEVC/H.265 or AVI) to web-optimized H.264 MP4."""
     safe_name = os.path.basename(filename)
@@ -132,6 +135,52 @@ async def transcode_video(
     base_name, _ = os.path.splitext(safe_name)
     output_filename = f"{base_name}_h264.mp4"
     output_path = os.path.join(VIDEOS_DIR, output_filename)
+
+    job_mgr = get_video_job_manager()
+    active_job = job_mgr.get_active_job_for_file(safe_name)
+    if active_job is not None:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "conflict",
+                "message": f"A {active_job.job_type} job is already active for video '{safe_name}'.",
+                "active_job": active_job.to_dict(),
+            },
+        )
+
+    if async_mode:
+        def _runner(job, stop_event, progress_cb):
+            VideoTranscodeService.transcode_to_h264_async(
+                input_path=path,
+                output_path=output_path,
+                target_resolution=target_resolution,
+                progress_callback=progress_cb,
+                stop_event=stop_event,
+            )
+            st = os.stat(output_path)
+            return {
+                "original_filename": safe_name,
+                "output_filename": output_filename,
+                "video_url": f"/videos/{output_filename}",
+                "size_mb": round(st.st_size / (1024 * 1024), 2),
+            }
+
+        job = job_mgr.submit_job(
+            job_type="transcode",
+            filename=safe_name,
+            runner_fn=_runner,
+            initial_metrics={"output_filename": output_filename},
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "accepted",
+                "job_id": job.job_id,
+                "job": job.to_dict(),
+                "output_filename": output_filename,
+                "video_url": f"/videos/{output_filename}",
+            },
+        )
 
     try:
         VideoTranscodeService.transcode_to_h264(
@@ -158,6 +207,37 @@ async def transcode_video(
     }
 
 
+@router.get("/api/videos/jobs/{job_id}")
+async def get_video_job(job_id: str):
+    """Query status and progress of an asynchronous video processing job."""
+    job_mgr = get_video_job_manager()
+    job = job_mgr.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    return job.to_dict()
+
+
+@router.get("/api/videos/jobs")
+async def list_video_jobs(
+    filename: Optional[str] = Query(None),
+    active_only: bool = Query(False),
+):
+    """List recent and active video processing jobs."""
+    job_mgr = get_video_job_manager()
+    return [j.to_dict() for j in job_mgr.list_jobs(filename=filename, active_only=active_only)]
+
+
+@router.post("/api/videos/jobs/{job_id}/cancel")
+async def cancel_video_job(job_id: str):
+    """Request early cancellation of a running or pending video job."""
+    job_mgr = get_video_job_manager()
+    job = job_mgr.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
+    job_mgr.cancel_job(job_id)
+    return {"status": "cancelling", "job_id": job_id}
+
+
 @router.delete("/api/videos/{filename}")
 async def delete_video(filename: str):
     """Delete a recording from data/videos/."""
@@ -165,6 +245,8 @@ async def delete_video(filename: str):
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
+    job_mgr = get_video_job_manager()
+    job_mgr.cancel_active_job_for_file(safe_name)
     os.remove(path)
     return {"status": "success", "deleted": safe_name}
 
@@ -234,6 +316,7 @@ async def analyze_video(
     detector: Optional[str] = Query(None, description="Detector model name (e.g. yolov8, mock)"),
     confidence: Optional[float] = Query(None, ge=0.01, le=1.0, description="Detection confidence threshold"),
     classes: Optional[str] = Query(None, description="Comma-separated class filter names (e.g. person,car)"),
+    async_mode: Optional[bool] = Query(None, description="Run analysis asynchronously in background"),
     req: Optional[VideoAnalyzeRequest] = None,
 ):
     """Run offline occurrence indexer and entity analytics on a video recording."""
@@ -256,31 +339,76 @@ async def analyze_video(
     else:
         target_classes = None
 
+    is_async = req.async_mode if (req and req.async_mode is not None) else None
+    if is_async is None:
+        is_async = bool(async_mode)
+
+    job_mgr = get_video_job_manager()
+    active_job = job_mgr.get_active_job_for_file(safe_name)
+    if active_job is not None:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "conflict",
+                "message": f"A {active_job.job_type} job is already active for video '{safe_name}'.",
+                "active_job": active_job.to_dict(),
+            },
+        )
+
     mgr = get_active_stream_manager()
     db = mgr.db if (mgr and mgr.db) else TrackerDB("data/tracker.db")
 
-    try:
-        indexer = VideoIndexer(
-            db=db,
-            detector_name=det,
-            sample_rate=sr,
-            conf_threshold=conf,
-            classes=target_classes,
+    def _create_indexer():
+        try:
+            return VideoIndexer(
+                db=db,
+                detector_name=det,
+                sample_rate=sr,
+                conf_threshold=conf,
+                classes=target_classes,
+            )
+        except Exception as e:
+            logger.warning(
+                "VideoIndexer initialization with detector '%s' failed (%s), falling back to mock",
+                det,
+                e,
+            )
+            return VideoIndexer(
+                db=db,
+                detector_name="mock",
+                sample_rate=sr,
+                conf_threshold=conf,
+                classes=target_classes,
+            )
+
+    if is_async:
+        def _runner(job, stop_event, progress_cb):
+            indexer = _create_indexer()
+            summary = indexer.process_video(
+                video_path=path,
+                verbose=False,
+                progress_callback=progress_cb,
+                stop_event=stop_event,
+            )
+            report = indexer.generate_occurrence_report()
+            report["frames_processed"] = summary.get("processed_frames", 0)
+            report["total_detections"] = summary.get("identifications_count", 0)
+            report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
+            report["execution_summary"] = summary
+            return report
+
+        job = job_mgr.submit_job(
+            job_type="analytics",
+            filename=safe_name,
+            runner_fn=_runner,
+            initial_metrics={"detector": det, "sample_rate": sr},
         )
-    except Exception as e:
-        logger.warning(
-            "VideoIndexer initialization with detector '%s' failed (%s), falling back to mock",
-            det,
-            e,
-        )
-        indexer = VideoIndexer(
-            db=db,
-            detector_name="mock",
-            sample_rate=sr,
-            conf_threshold=conf,
-            classes=target_classes,
+        return JSONResponse(
+            status_code=202,
+            content={"status": "accepted", "job_id": job.job_id, "job": job.to_dict()},
         )
 
+    indexer = _create_indexer()
     summary = indexer.process_video(video_path=path, verbose=False)
     report = indexer.generate_occurrence_report()
     report["frames_processed"] = summary.get("processed_frames", 0)

@@ -88,6 +88,7 @@ class VideoAnalyzeRequest(BaseModel):
     detector: Optional[str] = Field("yolov8", description="Detector model name (yolov8, mock, etc.)")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Optional target class filters")
+    async_mode: Optional[bool] = Field(None, description="Run analysis asynchronously in background")
 
     @field_validator("classes", mode="before")
     @classmethod

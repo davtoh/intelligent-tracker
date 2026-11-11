@@ -132,38 +132,59 @@
     const confidence = options.confidence !== undefined ? options.confidence : 0.40;
     const classes = options.classes || null;
 
+    currentBatchFilename = filename;
+
     if (btn) {
       btn.disabled = true;
       btn.textContent = '⏳ Processing Analytics...';
     }
-    container.innerHTML = `<div class="empty-state">Running Edge AI detector (${escapeHtml(detector)}) and Re-ID indexer on recording...</div>`;
 
     try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      if (window.VideoJobClient) {
+        const payload = {
           sample_rate: sampleRate,
           detector: detector,
           confidence: confidence,
           classes: classes,
-        }),
-      });
-      const data = await resp.json();
-
-      if (data.status === 'success') {
-        container.innerHTML = renderReportCards(data.report || {}, filename, {
-          detector: detector,
-          sampleRate: sampleRate,
-          confidence: confidence,
-          classes: classes,
-        });
+        };
+        const data = await window.VideoJobClient.startAnalytics(filename, payload);
+        if (data.job) {
+          window.VideoJobClient.renderProgressBar(container, data.job);
+        }
       } else {
-        container.innerHTML = `<div class="empty-state" style="color:#ef4444;">Analysis failed: ${escapeHtml(data.detail || 'Error')}</div>`;
+        container.innerHTML = `<div class="empty-state">Running Edge AI detector (${escapeHtml(detector)}) and Re-ID indexer on recording...</div>`;
+        const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sample_rate: sampleRate,
+            detector: detector,
+            confidence: confidence,
+            classes: classes,
+          }),
+        });
+        const data = await resp.json();
+        if (data.status === 'success') {
+          container.innerHTML = renderReportCards(data.report || {}, filename, {
+            detector: detector,
+            sampleRate: sampleRate,
+            confidence: confidence,
+            classes: classes,
+          });
+        } else {
+          container.innerHTML = `<div class="empty-state" style="color:#ef4444;">Analysis failed: ${escapeHtml(data.detail || 'Error')}</div>`;
+        }
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '⚡ Run Batch Analytics';
+        }
       }
     } catch (e) {
-      container.innerHTML = `<div class="empty-state" style="color:#ef4444;">Request error: ${escapeHtml(e.message)}</div>`;
-    } finally {
+      if (window.VideoJobClient) {
+        window.VideoJobClient.renderErrorAlert(container, e.message, () => runBatchAnalytics(filename, options));
+      } else {
+        container.innerHTML = `<div class="empty-state" style="color:#ef4444;">Request error: ${escapeHtml(e.message)}</div>`;
+      }
       if (btn) {
         btn.disabled = false;
         btn.textContent = '⚡ Run Batch Analytics';
@@ -241,6 +262,52 @@
         closeBatchModal();
       }
     });
+
+    window.addEventListener('video-job-event', (e) => {
+      const { type, data } = e.detail || {};
+      if (!data) return;
+      const job = data;
+      if (job.job_type !== 'analytics') return;
+      if (job.filename !== currentBatchFilename) return;
+
+      const btn = document.getElementById('btn-video-analyze');
+      const container = document.getElementById('video-batch-report-container');
+
+      if (type === 'job-started' || type === 'job-update') {
+        if (job.status === 'running' || job.status === 'pending') {
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ Processing Analytics...';
+          }
+          if (container && window.VideoJobClient) {
+            window.VideoJobClient.renderProgressBar(container, job);
+          }
+        }
+      } else if (type === 'job-finished') {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '⚡ Run Batch Analytics';
+        }
+        if (container) {
+          if (job.status === 'completed' && job.result) {
+            container.innerHTML = renderReportCards(job.result, job.filename, {
+              detector: job.metrics?.detector || 'yolov8',
+              sampleRate: job.metrics?.sample_rate || 1,
+              confidence: job.metrics?.confidence || 0.40,
+              classes: job.metrics?.classes || null,
+            });
+          } else if (job.status === 'cancelled') {
+            container.innerHTML = `<div class="empty-state" style="color:#f59e0b;">Analytics job for '${escapeHtml(job.filename)}' was cancelled.</div>`;
+          } else if (job.status === 'failed' && window.VideoJobClient) {
+            window.VideoJobClient.renderErrorAlert(container, job.error, () => runBatchAnalytics(job.filename));
+          }
+        }
+      }
+    });
+  }
+
+  function setCurrentBatchFilename(filename) {
+    currentBatchFilename = filename ? String(filename).trim() : null;
   }
 
   function init() {
@@ -253,6 +320,7 @@
     renderReportCards: renderReportCards,
     openBatchModal: openBatchModal,
     closeBatchModal: closeBatchModal,
+    setCurrentBatchFilename: setCurrentBatchFilename,
   };
 
   if (document.readyState === 'loading') {

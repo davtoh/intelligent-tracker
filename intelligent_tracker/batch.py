@@ -24,7 +24,9 @@ import time
 import json
 import csv
 import argparse
-from typing import Dict, List, Optional, Any, Tuple
+import logging
+import threading
+from typing import Dict, List, Optional, Any, Tuple, Callable
 
 import cv2
 import numpy as np
@@ -35,6 +37,8 @@ from intelligent_tracker.matcher import GalleryMatcher
 from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.analytics import AnalyticsEngine
+
+logger = logging.getLogger(__name__)
 
 
 class VideoIndexer:
@@ -89,6 +93,8 @@ class VideoIndexer:
         source_label: Optional[str] = None,
         max_frames: int = 0,
         verbose: bool = True,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        stop_event: Optional[threading.Event] = None,
     ) -> Dict[str, Any]:
         """
         Process a recorded video file, catalog occurrences into TrackerDB,
@@ -98,6 +104,8 @@ class VideoIndexer:
         :param source_label: Custom name for the video source (defaults to filename).
         :param max_frames: Max frames to process (0 = whole video).
         :param verbose: Print progress to stdout.
+        :param progress_callback: Optional callback receiving progress dict.
+        :param stop_event: Optional threading.Event to interrupt indexing early.
         :return: Execution summary dictionary.
         """
         if not os.path.isfile(video_path):
@@ -127,10 +135,16 @@ class VideoIndexer:
         read_frames = 0
         matched_identifications = 0
         identified_entities = set()
+        cancelled = False
         start_wall_time = time.time()
+        last_cb_time = 0.0
 
         try:
             while True:
+                if stop_event is not None and stop_event.is_set():
+                    cancelled = True
+                    break
+
                 ret, frame = cap.read()
                 if not ret or frame is None:
                     break
@@ -169,7 +183,27 @@ class VideoIndexer:
                 if self.analytics is not None:
                     self.analytics.update(tracks, timestamp=video_timestamp)
 
-                # Progress printing
+                # Progress reporting via callback or stdout
+                now = time.time()
+                if (read_frames % 10 == 0 or (now - last_cb_time) >= 0.25):
+                    last_cb_time = now
+                    pct = (read_frames / total_video_frames * 100) if total_video_frames > 0 else 0.0
+                    elapsed = now - start_wall_time
+                    fps_eff = processed_frames / elapsed if elapsed > 0 else 0.0
+                    if progress_callback is not None:
+                        try:
+                            progress_callback({
+                                "read_frames": read_frames,
+                                "total_frames": total_video_frames,
+                                "processed_frames": processed_frames,
+                                "percent": round(pct, 1),
+                                "fps": round(fps_eff, 1),
+                                "sightings": matched_identifications,
+                                "elapsed": round(elapsed, 1),
+                            })
+                        except Exception as cb_err:
+                            logger.debug("Progress callback error: %s", cb_err)
+
                 if verbose and processed_frames % 20 == 0:
                     pct = (read_frames / total_video_frames * 100) if total_video_frames > 0 else 0
                     elapsed = time.time() - start_wall_time
@@ -186,9 +220,28 @@ class VideoIndexer:
             del cap
 
         elapsed_wall_time = time.time() - start_wall_time
+        final_pct = 100.0 if (not cancelled and read_frames >= total_video_frames and total_video_frames > 0) else (
+            (read_frames / total_video_frames * 100) if total_video_frames > 0 else 0.0
+        )
+        if progress_callback is not None:
+            try:
+                progress_callback({
+                    "read_frames": read_frames,
+                    "total_frames": total_video_frames,
+                    "processed_frames": processed_frames,
+                    "percent": round(final_pct, 1),
+                    "fps": round(processed_frames / max(1e-4, elapsed_wall_time), 1),
+                    "sightings": matched_identifications,
+                    "elapsed": round(elapsed_wall_time, 1),
+                    "cancelled": cancelled,
+                })
+            except Exception as cb_err:
+                logger.debug("Final progress callback error: %s", cb_err)
+
         if verbose:
-            print("\n[COMPLETED] Indexed {} frames in {:.2f}s ({:.1f} FPS)".format(
-                processed_frames, elapsed_wall_time, processed_frames / max(1e-4, elapsed_wall_time)
+            tag = "[CANCELLED]" if cancelled else "[COMPLETED]"
+            print("\n{} Indexed {} frames in {:.2f}s ({:.1f} FPS)".format(
+                tag, processed_frames, elapsed_wall_time, processed_frames / max(1e-4, elapsed_wall_time)
             ))
 
         return {
@@ -201,6 +254,7 @@ class VideoIndexer:
             "video_duration_seconds": round(duration_sec, 2),
             "identifications_count": matched_identifications,
             "unique_entities_identified": list(identified_entities),
+            "cancelled": cancelled,
         }
 
     def generate_occurrence_report(

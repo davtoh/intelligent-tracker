@@ -66,6 +66,21 @@
     if (notice) notice.style.display = 'none';
   }
 
+  function showCodecNoticeProgress(job) {
+    const notice = getCodecNoticeElement();
+    if (!notice || !job) return;
+    notice.style.display = 'block';
+    notice.style.padding = '0';
+    notice.style.background = 'transparent';
+    notice.style.border = 'none';
+
+    if (window.VideoJobClient) {
+      window.VideoJobClient.renderProgressBar(notice, job, () => {
+        window.VideoJobClient.cancelJob(job.job_id);
+      });
+    }
+  }
+
   async function transcodeVideo(filename, onSuccess) {
     if (!filename) return;
     const btns = document.querySelectorAll(
@@ -75,29 +90,82 @@
       b.disabled = true;
       b.textContent = '⏳ Converting...';
     });
-    showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`, null);
 
     try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode`, {
-        method: 'POST'
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        hideCodecNotice();
-        if (onSuccess) onSuccess(data);
+      if (window.VideoJobClient) {
+        const data = await window.VideoJobClient.startTranscode(filename);
+        if (data.job) {
+          showCodecNoticeProgress(data.job);
+        }
       } else {
-        const err = await resp.json();
-        showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
+        showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`, null);
+        const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode`, {
+          method: 'POST'
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          hideCodecNotice();
+          if (onSuccess) onSuccess(data);
+        } else {
+          const err = await resp.json();
+          showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
+        }
+        btns.forEach(b => {
+          b.disabled = false;
+          b.textContent = '⚡ Convert';
+        });
       }
     } catch (e) {
       showToast(`Error during transcoding: ${e.message}`, 'error');
-    } finally {
       btns.forEach(b => {
         b.disabled = false;
         b.textContent = '⚡ Convert';
       });
     }
   }
+
+  window.addEventListener('video-job-event', (e) => {
+    const { type, data } = e.detail || {};
+    if (!data) return;
+    const job = data;
+    if (job.job_type !== 'transcode') return;
+
+    const btns = document.querySelectorAll(
+      `.btn-transcode-video[data-filename="${CSS.escape(job.filename)}"], .btn-notice-convert[data-filename="${CSS.escape(job.filename)}"]`
+    );
+
+    if (type === 'job-started' || type === 'job-update') {
+      if (job.status === 'running' || job.status === 'pending') {
+        btns.forEach(b => {
+          b.disabled = true;
+          b.textContent = `⏳ ${(job.progress || 0).toFixed(0)}%`;
+        });
+        showCodecNoticeProgress(job);
+      }
+    } else if (type === 'job-finished') {
+      btns.forEach(b => {
+        b.disabled = false;
+        b.textContent = '⚡ Convert';
+      });
+      if (job.status === 'completed') {
+        hideCodecNotice();
+        showToast(`Transcoding completed for '${job.filename}'!`, 'success');
+        if (typeof window.loadVideosList === 'function') {
+          window.loadVideosList();
+        }
+      } else if (job.status === 'cancelled') {
+        hideCodecNotice();
+        showToast(`Transcoding cancelled for '${job.filename}'.`, 'info');
+      } else if (job.status === 'failed') {
+        const notice = getCodecNoticeElement();
+        if (notice && window.VideoJobClient) {
+          window.VideoJobClient.renderErrorAlert(notice, job.error, () => transcodeVideo(job.filename));
+        } else {
+          showToast(`Transcode failed: ${job.error}`, 'error');
+        }
+      }
+    }
+  });
 
   async function uploadSelectedVideo(e, onUploaded) {
     const file = e.target.files[0];

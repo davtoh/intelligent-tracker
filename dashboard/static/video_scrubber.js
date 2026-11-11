@@ -78,6 +78,14 @@
       });
     }
 
+    window.addEventListener('video-select-request', (e) => {
+      const fn = e.detail?.filename;
+      if (!fn) return;
+      const card = document.querySelector(`.video-file-card[data-file="${CSS.escape(fn)}"]`);
+      const btn = card?.querySelector('.btn-select-video');
+      if (btn) btn.click();
+    });
+
     if (btnUploadVideo && videoFileInput) {
       btnUploadVideo.addEventListener('click', () => videoFileInput.click());
       videoFileInput.addEventListener('change', (e) => {
@@ -244,9 +252,36 @@
 
     updateScrubberLoadedTitle(filename);
     if (btnAddAsCamera) btnAddAsCamera.disabled = false;
-    if (btnAnalyzeVideo) btnAnalyzeVideo.disabled = false;
 
-    if (isWebCompatible === false) {
+    window.VideoJobClient?.setCurrentViewedFilename(filename);
+    window.VideoBatch?.setCurrentBatchFilename(filename);
+
+    const activeJob = window.VideoJobClient?.getActiveJob(filename);
+    const reportContainer = document.getElementById('video-batch-report-container');
+
+    if (activeJob) {
+      if (activeJob.job_type === 'analytics') {
+        if (btnAnalyzeVideo) {
+          btnAnalyzeVideo.disabled = true;
+          btnAnalyzeVideo.textContent = '⏳ Processing Analytics...';
+        }
+        if (reportContainer && window.VideoJobClient) {
+          window.VideoJobClient.renderProgressBar(reportContainer, activeJob);
+        }
+      } else if (activeJob.job_type === 'transcode') {
+        window.VideoLibrary?.showCodecNoticeProgress(activeJob);
+      }
+    } else {
+      if (btnAnalyzeVideo) {
+        btnAnalyzeVideo.disabled = false;
+        btnAnalyzeVideo.textContent = '⚡ Batch Video Analytics';
+      }
+      if (reportContainer && reportContainer.querySelector('.video-job-progress-panel')) {
+        reportContainer.innerHTML = '<div class="empty-state">Click <strong>⚡ Batch Video Analytics</strong> to catalog entity sightings and dwell times.</div>';
+      }
+    }
+
+    if (isWebCompatible === false && (!activeJob || activeJob.job_type !== 'transcode')) {
       window.VideoLibrary?.showCodecNotice(
         `This video is encoded with '${(codec || 'HEVC').toUpperCase()}' which may not play in standard browsers without conversion.`,
         filename,
@@ -343,6 +378,7 @@
     return `${min}:${sec < 10 ? '0' : ''}${sec}.${ms < 10 ? '0' : ''}${ms}`;
   }
 
+  window.loadVideosList = loadVideosList;
   window.VideoScrubber = {
     init: init,
     loadVideosList: loadVideosList,
