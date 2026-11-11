@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-11] feat: Milestone 3: Layer-Isolated Scaling & Policy-Governed Scrubber Timeline Persistence
+- **Type**: feat
+- **Summary**: Removed primary-layer sourceResolution cross-contamination in ScrubberOverlay.render(), extracted ScrubberPlaybackState & ScrubberLibraryBridge to keep VideoScrubber modular (<390L), persisted per-stem playback timestamps across original/_h264 pairs & recordings honoring #scrubber-tab-policy, and verified 372/372 unit tests plus headless CDP.
+- **Files** (6):
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `dashboard/static/js/scrubber_playback_state.js`
+  - `dashboard/static/js/scrubber_library_bridge.js`
+  - `dashboard/static/video_scrubber.js`
+  - `dashboard/static/index.html`
+  - `tests/test_scrubber_ux_fixes.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (372 passed); headless CDP audit passed (0 warnings, 3 concurrent layers, slider persistence across keep-paused/auto-resume/reset)
+
 ## [2026-11-11] test: Video Studio Automated Verification & Multi-Layer JS Runtime Suite
 - **Type**: test
 - **Summary**: Added Node VM runtime tests for 2688x1520 vs 1920x1086 resolution-aware overlay scaling, reactive parent/_h264 cache invalidation, concurrent multi-layer compositing, and paired H.264 UI switching; split progressive stream and unified report store tests under modularity budgets and synced documentation/vms.rst.

@@ -45,13 +45,21 @@ class TestScrubberUXStaticAndModularityContracts(unittest.TestCase):
         batch_js_idx = index_html.index('/static/js/video_batch.js')
         self.assertLess(reports_js_idx, batch_js_idx)
 
+        playback_js_idx = index_html.index('/static/js/scrubber_playback_state.js')
+        bridge_js_idx = index_html.index('/static/js/scrubber_library_bridge.js')
+        scrubber_js_idx = index_html.index('/static/video_scrubber.js')
+        self.assertLess(playback_js_idx, bridge_js_idx)
+        self.assertLess(bridge_js_idx, scrubber_js_idx)
+
     def test_modularity_budgets_under_350_lines(self):
-        """Extracted CSS and JS modules strictly stay under the 350-line soft ceiling."""
+        """Extracted CSS and JS modules stay strictly within modularity budgets."""
         targets = [
             CSS_DIR / "scrubber.css",
             CSS_DIR / "scrubber_overlays.css",
             JS_DIR / "video_batch.js",
             JS_DIR / "video_batch_reports.js",
+            JS_DIR / "scrubber_playback_state.js",
+            JS_DIR / "scrubber_library_bridge.js",
         ]
         for path in targets:
             line_count = len(path.read_text(encoding="utf-8").splitlines())
@@ -60,6 +68,8 @@ class TestScrubberUXStaticAndModularityContracts(unittest.TestCase):
                 350,
                 f"{path.name} has {line_count} lines; expected < 350 lines",
             )
+        video_scrubber_lines = len((STATIC_DIR / "video_scrubber.js").read_text(encoding="utf-8").splitlines())
+        self.assertLess(video_scrubber_lines, 500, f"video_scrubber.js exceeded 500L ceiling ({video_scrubber_lines})")
 
 
 class TestMilestone2JSRuntimeBehaviors(unittest.TestCase):
@@ -100,6 +110,7 @@ const makeEl = (tag = 'div', id = '') => {
     },
     click: () => el.dispatchEvent({ type: 'click', target: el }),
     focus: () => { doc.activeElement = el; },
+    matches: () => false,
     contains: (c) => el === c || el._children.includes(c) || el._children.some(ch => ch.contains(c)),
     closest: (sel) => {
       const parts = sel.split(',').map(s => s.trim());
@@ -175,6 +186,10 @@ viewport.parentNode = stage; viewport._rect = { left: 0, top: 0, width: 960, hei
 const player = makeEl('video', 'scrubber-video-player');
 player._rect = { left: 0, top: 0, width: 960, height: 543 };
 player.videoWidth = 1920; player.videoHeight = 1080; player.currentTime = 1.0;
+player.duration = 0; player.paused = true; player.error = null; player.playCalls = 0;
+player.pause = () => { player.paused = true; };
+player.play = async () => { player.paused = false; player.playCalls += 1; };
+player.load = () => {};
 const canvas = makeEl('canvas', 'scrubber-overlay-canvas');
 canvas.parentElement = viewport;
 const ctx2d = {
@@ -188,7 +203,16 @@ canvas.getContext = () => ctx2d;
 const layersBar = makeEl('div', 'scrubber-overlay-layers'), layersStatus = makeEl('div', 'scrubber-overlay-layers-status');
 const reportContainer = makeEl('div', 'video-batch-report-container'), analyzeBtn = makeEl('button', 'btn-video-analyze');
 const listContainer = makeEl('div', 'video-recordings-list');
-[player, canvas, layersBar, layersStatus, reportContainer, analyzeBtn, listContainer].forEach(e => {
+const timelineSlider = makeEl('input', 'scrubber-timeline-slider'); timelineSlider.value = 0;
+const timeDisplay = makeEl('span', 'scrubber-time-display');
+const btnPlay = makeEl('button', 'scrubber-btn-play');
+const btnPrev = makeEl('button', 'scrubber-btn-prev');
+const btnNext = makeEl('button', 'scrubber-btn-next');
+const tabPolicySelect = makeEl('select', 'scrubber-tab-policy'); tabPolicySelect.value = 'auto-resume';
+const loadedTitle = makeEl('span', 'scrubber-loaded-title');
+const addCamBtn = makeEl('button', 'btn-video-add-camera');
+[player, canvas, layersBar, layersStatus, reportContainer, analyzeBtn, listContainer,
+ timelineSlider, timeDisplay, btnPlay, btnPrev, btnNext, tabPolicySelect, loadedTitle, addCamBtn].forEach(e => {
   byId.set(e.id, e);
   allRootEls.push(e);
 });
@@ -506,6 +530,209 @@ console.log(JSON.stringify({
         self.assertTrue(res["slowDeleteResult"])
         self.assertEqual(res["activeHtml"], "<div>OTHER_ACTIVE_VIEW</div>")
         self.assertEqual(res["toasts"][0]["type"], "error")
+
+
+class TestMilestone3LayerScalingAndTimelinePersistence(unittest.TestCase):
+    """Verify Milestone 3 layer-isolated resolution scaling and policy-governed slider persistence."""
+
+    def _run_js(self, files: list[str], body: str) -> dict:
+        return TestMilestone2JSRuntimeBehaviors()._run_js(files, body)
+
+    def test_concurrent_multi_resolution_layer_scaling_isolation(self):
+        """Concurrent 2688x1520 & 1920x1086 layers scale independently without primary cross-contamination."""
+        res = self._run_js(
+            ["scrubber_overlay_renderer.js", "scrubber_overlay.js"],
+            """
+player.videoWidth = 1920; player.videoHeight = 1086; player.currentTime = 2.0;
+
+// Primary/Run 1: 2688x1520 detection at normalized center (0.5, 0.25) -> [1344, 380, 134.4, 152]
+sandbox.ScrubberOverlay.setLayer('r1', {
+  runId: 'r1',
+  shortLabel: 'R1',
+  color: sandbox.ScrubberOverlay.PALETTES[0],
+  sourceResolution: [2688, 1520],
+  frameDetections: [{ time: 2.0, tracks: [{ track_id: 1, label: 'car', confidence: 0.9, bbox: [1344, 380, 134.4, 152] }] }],
+});
+
+// Run 2: 1920x1086 detection WITHOUT per-frame source_resolution (relies on layer.sourceResolution)
+sandbox.ScrubberOverlay.setLayer('r2', {
+  runId: 'r2',
+  shortLabel: 'R2',
+  color: sandbox.ScrubberOverlay.PALETTES[1],
+  sourceResolution: [1920, 1086],
+  frameDetections: [{ time: 2.0, tracks: [{ track_id: 2, label: 'car', confidence: 0.88, bbox: [960, 271.5, 96, 108.6] }] }],
+});
+
+// Run 3: null layer.sourceResolution while r1 (primary) is 2688x1520 -> MUST fall back to player [1920, 1086], NOT r1!
+sandbox.ScrubberOverlay.setLayer('r3', {
+  runId: 'r3',
+  shortLabel: 'R3',
+  color: sandbox.ScrubberOverlay.PALETTES[2],
+  sourceResolution: null,
+  frameDetections: [{ time: 2.0, tracks: [{ track_id: 3, label: 'truck', confidence: 0.82, bbox: [960, 271.5, 96, 108.6] }] }],
+});
+// Force r1 back as primary so r3 would be contaminated if getPrimaryLayer()?.sourceResolution were used
+sandbox.ScrubberOverlay.setLayer('r1', {
+  runId: 'r1',
+  shortLabel: 'R1',
+  color: sandbox.ScrubberOverlay.PALETTES[0],
+  sourceResolution: [2688, 1520],
+  frameDetections: [{ time: 2.0, tracks: [{ track_id: 1, label: 'car', confidence: 0.9, bbox: [1344, 380, 134.4, 152] }] }],
+});
+
+draws.length = 0;
+sandbox.ScrubberOverlay.render();
+const rectsOn1920 = draws.filter(d => d.op === 'strokeRect');
+
+// Switch player to original 2688x1520 and re-render r1 + r2
+sandbox.ScrubberOverlay.removeLayer('r3');
+player.videoWidth = 2688; player.videoHeight = 1520;
+draws.length = 0;
+sandbox.ScrubberOverlay.render();
+const rectsOn2688 = draws.filter(d => d.op === 'strokeRect');
+
+console.log(JSON.stringify({ rectsOn1920, rectsOn2688 }));
+""",
+        )
+        # On 1920x1086 player, R2, R3 (null fallback->player 1920x1086), and R1 all land at x=480, y=135.75!
+        self.assertEqual(len(res["rectsOn1920"]), 3)
+        for rect in res["rectsOn1920"]:
+            self.assertAlmostEqual(rect["x"], 480.0, delta=0.5)
+            self.assertAlmostEqual(rect["y"], 135.75, delta=0.5)
+            self.assertAlmostEqual(rect["w"], 48.0, delta=0.5)
+            self.assertAlmostEqual(rect["h"], 54.3, delta=0.5)
+
+        self.assertEqual(len(res["rectsOn2688"]), 2)
+        for rect in res["rectsOn2688"]:
+            self.assertAlmostEqual(rect["x"], 480.0, delta=0.5)
+            self.assertAlmostEqual(rect["y"], 135.75, delta=0.5)
+
+    def test_scrubber_timeline_preserves_position_across_pairs_recordings_and_policies(self):
+        """scrubber-timeline-slider preserves stem position on auto-resume/keep-paused and resets on reset."""
+        res = self._run_js(
+            ["scrubber_playback_state.js", "scrubber_library_bridge.js", "video_library.js", "../video_scrubber.js"],
+            """
+// Simulate real browser <video>.load() resetting currentTime/duration until loadedmetadata fires
+player.load = () => { player.currentTime = 0; player.duration = NaN; player.error = null; };
+const finishLoad = (dur) => { player.duration = dur; player.dispatchEvent({ type: 'loadedmetadata' }); };
+
+// 1. keep-paused: scrub clip_a_h264.mp4 to 12.5s / 50s (25%)
+sandbox.VideoScrubber.setTabPolicy('keep-paused');
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_a_h264.mp4', 'clip_a_h264.mp4', true, 'h264');
+finishLoad(50);
+timelineSlider.value = 25;
+timelineSlider.dispatchEvent({ type: 'input', target: timelineSlider });
+const clipAAfterScrub = { t: player.currentTime, slider: Number(timelineSlider.value) };
+
+// 2. Switch to distinct recording clip_b_h264.mp4 -> starts at 0, scrub to 60s / 100s (60%)
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_b_h264.mp4', 'clip_b_h264.mp4', true, 'h264');
+const clipBInitial = { t: player.currentTime, slider: Number(timelineSlider.value) };
+finishLoad(100);
+timelineSlider.value = 60;
+timelineSlider.dispatchEvent({ type: 'input', target: timelineSlider });
+
+// 3. Switch back to clip_a_h264.mp4 -> slider immediately shows 25% and loadedmetadata restores 12.5s
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_a_h264.mp4', 'clip_a_h264.mp4', true, 'h264');
+const clipABeforeMeta = { slider: Number(timelineSlider.value) };
+finishLoad(50);
+const clipAAfterMeta = { t: player.currentTime, slider: Number(timelineSlider.value), playCalls: player.playCalls };
+
+// 4. Switch to unplayable HEVC original clip_a.mp4 (error, no loadedmetadata), then back to clip_a_h264.mp4
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_a.mp4', 'clip_a.mp4', false, 'hevc');
+player.error = { code: 4 };
+player.currentTime = 0;
+player.dispatchEvent({ type: 'error' });
+sandbox.VideoLibrary.switchToH264('clip_a_h264.mp4', '/videos/clip_a_h264.mp4');
+finishLoad(50);
+const afterHevcRoundTrip = { t: player.currentTime, slider: Number(timelineSlider.value), paused: player.paused };
+
+// 5. auto-resume: play clip_a_h264.mp4 at 20s (40%), switch to clip_b (paused at 60%), switch back -> resumes!
+sandbox.VideoScrubber.setTabPolicy('auto-resume');
+await player.play();
+player.playCalls = 0;
+timelineSlider.value = 40;
+timelineSlider.dispatchEvent({ type: 'input', target: timelineSlider });
+
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_b_h264.mp4', 'clip_b_h264.mp4', true, 'h264');
+finishLoad(100);
+const clipBWhileAutoResume = { t: player.currentTime, slider: Number(timelineSlider.value), paused: player.paused, playCalls: player.playCalls };
+
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_a_h264.mp4', 'clip_a_h264.mp4', true, 'h264');
+finishLoad(50);
+await new Promise(r => setTimeout(r, 5));
+const clipAAutoResumed = { t: player.currentTime, slider: Number(timelineSlider.value), paused: player.paused, playCalls: player.playCalls };
+
+// 6. reset: change #scrubber-tab-policy select to 'reset' -> loading clip_a_h264.mp4 resets slider & time to 0
+tabPolicySelect.value = 'reset';
+tabPolicySelect.dispatchEvent({ type: 'change', target: tabPolicySelect });
+sandbox.VideoScrubber.loadVideoIntoPlayer('/videos/clip_a_h264.mp4', 'clip_a_h264.mp4', true, 'h264');
+const afterResetBeforeMeta = { slider: Number(timelineSlider.value), t: player.currentTime };
+finishLoad(50);
+const afterResetAfterMeta = { slider: Number(timelineSlider.value), t: player.currentTime, saved: sandbox.VideoScrubber.getSavedPlaybackState('clip_a.mp4') };
+
+console.log(JSON.stringify({
+  clipAAfterScrub,
+  clipBInitial,
+  clipABeforeMeta,
+  clipAAfterMeta,
+  afterHevcRoundTrip,
+  clipBWhileAutoResume,
+  clipAAutoResumed,
+  afterResetBeforeMeta,
+  afterResetAfterMeta,
+}));
+""",
+        )
+        self.assertEqual(res["clipAAfterScrub"], {"t": 12.5, "slider": 25})
+        self.assertEqual(res["clipBInitial"], {"t": 0, "slider": 0})
+        self.assertEqual(res["clipABeforeMeta"], {"slider": 25})
+        self.assertEqual(res["clipAAfterMeta"], {"t": 12.5, "slider": 25, "playCalls": 0})
+        self.assertEqual(res["afterHevcRoundTrip"], {"t": 12.5, "slider": 25, "paused": True})
+        self.assertEqual(res["clipBWhileAutoResume"], {"t": 60, "slider": 60, "paused": True, "playCalls": 0})
+        self.assertEqual(res["clipAAutoResumed"], {"t": 20, "slider": 40, "paused": False, "playCalls": 1})
+        self.assertEqual(res["afterResetBeforeMeta"], {"slider": 0, "t": 0})
+        self.assertEqual(res["afterResetAfterMeta"], {"slider": 0, "t": 0, "saved": None})
+
+    def test_playback_state_hydrates_from_local_storage_without_autoplay(self):
+        """Saved stem timestamp survives simulated reload in localStorage without unexpected autoplay."""
+        res = self._run_js(
+            ["scrubber_playback_state.js", "scrubber_library_bridge.js", "../video_scrubber.js"],
+            """
+sandbox.localStorage.setItem(
+  sandbox.ScrubberPlaybackState.STORAGE_KEY,
+  JSON.stringify({ clip_persisted: { time: 18, duration: 60, pct: 30 } })
+);
+// Re-run scripts in a fresh inner VM sharing the same localStorage
+const freshStorage = sandbox.localStorage;
+const freshCtx = {
+  ...sandbox,
+  localStorage: freshStorage,
+  window: null,
+};
+freshCtx.window = freshCtx;
+vm.createContext(freshCtx);
+['scrubber_playback_state.js', 'scrubber_library_bridge.js', '../video_scrubber.js'].forEach(f =>
+  vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), freshCtx, { filename: f })
+);
+player.playCalls = 0;
+player.paused = true;
+freshCtx.VideoScrubber.loadVideoIntoPlayer('/videos/clip_persisted_h264.mp4', 'clip_persisted_h264.mp4', true, 'h264');
+player.duration = 60;
+player.dispatchEvent({ type: 'loadedmetadata' });
+
+console.log(JSON.stringify({
+  t: player.currentTime,
+  slider: Number(timelineSlider.value),
+  playCalls: player.playCalls,
+  saved: freshCtx.VideoScrubber.getSavedPlaybackState('clip_persisted.mp4'),
+}));
+""",
+        )
+        self.assertEqual(res["t"], 18)
+        self.assertEqual(res["slider"], 30)
+        self.assertEqual(res["playCalls"], 0)
+        self.assertEqual(res["saved"]["time"], 18)
+        self.assertFalse(res["saved"]["wasPlaying"])
 
 
 if __name__ == "__main__":

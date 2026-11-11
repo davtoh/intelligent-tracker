@@ -304,7 +304,7 @@
       const record = renderer.findClosestDetections(layer.frameDetections, currentTime);
       if (!record || !record.tracks || record.tracks.length === 0) continue;
 
-      const fallbackRes = layer.sourceResolution || getPrimaryLayer()?.sourceResolution || null;
+      const fallbackRes = layer.sourceResolution || null;
       const { scaleX, scaleY } = renderer.resolveScaleFactors(
         renderW, renderH, record, videoPlayer.videoWidth, videoPlayer.videoHeight, fallbackRes
       );
