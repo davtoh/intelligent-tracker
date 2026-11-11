@@ -43,10 +43,27 @@
     return filename ? (pairedH264ByFilename.get(filename) || null) : null;
   }
 
+  function findMenuHost(el) {
+    let cur = el;
+    while (cur) {
+      if (cur.classList?.contains('video-file-card') || cur.classList?.contains('codec-notice-banner')) {
+        return cur;
+      }
+      cur = cur.parentElement || cur.parentNode || null;
+    }
+    return null;
+  }
+
+  function syncMenuCardElevation(menu, isOpen) {
+    const host = findMenuHost(menu);
+    if (host) host.classList.toggle('menu-open', Boolean(isOpen));
+  }
+
   function closeAllActionMenus(exceptMenu = null) {
     document.querySelectorAll('.video-action-menu').forEach(menu => {
       if (menu !== exceptMenu) {
         menu.hidden = true;
+        syncMenuCardElevation(menu, false);
         const toggle = menu.parentElement?.querySelector('.btn-action-menu-toggle');
         if (toggle) toggle.setAttribute('aria-expanded', 'false');
       }
@@ -106,6 +123,7 @@
         const willOpen = menu.hidden;
         closeAllActionMenus(willOpen ? menu : null);
         menu.hidden = !willOpen;
+        syncMenuCardElevation(menu, willOpen);
         btn.setAttribute('aria-expanded', String(willOpen));
       });
     });
@@ -208,6 +226,23 @@
     }
   }
 
+  function preservePairedSwitchControls(filename) {
+    if (!filename) return;
+    const safeSel = CSS.escape(filename);
+    document.querySelectorAll(
+      `.btn-switch-h264[data-filename="${safeSel}"], .btn-action-menu-toggle[data-filename="${safeSel}"]`
+    ).forEach(el => { el.disabled = false; });
+
+    const paired = getPairedH264(filename);
+    const notice = document.getElementById('scrubber-codec-notice');
+    if (paired && notice && notice.style.display !== 'none' && !notice.querySelector('.btn-switch-h264')) {
+      showCodecNotice(`Using existing H.264 copy '${paired.convertedFilename}'.`, filename, null, paired);
+    }
+    if (typeof window.loadVideosList === 'function') {
+      window.loadVideosList();
+    }
+  }
+
   async function runDirectTranscode(filename, force, btns, onSuccess) {
     showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`, null);
     const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode?force=${force}`, {
@@ -220,6 +255,7 @@
     } else {
       const err = await resp.json();
       showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
+      preservePairedSwitchControls(filename);
     }
     btns.forEach(restoreTranscodeButtonLabel);
   }
@@ -297,8 +333,10 @@
           }
         }
       } else if (job.status === 'cancelled') {
+        preservePairedSwitchControls(job.filename);
         showToast(`Transcoding cancelled for '${job.filename}'.`, 'info');
       } else if (job.status === 'failed') {
+        preservePairedSwitchControls(job.filename);
         showToast(`Transcode failed: ${job.error || 'Unknown error'}`, 'error');
       }
     }

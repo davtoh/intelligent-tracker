@@ -360,7 +360,7 @@ console.log(JSON.stringify({ orig, trans, fallbackFactors }));
     def test_reactive_cache_invalidation_clears_stale_tags(self):
         """SC-05: job-finished purges stale parent/_h264 report cache so car replaces person without reload."""
         res = self._run_js(
-            ["video_batch.js"],
+            ["video_batch_reports.js", "video_batch.js"],
             """
 let phase = 1; const fetchedUrls = [];
 sandbox.fetch = async (url) => {
