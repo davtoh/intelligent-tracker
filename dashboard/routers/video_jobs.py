@@ -7,29 +7,26 @@ import os
 import subprocess
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from dashboard.dependencies import (
-    VIDEOS_DIR,
-    get_active_stream_manager,
-)
+from dashboard.dependencies import VIDEOS_DIR
 from dashboard.schemas import VideoAnalyzeRequest
-from dashboard.services.progressive_stream_store import (
-    append_progressive_chunk,
-    build_job_stream_response,
-    finalize_progressive_stream,
+from dashboard.services.progressive_stream_store import build_job_stream_response
+from dashboard.services.video_analytics_service import (
+    parse_analyze_options,
+    run_sync_analytics,
+    submit_async_analytics_job,
 )
 from dashboard.services.video_jobs_service import get_video_job_manager
 from dashboard.services.video_report_store import (
+    clear_report_runs,
+    delete_report_run,
     get_detection_stream,
     is_same_recording_alias,
     list_report_runs,
-    save_report_run,
 )
 from dashboard.services.video_transcoder import VideoTranscodeService
-from intelligent_tracker.batch import VideoIndexer
-from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.video_jobs")
 
@@ -185,22 +182,7 @@ async def analyze_video(
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
-    sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
-    det = req.detector if (req and req.detector is not None) else (detector or "yolov8")
-    conf = req.confidence if (req and req.confidence is not None) else (confidence if confidence is not None else 0.40)
-    raw_classes = (req.classes if req and req.classes is not None else None) or classes
-
-    if isinstance(raw_classes, str):
-        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
-    elif isinstance(raw_classes, (list, tuple, set)):
-        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
-    else:
-        target_classes = None
-
-    is_async = req.async_mode if (req and req.async_mode is not None) else None
-    if is_async is None:
-        is_async = bool(async_mode)
-
+    opts = parse_analyze_options(sample_rate, detector, confidence, classes, async_mode, req)
     job_mgr = get_video_job_manager()
     active_job = job_mgr.get_active_job_for_file(safe_name)
     if active_job is not None:
@@ -213,92 +195,14 @@ async def analyze_video(
             },
         )
 
-    mgr = get_active_stream_manager()
-    db = mgr.db if (mgr and mgr.db) else TrackerDB("data/tracker.db")
-
-    def _create_indexer():
-        try:
-            return VideoIndexer(
-                db=db,
-                detector_name=det,
-                sample_rate=sr,
-                conf_threshold=conf,
-                classes=target_classes,
-            )
-        except Exception as e:
-            logger.warning(
-                "VideoIndexer initialization with detector '%s' failed (%s), falling back to mock",
-                det,
-                e,
-            )
-            return VideoIndexer(
-                db=db,
-                detector_name="mock",
-                sample_rate=sr,
-                conf_threshold=conf,
-                classes=target_classes,
-            )
-
-    config_meta = {
-        "detector": det,
-        "sample_rate": sr,
-        "confidence": conf,
-        "classes": target_classes,
-    }
-
-    def _finalize_report(indexer: VideoIndexer, summary: dict) -> dict:
-        report = indexer.generate_occurrence_report()
-        report["frames_processed"] = summary.get("processed_frames", 0)
-        report["total_detections"] = summary.get("total_detections", 0)
-        report["total_sightings"] = summary.get("identifications_count", 0)
-        report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
-        report["source_resolution"] = summary.get("source_resolution")
-        report["source_fps"] = summary.get("source_fps")
-        report["execution_summary"] = summary
-
-        # Persist stacked report and time-indexed detection stream to disk
-        run_rec = save_report_run(
-            filename=safe_name,
-            report=report,
-            config=config_meta,
-            frame_detections=summary.get("frame_detections"),
-            source_resolution=summary.get("source_resolution"),
-            source_fps=summary.get("source_fps"),
-        )
-        report["run_id"] = run_rec.get("run_id")
-        return report
-
-    if is_async:
-        def _runner(job, stop_event, progress_cb):
-            indexer = _create_indexer()
-            try:
-                summary = indexer.process_video(
-                    video_path=path,
-                    verbose=False,
-                    progress_callback=progress_cb,
-                    stop_event=stop_event,
-                    frame_flush_callback=lambda chunk, meta: append_progressive_chunk(
-                        job.job_id, safe_name, chunk, meta
-                    ),
-                )
-                return _finalize_report(indexer, summary)
-            finally:
-                finalize_progressive_stream(job.job_id)
-
-        job = job_mgr.submit_job(
-            job_type="analytics",
-            filename=safe_name,
-            runner_fn=_runner,
-            initial_metrics=config_meta,
-        )
+    if opts["is_async"]:
+        job = submit_async_analytics_job(job_mgr, safe_name, path, opts)
         return JSONResponse(
             status_code=202,
             content={"status": "accepted", "job_id": job.job_id, "job": job.to_dict()},
         )
 
-    indexer = _create_indexer()
-    summary = indexer.process_video(video_path=path, verbose=False)
-    report = _finalize_report(indexer, summary)
+    report = run_sync_analytics(safe_name, path, opts)
     return {"status": "success", "report": report}
 
 
@@ -308,6 +212,24 @@ async def get_video_reports(filename: str):
     safe_name = os.path.basename(filename)
     runs = list_report_runs(safe_name)
     return runs
+
+
+@router.delete("/api/videos/{filename}/reports/{run_id}")
+async def delete_video_report_run(filename: str, run_id: str):
+    """Delete a single historical report run and its detections stream across recording aliases."""
+    safe_name = os.path.basename(filename)
+    safe_run_id = os.path.basename(run_id)
+    if not delete_report_run(safe_name, safe_run_id):
+        raise HTTPException(status_code=404, detail=f"Report run '{safe_run_id}' not found for '{safe_name}'")
+    return {"status": "success", "filename": safe_name, "deleted_run_id": safe_run_id}
+
+
+@router.delete("/api/videos/{filename}/reports")
+async def clear_video_report_runs(filename: str):
+    """Delete all historical report runs and detections streams across recording aliases."""
+    safe_name = os.path.basename(filename)
+    cleared_count = clear_report_runs(safe_name)
+    return {"status": "success", "filename": safe_name, "cleared_count": cleared_count}
 
 
 @router.get("/api/videos/{filename}/jobs/{job_id}/stream")

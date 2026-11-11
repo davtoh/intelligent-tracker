@@ -53,7 +53,8 @@ async def list_videos():
     files = []
     if os.path.exists(VIDEOS_DIR):
         for f in sorted(os.listdir(VIDEOS_DIR)):
-            if f.lower().endswith((".mp4", ".avi", ".mkv", ".mov")):
+            lower_name = f.lower()
+            if lower_name.endswith((".mp4", ".avi", ".mkv", ".mov")) and not lower_name.endswith(".part.mp4"):
                 full = os.path.join(VIDEOS_DIR, f)
                 stat = os.stat(full)
                 probe = VideoTranscodeService.probe_video(full)

@@ -9,16 +9,30 @@ to disk so historical runs are stackable and survive server restarts.
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
 from dashboard.dependencies import VIDEOS_DIR
+from dashboard.services.video_report_maintenance import (
+    backfill_runs_resolution,
+    clear_runs_across_aliases,
+    extract_source_metadata as _extract_source_metadata,
+    heal_detection_stream_metadata,
+    is_valid_resolution,
+    load_runs_file as _load_runs_file,
+    persist_healed_runs,
+    remove_run_across_aliases,
+    write_json_atomic,
+)
+from dashboard.services.video_transcoder import VideoTranscodeService
 
 logger = logging.getLogger(__name__)
 
 REPORTS_DIR = os.path.join("data", "reports")
 _VIDEO_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov")
+_store_lock = threading.RLock()
 
 
 def _get_safe_filename(filename: str) -> str:
@@ -93,45 +107,31 @@ def is_same_recording_alias(name_a: str, name_b: str) -> bool:
     return safe_b in _get_alias_filenames(safe_a) or safe_a in _get_alias_filenames(safe_b)
 
 
-def _extract_source_metadata(
-    report: Dict[str, Any],
-    source_resolution: Optional[List[int]],
-    source_fps: Optional[float],
-) -> tuple[Optional[List[int]], Optional[float]]:
-    """Resolve source_resolution and source_fps from explicit args or execution summary."""
-    exec_summary = report.get("execution_summary")
-    summary_dict = exec_summary if isinstance(exec_summary, dict) else {}
-
-    res = source_resolution if source_resolution is not None else (
-        report.get("source_resolution") or summary_dict.get("source_resolution")
-    )
-    if isinstance(res, tuple):
-        res = list(res)
-
-    fps = source_fps if source_fps is not None else report.get("source_fps")
-    if fps is None:
-        fps = summary_dict.get("source_fps")
-    return res, fps
-
-
-def _load_runs_file(path: str) -> List[Dict[str, Any]]:
-    """Load report runs array from JSON file safely."""
+def _infer_source_resolution_for_filename(filename: Optional[str]) -> Optional[List[int]]:
+    """Probe the underlying video file in VIDEOS_DIR to infer [width, height]."""
+    if not filename:
+        return None
+    safe = _get_safe_filename(filename)
+    if not safe:
+        return None
+    video_path = os.path.join(VIDEOS_DIR, safe)
+    if not os.path.isfile(video_path):
+        return None
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-    except Exception as e:
-        logger.warning("Could not read reports file %s: %s", path, e)
-    return []
+        probe = VideoTranscodeService.probe_video(video_path)
+    except Exception as err:
+        logger.debug("Resolution probe failed for %s: %s", safe, err)
+        return None
+    width = int(probe.get("width") or 0)
+    height = int(probe.get("height") or 0)
+    if width > 0 and height > 0:
+        return [width, height]
+    return None
 
 
 def _write_json_atomic(path: str, payload: Any, indent: Optional[int] = None) -> None:
     """Atomically write JSON payload via temporary file replacement."""
-    tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=indent)
-    os.replace(tmp_path, path)
+    write_json_atomic(path, payload, indent=indent)
 
 
 def _save_detections_file(
@@ -175,6 +175,8 @@ def save_report_run(
     safe_name = _get_safe_filename(filename)
     canonical_name = resolve_base_recording_name(safe_name)
     resolved_res, resolved_fps = _extract_source_metadata(report, source_resolution, source_fps)
+    if not is_valid_resolution(resolved_res):
+        resolved_res = _infer_source_resolution_for_filename(safe_name)
 
     run_id = f"run_{uuid.uuid4().hex[:8]}"
     now = time.time()
@@ -208,10 +210,18 @@ def save_report_run(
 
     existing_runs = list_report_runs(canonical_name)
     rep_path = _reports_file_path(canonical_name)
-    try:
-        _write_json_atomic(rep_path, [run_record] + existing_runs, indent=2)
-    except Exception as e:
-        logger.error("Failed writing stacked reports file for %s: %s", canonical_name, e)
+    with _store_lock:
+        if os.path.isfile(rep_path):
+            disk_runs = _load_runs_file(rep_path)
+            known_ids = {r.get("run_id") for r in existing_runs if isinstance(r, dict)}
+            for dr in disk_runs:
+                if isinstance(dr, dict) and dr.get("run_id") not in known_ids:
+                    existing_runs.append(dr)
+            existing_runs.sort(key=lambda r: float(r.get("timestamp", 0.0)), reverse=True)
+        try:
+            _write_json_atomic(rep_path, [run_record] + existing_runs, indent=2)
+        except Exception as e:
+            logger.error("Failed writing stacked reports file for %s: %s", canonical_name, e)
 
     return run_record
 
@@ -221,12 +231,21 @@ def list_report_runs(filename: str) -> List[Dict[str, Any]]:
     safe_name = _get_safe_filename(filename)
     seen_ids = set()
     merged: List[Dict[str, Any]] = []
+    probe_cache: Dict[str, Optional[List[int]]] = {}
 
     for alias in _get_alias_filenames(safe_name):
-        path = _reports_file_path(alias)
-        if not os.path.exists(path):
-            continue
-        for run in _load_runs_file(path):
+        path = os.path.join(REPORTS_DIR, f"{alias}_reports.json")
+        with _store_lock:
+            if not os.path.isfile(path):
+                continue
+            runs = _load_runs_file(path)
+
+        if backfill_runs_resolution(
+            runs, alias, probe_cache, _infer_source_resolution_for_filename, _extract_source_metadata
+        ):
+            persist_healed_runs(path, runs, _load_runs_file, _store_lock)
+
+        for run in runs:
             rid = run.get("run_id")
             if rid and rid in seen_ids:
                 continue
@@ -268,14 +287,35 @@ def get_detection_stream(filename: str, run_id: Optional[str] = None) -> Optiona
         return None
 
     try:
-        with open(det_path, "r", encoding="utf-8") as f:
-            stream = json.load(f)
+        with _store_lock:
+            with open(det_path, "r", encoding="utf-8") as f:
+                stream = json.load(f)
         if isinstance(stream, dict):
-            if stream.get("source_resolution") is None and target_run.get("source_resolution") is not None:
-                stream["source_resolution"] = target_run.get("source_resolution")
-            if stream.get("source_fps") is None and target_run.get("source_fps") is not None:
-                stream["source_fps"] = target_run.get("source_fps")
+            return heal_detection_stream_metadata(
+                stream, det_path, target_run, safe_name, _infer_source_resolution_for_filename, _store_lock
+            )
         return stream
     except Exception as e:
         logger.error("Error reading detections stream for %s (%s): %s", safe_name, target_run.get("run_id"), e)
         return None
+
+
+def delete_report_run(filename: str, run_id: str) -> bool:
+    """Delete a single report run and its detections file across all recording aliases."""
+    safe_name = _get_safe_filename(filename)
+    safe_run_id = _get_safe_filename(run_id)
+    if not safe_name or not safe_run_id:
+        return False
+    return remove_run_across_aliases(
+        _get_alias_filenames(safe_name), safe_run_id, REPORTS_DIR, _load_runs_file, _store_lock
+    )
+
+
+def clear_report_runs(filename: str) -> int:
+    """Delete all archived report runs and detection files across all recording aliases."""
+    safe_name = _get_safe_filename(filename)
+    if not safe_name:
+        return 0
+    return clear_runs_across_aliases(
+        _get_alias_filenames(safe_name), REPORTS_DIR, _load_runs_file, _store_lock
+    )
