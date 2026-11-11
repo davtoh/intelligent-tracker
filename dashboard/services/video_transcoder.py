@@ -126,6 +126,7 @@ class VideoTranscodeService:
         Transcodes video asynchronously with realtime progress parsing from FFmpeg stdout.
         Supports cancellation via stop_event and cleans up partial output files.
         """
+        stop_event = stop_event or threading.Event()
         meta = VideoTranscodeService.probe_video(input_path)
         total_duration = meta.get("duration", 0.0) or 0.0
 
@@ -174,7 +175,7 @@ class VideoTranscodeService:
 
         def _monitor_cancellation():
             while proc.poll() is None:
-                if stop_event is not None and stop_event.is_set():
+                if stop_event.is_set():
                     try:
                         proc.terminate()
                         for _ in range(20):
@@ -187,10 +188,7 @@ class VideoTranscodeService:
                     except Exception:
                         pass
                     break
-                if stop_event is not None:
-                    stop_event.wait(0.2)
-                else:
-                    time.sleep(0.2)
+                stop_event.wait(0.2)
 
         cancel_thread = threading.Thread(target=_monitor_cancellation, daemon=True)
         cancel_thread.start()

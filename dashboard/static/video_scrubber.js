@@ -112,12 +112,28 @@
 
     if (btnAnalyzeVideo) {
       btnAnalyzeVideo.addEventListener('click', () => {
-        if (currentVideoFilename) {
-          if (window.VideoBatch?.openBatchModal) {
-            window.VideoBatch.openBatchModal(currentVideoFilename);
-          } else {
-            window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
-          }
+        if (!currentVideoFilename) return;
+        const activeJob = window.VideoJobClient?.getActiveJob(currentVideoFilename);
+        if (activeJob) {
+          window.VideoJobClient.showConflictModal(
+            activeJob,
+            'Batch Video Analytics',
+            () => {
+              if (window.VideoBatch?.openBatchModal) {
+                window.VideoBatch.openBatchModal(currentVideoFilename);
+              } else {
+                window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
+              }
+            },
+            () => {}
+          );
+          return;
+        }
+
+        if (window.VideoBatch?.openBatchModal) {
+          window.VideoBatch.openBatchModal(currentVideoFilename);
+        } else {
+          window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
         }
       });
     }
@@ -168,6 +184,7 @@
 
       videoFilesList.innerHTML = files.map(file => window.VideoLibrary?.renderVideoFileCard(file, currentVideoFilename) || '').join('');
       bindVideoCardActions();
+      window.VideoJobClient?.updateSidebarCards();
 
       if (!currentVideoFilename && files.length > 0) {
         const preferred = files.find(f => f.web_compatible) || files[0];

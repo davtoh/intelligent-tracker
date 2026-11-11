@@ -83,6 +83,24 @@
 
   async function transcodeVideo(filename, onSuccess) {
     if (!filename) return;
+    const activeJob = window.VideoJobClient?.getActiveJob(filename);
+    if (activeJob) {
+      window.VideoJobClient.showConflictModal(
+        activeJob,
+        'Convert to H.264',
+        async () => {
+          try {
+            const data = await window.VideoJobClient.startTranscode(filename);
+            if (data.job) showCodecNoticeProgress(data.job);
+          } catch (err) {
+            showToast(`Transcode error: ${err.message}`, 'error');
+          }
+        },
+        () => {}
+      );
+      return;
+    }
+
     const btns = document.querySelectorAll(
       `.btn-transcode-video[data-filename="${CSS.escape(filename)}"], .btn-notice-convert[data-filename="${CSS.escape(filename)}"]`
     );

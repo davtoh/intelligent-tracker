@@ -315,6 +315,40 @@ class TestVideoJobAPI(unittest.TestCase):
         self.assertIsInstance(jobs, list)
         self.assertGreater(len(jobs), 0)
 
+    def test_04_cancel_and_immediate_resubmit(self):
+        """SC-04: Cancelling an active job allows immediate resubmission without 409 conflict."""
+        resp1 = self.client.post(f"/api/videos/{self.test_filename}/transcode?async_mode=true")
+        self.assertEqual(resp1.status_code, 202)
+        job_id = resp1.json()["job_id"]
+
+        # Cancel job - backend joinable cancellation guarantees release before 200 response
+        cancel_resp = self.client.post(f"/api/videos/jobs/{job_id}/cancel")
+        self.assertEqual(cancel_resp.status_code, 200)
+
+        # Immediate resubmission without sleeping
+        resp2 = self.client.post(f"/api/videos/{self.test_filename}/analyze?async_mode=true&detector=mock")
+        self.assertEqual(resp2.status_code, 202, f"Expected 202 but got {resp2.status_code}: {resp2.text}")
+
+        # Cleanup
+        job_id2 = resp2.json()["job_id"]
+        self.client.post(f"/api/videos/jobs/{job_id2}/cancel")
+
+    def test_05_delete_video_with_active_job(self):
+        """SC-10: Deleting a video with an active job cancels worker and removes file cleanly."""
+        del_test_file = "test_del_with_job.mp4"
+        del_test_path = os.path.join(VIDEOS_DIR, del_test_file)
+        create_synthetic_video(del_test_path, num_frames=30, fps=10.0)
+
+        # Start job
+        resp = self.client.post(f"/api/videos/{del_test_file}/analyze?async_mode=true&detector=mock")
+        self.assertEqual(resp.status_code, 202)
+
+        # Delete video immediately
+        del_resp = self.client.delete(f"/api/videos/{del_test_file}")
+        self.assertEqual(del_resp.status_code, 200)
+        self.assertEqual(del_resp.json()["status"], "success")
+        self.assertFalse(os.path.exists(del_test_path))
+
 
 if __name__ == "__main__":
     unittest.main()

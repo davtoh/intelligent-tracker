@@ -212,3 +212,44 @@
   gap: 4px;
 }
 
+/* Active Job Indicators & Animations (Milestone 17) */
+.badge-running-job {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  animation: pulse-job 2s infinite ease-in-out;
+  white-space: nowrap;
+}
+
+@keyframes pulse-job {
+  0%, 100% {
+    opacity: 1;
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    opacity: 0.75;
+    border-color: rgba(59, 130, 246, 0.8);
+  }
+}
+
+.video-file-card.job-running {
+  border-color: rgba(59, 130, 246, 0.6);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.video-file-card-job-pill {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+

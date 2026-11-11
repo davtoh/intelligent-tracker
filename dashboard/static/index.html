@@ -329,14 +329,20 @@
       <div class="scrubber-grid">
         <div class="glass-panel video-player-card">
           <div class="card-header">
-            <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback
-              Scrubber</h3>
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto;">
+              <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback
+                Scrubber</h3>
+              <span id="scrubber-header-job-badge" class="badge-running-job" style="display: none;"></span>
+            </div>
             <div class="card-actions">
               <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera
                 Feed</button>
               <button class="btn btn-sm btn-outline" id="btn-video-analyze" disabled>⚡ Run Batch Analytics</button>
             </div>
           </div>
+
+          <!-- Prominent Active Video Job Banner (Milestone 17) -->
+          <div id="scrubber-active-job-banner" style="display: none; margin-bottom: 12px;"></div>
 
           <div class="scrubber-viewport">
             <video id="scrubber-video-player" playsinline></video>

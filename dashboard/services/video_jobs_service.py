@@ -117,8 +117,23 @@ class VideoJobManager:
         if not job or not stop_event:
             return
 
-        # Acquire concurrency throttle semaphore
-        self._semaphore.acquire()
+        # Acquire concurrency throttle semaphore with responsive cancellation
+        acquired = False
+        while not stop_event.is_set():
+            with self._lock:
+                if self._is_shutdown:
+                    break
+            if self._semaphore.acquire(timeout=0.1):
+                acquired = True
+                break
+
+        if not acquired:
+            with self._lock:
+                job.status = JobStatus.CANCELLED
+                job.stage = "cancelled_before_start"
+                job.completed_at = time.time()
+            return
+
         try:
             with self._lock:
                 if stop_event.is_set():
@@ -193,30 +208,31 @@ class VideoJobManager:
                 results.append(job)
             return sorted(results, key=lambda j: j.created_at, reverse=True)
 
-    def cancel_job(self, job_id: str) -> bool:
-        """Signals cancellation to an active job."""
+    def cancel_job(self, job_id: str, wait_timeout: float = 2.0) -> bool:
+        """Signals cancellation to an active job and optionally waits for worker thread exit."""
         with self._lock:
             job = self._jobs.get(job_id)
             stop_event = self._stop_events.get(job_id)
+            thread = self._threads.get(job_id)
             if not job or not stop_event:
                 return False
             if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
                 return False
             stop_event.set()
             job.stage = "cancelling"
-            return True
 
-    def cancel_active_job_for_file(self, filename: str) -> bool:
+        # Wait outside lock for worker thread to exit and release handles
+        if wait_timeout > 0 and thread and thread.is_alive():
+            thread.join(timeout=wait_timeout)
+        return True
+
+    def cancel_active_job_for_file(self, filename: str, wait_timeout: float = 2.0) -> bool:
         with self._lock:
             job = self._get_active_job_for_file_unlocked(filename)
             if not job:
                 return False
-            stop_event = self._stop_events.get(job.job_id)
-            if stop_event:
-                stop_event.set()
-                job.stage = "cancelling"
-                return True
-            return False
+            job_id = job.job_id
+        return self.cancel_job(job_id, wait_timeout=wait_timeout)
 
     def _prune_history_unlocked(self, max_history: int = 100) -> None:
         """Removes old completed or failed jobs if capacity exceeded."""

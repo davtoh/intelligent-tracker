@@ -34,7 +34,9 @@
 
     setCurrentViewedFilename(filename) {
       this.currentViewedFilename = filename ? String(filename).trim() : null;
+      this.syncActiveJobUI(this.currentViewedFilename);
       this.updateBackgroundPill();
+      this.updateSidebarCards();
     }
 
     subscribe(fn) {
@@ -46,6 +48,8 @@
     }
 
     _notify(eventType, data) {
+      this.syncActiveJobUI(this.currentViewedFilename);
+      this.updateSidebarCards();
       this.listeners.forEach(fn => {
         try { fn(eventType, data); } catch (e) { console.debug('Listener error:', e); }
       });
@@ -351,6 +355,76 @@
       if (onRetry) {
         container.querySelector('.btn-retry-job')?.addEventListener('click', onRetry);
       }
+    }
+
+    syncActiveJobUI(filename) {
+      const banner = document.getElementById('scrubber-active-job-banner');
+      const badge = document.getElementById('scrubber-header-job-badge');
+      const btnAnalyze = document.getElementById('btn-video-analyze');
+      if (!filename) {
+        if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
+        if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+        return;
+      }
+
+      const activeJob = this.getActiveJob(filename);
+      if (activeJob) {
+        if (banner) {
+          this.renderProgressBar(banner, activeJob);
+          banner.style.display = 'block';
+        }
+        if (badge) {
+          const type = activeJob.job_type === 'transcode' ? 'Transcoding' : 'Indexing';
+          badge.textContent = `⏳ ${type} ${(activeJob.progress || 0).toFixed(0)}%`;
+          badge.style.display = 'inline-flex';
+        }
+        if (btnAnalyze) {
+          btnAnalyze.disabled = false;
+          btnAnalyze.textContent = activeJob.job_type === 'analytics'
+            ? '⏳ Indexing Active (Click to Manage)'
+            : '⚡ Run Batch Analytics (Transcode Active)';
+        }
+      } else {
+        if (banner) {
+          banner.style.display = 'none';
+          banner.innerHTML = '';
+        }
+        if (badge) {
+          badge.style.display = 'none';
+          badge.textContent = '';
+        }
+        if (btnAnalyze && filename) {
+          btnAnalyze.disabled = false;
+          btnAnalyze.textContent = '⚡ Run Batch Analytics';
+        }
+      }
+    }
+
+    updateSidebarCards() {
+      document.querySelectorAll('.video-file-card').forEach(card => {
+        const fn = card.getAttribute('data-file');
+        const job = fn ? this.getActiveJob(fn) : null;
+        let pill = card.querySelector('.video-file-card-job-pill');
+        if (job) {
+          card.classList.add('job-running');
+          const type = job.job_type === 'transcode' ? 'Transcode' : 'Index';
+          const pct = (job.progress || 0).toFixed(0);
+          if (!pill) {
+            pill = document.createElement('span');
+            pill.className = 'video-file-card-job-pill';
+            const meta = card.querySelector('.video-file-meta .video-filesize');
+            if (meta) meta.appendChild(pill);
+          }
+          if (pill) {
+            pill.textContent = `⏳ ${type} ${pct}%`;
+          }
+        } else {
+          card.classList.remove('job-running');
+          if (pill && pill.parentNode) {
+            pill.parentNode.removeChild(pill);
+          }
+        }
+      });
     }
 
     updateBackgroundPill() {
