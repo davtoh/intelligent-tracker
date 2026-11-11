@@ -9,6 +9,24 @@
   let currentBatchFilename = null;
   const reportsByFilename = new Map();
 
+  function getBaseRecordingName(filename) {
+    return filename ? String(filename).trim().replace(/_h264(\.[^.]+)$/i, '$1') : '';
+  }
+
+  function invalidateCachedReports(filename) {
+    if (!filename) return;
+    const safeName = String(filename).trim();
+    const baseName = getBaseRecordingName(safeName);
+    const stem = baseName.replace(/\.[^.]+$/, '');
+    reportsByFilename.delete(safeName);
+    if (baseName) reportsByFilename.delete(baseName);
+    for (const key of Array.from(reportsByFilename.keys())) {
+      if (getBaseRecordingName(key).replace(/\.[^.]+$/, '') === stem) {
+        reportsByFilename.delete(key);
+      }
+    }
+  }
+
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -233,6 +251,7 @@
         });
         const data = await resp.json();
         if (data.status === 'success') {
+          invalidateCachedReports(filename);
           await restoreReportForFile(filename);
           if (data.report?.run_id) {
             window.ScrubberOverlay?.loadDetections(filename, data.report.run_id);
@@ -334,6 +353,9 @@
       if (!data) return;
       const job = data;
       if (job.job_type !== 'analytics') return;
+      if (type === 'job-finished') {
+        invalidateCachedReports(job.filename);
+      }
       if (job.filename !== currentBatchFilename) return;
 
       const btn = document.getElementById('btn-video-analyze');
@@ -358,6 +380,9 @@
           if (container) {
             container.style.display = 'block';
             if (job.status === 'completed') {
+              const baseRecordingName = getBaseRecordingName(job.filename);
+              reportsByFilename.delete(job.filename);
+              reportsByFilename.delete(baseRecordingName);
               await restoreReportForFile(job.filename);
               window.ScrubberOverlay?.loadDetections(job.filename, job.result?.run_id || null);
             } else if (job.status === 'cancelled') {
@@ -374,6 +399,25 @@
   function setCurrentBatchFilename(filename) {
     currentBatchFilename = filename ? String(filename).trim() : null;
     syncContainerVisibility(currentBatchFilename);
+  }
+
+  function renderLatestRun(container, filename, runs) {
+    const latest = runs[0];
+    const meta = {
+      detector: latest.config?.detector || 'yolov8',
+      sampleRate: latest.config?.sample_rate || latest.config?.sampleRate || 1,
+      confidence: latest.config?.confidence !== undefined ? latest.config.confidence : 0.40,
+      classes: latest.config?.classes || null,
+    };
+    container.innerHTML = renderReportCards(
+      latest.report || latest.metrics || {},
+      filename,
+      meta,
+      runs,
+      latest.run_id
+    );
+    bindHistoryDropdown(container, filename, runs);
+    container.style.display = 'block';
   }
 
   async function restoreReportForFile(filename) {
@@ -393,22 +437,7 @@
     if (reportsByFilename.has(filename)) {
       const cachedRuns = reportsByFilename.get(filename);
       if (Array.isArray(cachedRuns) && cachedRuns.length > 0) {
-        const latest = cachedRuns[0];
-        const meta = {
-          detector: latest.config?.detector || 'yolov8',
-          sampleRate: latest.config?.sample_rate || latest.config?.sampleRate || 1,
-          confidence: latest.config?.confidence !== undefined ? latest.config.confidence : 0.40,
-          classes: latest.config?.classes || null,
-        };
-        container.innerHTML = renderReportCards(
-          latest.report || latest.metrics || {},
-          filename,
-          meta,
-          cachedRuns,
-          latest.run_id
-        );
-        bindHistoryDropdown(container, filename, cachedRuns);
-        container.style.display = 'block';
+        renderLatestRun(container, filename, cachedRuns);
         return;
       }
     }
@@ -421,22 +450,7 @@
 
         if (Array.isArray(runs) && runs.length > 0) {
           reportsByFilename.set(filename, runs);
-          const latest = runs[0];
-          const meta = {
-            detector: latest.config?.detector || 'yolov8',
-            sampleRate: latest.config?.sample_rate || latest.config?.sampleRate || 1,
-            confidence: latest.config?.confidence !== undefined ? latest.config.confidence : 0.40,
-            classes: latest.config?.classes || null,
-          };
-          container.innerHTML = renderReportCards(
-            latest.report || latest.metrics || {},
-            filename,
-            meta,
-            runs,
-            latest.run_id
-          );
-          bindHistoryDropdown(container, filename, runs);
-          container.style.display = 'block';
+          renderLatestRun(container, filename, runs);
           return;
         }
       }
@@ -463,6 +477,7 @@
     setCurrentBatchFilename: setCurrentBatchFilename,
     restoreReportForFile: restoreReportForFile,
     syncContainerVisibility: syncContainerVisibility,
+    invalidateCachedReports: invalidateCachedReports,
   };
 
   if (document.readyState === 'loading') {

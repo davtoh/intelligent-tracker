@@ -163,6 +163,9 @@ Video Studio & Scrubber Endpoints
      - ``/api/videos/{name}/detections``
      - Retrieve latest resolution-aware frame detection stream for scrubber overlay rendering.
    * - ``GET``
+     - ``/api/videos/{name}/jobs/{job_id}/stream``
+     - Stream progressive frame detections incrementally (`?since=N`) while an analytics job is active.
+   * - ``GET``
      - ``/videos/{name}``
      - Stream video file supporting HTML5 seeking and range requests.
 

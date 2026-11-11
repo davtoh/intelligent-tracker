@@ -23,6 +23,19 @@
   let currentRunId = null;
   let currentSourceResolution = null;
   let animFrameId = null;
+  let progressiveJobId = null;
+  let progressiveNextIndex = 0;
+  let isFetchingProgressive = false;
+  let eventsBound = false;
+
+  function getBaseStem(filename) {
+    if (!filename) return '';
+    return String(filename).trim().replace(/_h264(\.[^.]+)$/i, '$1').replace(/\.[^.]+$/, '');
+  }
+
+  function isSameRecording(nameA, nameB) {
+    return Boolean(nameA && nameB && getBaseStem(nameA) === getBaseStem(nameB));
+  }
 
   function init() {
     videoPlayer = document.getElementById('scrubber-video-player');
@@ -30,9 +43,11 @@
     if (overlayCanvas) {
       overlayCtx = overlayCanvas.getContext('2d');
     }
-    window.addEventListener('resize', () => {
-      render();
-    });
+    if (!eventsBound) {
+      eventsBound = true;
+      window.addEventListener('resize', () => render());
+      window.addEventListener('video-job-event', handleVideoJobEvent);
+    }
   }
 
   /**
@@ -42,12 +57,27 @@
     currentFilename = filename;
     currentRunId = runId;
     if (!filename) {
+      progressiveJobId = null;
+      progressiveNextIndex = 0;
       currentDetections = [];
       currentSourceResolution = null;
       clear();
       return;
     }
 
+    if (!runId && window.VideoJobClient) {
+      const activeJob = window.VideoJobClient.getActiveJob(filename);
+      if (activeJob && activeJob.job_type === 'analytics') {
+        progressiveJobId = activeJob.job_id;
+        progressiveNextIndex = 0;
+        currentDetections = [];
+        await fetchProgressiveStream(activeJob.filename, activeJob.job_id);
+        return;
+      }
+    }
+
+    progressiveJobId = null;
+    progressiveNextIndex = 0;
     try {
       const url = runId
         ? `/api/videos/${encodeURIComponent(filename)}/reports/${encodeURIComponent(runId)}/detections`
@@ -75,9 +105,79 @@
    * Set detections stream directly (e.g. from completed batch job payload).
    */
   function setDetections(frameDetections, sourceResolution = null) {
+    progressiveJobId = null;
+    progressiveNextIndex = 0;
     currentDetections = Array.isArray(frameDetections) ? frameDetections : [];
     currentSourceResolution = Array.isArray(sourceResolution) ? sourceResolution : null;
     render();
+  }
+
+  /**
+   * Append progressive frame detections from an active analytics job and redraw.
+   */
+  function appendDetections(frameDetections, sourceResolution = null, options = {}) {
+    if (options.reset) currentDetections = [];
+    if (Array.isArray(sourceResolution) && sourceResolution.length >= 2) {
+      currentSourceResolution = sourceResolution;
+    }
+    if (Array.isArray(frameDetections) && frameDetections.length > 0) {
+      const prevLast = currentDetections.length > 0 ? currentDetections[currentDetections.length - 1].time : -Infinity;
+      const needsSort = frameDetections[0].time < prevLast;
+      currentDetections.push(...frameDetections);
+      if (needsSort) currentDetections.sort((a, b) => a.time - b.time);
+    }
+    render();
+  }
+
+  async function fetchProgressiveStream(filename, jobId) {
+    if (!filename || !jobId || isFetchingProgressive || !isSameRecording(currentFilename, filename)) return;
+    isFetchingProgressive = true;
+    try {
+      const url = `/api/videos/${encodeURIComponent(filename)}/jobs/${encodeURIComponent(jobId)}/stream?since=${progressiveNextIndex}`;
+      const resp = await fetch(url);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!isSameRecording(currentFilename, filename)) return;
+      if (progressiveJobId && progressiveJobId !== jobId) return;
+      if (typeof data.next_index === 'number') {
+        progressiveNextIndex = data.next_index;
+      }
+      appendDetections(data.frame_detections, data.source_resolution);
+    } catch (err) {
+      console.debug('[ScrubberOverlay] Progressive stream poll error:', err);
+    } finally {
+      isFetchingProgressive = false;
+    }
+  }
+
+  function handleVideoJobEvent(e) {
+    const { type, data: job } = e.detail || {};
+    if (!job || job.job_type !== 'analytics' || !isSameRecording(currentFilename, job.filename)) return;
+    if (type === 'job-started') {
+      progressiveJobId = job.job_id;
+      progressiveNextIndex = 0;
+      currentRunId = null;
+      currentDetections = [];
+      clear();
+    } else if (type === 'job-update') {
+      if (job.status === 'running' || job.status === 'pending') {
+        if (progressiveJobId !== job.job_id) {
+          progressiveJobId = job.job_id;
+          progressiveNextIndex = 0;
+          currentRunId = null;
+          currentDetections = [];
+        }
+        fetchProgressiveStream(job.filename, job.job_id);
+      }
+    } else if (type === 'job-finished') {
+      if (progressiveJobId === job.job_id) {
+        progressiveJobId = null;
+        progressiveNextIndex = 0;
+      }
+      if (job.status === 'completed' && currentFilename !== job.filename && job.result?.run_id) {
+        loadDetections(currentFilename, job.result.run_id);
+      }
+    }
   }
 
   /**
@@ -298,6 +398,8 @@
     init: init,
     loadDetections: loadDetections,
     setDetections: setDetections,
+    appendDetections: appendDetections,
+    fetchProgressiveStream: fetchProgressiveStream,
     render: render,
     clear: clear,
     startLoop: startLoop,
@@ -307,6 +409,7 @@
     getCurrentDetections: () => currentDetections,
     getCurrentRunId: () => currentRunId,
     getCurrentSourceResolution: () => currentSourceResolution,
+    getProgressiveJobId: () => progressiveJobId,
   };
 
   if (document.readyState === 'loading') {

@@ -15,9 +15,15 @@ from dashboard.dependencies import (
     get_active_stream_manager,
 )
 from dashboard.schemas import VideoAnalyzeRequest
+from dashboard.services.progressive_stream_store import (
+    append_progressive_chunk,
+    build_job_stream_response,
+    finalize_progressive_stream,
+)
 from dashboard.services.video_jobs_service import get_video_job_manager
 from dashboard.services.video_report_store import (
     get_detection_stream,
+    is_same_recording_alias,
     list_report_runs,
     save_report_run,
 )
@@ -163,7 +169,6 @@ async def cancel_video_job(job_id: str):
     return {"status": "cancelling", "job_id": job_id}
 
 
-
 @router.post("/api/videos/{filename}/analyze")
 async def analyze_video(
     filename: str,
@@ -179,8 +184,6 @@ async def analyze_video(
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
-
-    from intelligent_tracker.batch import VideoIndexer
 
     sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
     det = req.detector if (req and req.detector is not None) else (detector or "yolov8")
@@ -268,13 +271,19 @@ async def analyze_video(
     if is_async:
         def _runner(job, stop_event, progress_cb):
             indexer = _create_indexer()
-            summary = indexer.process_video(
-                video_path=path,
-                verbose=False,
-                progress_callback=progress_cb,
-                stop_event=stop_event,
-            )
-            return _finalize_report(indexer, summary)
+            try:
+                summary = indexer.process_video(
+                    video_path=path,
+                    verbose=False,
+                    progress_callback=progress_cb,
+                    stop_event=stop_event,
+                    frame_flush_callback=lambda chunk, meta: append_progressive_chunk(
+                        job.job_id, safe_name, chunk, meta
+                    ),
+                )
+                return _finalize_report(indexer, summary)
+            finally:
+                finalize_progressive_stream(job.job_id)
 
         job = job_mgr.submit_job(
             job_type="analytics",
@@ -299,6 +308,20 @@ async def get_video_reports(filename: str):
     safe_name = os.path.basename(filename)
     runs = list_report_runs(safe_name)
     return runs
+
+
+@router.get("/api/videos/{filename}/jobs/{job_id}/stream")
+async def stream_video_job_detections(
+    filename: str,
+    job_id: str,
+    since: int = Query(0, ge=0),
+):
+    """Retrieve progressive frame detections while an analytics job is running."""
+    safe_name = os.path.basename(filename)
+    job = get_video_job_manager().get_job(job_id)
+    if not job or not is_same_recording_alias(safe_name, job.filename):
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found for '{safe_name}'")
+    return build_job_stream_response(job, safe_name, since=since)
 
 
 @router.get("/api/videos/{filename}/reports/{run_id}/detections")

@@ -84,6 +84,15 @@ def _get_alias_filenames(safe_name: str) -> List[str]:
     return aliases
 
 
+def is_same_recording_alias(name_a: str, name_b: str) -> bool:
+    """Return True if two filenames refer to the same parent/_h264 video pair."""
+    safe_a = _get_safe_filename(name_a)
+    safe_b = _get_safe_filename(name_b)
+    if not safe_a or not safe_b:
+        return False
+    return safe_b in _get_alias_filenames(safe_a) or safe_a in _get_alias_filenames(safe_b)
+
+
 def _extract_source_metadata(
     report: Dict[str, Any],
     source_resolution: Optional[List[int]],

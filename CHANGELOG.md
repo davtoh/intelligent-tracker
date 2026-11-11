@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-11] feat: Reactive Cache Invalidation & Progressive Detection Streaming (M2)
+- **Type**: feat
+- **Summary**: Purged stale parent and _h264 client report cache aliases on job-finished in video_batch.js; added progressive 30-frame chunk flush callback in VideoIndexer.process_video, thread-safe progressive_stream_store.py buffer, GET /api/videos/{filename}/jobs/{job_id}/stream endpoint with incremental ?since= slicing and alias/persisted fallback, and live ScrubberOverlay progressive polling during active analytics.
+- **Files** (8):
+  - `intelligent_tracker/batch.py`
+  - `dashboard/services/progressive_stream_store.py`
+  - `dashboard/services/video_report_store.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/static/js/video_batch.js`
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `documentation/vms.rst`
+  - `tests/test_video_pairing_and_layers.py`
+- **Verification**: unittest discover tests (348 OK); Milestone 2 suites (26 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui live browser audit OK
+
 ## [2026-11-11] feat: Video Pairing, Idempotent Transcode & Resolution-Aware Overlay (M1)
 - **Type**: feat
 - **Summary**: Added H.264 pair detection in /api/videos, idempotent /transcode with force flag, unified _h264/base report and detection storage, container PTS + source_resolution propagation in BatchAnalyzer and VideoReportStore, Switch/Re-convert library and codec notice UI controls, and letterbox/pillarbox-compensated source_resolution overlay scaling.
@@ -128,19 +142,3 @@
   `CUDAExecutionProvider` -> `DmlExecutionProvider` (DirectML on Windows) -> `OpenVINOExecutionProvider` (Intel) -> `CoreMLExecutionProvider` (macOS) -> `CPUExecutionProvider`.
 - Maintain full backwards compatibility for legacy detectors:
   - `HaarCascadeDetector`: Subclass of `BaseDetector` and `Detector` wrapping OpenCV cascade XML files.
-
-## [Milestone 3] - 2026-10-23 - RTSP Camera Streams & Retail / Occupancy Analytics
-
-### 1. Objectives & Scope
-- Deliver non-blocking, multi-source video ingestion supporting RTSP IP network streams, local webcams, video files, and high-fidelity synthetic feeds.
-- Build a dedicated background acquisition reader (`VideoSource`) with configurable buffer queues, automatic frame-drop on lag (guaranteeing zero latency drift for live streams), auto-reconnect backoff on network dropouts, and live connection health metrics (FPS, drop rate %, frames read, reconnections).
-- Extend `intelligent_tracker.geometry` with spatial analytics primitives:
-  - `Tripwire`: Virtual line segment with trajectory vector normal analysis for bidirectional entry/exit crossing detection and tally counters.
-  - `ZoneROI`: Polygonal region of interest using `cv2.pointPolygonTest` with occupant state machine, entry/exit/dwell events, dwell time estimation, and translucent overlay rendering.
-  - `ZoneEvent` and `TripwireEvent`: Strongly typed dataclasses with dictionary serialization.
-  - Integrated `Area` and `Line` in `intelligent_tracker/high_objects.py` to wrap `ZoneROI` and `Tripwire`.
-- Implement multi-object tracking in `intelligent_tracker.tracker`:
-  - `Track`: Rich entity representation with centroid motion history, smoothed velocity estimation, dwell times, and state lifecycle (`tentative`, `confirmed`, `lost`).
-  - `CentroidTracker`: Two-stage IoU and Euclidean distance matching with zero heavy dependencies.
-  - `SortTracker`: Simple Online and Realtime Tracking using 2D kinematic Kalman filters in pure NumPy.
-  - `TrackerFactory`: Registry for decoupled runtime instantiation (`centroid`, `sort`).

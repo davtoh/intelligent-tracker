@@ -42,6 +42,23 @@ from intelligent_tracker.analytics import AnalyticsEngine
 logger = logging.getLogger(__name__)
 
 
+def _dispatch_frame_flush(
+    callback: Optional[Callable[[List[Dict[str, Any]], Dict[str, Any]], None]],
+    frame_detections: List[Dict[str, Any]],
+    last_flushed_idx: int,
+    meta: Dict[str, Any],
+) -> int:
+    """Emit newly collected frame detections to a progressive stream listener."""
+    if callback is None:
+        return last_flushed_idx
+    chunk = list(frame_detections[last_flushed_idx:])
+    try:
+        callback(chunk, meta)
+    except Exception as cb_err:
+        logger.debug("Frame flush callback error: %s", cb_err)
+    return len(frame_detections)
+
+
 class VideoIndexer:
     """
     Offline batch video processor and occurrence analytics indexer.
@@ -96,6 +113,8 @@ class VideoIndexer:
         verbose: bool = True,
         progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         stop_event: Optional[threading.Event] = None,
+        frame_flush_callback: Optional[Callable[[List[Dict[str, Any]], Dict[str, Any]], None]] = None,
+        flush_interval: int = 30,
     ) -> Dict[str, Any]:
         """
         Process a recorded video file, catalog occurrences into TrackerDB,
@@ -107,6 +126,8 @@ class VideoIndexer:
         :param verbose: Print progress to stdout.
         :param progress_callback: Optional callback receiving progress dict.
         :param stop_event: Optional threading.Event to interrupt indexing early.
+        :param frame_flush_callback: Optional callback receiving (chunk, meta) periodically.
+        :param flush_interval: Processed frame interval for progressive flushes (default 30).
         :return: Execution summary dictionary.
         """
         if not os.path.isfile(video_path):
@@ -143,6 +164,9 @@ class VideoIndexer:
         start_wall_time = time.time()
         last_cb_time = 0.0
         frame_detections: List[Dict[str, Any]] = []
+        last_flushed_idx = 0
+        last_video_timestamp = 0.0
+        flush_step = max(1, int(flush_interval))
 
         try:
             while True:
@@ -171,6 +195,7 @@ class VideoIndexer:
                     video_timestamp = pos_msec / 1000.0
                 else:
                     video_timestamp = (read_frames - 1) / fps
+                last_video_timestamp = video_timestamp
 
                 # 1. Detect
                 detections = self.detector.detect(frame)
@@ -207,6 +232,24 @@ class VideoIndexer:
                 # 4. Optional Spatial Analytics
                 if self.analytics is not None:
                     self.analytics.update(tracks, timestamp=video_timestamp)
+
+                # 5. Progressive Detection Chunk Flush (every flush_step processed frames)
+                if frame_flush_callback is not None and processed_frames % flush_step == 0:
+                    last_flushed_idx = _dispatch_frame_flush(
+                        frame_flush_callback,
+                        frame_detections,
+                        last_flushed_idx,
+                        {
+                            "source_resolution": [width, height],
+                            "source_fps": source_fps,
+                            "processed_frames": processed_frames,
+                            "read_frames": read_frames,
+                            "total_frames": total_video_frames,
+                            "latest_time": round(video_timestamp, 3),
+                            "cancelled": False,
+                            "final": False,
+                        },
+                    )
 
                 # Progress reporting via callback or stdout
                 now = time.time()
@@ -262,6 +305,23 @@ class VideoIndexer:
                 })
             except Exception as cb_err:
                 logger.debug("Final progress callback error: %s", cb_err)
+
+        if frame_flush_callback is not None:
+            last_flushed_idx = _dispatch_frame_flush(
+                frame_flush_callback,
+                frame_detections,
+                last_flushed_idx,
+                {
+                    "source_resolution": [width, height],
+                    "source_fps": source_fps,
+                    "processed_frames": processed_frames,
+                    "read_frames": read_frames,
+                    "total_frames": total_video_frames,
+                    "latest_time": round(last_video_timestamp, 3),
+                    "cancelled": cancelled,
+                    "final": True,
+                },
+            )
 
         if verbose:
             tag = "[CANCELLED]" if cancelled else "[COMPLETED]"
