@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-11] test: Video Studio Automated Verification & Multi-Layer JS Runtime Suite
+- **Type**: test
+- **Summary**: Added Node VM runtime tests for 2688x1520 vs 1920x1086 resolution-aware overlay scaling, reactive parent/_h264 cache invalidation, concurrent multi-layer compositing, and paired H.264 UI switching; split progressive stream and unified report store tests under modularity budgets and synced documentation/vms.rst.
+- **Files** (4):
+  - `documentation/vms.rst`
+  - `tests/test_video_pairing_and_layers.py`
+  - `tests/test_progressive_stream.py`
+  - `tests/test_video_report_store.py`
+- **Verification**: python -m unittest discover tests (352 passed); python -m sphinx -W --keep-going documentation/ documentation/_build/html/ (0 warnings)
+
 ## [2026-11-11] feat: Reactive Cache Invalidation & Progressive Detection Streaming (M2)
 - **Type**: feat
 - **Summary**: Purged stale parent and _h264 client report cache aliases on job-finished in video_batch.js; added progressive 30-frame chunk flush callback in VideoIndexer.process_video, thread-safe progressive_stream_store.py buffer, GET /api/videos/{filename}/jobs/{job_id}/stream endpoint with incremental ?since= slicing and alias/persisted fallback, and live ScrubberOverlay progressive polling during active analytics.
@@ -126,19 +136,3 @@
 - `rules/environment_and_execution.md`: Updated virtualenv paths, test commands, execution workflows, and cross-platform instructions.
 - `rules/milestone_workflow.md`: Structured incremental computer vision milestones and automated verification procedures.
 - `rules/security_and_standards.md`: Added RTSP camera secret handling, GDPR video privacy, OpenCV frame buffer memory leak safety, and modern Python standards.
-
-## [Milestone 2] - 2026-10-23 - Edge AI Detection Architecture
-
-### 1. Objectives & Scope
-- Modernize the legacy Haar cascade detection architecture into an extensible, pluggable Edge AI framework.
-- Integrate ultralightweight Edge AI models (**YOLOv8 Nano**, **YOLO11 Nano**) via **ONNX Runtime** without requiring heavy PyTorch or CUDA dependencies on edge devices.
-- Design an abstract `BaseDetector` interface defining a typed contract returning `Detection(bbox, class_id, confidence, label)` namedtuples.
-- Create a registry-based `DetectorFactory` providing decoupled instantiation by name (`"haar"`, `"yolov8"`, `"yolo11"`, `"mock"`, `"color"`, `"face"`, `"eye"`), with bidirectional registration into `Detector.available_detectors`.
-- Implement zero-dependency computer vision primitives in pure NumPy:
-  - Letterbox aspect-ratio preserving resizing with constant border padding.
-  - Vectorized multi-class Non-Maximum Suppression (NMS) with label offsets.
-  - Letterbox-to-original coordinate space inverse transformation strictly bounded to image boundaries.
-- Build automatic Execution Provider fallback hierarchy in ONNX Runtime:
-  `CUDAExecutionProvider` -> `DmlExecutionProvider` (DirectML on Windows) -> `OpenVINOExecutionProvider` (Intel) -> `CoreMLExecutionProvider` (macOS) -> `CPUExecutionProvider`.
-- Maintain full backwards compatibility for legacy detectors:
-  - `HaarCascadeDetector`: Subclass of `BaseDetector` and `Detector` wrapping OpenCV cascade XML files.

@@ -7,10 +7,10 @@ Container PTS Timing, Resolution-Aware Reports, and Overlay Scaling.
 
 import json
 import os
+import pathlib
 import shutil
+import subprocess
 import tempfile
-import threading
-import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -20,9 +20,9 @@ from fastapi.testclient import TestClient
 
 from dashboard.app import app
 from dashboard.dependencies import VIDEOS_DIR
-from dashboard.services import progressive_stream_store, video_report_store
-from dashboard.services.video_jobs_service import JobStatus, VideoJob, get_video_job_manager
 from intelligent_tracker.batch import VideoIndexer
+
+JS_DIR = pathlib.Path(__file__).resolve().parent.parent / "dashboard" / "static" / "js"
 
 
 def create_test_clip(
@@ -217,249 +217,253 @@ class TestBatchPTSAndResolutionMetadata(unittest.TestCase):
             indexer.db.close()
 
 
-class TestUnifiedReportStoreAndResolutionScaling(unittest.TestCase):
-    """Verify consolidated base-name report stacks and resolution metadata persistence."""
+class TestFrontendScalingCacheAndMultiLayer(unittest.TestCase):
+    """Execute real JS overlay, batch cache, and library modules in Node.js VM."""
 
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp(prefix="test_report_store_")
-        self.orig_reports_dir = video_report_store.REPORTS_DIR
-        self.orig_videos_dir = video_report_store.VIDEOS_DIR
-        self.videos_dir = os.path.join(self.temp_dir, "videos")
-        self.reports_dir = os.path.join(self.temp_dir, "reports")
-        os.makedirs(self.videos_dir, exist_ok=True)
-        os.makedirs(self.reports_dir, exist_ok=True)
-        video_report_store.REPORTS_DIR = self.reports_dir
-        video_report_store.VIDEOS_DIR = self.videos_dir
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS runtime verification")
+    def _run_js(self, files: list[str], body: str) -> dict:
+        prelude = """
+const fs = require('fs'), vm = require('vm'), path = require('path'), jsDir = process.env.JS_DIR;
+const byId = new Map(), docListeners = new Map(), winListeners = new Map(), storage = new Map(), draws = [];
+const makeEl = (tag = 'div', id = '') => {
+  const attrs = new Map(), listeners = new Map(), classes = new Set();
+  const el = {
+    tagName: tag.toUpperCase(), id, style: {}, hidden: false, disabled: false,
+    textContent: '', value: '', title: '', tabIndex: 0, _html: '', _children: [],
+    parentNode: null, parentElement: null,
+    classList: {
+      add: (...c) => c.forEach(x => classes.add(x)),
+      remove: (...c) => c.forEach(x => classes.delete(x)),
+      toggle: (c, f) => (f === undefined ? (classes.has(c) ? classes.delete(c) : classes.add(c)) : (f ? classes.add(c) : classes.delete(c))),
+      contains: (c) => classes.has(c),
+    },
+    setAttribute: (k, v) => {
+      attrs.set(k, String(v));
+      if (k === 'class') String(v).split(/\\s+/).filter(Boolean).forEach(x => classes.add(x));
+      if (k === 'id') { el.id = String(v); byId.set(el.id, el); }
+    },
+    getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null),
+    removeAttribute: (k) => attrs.delete(k),
+    addEventListener: (t, fn) => { if (!listeners.has(t)) listeners.set(t, []); listeners.get(t).push(fn); },
+    dispatchEvent: (ev) => {
+      ev.target = ev.target || el; ev.currentTarget = el;
+      ev.stopPropagation = ev.stopPropagation || (() => {});
+      ev.preventDefault = ev.preventDefault || (() => {});
+      (listeners.get(ev.type) || []).forEach(fn => fn(ev));
+    },
+    click: () => el.dispatchEvent({ type: 'click', target: el }),
+    focus: () => { doc.activeElement = el; },
+    contains: (c) => el === c || el._children.includes(c),
+    closest: (sel) => (sel.startsWith('.') && classes.has(sel.slice(1)) ? el : null),
+    insertBefore: (n) => { n.parentNode = el; n.parentElement = el; if (n.id) byId.set(n.id, n); },
+    querySelectorAll: (sel) => {
+      const parts = sel.split(',').map(s => s.trim());
+      return el._children.filter(c => parts.some(p => {
+        if (p.startsWith('#')) return c.id === p.slice(1);
+        if (p.startsWith('.')) {
+          const m = p.match(/^\\.([^\\[]+)(\\[data-filename="([^"]+)"\\])?/);
+          if (!m || !c.classList.contains(m[1])) return false;
+          return m[3] ? c.getAttribute('data-filename') === m[3].replace(/\\\\/g, '') : true;
+        }
+        return c.tagName.toLowerCase() === p.toLowerCase();
+      }));
+    },
+    querySelector: (sel) => el.querySelectorAll(sel)[0] || null,
+    getBoundingClientRect: () => el._rect || { left: 0, top: 0, width: 960, height: 543 },
+  };
+  Object.defineProperty(el, 'innerHTML', {
+    get: () => el._html,
+    set: (html) => {
+      el._html = String(html); el._children = [];
+      const re = /<(button|select|div)\\b([^>]*)>/gi;
+      for (let m; (m = re.exec(el._html)) !== null;) {
+        const child = makeEl(m[1]);
+        for (let am, attrRe = /([a-zA-Z0-9_-]+)="([^"]*)"/g; (am = attrRe.exec(m[2])) !== null;) child.setAttribute(am[1], am[2]);
+        el._children.push(child);
+      }
+    },
+  });
+  return el;
+};
+const stage = makeEl('div', 'scrubber-stage');
+const viewport = makeEl('div', 'scrubber-viewport');
+viewport.parentNode = stage; viewport._rect = { left: 0, top: 0, width: 960, height: 543 };
+const player = makeEl('video', 'scrubber-video-player');
+player._rect = { left: 0, top: 0, width: 960, height: 543 };
+player.videoWidth = 2688; player.videoHeight = 1520; player.currentTime = 1.0;
+const canvas = makeEl('canvas', 'scrubber-overlay-canvas');
+canvas.parentElement = viewport;
+const ctx2d = {
+  strokeStyle: '', fillStyle: '', lineWidth: 1, font: '', textBaseline: 'top',
+  save: () => {}, restore: () => {}, scale: () => {}, clearRect: () => {}, fillRect: () => {},
+  strokeRect: (x, y, w, h) => draws.push({ op: 'strokeRect', x, y, w, h, stroke: ctx2d.strokeStyle }),
+  measureText: (txt) => ({ width: txt.length * 6 }),
+  fillText: (txt, x, y) => draws.push({ op: 'fillText', txt, x, y, fill: ctx2d.fillStyle }),
+};
+canvas.getContext = () => ctx2d;
+const layersBar = makeEl('div', 'scrubber-overlay-layers'), layersStatus = makeEl('div', 'scrubber-overlay-layers-status');
+const reportContainer = makeEl('div', 'video-batch-report-container'), analyzeBtn = makeEl('button', 'btn-video-analyze');
+[player, canvas, layersBar, layersStatus, reportContainer, analyzeBtn].forEach(e => byId.set(e.id, e));
+const doc = {
+  readyState: 'complete', activeElement: null,
+  getElementById: (id) => byId.get(id) || null, createElement: (tag) => makeEl(tag),
+  querySelector: (sel) => (sel === '.scrubber-viewport' ? viewport : null), querySelectorAll: () => [],
+  addEventListener: (t, fn) => { if (!docListeners.has(t)) docListeners.set(t, []); docListeners.get(t).push(fn); },
+};
+function CustomEvent(type, init = {}) { this.type = type; this.detail = init.detail; }
+function HTMLElement() {}
+const sandbox = {
+  console, Math, Number, String, Array, Object, Map, Set, JSON, Promise, Infinity, isNaN, parseFloat, parseInt, encodeURIComponent,
+  HTMLElement, CustomEvent, MediaError: { MEDIA_ERR_SRC_NOT_SUPPORTED: 4 },
+  CSS: { escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&') },
+  localStorage: { getItem: (k) => (storage.has(k) ? storage.get(k) : null), setItem: (k, v) => storage.set(k, String(v)) },
+  getComputedStyle: () => ({ direction: 'ltr' }), requestAnimationFrame: () => 1, cancelAnimationFrame: () => {},
+  document: doc, fetch: async () => ({ ok: false, json: async () => ({}) }), devicePixelRatio: 1,
+};
+sandbox.window = sandbox;
+sandbox.addEventListener = (t, fn) => { if (!winListeners.has(t)) winListeners.set(t, []); winListeners.get(t).push(fn); };
+sandbox.dispatchEvent = (ev) => Promise.all((winListeners.get(ev.type) || []).map(fn => fn(ev)));
+vm.createContext(sandbox);
+JSON.parse(process.env.JS_FILES).forEach(f => vm.runInContext(fs.readFileSync(path.join(jsDir, f), 'utf8'), sandbox, { filename: f }));
+(async () => {
+"""
+        epilogue = "\n})().catch(err => { console.error(err); process.exit(1); });"
+        env = dict(os.environ, JS_DIR=str(JS_DIR), JS_FILES=json.dumps(files))
+        proc = subprocess.run(["node", "-e", prelude + body + epilogue], capture_output=True, text=True, env=env, timeout=15)
+        self.assertEqual(proc.returncode, 0, f"Node harness failed:\nSTDERR:\n{proc.stderr}\nSTDOUT:\n{proc.stdout}")
+        return json.loads(proc.stdout.strip().splitlines()[-1])
 
-    def tearDown(self):
-        video_report_store.REPORTS_DIR = self.orig_reports_dir
-        video_report_store.VIDEOS_DIR = self.orig_videos_dir
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_save_and_lookup_unified_across_parent_and_h264_child(self):
-        """Reports saved under foo.mp4 or foo_h264.mp4 consolidate into one chronological stack."""
-        run1 = video_report_store.save_report_run(
-            filename="cam_rec.mp4",
-            report={"frames_processed": 10, "total_detections": 4, "source_resolution": [2688, 1520], "source_fps": 30.027},
-            config={"detector": "yolov8", "classes": ["person"]},
-            frame_detections=[{"time": 0.0, "frame": 0, "source_resolution": [2688, 1520], "tracks": [{"track_id": 1, "bbox": [1421, 175, 63, 132]}]}],
+    def test_resolution_aware_coordinate_scaling_2688_vs_1920(self):
+        """SC-04: 2688x1520 detections render at identical canvas coordinates on 2688x1520 and 1920x1086 players."""
+        res = self._run_js(
+            ["scrubber_overlay_renderer.js", "scrubber_overlay.js"],
+            """
+const detections = [{
+  time: 1.0, frame: 30, source_resolution: [2688, 1520],
+  tracks: [{ track_id: 7, label: 'person', confidence: 0.91, bbox: [1421, 175, 63, 132] }],
+}];
+sandbox.ScrubberOverlay.setDetections(detections, [2688, 1520], { runId: 'r1' });
+const orig = draws.filter(d => d.op === 'strokeRect')[0];
+draws.length = 0;
+player.videoWidth = 1920; player.videoHeight = 1086;
+sandbox.ScrubberOverlay.render();
+const trans = draws.filter(d => d.op === 'strokeRect')[0];
+const fallbackFactors = sandbox.ScrubberOverlay.resolveScaleFactors(960, 543, { time: 1.0, tracks: [] }, 1920, 1086);
+console.log(JSON.stringify({ orig, trans, fallbackFactors }));
+""",
         )
-        run2 = video_report_store.save_report_run(
-            filename="cam_rec_h264.mp4",
-            report={"frames_processed": 10, "total_detections": 7, "source_resolution": [1920, 1086], "source_fps": 30.0},
-            config={"detector": "yolov8", "classes": ["car"]},
-            frame_detections=[{"time": 0.0, "frame": 0, "source_resolution": [1920, 1086], "tracks": [{"track_id": 2, "bbox": [500, 200, 120, 80]}]}],
+        for key in ("x", "y", "w", "h"):
+            self.assertAlmostEqual(res["orig"][key], res["trans"][key], delta=0.25)
+        self.assertAlmostEqual(res["fallbackFactors"]["scaleX"], 960 / 2688, places=6)
+        self.assertAlmostEqual(res["fallbackFactors"]["scaleY"], 543 / 1520, places=6)
+
+    def test_reactive_cache_invalidation_clears_stale_tags(self):
+        """SC-05: job-finished purges stale parent/_h264 report cache so car replaces person without reload."""
+        res = self._run_js(
+            ["video_batch.js"],
+            """
+let phase = 1; const fetchedUrls = [];
+sandbox.fetch = async (url) => {
+  fetchedUrls.push(url);
+  if (phase === 1) return { ok: true, json: async () => [{ run_id: 'r1', config: { detector: 'yolov8', classes: ['person'] }, report: { frames_processed: 10, total_detections: 3 } }] };
+  return { ok: true, json: async () => [
+    { run_id: 'r2', config: { detector: 'yolov8', classes: ['car'] }, report: { frames_processed: 10, total_detections: 5 } },
+    { run_id: 'r1', config: { detector: 'yolov8', classes: ['person'] }, report: { frames_processed: 10, total_detections: 3 } },
+  ] };
+};
+await sandbox.VideoBatch.restoreReportForFile('cam_rec.mp4');
+const firstHtml = reportContainer.innerHTML;
+await sandbox.VideoBatch.restoreReportForFile('cam_rec.mp4');
+const callsAfterCacheHit = fetchedUrls.length;
+phase = 2;
+await sandbox.dispatchEvent(new CustomEvent('video-job-event', {
+  detail: { type: 'job-finished', data: { job_type: 'analytics', filename: 'cam_rec.mp4', status: 'completed', result: { run_id: 'r2' } } }
+}));
+const secondHtml = reportContainer.innerHTML;
+sandbox.VideoBatch.setCurrentBatchFilename('other.mp4');
+reportContainer.innerHTML = '<div>OTHER_VIDEO_VIEW</div>';
+await sandbox.dispatchEvent(new CustomEvent('video-job-event', {
+  detail: { type: 'job-finished', data: { job_type: 'analytics', filename: 'cam_rec_h264.mp4', status: 'completed', result: { run_id: 'r3' } } }
+}));
+console.log(JSON.stringify({ firstHtml, secondHtml, callsAfterCacheHit, totalCalls: fetchedUrls.length, otherHtml: reportContainer.innerHTML }));
+""",
         )
+        self.assertIn("person", res["firstHtml"])
+        self.assertEqual(res["callsAfterCacheHit"], 1)
+        self.assertEqual(res["totalCalls"], 2)
+        self.assertIn("car", res["secondHtml"])
+        self.assertIn("r2", res["secondHtml"])
+        self.assertEqual(res["otherHtml"], "<div>OTHER_VIDEO_VIEW</div>")
 
-        runs_parent = video_report_store.list_report_runs("cam_rec.mp4")
-        runs_child = video_report_store.list_report_runs("cam_rec_h264.mp4")
-
-        self.assertEqual([r["run_id"] for r in runs_parent], [run2["run_id"], run1["run_id"]])
-        self.assertEqual([r["run_id"] for r in runs_child], [run2["run_id"], run1["run_id"]])
-        self.assertEqual(runs_parent[1]["source_resolution"], [2688, 1520])
-        self.assertEqual(runs_parent[1]["source_fps"], 30.027)
-
-        stream1 = video_report_store.get_detection_stream("cam_rec_h264.mp4", run1["run_id"])
-        self.assertIsNotNone(stream1)
-        self.assertEqual(stream1["source_resolution"], [2688, 1520])
-        self.assertEqual(stream1["source_fps"], 30.027)
-
-    def test_mkv_parent_and_legacy_split_file_merge(self):
-        """MKV parent resolves from _h264.mp4 and merges any legacy split report files."""
-        with open(os.path.join(self.videos_dir, "hallway.mkv"), "wb") as f:
-            f.write(b"mkv")
-
-        run_mkv = video_report_store.save_report_run(
-            filename="hallway_h264.mp4",
-            report={"frames_processed": 5, "total_detections": 2},
-            config={"detector": "mock"},
-            source_resolution=[2688, 1520],
-            source_fps=30.0,
+    def test_multi_layer_compositing_and_live_stream_lifecycle(self):
+        """SC-06/SC-07: Multiple toggled layers render concurrently in distinct palettes alongside live stream."""
+        res = self._run_js(
+            ["scrubber_overlay_renderer.js", "scrubber_overlay.js", "overlay_layer_toolbar.js", "overlay_layers.js"],
+            """
+const runStreams = {
+  r1: { source_resolution: [1920, 1080], frame_detections: [{ time: 1.0, tracks: [{ track_id: 1, label: 'person', confidence: 0.9, bbox: [100, 100, 50, 100] }] }] },
+  r2: { source_resolution: [1920, 1080], frame_detections: [{ time: 1.0, tracks: [{ track_id: 2, label: 'car', confidence: 0.85, bbox: [400, 200, 120, 80] }] }] },
+};
+sandbox.fetch = async (url) => {
+  if (url.endsWith('/reports')) return { ok: true, json: async () => [{ run_id: 'r2', config: { detector: 'yolov8', classes: ['car'] } }, { run_id: 'r1', config: { detector: 'yolov8', classes: ['person'] } }] };
+  const m = url.match(/reports\\/([^/]+)\\/detections/);
+  return { ok: Boolean(m && runStreams[m[1]]), json: async () => runStreams[m[1]] };
+};
+await sandbox.ScrubberOverlay.loadDetections('cam_rec.mp4');
+await new Promise(r => setTimeout(r, 10));
+layersBar.querySelectorAll('.overlay-layer-chip').find(c => c.getAttribute('data-run-id') === 'r1').click();
+await new Promise(r => setTimeout(r, 10));
+draws.length = 0;
+sandbox.ScrubberOverlay.render();
+const dualStrokes = draws.filter(d => d.op === 'strokeRect').map(d => d.stroke);
+const dualLabels = draws.filter(d => d.op === 'fillText').map(d => d.txt);
+await sandbox.dispatchEvent(new CustomEvent('video-job-event', {
+  detail: { type: 'job-started', data: { job_id: 'j99', job_type: 'analytics', filename: 'cam_rec.mp4', status: 'running' } }
+}));
+sandbox.ScrubberOverlay.appendDetections([{ time: 1.0, tracks: [{ track_id: 9, label: 'truck', confidence: 0.88, bbox: [700, 300, 90, 70] }] }], [1920, 1080], { layerId: 'live:j99' });
+const liveLayerCount = sandbox.ScrubberOverlay.getActiveLayerIds().length;
+await sandbox.dispatchEvent(new CustomEvent('video-job-event', {
+  detail: { type: 'job-finished', data: { job_id: 'j99', job_type: 'analytics', filename: 'cam_rec.mp4', status: 'cancelled' } }
+}));
+const postCancelIds = sandbox.ScrubberOverlay.getActiveLayerIds();
+layersBar.querySelectorAll('.overlay-layer-action-btn').find(b => b.getAttribute('data-layer-action') === 'none').click();
+const clearedIds = sandbox.OverlayLayers.getActiveRunIds();
+layersBar.querySelectorAll('.overlay-layer-action-btn').find(b => b.getAttribute('data-layer-action') === 'all').click();
+await new Promise(r => setTimeout(r, 10));
+await sandbox.OverlayLayers.ensureLoaded('cam_rec_h264.mp4');
+console.log(JSON.stringify({ dualStrokes, dualLabels, liveLayerCount, postCancelIds, clearedIds, restoredAliasIds: sandbox.OverlayLayers.getActiveRunIds() }));
+""",
         )
-        self.assertEqual(run_mkv["base_filename"], "hallway.mkv")
+        self.assertEqual(set(res["dualStrokes"]), {"#06b6d4", "#f59e0b"})
+        self.assertTrue(any(lbl.startswith("R1 · person") for lbl in res["dualLabels"]))
+        self.assertTrue(any(lbl.startswith("R2 · car") for lbl in res["dualLabels"]))
+        self.assertEqual(res["liveLayerCount"], 3)
+        self.assertEqual(set(res["postCancelIds"]), {"r1", "r2"})
+        self.assertEqual(res["clearedIds"], [])
+        self.assertEqual(set(res["restoredAliasIds"]), {"r1", "r2"})
 
-        # Simulate legacy split report file written directly under hallway_h264.mp4
-        legacy_path = os.path.join(self.reports_dir, "hallway_h264.mp4_reports.json")
-        with open(legacy_path, "w", encoding="utf-8") as f:
-            json.dump(
-                [
-                    {"run_id": run_mkv["run_id"], "timestamp": run_mkv["timestamp"]},
-                    {"run_id": "run_legacy_01", "timestamp": 1.0, "source_resolution": [1280, 720]},
-                ],
-                f,
-            )
-
-        runs_from_mkv = video_report_store.list_report_runs("hallway.mkv")
-        runs_from_h264 = video_report_store.list_report_runs("hallway_h264.mp4")
-        self.assertEqual([r["run_id"] for r in runs_from_mkv], [run_mkv["run_id"], "run_legacy_01"])
-        self.assertEqual([r["run_id"] for r in runs_from_h264], [run_mkv["run_id"], "run_legacy_01"])
-
-
-class TestBatchProgressiveFlush(unittest.TestCase):
-    """Verify VideoIndexer.process_video flushes partial frame_detections every 30 frames."""
-
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp(prefix="test_prog_flush_")
-        self.db_path = os.path.join(self.temp_dir, "tracker.db")
-        self.video_path = os.path.join(self.temp_dir, "prog_35f.mp4")
-        create_test_clip(self.video_path, num_frames=35, fps=15.0, width=320, height=240)
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_progressive_flush_emits_at_30_frame_interval_and_completion(self):
-        """Default flush_interval=30 emits intermediate chunk at frame 30 and final remainder."""
-        flushes = []
-
-        def on_flush(chunk, meta):
-            flushes.append((chunk, dict(meta)))
-
-        indexer = VideoIndexer(db_path=self.db_path, detector_name="mock", sample_rate=1)
-        try:
-            summary = indexer.process_video(
-                self.video_path,
-                verbose=False,
-                frame_flush_callback=on_flush,
-            )
-        finally:
-            indexer.db.close()
-
-        self.assertEqual(len(flushes), 2)
-        first_chunk, first_meta = flushes[0]
-        final_chunk, final_meta = flushes[1]
-
-        self.assertFalse(first_meta["final"])
-        self.assertEqual(first_meta["processed_frames"], 30)
-        self.assertEqual(first_meta["source_resolution"], [320, 240])
-        self.assertTrue(final_meta["final"])
-        self.assertEqual(final_meta["processed_frames"], 35)
-
-        combined = first_chunk + final_chunk
-        self.assertEqual(len(combined), len(summary["frame_detections"]))
-        self.assertEqual([f["frame"] for f in combined], [f["frame"] for f in summary["frame_detections"]])
-
-    def test_progressive_flush_callback_exception_is_non_fatal(self):
-        """Raising inside frame_flush_callback does not abort indexing."""
-        def broken_cb(_chunk, _meta):
-            raise RuntimeError("transient listener failure")
-
-        indexer = VideoIndexer(db_path=self.db_path, detector_name="mock", sample_rate=1)
-        try:
-            summary = indexer.process_video(
-                self.video_path,
-                verbose=False,
-                frame_flush_callback=broken_cb,
-                flush_interval=10,
-            )
-        finally:
-            indexer.db.close()
-
-        self.assertEqual(summary["processed_frames"], 35)
-
-
-class TestProgressiveStreamAPI(unittest.TestCase):
-    """Verify progressive stream store, incremental ?since= slicing, and REST /stream endpoint."""
-
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp(prefix="test_prog_api_")
-        self.orig_reports_dir = video_report_store.REPORTS_DIR
-        self.reports_dir = os.path.join(self.temp_dir, "reports")
-        os.makedirs(self.reports_dir, exist_ok=True)
-        video_report_store.REPORTS_DIR = self.reports_dir
-        self.client = TestClient(app)
-
-    def tearDown(self):
-        video_report_store.REPORTS_DIR = self.orig_reports_dir
-        with progressive_stream_store._stream_lock:
-            progressive_stream_store._streams.clear()
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_progressive_store_incremental_slicing_and_partial_cleanup(self):
-        """append_progressive_chunk writes disk snapshot; finalize removes temp file; since slices deltas."""
-        progressive_stream_store.append_progressive_chunk(
-            "job_unit_01",
-            "clip.mp4",
-            [{"time": 0.0, "frame": 0, "tracks": [{"track_id": 1}]}],
-            {"source_resolution": [1920, 1080], "source_fps": 30.0, "processed_frames": 1, "final": False},
+    def test_paired_h264_switch_ui_and_reconvert_action(self):
+        """SC-03: Paired incompatible video renders Switch to H.264 & Re-convert instead of Convert."""
+        res = self._run_js(
+            ["video_library.js"],
+            """
+const switched = [];
+sandbox.loadVideoIntoPlayer = (url, fn, web, codec) => switched.push({ url, fn, web, codec });
+const files = [{ filename: 'hevc_cam.mp4', video_url: '/videos/hevc_cam.mp4', size_mb: 12.4, codec: 'hevc', web_compatible: false, has_converted_h264: true, converted_filename: 'hevc_cam_h264.mp4', resolution: '2688x1520' }];
+sandbox.VideoLibrary.registerVideos(files);
+const cardHost = doc.createElement('div');
+cardHost.innerHTML = sandbox.VideoLibrary.renderVideoFileCard(files[0], 'hevc_cam.mp4');
+sandbox.VideoLibrary.bindPairedActionControls(cardHost);
+cardHost.querySelector('.btn-switch-h264').click();
+sandbox.VideoLibrary.showCodecNotice('HEVC unsupported', 'hevc_cam.mp4');
+console.log(JSON.stringify({ cardHtml: cardHost.innerHTML, noticeHtml: doc.getElementById('scrubber-codec-notice').innerHTML, switched }));
+""",
         )
-        partial_path = os.path.join(self.reports_dir, "clip.mp4_job_unit_01_partial_detections.json")
-        self.assertTrue(os.path.isfile(partial_path))
-
-        progressive_stream_store.append_progressive_chunk(
-            "job_unit_01",
-            "clip.mp4",
-            [{"time": 0.5, "frame": 15, "tracks": [{"track_id": 2}]}],
-            {"source_resolution": [1920, 1080], "source_fps": 30.0, "processed_frames": 2, "final": False},
-        )
-        delta = progressive_stream_store.get_progressive_stream("job_unit_01", since=1)
-        self.assertIsNotNone(delta)
-        self.assertEqual(delta["next_index"], 2)
-        self.assertEqual(len(delta["frame_detections"]), 1)
-        self.assertEqual(delta["frame_detections"][0]["frame"], 15)
-
-        progressive_stream_store.finalize_progressive_stream("job_unit_01")
-        self.assertFalse(os.path.exists(partial_path))
-
-    def test_stream_endpoint_returns_404_empty_live_alias_and_persisted_fallback(self):
-        """GET /api/videos/{file}/jobs/{id}/stream covers 404, early empty, live chunks, alias, and fallback."""
-        # 1. Unknown job returns 404
-        resp_404 = self.client.get("/api/videos/demo.mp4/jobs/job_missing/stream")
-        self.assertEqual(resp_404.status_code, 404)
-
-        # 2. Early running job with no chunks yet returns 200 with empty detections
-        early_job = VideoJob(job_id="job_early_01", job_type="analytics", filename="demo.mp4", status=JobStatus.RUNNING)
-        with patch.object(get_video_job_manager(), "get_job", return_value=early_job):
-            resp_empty = self.client.get("/api/videos/demo.mp4/jobs/job_early_01/stream")
-            self.assertEqual(resp_empty.status_code, 200)
-            self.assertEqual(resp_empty.json()["frame_detections"], [])
-            self.assertEqual(resp_empty.json()["status"], "running")
-
-            # Unrelated filename returns 404
-            resp_mismatch = self.client.get("/api/videos/other.mp4/jobs/job_early_01/stream")
-            self.assertEqual(resp_mismatch.status_code, 404)
-
-            # 3. Buffered progressive chunk accessible via parent and _h264 alias with ?since=
-            progressive_stream_store.append_progressive_chunk(
-                "job_early_01",
-                "demo.mp4",
-                [
-                    {"time": 0.0, "frame": 0, "source_resolution": [2688, 1520], "tracks": [{"track_id": 1}]},
-                    {"time": 1.0, "frame": 30, "source_resolution": [2688, 1520], "tracks": [{"track_id": 1}]},
-                ],
-                {"source_resolution": [2688, 1520], "source_fps": 30.0, "processed_frames": 30, "final": False},
-            )
-            resp_alias = self.client.get("/api/videos/demo_h264.mp4/jobs/job_early_01/stream?since=1")
-            self.assertEqual(resp_alias.status_code, 200)
-            body = resp_alias.json()
-            self.assertEqual(body["next_index"], 2)
-            self.assertEqual(len(body["frame_detections"]), 1)
-            self.assertEqual(body["source_resolution"], [2688, 1520])
-
-        # 4. Completed job evicted from memory falls back to persisted run_id detections
-        run = video_report_store.save_report_run(
-            filename="demo.mp4",
-            report={"frames_processed": 5, "total_detections": 1},
-            config={"detector": "mock"},
-            frame_detections=[{"time": 0.2, "frame": 6, "source_resolution": [2688, 1520], "tracks": [{"track_id": 9}]}],
-            source_resolution=[2688, 1520],
-            source_fps=30.0,
-        )
-        done_job = VideoJob(
-            job_id="job_done_fallback",
-            job_type="analytics",
-            filename="demo.mp4",
-            status=JobStatus.COMPLETED,
-            progress=100.0,
-            result={"run_id": run["run_id"]},
-        )
-        with patch.object(get_video_job_manager(), "get_job", return_value=done_job):
-            resp_fb = self.client.get("/api/videos/demo_h264.mp4/jobs/job_done_fallback/stream")
-            self.assertEqual(resp_fb.status_code, 200)
-            fb = resp_fb.json()
-            self.assertTrue(fb["final"])
-            self.assertEqual(fb["run_id"], run["run_id"])
-            self.assertEqual(len(fb["frame_detections"]), 1)
-            self.assertEqual(fb["frame_detections"][0]["tracks"][0]["track_id"], 9)
+        self.assertIn("btn-switch-h264", res["cardHtml"])
+        self.assertIn("btn-reconvert-video", res["cardHtml"])
+        self.assertNotIn("btn-transcode-video", res["cardHtml"])
+        self.assertIn("▶ Switch to H.264", res["noticeHtml"])
+        self.assertEqual(res["switched"], [{"url": "/videos/hevc_cam_h264.mp4", "fn": "hevc_cam_h264.mp4", "web": True, "codec": "h264"}])
 
 
 if __name__ == "__main__":

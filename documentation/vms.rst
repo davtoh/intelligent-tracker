@@ -67,9 +67,10 @@ Key Capabilities
 
 5. **Video Studio & Playback Scrubber**:
    - Upload recorded footage (``.mp4``, ``.avi``, ``.mkv``, ``.mov``) via web UI or REST API into ``data/videos/``.
+   - Automatic parent/H.264 child pairing with one-click ``▶ Switch to H.264`` and ``↺ Re-convert`` actions.
    - Precise frame-stepping controls (``< -1 Frame``, ``> +1 Frame``) and variable playback rates (1x, 2x, 4x, 8x).
    - One-click registration of recorded video as an active live camera feed.
-   - One-click offline occurrence indexing via ``BatchVideoIndexer`` generating detection tallies, dwell times, and sighting records in ``TrackerDB``.
+   - One-click offline occurrence indexing via ``BatchVideoIndexer`` generating detection tallies, dwell times, and sighting records in ``TrackerDB``, paired with resolution-independent multi-layer canvas overlays (``#scrubber-overlay-layers``) and live progressive detection streaming.
 
 6. **State Persistence, Auto-Restore & Full Import/Export**:
    - **One-Click Snapshot Export**: Packages SQLite database (``tracker.db``), face and entity crops (``data/crops/``), and configurations (``configs/``) into a portable, versioned ``.zip`` archive with SHA-256 checksums.
