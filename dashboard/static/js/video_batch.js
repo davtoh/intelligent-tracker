@@ -7,6 +7,7 @@
   'use strict';
 
   let currentBatchFilename = null;
+  const reportsByFilename = new Map();
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -147,10 +148,7 @@
           confidence: confidence,
           classes: classes,
         };
-        const data = await window.VideoJobClient.startAnalytics(filename, payload);
-        if (data.job) {
-          window.VideoJobClient.renderProgressBar(container, data.job);
-        }
+        await window.VideoJobClient.startAnalytics(filename, payload);
       } else {
         container.innerHTML = `<div class="empty-state">Running Edge AI detector (${escapeHtml(detector)}) and Re-ID indexer on recording...</div>`;
         const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/analyze`, {
@@ -275,31 +273,38 @@
 
       if (type === 'job-started' || type === 'job-update') {
         if (job.status === 'running' || job.status === 'pending') {
-          if (btn) {
-            btn.disabled = true;
+          if (btn && currentBatchFilename === job.filename) {
+            btn.disabled = false;
             btn.textContent = '⏳ Processing Analytics...';
           }
-          if (container && window.VideoJobClient) {
-            window.VideoJobClient.renderProgressBar(container, job);
+          if (container && currentBatchFilename === job.filename && !container.querySelector('.batch-report-card')) {
+            container.innerHTML = `<div class="empty-state">⏳ Batch Video Analytics in progress for '<strong>${escapeHtml(job.filename)}</strong>'... Occurrence report will appear here upon completion.</div>`;
           }
         }
       } else if (type === 'job-finished') {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = '⚡ Run Batch Analytics';
+        if (job.status === 'completed' && job.result) {
+          const meta = {
+            detector: job.metrics?.detector || 'yolov8',
+            sampleRate: job.metrics?.sample_rate || 1,
+            confidence: job.metrics?.confidence || 0.40,
+            classes: job.metrics?.classes || null,
+          };
+          reportsByFilename.set(job.filename, { result: job.result, meta });
         }
-        if (container) {
-          if (job.status === 'completed' && job.result) {
-            container.innerHTML = renderReportCards(job.result, job.filename, {
-              detector: job.metrics?.detector || 'yolov8',
-              sampleRate: job.metrics?.sample_rate || 1,
-              confidence: job.metrics?.confidence || 0.40,
-              classes: job.metrics?.classes || null,
-            });
-          } else if (job.status === 'cancelled') {
-            container.innerHTML = `<div class="empty-state" style="color:#f59e0b;">Analytics job for '${escapeHtml(job.filename)}' was cancelled.</div>`;
-          } else if (job.status === 'failed' && window.VideoJobClient) {
-            window.VideoJobClient.renderErrorAlert(container, job.error, () => runBatchAnalytics(job.filename));
+        if (currentBatchFilename === job.filename) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '⚡ Run Batch Analytics';
+          }
+          if (container) {
+            if (job.status === 'completed' && job.result) {
+              const meta = reportsByFilename.get(job.filename)?.meta || {};
+              container.innerHTML = renderReportCards(job.result, job.filename, meta);
+            } else if (job.status === 'cancelled') {
+              container.innerHTML = `<div class="empty-state" style="color:#f59e0b;">Analytics job for '${escapeHtml(job.filename)}' was cancelled.</div>`;
+            } else if (job.status === 'failed' && window.VideoJobClient) {
+              window.VideoJobClient.renderErrorAlert(container, job.error, () => runBatchAnalytics(job.filename));
+            }
           }
         }
       }
@@ -308,6 +313,52 @@
 
   function setCurrentBatchFilename(filename) {
     currentBatchFilename = filename ? String(filename).trim() : null;
+  }
+
+  async function restoreReportForFile(filename) {
+    if (!filename) return;
+    currentBatchFilename = filename;
+    const container = document.getElementById('video-batch-report-container');
+    if (!container) return;
+
+    if (reportsByFilename.has(filename)) {
+      const cached = reportsByFilename.get(filename);
+      container.innerHTML = renderReportCards(cached.result, filename, cached.meta);
+      return;
+    }
+
+    const activeJob = window.VideoJobClient?.getActiveJob(filename);
+    if (activeJob && activeJob.job_type === 'analytics') {
+      container.innerHTML = `<div class="empty-state">⏳ Batch Video Analytics in progress for '<strong>${escapeHtml(filename)}</strong>'... Occurrence report will appear here upon completion.</div>`;
+      return;
+    }
+
+    try {
+      const resp = await fetch(`/api/videos/jobs?filename=${encodeURIComponent(filename)}`);
+      if (resp.ok) {
+        const jobs = await resp.json();
+        const completed = jobs.find(j => j.job_type === 'analytics' && j.status === 'completed' && j.result);
+        if (completed) {
+          const meta = {
+            detector: completed.metrics?.detector || 'yolov8',
+            sampleRate: completed.metrics?.sample_rate || 1,
+            confidence: completed.metrics?.confidence || 0.40,
+            classes: completed.metrics?.classes || null,
+          };
+          reportsByFilename.set(filename, { result: completed.result, meta });
+          if (currentBatchFilename === filename) {
+            container.innerHTML = renderReportCards(completed.result, filename, meta);
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.debug('Failed to restore report for', filename, e);
+    }
+
+    if (currentBatchFilename === filename) {
+      container.innerHTML = '<div class="empty-state">Click <strong>⚡ Batch Video Analytics</strong> to catalog entity sightings and dwell times.</div>';
+    }
   }
 
   function init() {
@@ -321,6 +372,7 @@
     openBatchModal: openBatchModal,
     closeBatchModal: closeBatchModal,
     setCurrentBatchFilename: setCurrentBatchFilename,
+    restoreReportForFile: restoreReportForFile,
   };
 
   if (document.readyState === 'loading') {

@@ -272,38 +272,22 @@
 
     window.VideoJobClient?.setCurrentViewedFilename(filename);
     window.VideoBatch?.setCurrentBatchFilename(filename);
+    window.VideoBatch?.restoreReportForFile(filename);
 
-    const activeJob = window.VideoJobClient?.getActiveJob(filename);
-    const reportContainer = document.getElementById('video-batch-report-container');
-
-    if (activeJob) {
-      if (activeJob.job_type === 'analytics') {
-        if (btnAnalyzeVideo) {
-          btnAnalyzeVideo.disabled = true;
-          btnAnalyzeVideo.textContent = '⏳ Processing Analytics...';
-        }
-        if (reportContainer && window.VideoJobClient) {
-          window.VideoJobClient.renderProgressBar(reportContainer, activeJob);
-        }
-      } else if (activeJob.job_type === 'transcode') {
-        window.VideoLibrary?.showCodecNoticeProgress(activeJob);
-      }
-    } else {
-      if (btnAnalyzeVideo) {
-        btnAnalyzeVideo.disabled = false;
-        btnAnalyzeVideo.textContent = '⚡ Batch Video Analytics';
-      }
-      if (reportContainer && reportContainer.querySelector('.video-job-progress-panel')) {
-        reportContainer.innerHTML = '<div class="empty-state">Click <strong>⚡ Batch Video Analytics</strong> to catalog entity sightings and dwell times.</div>';
-      }
-    }
-
-    if (isWebCompatible === false && (!activeJob || activeJob.job_type !== 'transcode')) {
+    if (isWebCompatible === false) {
       window.VideoLibrary?.showCodecNotice(
         `This video is encoded with '${(codec || 'HEVC').toUpperCase()}' which may not play in standard browsers without conversion.`,
         filename,
         (fn) => window.VideoLibrary?.transcodeVideo(fn, () => loadVideosList())
       );
+      const activeJob = window.VideoJobClient?.getActiveJob(filename);
+      if (activeJob && activeJob.job_type === 'transcode') {
+        const noticeBtn = document.querySelector(`.btn-notice-convert[data-filename="${CSS.escape(filename)}"]`);
+        if (noticeBtn) {
+          noticeBtn.disabled = true;
+          noticeBtn.textContent = `⏳ ${(activeJob.progress || 0).toFixed(0)}%`;
+        }
+      }
     }
 
     document.querySelectorAll('.video-file-card').forEach(c => {
@@ -339,6 +323,10 @@
 
   function onTabEnter() {
     if (!videoPlayer) return;
+    if (currentVideoFilename) {
+      window.VideoJobClient?.setCurrentViewedFilename(currentVideoFilename);
+      window.VideoBatch?.restoreReportForFile(currentVideoFilename);
+    }
     if (tabPolicy === 'reset') {
       videoPlayer.currentTime = 0;
       if (timelineSlider) timelineSlider.value = 0;

@@ -349,6 +349,34 @@ class TestVideoJobAPI(unittest.TestCase):
         self.assertEqual(del_resp.json()["status"], "success")
         self.assertFalse(os.path.exists(del_test_path))
 
+    def test_06_completed_job_result_persistence_and_query(self):
+        """Verify completed jobs persist their occurrence report for frontend tab-switching restoration."""
+        resp = self.client.post(
+            f"/api/videos/{self.test_filename}/analyze?async_mode=true&detector=mock&sample_rate=1"
+        )
+        self.assertEqual(resp.status_code, 202)
+        job_id = resp.json()["job_id"]
+
+        # Wait for completion
+        for _ in range(100):
+            r = self.client.get(f"/api/videos/jobs/{job_id}")
+            if r.json()["status"] in ("completed", "failed"):
+                break
+            time.sleep(0.05)
+
+        # Query jobs specifically by filename (how VideoBatch.restoreReportForFile queries)
+        resp_list = self.client.get(f"/api/videos/jobs?filename={self.test_filename}")
+        self.assertEqual(resp_list.status_code, 200)
+        jobs = resp_list.json()
+        self.assertIsInstance(jobs, list)
+
+        matching = [j for j in jobs if j["job_id"] == job_id]
+        self.assertEqual(len(matching), 1)
+        completed_job = matching[0]
+        self.assertEqual(completed_job["status"], "completed")
+        self.assertIsNotNone(completed_job["result"])
+        self.assertIn("frames_processed", completed_job["result"])
+
 
 if __name__ == "__main__":
     unittest.main()

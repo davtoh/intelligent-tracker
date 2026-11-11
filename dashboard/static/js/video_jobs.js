@@ -62,6 +62,14 @@
       if (job && (job.status === 'pending' || job.status === 'running')) {
         return job;
       }
+      // Also check related variant (e.g. base.mp4 vs base_h264.mp4)
+      const base = filename.replace(/_h264(\.[^.]+)$/, '$1');
+      for (const j of this.jobsByFilename.values()) {
+        if (j.status === 'pending' || j.status === 'running') {
+          const jBase = j.filename.replace(/_h264(\.[^.]+)$/, '$1');
+          if (jBase === base) return j;
+        }
+      }
       return null;
     }
 
@@ -216,8 +224,9 @@
           for (const [fn, j] of this.jobsByFilename.entries()) {
             if (j.job_id === jobId) {
               j.status = 'cancelled';
-              j.stage = 'cancelling';
+              j.stage = 'cancelled';
               this._notify('job-update', j);
+              this._notify('job-finished', j);
               break;
             }
           }

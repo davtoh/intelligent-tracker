@@ -66,21 +66,6 @@
     if (notice) notice.style.display = 'none';
   }
 
-  function showCodecNoticeProgress(job) {
-    const notice = getCodecNoticeElement();
-    if (!notice || !job) return;
-    notice.style.display = 'block';
-    notice.style.padding = '0';
-    notice.style.background = 'transparent';
-    notice.style.border = 'none';
-
-    if (window.VideoJobClient) {
-      window.VideoJobClient.renderProgressBar(notice, job, () => {
-        window.VideoJobClient.cancelJob(job.job_id);
-      });
-    }
-  }
-
   async function transcodeVideo(filename, onSuccess) {
     if (!filename) return;
     const activeJob = window.VideoJobClient?.getActiveJob(filename);
@@ -90,8 +75,7 @@
         'Convert to H.264',
         async () => {
           try {
-            const data = await window.VideoJobClient.startTranscode(filename);
-            if (data.job) showCodecNoticeProgress(data.job);
+            await window.VideoJobClient.startTranscode(filename);
           } catch (err) {
             showToast(`Transcode error: ${err.message}`, 'error');
           }
@@ -111,10 +95,7 @@
 
     try {
       if (window.VideoJobClient) {
-        const data = await window.VideoJobClient.startTranscode(filename);
-        if (data.job) {
-          showCodecNoticeProgress(data.job);
-        }
+        await window.VideoJobClient.startTranscode(filename);
       } else {
         showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`, null);
         const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode`, {
@@ -130,14 +111,14 @@
         }
         btns.forEach(b => {
           b.disabled = false;
-          b.textContent = '⚡ Convert';
+          b.textContent = b.classList.contains('btn-notice-convert') ? '⚡ Convert to H.264' : '⚡ Convert';
         });
       }
     } catch (e) {
       showToast(`Error during transcoding: ${e.message}`, 'error');
       btns.forEach(b => {
         b.disabled = false;
-        b.textContent = '⚡ Convert';
+        b.textContent = b.classList.contains('btn-notice-convert') ? '⚡ Convert to H.264' : '⚡ Convert';
       });
     }
   }
@@ -158,12 +139,11 @@
           b.disabled = true;
           b.textContent = `⏳ ${(job.progress || 0).toFixed(0)}%`;
         });
-        showCodecNoticeProgress(job);
       }
     } else if (type === 'job-finished') {
       btns.forEach(b => {
         b.disabled = false;
-        b.textContent = '⚡ Convert';
+        b.textContent = b.classList.contains('btn-notice-convert') ? '⚡ Convert to H.264' : '⚡ Convert';
       });
       if (job.status === 'completed') {
         hideCodecNotice();
@@ -171,16 +151,16 @@
         if (typeof window.loadVideosList === 'function') {
           window.loadVideosList();
         }
+        if (window.VideoJobClient?.currentViewedFilename === job.filename && job.result?.output_filename) {
+          const outUrl = job.result.video_url || `/videos/${encodeURIComponent(job.result.output_filename)}`;
+          if (typeof window.loadVideoIntoPlayer === 'function') {
+            window.loadVideoIntoPlayer(outUrl, job.result.output_filename, true, 'h264');
+          }
+        }
       } else if (job.status === 'cancelled') {
-        hideCodecNotice();
         showToast(`Transcoding cancelled for '${job.filename}'.`, 'info');
       } else if (job.status === 'failed') {
-        const notice = getCodecNoticeElement();
-        if (notice && window.VideoJobClient) {
-          window.VideoJobClient.renderErrorAlert(notice, job.error, () => transcodeVideo(job.filename));
-        } else {
-          showToast(`Transcode failed: ${job.error}`, 'error');
-        }
+        showToast(`Transcode failed: ${job.error || 'Unknown error'}`, 'error');
       }
     }
   });

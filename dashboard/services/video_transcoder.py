@@ -226,7 +226,8 @@ class VideoTranscodeService:
                         elif k in ("out_time_us", "out_time_ms"):
                             try:
                                 val = float(v)
-                                sec = val / 1_000_000.0 if k == "out_time_us" else val / 1000.0
+                                # Note: In FFmpeg -progress output, out_time_ms is in microseconds despite its name
+                                sec = val / 1_000_000.0
                                 current_metrics["out_time_sec"] = sec
                                 if total_duration > 0:
                                     current_metrics["percent"] = min(99.0, round((sec / total_duration) * 100, 1))
