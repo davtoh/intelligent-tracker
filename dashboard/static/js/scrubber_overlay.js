@@ -1,32 +1,41 @@
 /**
- * Intelligent Tracker - Video Scrubber Canvas Detection Overlay.
- * 
- * Renders real-time bounding boxes, track IDs, labels, and confidence tags
- * on a transparent canvas overlaid directly above the video playback element.
- * 
- * Supports:
- * - Time-indexed frame detection lookup with binary search (O(log N))
- * - High-DPI canvas scaling via window.devicePixelRatio
- * - Responsive aspect-ratio mapping with letterbox/pillarbox offset compensation
- * - Smooth 60fps requestAnimationFrame rendering during active playback
- * - Race-safe async detection loading tied to the active video filename
+ * Intelligent Tracker - Video Scrubber Multi-Layer Canvas Detection Overlay.
+ *
+ * Manages concurrent detection run layers (Map<runId, LayerState>) and
+ * progressive live-stream compositing above the HTML5 video element.
+ * Geometry math, binary search, and box drawing live in ScrubberOverlayRenderer.
  */
 
 (function () {
   'use strict';
 
+  const FALLBACK_PALETTES = [
+    { id: 'cyan', name: 'Cyan', stroke: '#06b6d4', fill: 'rgba(6, 182, 212, 0.16)', labelBg: 'rgba(8, 145, 178, 0.92)', text: '#ffffff' },
+    { id: 'amber', name: 'Amber', stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.16)', labelBg: 'rgba(180, 83, 9, 0.92)', text: '#ffffff' },
+    { id: 'purple', name: 'Purple', stroke: '#a855f7', fill: 'rgba(168, 85, 247, 0.16)', labelBg: 'rgba(126, 34, 206, 0.92)', text: '#ffffff' },
+    { id: 'emerald', name: 'Emerald', stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.16)', labelBg: 'rgba(4, 120, 87, 0.92)', text: '#ffffff' },
+    { id: 'rose', name: 'Rose', stroke: '#f43f5e', fill: 'rgba(244, 63, 94, 0.16)', labelBg: 'rgba(190, 18, 60, 0.92)', text: '#ffffff' },
+  ];
+
   let videoPlayer = null;
   let overlayCanvas = null;
   let overlayCtx = null;
-  let currentDetections = [];
+  const activeLayers = new Map();
+  let primaryRunId = null;
   let currentFilename = null;
-  let currentRunId = null;
-  let currentSourceResolution = null;
   let animFrameId = null;
   let progressiveJobId = null;
   let progressiveNextIndex = 0;
   let isFetchingProgressive = false;
   let eventsBound = false;
+
+  function getRenderer() {
+    return window.ScrubberOverlayRenderer || null;
+  }
+
+  function getPalettes() {
+    return getRenderer()?.PALETTES || FALLBACK_PALETTES;
+  }
 
   function getBaseStem(filename) {
     if (!filename) return '';
@@ -37,12 +46,17 @@
     return Boolean(nameA && nameB && getBaseStem(nameA) === getBaseStem(nameB));
   }
 
+  function getPrimaryLayer() {
+    if (primaryRunId && activeLayers.has(primaryRunId)) return activeLayers.get(primaryRunId);
+    let last = null;
+    for (const layer of activeLayers.values()) last = layer;
+    return last;
+  }
+
   function init() {
     videoPlayer = document.getElementById('scrubber-video-player');
     overlayCanvas = document.getElementById('scrubber-overlay-canvas');
-    if (overlayCanvas) {
-      overlayCtx = overlayCanvas.getContext('2d');
-    }
+    if (overlayCanvas) overlayCtx = overlayCanvas.getContext('2d');
     if (!eventsBound) {
       eventsBound = true;
       window.addEventListener('resize', () => render());
@@ -50,30 +64,84 @@
     }
   }
 
-  /**
-   * Load time-indexed frame detections stream for a video file or specific run.
-   */
-  async function loadDetections(filename, runId = null) {
+  function setLayer(runId, layerState) {
+    if (!runId || !layerState) return;
+    const key = String(runId);
+    activeLayers.set(key, {
+      runId: key,
+      label: layerState.label || key,
+      shortLabel: layerState.shortLabel || '',
+      color: layerState.color || getPalettes()[0],
+      frameDetections: Array.isArray(layerState.frameDetections) ? layerState.frameDetections : [],
+      sourceResolution: Array.isArray(layerState.sourceResolution) ? layerState.sourceResolution : null,
+      isLive: Boolean(layerState.isLive),
+    });
+    primaryRunId = key;
+    render();
+  }
+
+  function removeLayer(runId) {
+    if (!runId) return;
+    const key = String(runId);
+    if (!activeLayers.delete(key)) return;
+    if (primaryRunId === key) {
+      const keys = Array.from(activeLayers.keys());
+      primaryRunId = keys.length > 0 ? keys[keys.length - 1] : null;
+    }
+    render();
+  }
+
+  function clearLayers(options = {}) {
+    if (options.keepLive) {
+      for (const [key, layer] of activeLayers.entries()) {
+        if (!layer.isLive) activeLayers.delete(key);
+      }
+    } else {
+      activeLayers.clear();
+    }
+    const keys = Array.from(activeLayers.keys());
+    primaryRunId = keys.length > 0 ? keys[keys.length - 1] : null;
+    render();
+  }
+
+  function removeLiveLayers() {
+    for (const [key, layer] of activeLayers.entries()) {
+      if (layer.isLive) activeLayers.delete(key);
+    }
+  }
+
+  async function attachActiveJob(filename, activeJob) {
+    progressiveJobId = activeJob.job_id;
+    progressiveNextIndex = 0;
+    removeLiveLayers();
+    if (window.OverlayLayers) await window.OverlayLayers.ensureLoaded(filename);
+    await fetchProgressiveStream(activeJob.filename, activeJob.job_id);
+  }
+
+  async function loadDetections(filename, runId = null, options = {}) {
+    const prevFilename = currentFilename;
     currentFilename = filename;
-    currentRunId = runId;
     if (!filename) {
       progressiveJobId = null;
       progressiveNextIndex = 0;
-      currentDetections = [];
-      currentSourceResolution = null;
-      clear();
+      clearLayers();
       return;
     }
-
+    if (prevFilename && !isSameRecording(prevFilename, filename)) {
+      progressiveJobId = null;
+      progressiveNextIndex = 0;
+      clearLayers();
+    }
     if (!runId && window.VideoJobClient) {
       const activeJob = window.VideoJobClient.getActiveJob(filename);
       if (activeJob && activeJob.job_type === 'analytics') {
-        progressiveJobId = activeJob.job_id;
-        progressiveNextIndex = 0;
-        currentDetections = [];
-        await fetchProgressiveStream(activeJob.filename, activeJob.job_id);
+        await attachActiveJob(filename, activeJob);
         return;
       }
+    }
+    if (!runId && window.OverlayLayers) {
+      const runs = await window.OverlayLayers.ensureLoaded(filename);
+      if (Array.isArray(runs) && runs.length > 0) return;
     }
 
     progressiveJobId = null;
@@ -83,49 +151,68 @@
         ? `/api/videos/${encodeURIComponent(filename)}/reports/${encodeURIComponent(runId)}/detections`
         : `/api/videos/${encodeURIComponent(filename)}/detections`;
       const resp = await fetch(url);
+      if (!isSameRecording(currentFilename, filename)) return;
+      if (!options.additive) clearLayers({ keepLive: true });
       if (resp.ok) {
         const data = await resp.json();
-        // Discard if active video changed while network request was in-flight
-        if (currentFilename !== filename) return;
-        currentDetections = Array.isArray(data.frame_detections) ? data.frame_detections : [];
-        currentSourceResolution = Array.isArray(data.source_resolution) ? data.source_resolution : null;
-      } else {
-        currentDetections = [];
-        currentSourceResolution = null;
+        if (!isSameRecording(currentFilename, filename)) return;
+        const layerId = runId || 'default';
+        setLayer(layerId, {
+          runId: layerId,
+          label: options.label || layerId,
+          shortLabel: options.shortLabel || '',
+          color: options.color || getPalettes()[0],
+          frameDetections: data.frame_detections,
+          sourceResolution: data.source_resolution,
+        });
       }
     } catch (err) {
       console.debug('[ScrubberOverlay] Detection stream unavailable:', err);
-      currentDetections = [];
-      currentSourceResolution = null;
+      if (!options.additive) clearLayers({ keepLive: true });
     }
-    render();
   }
 
-  /**
-   * Set detections stream directly (e.g. from completed batch job payload).
-   */
-  function setDetections(frameDetections, sourceResolution = null) {
+  function setDetections(frameDetections, sourceResolution = null, options = {}) {
     progressiveJobId = null;
     progressiveNextIndex = 0;
-    currentDetections = Array.isArray(frameDetections) ? frameDetections : [];
-    currentSourceResolution = Array.isArray(sourceResolution) ? sourceResolution : null;
-    render();
+    if (!options.additive) clearLayers({ keepLive: true });
+    const layerId = options.runId || 'default';
+    setLayer(layerId, {
+      runId: layerId,
+      label: options.label || 'Detections',
+      shortLabel: options.shortLabel || '',
+      color: options.color || getPalettes()[0],
+      frameDetections,
+      sourceResolution,
+    });
   }
 
-  /**
-   * Append progressive frame detections from an active analytics job and redraw.
-   */
   function appendDetections(frameDetections, sourceResolution = null, options = {}) {
-    if (options.reset) currentDetections = [];
+    const liveKey = options.layerId || (progressiveJobId ? `live:${progressiveJobId}` : 'live:stream');
+    let layer = (!options.reset && activeLayers.get(liveKey)) || null;
+    if (!layer) {
+      const palette = options.color || window.OverlayLayers?.getNextPalette?.(currentFilename) || getPalettes()[0];
+      layer = {
+        runId: liveKey,
+        label: 'Live Indexing',
+        shortLabel: 'LIVE',
+        color: palette,
+        frameDetections: [],
+        sourceResolution: null,
+        isLive: true,
+      };
+      activeLayers.set(liveKey, layer);
+    }
     if (Array.isArray(sourceResolution) && sourceResolution.length >= 2) {
-      currentSourceResolution = sourceResolution;
+      layer.sourceResolution = sourceResolution;
     }
     if (Array.isArray(frameDetections) && frameDetections.length > 0) {
-      const prevLast = currentDetections.length > 0 ? currentDetections[currentDetections.length - 1].time : -Infinity;
+      const prevLast = layer.frameDetections.length > 0 ? layer.frameDetections[layer.frameDetections.length - 1].time : -Infinity;
       const needsSort = frameDetections[0].time < prevLast;
-      currentDetections.push(...frameDetections);
-      if (needsSort) currentDetections.sort((a, b) => a.time - b.time);
+      layer.frameDetections.push(...frameDetections);
+      if (needsSort) layer.frameDetections.sort((a, b) => a.time - b.time);
     }
+    primaryRunId = liveKey;
     render();
   }
 
@@ -139,10 +226,8 @@
       const data = await resp.json();
       if (!isSameRecording(currentFilename, filename)) return;
       if (progressiveJobId && progressiveJobId !== jobId) return;
-      if (typeof data.next_index === 'number') {
-        progressiveNextIndex = data.next_index;
-      }
-      appendDetections(data.frame_detections, data.source_resolution);
+      if (typeof data.next_index === 'number') progressiveNextIndex = data.next_index;
+      appendDetections(data.frame_detections, data.source_resolution, { layerId: `live:${jobId}` });
     } catch (err) {
       console.debug('[ScrubberOverlay] Progressive stream poll error:', err);
     } finally {
@@ -156,174 +241,35 @@
     if (type === 'job-started') {
       progressiveJobId = job.job_id;
       progressiveNextIndex = 0;
-      currentRunId = null;
-      currentDetections = [];
-      clear();
-    } else if (type === 'job-update') {
-      if (job.status === 'running' || job.status === 'pending') {
-        if (progressiveJobId !== job.job_id) {
-          progressiveJobId = job.job_id;
-          progressiveNextIndex = 0;
-          currentRunId = null;
-          currentDetections = [];
-        }
-        fetchProgressiveStream(job.filename, job.job_id);
+      removeLiveLayers();
+      appendDetections([], null, { reset: true, layerId: `live:${job.job_id}` });
+    } else if (type === 'job-update' && (job.status === 'running' || job.status === 'pending')) {
+      if (progressiveJobId !== job.job_id) {
+        progressiveJobId = job.job_id;
+        progressiveNextIndex = 0;
+        removeLiveLayers();
       }
+      fetchProgressiveStream(job.filename, job.job_id);
     } else if (type === 'job-finished') {
+      removeLayer(`live:${job.job_id}`);
       if (progressiveJobId === job.job_id) {
         progressiveJobId = null;
         progressiveNextIndex = 0;
       }
-      if (job.status === 'completed' && currentFilename !== job.filename && job.result?.run_id) {
+      if (job.status === 'completed' && !window.OverlayLayers && job.result?.run_id) {
         loadDetections(currentFilename, job.result.run_id);
       }
     }
   }
 
-  /**
-   * Find closest time-indexed detection record using binary search.
-   * Allows up to tolerance seconds (default 0.35s) discrepancy for strided analysis.
-   */
-  function findClosestDetections(currentTime, tolerance = 0.35) {
-    if (!currentDetections || currentDetections.length === 0) return null;
-    let low = 0;
-    let high = currentDetections.length - 1;
-
-    while (low <= high) {
-      const mid = (low + high) >> 1;
-      const t = currentDetections[mid].time;
-      if (t < currentTime) {
-        low = mid + 1;
-      } else if (t > currentTime) {
-        high = mid - 1;
-      } else {
-        return currentDetections[mid];
-      }
-    }
-
-    let best = null;
-    let bestDiff = Infinity;
-    if (low < currentDetections.length) {
-      const diff = Math.abs(currentDetections[low].time - currentTime);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = currentDetections[low];
-      }
-    }
-    if (high >= 0) {
-      const diff = Math.abs(currentDetections[high].time - currentTime);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        best = currentDetections[high];
-      }
-    }
-    return bestDiff <= tolerance ? best : null;
-  }
-
-  /**
-   * Clear the overlay canvas buffer.
-   */
   function clear() {
     if (!overlayCanvas || !overlayCtx) return;
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   }
 
-  /**
-   * Compute rendered video rectangle inside object-fit: contain element box,
-   * accounting for letterbox (top/bottom) or pillarbox (left/right) offsets.
-   */
-  function computeVideoRenderBox(vRect, vpRect, videoWidth, videoHeight) {
-    const videoAspect = videoWidth / videoHeight;
-    const elemAspect = vRect.width / vRect.height;
-    let renderW, renderH, renderLeft, renderTop;
-
-    if (elemAspect > videoAspect) {
-      // Pillarboxed: black bars on left & right
-      renderH = vRect.height;
-      renderW = renderH * videoAspect;
-      renderLeft = (vRect.width - renderW) / 2;
-      renderTop = 0;
-    } else {
-      // Letterboxed: black bars on top & bottom
-      renderW = vRect.width;
-      renderH = renderW / videoAspect;
-      renderLeft = 0;
-      renderTop = (vRect.height - renderH) / 2;
-    }
-
-    return {
-      offsetX: (vRect.left - vpRect.left) + renderLeft,
-      offsetY: (vRect.top - vpRect.top) + renderTop,
-      renderW: renderW,
-      renderH: renderH,
-      scale: renderW / videoWidth,
-    };
-  }
-
-  /**
-   * Compute horizontal and vertical scale factors from source detection resolution
-   * to the rendered video viewport box, preserving alignment across transcoded resolutions.
-   */
-  function resolveScaleFactors(renderW, renderH, record, videoWidth, videoHeight) {
-    const srcRes = (Array.isArray(record?.source_resolution) && record.source_resolution.length >= 2)
-      ? record.source_resolution
-      : (Array.isArray(currentSourceResolution) && currentSourceResolution.length >= 2
-          ? currentSourceResolution
-          : [videoWidth, videoHeight]);
-    const srcW = Number(srcRes[0]) > 0 ? Number(srcRes[0]) : videoWidth;
-    const srcH = Number(srcRes[1]) > 0 ? Number(srcRes[1]) : videoHeight;
-    return {
-      scaleX: renderW / srcW,
-      scaleY: renderH / srcH,
-    };
-  }
-
-  /**
-   * Draw a single tracked bounding box and clamped label onto the overlay canvas.
-   */
-  function drawTrackBox(track, offsetX, offsetY, scaleX, scaleY) {
-    if (!track.bbox || track.bbox.length < 4) return;
-    const [bx, by, bw, bh] = track.bbox;
-    const x = offsetX + (bx * scaleX);
-    const y = offsetY + (by * scaleY);
-    const w = bw * scaleX;
-    const h = bh * scaleY;
-
-    const isIdentified = Boolean(track.identity_label);
-    const strokeColor = isIdentified ? '#10b981' : '#06b6d4';
-    const fillColor = isIdentified ? 'rgba(16, 185, 129, 0.15)' : 'rgba(6, 182, 212, 0.15)';
-
-    overlayCtx.strokeStyle = strokeColor;
-    overlayCtx.lineWidth = 2;
-    overlayCtx.fillStyle = fillColor;
-    overlayCtx.fillRect(x, y, w, h);
-    overlayCtx.strokeRect(x, y, w, h);
-
-    const conf = track.confidence ? ` ${(track.confidence * 100).toFixed(0)}%` : '';
-    const idTag = track.track_id != null ? ` #${track.track_id}` : '';
-    const labelText = (track.identity_label || track.label || 'object') + conf + idTag;
-
-    overlayCtx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    const textMetrics = overlayCtx.measureText(labelText);
-    const textHeight = 14;
-    const pad = 4;
-    const bgWidth = textMetrics.width + (pad * 2);
-    const bgHeight = textHeight + pad;
-    const labelY = Math.max(offsetY, y - bgHeight);
-
-    overlayCtx.fillStyle = isIdentified ? 'rgba(5, 150, 105, 0.9)' : 'rgba(8, 145, 178, 0.9)';
-    overlayCtx.fillRect(x, labelY, bgWidth, bgHeight);
-
-    overlayCtx.fillStyle = '#ffffff';
-    overlayCtx.textBaseline = 'top';
-    overlayCtx.fillText(labelText, x + pad, labelY + 2);
-  }
-
-  /**
-   * Render detected bounding boxes for the current video playback timestamp.
-   */
   function render() {
-    if (!overlayCanvas || !overlayCtx || !videoPlayer) return;
+    const renderer = getRenderer();
+    if (!renderer || !overlayCanvas || !overlayCtx || !videoPlayer) return;
     const viewport = overlayCanvas.parentElement;
     if (!viewport) return;
 
@@ -343,33 +289,34 @@
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     overlayCtx.scale(dpr, dpr);
 
-    if (!videoPlayer.videoWidth || !videoPlayer.videoHeight || vRect.width === 0 || vRect.height === 0) {
+    if (!videoPlayer.videoWidth || !videoPlayer.videoHeight || vRect.width === 0 || vRect.height === 0 || activeLayers.size === 0) {
       overlayCtx.restore();
       return;
     }
 
-    const { offsetX, offsetY, renderW, renderH } = computeVideoRenderBox(
+    const { offsetX, offsetY, renderW, renderH } = renderer.computeVideoRenderBox(
       vRect, vpRect, videoPlayer.videoWidth, videoPlayer.videoHeight
     );
-    const record = findClosestDetections(videoPlayer.currentTime);
-    if (!record || !record.tracks || record.tracks.length === 0) {
-      overlayCtx.restore();
-      return;
-    }
+    const multiLayer = activeLayers.size > 1;
+    const currentTime = videoPlayer.currentTime;
 
-    const { scaleX, scaleY } = resolveScaleFactors(
-      renderW, renderH, record, videoPlayer.videoWidth, videoPlayer.videoHeight
-    );
-    for (let i = 0; i < record.tracks.length; i++) {
-      drawTrackBox(record.tracks[i], offsetX, offsetY, scaleX, scaleY);
+    for (const layer of activeLayers.values()) {
+      const record = renderer.findClosestDetections(layer.frameDetections, currentTime);
+      if (!record || !record.tracks || record.tracks.length === 0) continue;
+
+      const fallbackRes = layer.sourceResolution || getPrimaryLayer()?.sourceResolution || null;
+      const { scaleX, scaleY } = renderer.resolveScaleFactors(
+        renderW, renderH, record, videoPlayer.videoWidth, videoPlayer.videoHeight, fallbackRes
+      );
+      const prefix = multiLayer && layer.shortLabel ? `${layer.shortLabel} · ` : '';
+      for (let i = 0; i < record.tracks.length; i++) {
+        renderer.drawTrackBox(overlayCtx, record.tracks[i], offsetX, offsetY, scaleX, scaleY, layer.color, prefix);
+      }
     }
 
     overlayCtx.restore();
   }
 
-  /**
-   * Start requestAnimationFrame loop during active video playback.
-   */
   function startLoop() {
     if (animFrameId) return;
     function loop() {
@@ -383,9 +330,6 @@
     animFrameId = requestAnimationFrame(loop);
   }
 
-  /**
-   * Stop requestAnimationFrame loop when video is paused or ended.
-   */
   function stopLoop() {
     if (animFrameId) {
       cancelAnimationFrame(animFrameId);
@@ -395,20 +339,28 @@
   }
 
   window.ScrubberOverlay = {
-    init: init,
-    loadDetections: loadDetections,
-    setDetections: setDetections,
-    appendDetections: appendDetections,
-    fetchProgressiveStream: fetchProgressiveStream,
-    render: render,
-    clear: clear,
-    startLoop: startLoop,
-    stopLoop: stopLoop,
-    computeVideoRenderBox: computeVideoRenderBox,
-    resolveScaleFactors: resolveScaleFactors,
-    getCurrentDetections: () => currentDetections,
-    getCurrentRunId: () => currentRunId,
-    getCurrentSourceResolution: () => currentSourceResolution,
+    init,
+    loadDetections,
+    setDetections,
+    appendDetections,
+    setLayer,
+    removeLayer,
+    clearLayers,
+    hasLayer: (runId) => activeLayers.has(String(runId)),
+    getActiveLayers: () => activeLayers,
+    getActiveLayerIds: () => Array.from(activeLayers.keys()),
+    fetchProgressiveStream,
+    render,
+    clear,
+    startLoop,
+    stopLoop,
+    computeVideoRenderBox: (vR, vpR, vw, vh) => getRenderer()?.computeVideoRenderBox(vR, vpR, vw, vh),
+    resolveScaleFactors: (rW, rH, rec, vw, vh, fb) =>
+      getRenderer()?.resolveScaleFactors(rW, rH, rec, vw, vh, fb ?? getPrimaryLayer()?.sourceResolution ?? null),
+    PALETTES: getPalettes(),
+    getCurrentDetections: () => getPrimaryLayer()?.frameDetections || [],
+    getCurrentRunId: () => getPrimaryLayer()?.runId || null,
+    getCurrentSourceResolution: () => getPrimaryLayer()?.sourceResolution || null,
     getProgressiveJobId: () => progressiveJobId,
   };
 
@@ -418,4 +370,3 @@
     init();
   }
 })();
-

@@ -194,7 +194,11 @@
         selectedRunId
       );
       bindHistoryDropdown(container, filename, runs);
-      window.ScrubberOverlay?.loadDetections(filename, selectedRunId);
+      if (window.OverlayLayers) {
+        window.OverlayLayers.activateRun(filename, selectedRunId);
+      } else {
+        window.ScrubberOverlay?.loadDetections(filename, selectedRunId);
+      }
     });
   }
 
@@ -252,9 +256,10 @@
         const data = await resp.json();
         if (data.status === 'success') {
           invalidateCachedReports(filename);
-          await restoreReportForFile(filename);
-          if (data.report?.run_id) {
-            window.ScrubberOverlay?.loadDetections(filename, data.report.run_id);
+          const completedRunId = data.report?.run_id || null;
+          await restoreReportForFile(filename, { activateRunId: completedRunId });
+          if (!window.OverlayLayers && completedRunId) {
+            window.ScrubberOverlay?.loadDetections(filename, completedRunId);
           }
         } else {
           container.innerHTML = `<div class="empty-state" style="color:#ef4444;">Analysis failed: ${escapeHtml(data.detail || 'Error')}</div>`;
@@ -383,8 +388,11 @@
               const baseRecordingName = getBaseRecordingName(job.filename);
               reportsByFilename.delete(job.filename);
               reportsByFilename.delete(baseRecordingName);
-              await restoreReportForFile(job.filename);
-              window.ScrubberOverlay?.loadDetections(job.filename, job.result?.run_id || null);
+              const completedRunId = job.result?.run_id || null;
+              await restoreReportForFile(job.filename, { activateRunId: completedRunId });
+              if (!window.OverlayLayers) {
+                window.ScrubberOverlay?.loadDetections(job.filename, completedRunId);
+              }
             } else if (job.status === 'cancelled') {
               container.innerHTML = `<div class="empty-state" style="color:#f59e0b;">Analytics job for '${escapeHtml(job.filename)}' was cancelled.</div>`;
             } else if (job.status === 'failed' && window.VideoJobClient) {
@@ -401,7 +409,7 @@
     syncContainerVisibility(currentBatchFilename);
   }
 
-  function renderLatestRun(container, filename, runs) {
+  function renderLatestRun(container, filename, runs, options = {}) {
     const latest = runs[0];
     const meta = {
       detector: latest.config?.detector || 'yolov8',
@@ -418,9 +426,10 @@
     );
     bindHistoryDropdown(container, filename, runs);
     container.style.display = 'block';
+    window.OverlayLayers?.syncRuns(filename, runs, options);
   }
 
-  async function restoreReportForFile(filename) {
+  async function restoreReportForFile(filename, options = {}) {
     if (!filename) return;
     currentBatchFilename = filename;
     const container = document.getElementById('video-batch-report-container');
@@ -437,7 +446,7 @@
     if (reportsByFilename.has(filename)) {
       const cachedRuns = reportsByFilename.get(filename);
       if (Array.isArray(cachedRuns) && cachedRuns.length > 0) {
-        renderLatestRun(container, filename, cachedRuns);
+        renderLatestRun(container, filename, cachedRuns, options);
         return;
       }
     }
@@ -450,7 +459,7 @@
 
         if (Array.isArray(runs) && runs.length > 0) {
           reportsByFilename.set(filename, runs);
-          renderLatestRun(container, filename, runs);
+          renderLatestRun(container, filename, runs, options);
           return;
         }
       }
@@ -461,6 +470,7 @@
     if (currentBatchFilename === filename) {
       container.innerHTML = '<div class="empty-state">Click <strong>⚡ Batch Video Analytics</strong> to catalog entity sightings and dwell times.</div>';
       container.style.display = 'block';
+      window.OverlayLayers?.syncRuns(filename, []);
     }
   }
 
