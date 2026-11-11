@@ -21,6 +21,7 @@
   let currentDetections = [];
   let currentFilename = null;
   let currentRunId = null;
+  let currentSourceResolution = null;
   let animFrameId = null;
 
   function init() {
@@ -42,6 +43,7 @@
     currentRunId = runId;
     if (!filename) {
       currentDetections = [];
+      currentSourceResolution = null;
       clear();
       return;
     }
@@ -56,12 +58,15 @@
         // Discard if active video changed while network request was in-flight
         if (currentFilename !== filename) return;
         currentDetections = Array.isArray(data.frame_detections) ? data.frame_detections : [];
+        currentSourceResolution = Array.isArray(data.source_resolution) ? data.source_resolution : null;
       } else {
         currentDetections = [];
+        currentSourceResolution = null;
       }
     } catch (err) {
       console.debug('[ScrubberOverlay] Detection stream unavailable:', err);
       currentDetections = [];
+      currentSourceResolution = null;
     }
     render();
   }
@@ -69,8 +74,9 @@
   /**
    * Set detections stream directly (e.g. from completed batch job payload).
    */
-  function setDetections(frameDetections) {
+  function setDetections(frameDetections, sourceResolution = null) {
     currentDetections = Array.isArray(frameDetections) ? frameDetections : [];
+    currentSourceResolution = Array.isArray(sourceResolution) ? sourceResolution : null;
     render();
   }
 
@@ -123,6 +129,97 @@
   }
 
   /**
+   * Compute rendered video rectangle inside object-fit: contain element box,
+   * accounting for letterbox (top/bottom) or pillarbox (left/right) offsets.
+   */
+  function computeVideoRenderBox(vRect, vpRect, videoWidth, videoHeight) {
+    const videoAspect = videoWidth / videoHeight;
+    const elemAspect = vRect.width / vRect.height;
+    let renderW, renderH, renderLeft, renderTop;
+
+    if (elemAspect > videoAspect) {
+      // Pillarboxed: black bars on left & right
+      renderH = vRect.height;
+      renderW = renderH * videoAspect;
+      renderLeft = (vRect.width - renderW) / 2;
+      renderTop = 0;
+    } else {
+      // Letterboxed: black bars on top & bottom
+      renderW = vRect.width;
+      renderH = renderW / videoAspect;
+      renderLeft = 0;
+      renderTop = (vRect.height - renderH) / 2;
+    }
+
+    return {
+      offsetX: (vRect.left - vpRect.left) + renderLeft,
+      offsetY: (vRect.top - vpRect.top) + renderTop,
+      renderW: renderW,
+      renderH: renderH,
+      scale: renderW / videoWidth,
+    };
+  }
+
+  /**
+   * Compute horizontal and vertical scale factors from source detection resolution
+   * to the rendered video viewport box, preserving alignment across transcoded resolutions.
+   */
+  function resolveScaleFactors(renderW, renderH, record, videoWidth, videoHeight) {
+    const srcRes = (Array.isArray(record?.source_resolution) && record.source_resolution.length >= 2)
+      ? record.source_resolution
+      : (Array.isArray(currentSourceResolution) && currentSourceResolution.length >= 2
+          ? currentSourceResolution
+          : [videoWidth, videoHeight]);
+    const srcW = Number(srcRes[0]) > 0 ? Number(srcRes[0]) : videoWidth;
+    const srcH = Number(srcRes[1]) > 0 ? Number(srcRes[1]) : videoHeight;
+    return {
+      scaleX: renderW / srcW,
+      scaleY: renderH / srcH,
+    };
+  }
+
+  /**
+   * Draw a single tracked bounding box and clamped label onto the overlay canvas.
+   */
+  function drawTrackBox(track, offsetX, offsetY, scaleX, scaleY) {
+    if (!track.bbox || track.bbox.length < 4) return;
+    const [bx, by, bw, bh] = track.bbox;
+    const x = offsetX + (bx * scaleX);
+    const y = offsetY + (by * scaleY);
+    const w = bw * scaleX;
+    const h = bh * scaleY;
+
+    const isIdentified = Boolean(track.identity_label);
+    const strokeColor = isIdentified ? '#10b981' : '#06b6d4';
+    const fillColor = isIdentified ? 'rgba(16, 185, 129, 0.15)' : 'rgba(6, 182, 212, 0.15)';
+
+    overlayCtx.strokeStyle = strokeColor;
+    overlayCtx.lineWidth = 2;
+    overlayCtx.fillStyle = fillColor;
+    overlayCtx.fillRect(x, y, w, h);
+    overlayCtx.strokeRect(x, y, w, h);
+
+    const conf = track.confidence ? ` ${(track.confidence * 100).toFixed(0)}%` : '';
+    const idTag = track.track_id != null ? ` #${track.track_id}` : '';
+    const labelText = (track.identity_label || track.label || 'object') + conf + idTag;
+
+    overlayCtx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const textMetrics = overlayCtx.measureText(labelText);
+    const textHeight = 14;
+    const pad = 4;
+    const bgWidth = textMetrics.width + (pad * 2);
+    const bgHeight = textHeight + pad;
+    const labelY = Math.max(offsetY, y - bgHeight);
+
+    overlayCtx.fillStyle = isIdentified ? 'rgba(5, 150, 105, 0.9)' : 'rgba(8, 145, 178, 0.9)';
+    overlayCtx.fillRect(x, labelY, bgWidth, bgHeight);
+
+    overlayCtx.fillStyle = '#ffffff';
+    overlayCtx.textBaseline = 'top';
+    overlayCtx.fillText(labelText, x + pad, labelY + 2);
+  }
+
+  /**
    * Render detected bounding boxes for the current video playback timestamp.
    */
   function render() {
@@ -132,13 +229,11 @@
 
     const vpRect = viewport.getBoundingClientRect();
     const vRect = videoPlayer.getBoundingClientRect();
-
     if (vpRect.width === 0 || vpRect.height === 0) return;
 
     const dpr = window.devicePixelRatio || 1;
     const targetW = Math.round(vpRect.width * dpr);
     const targetH = Math.round(vpRect.height * dpr);
-
     if (overlayCanvas.width !== targetW || overlayCanvas.height !== targetH) {
       overlayCanvas.width = targetW;
       overlayCanvas.height = targetH;
@@ -148,63 +243,25 @@
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     overlayCtx.scale(dpr, dpr);
 
-    // Only render if video frame dimensions and element dimensions are valid
     if (!videoPlayer.videoWidth || !videoPlayer.videoHeight || vRect.width === 0 || vRect.height === 0) {
       overlayCtx.restore();
       return;
     }
 
-    // Coordinate mapping: offset of video element inside viewport container
-    const left = vRect.left - vpRect.left;
-    const top = vRect.top - vpRect.top;
-    const scaleX = vRect.width / videoPlayer.videoWidth;
-    const scaleY = vRect.height / videoPlayer.videoHeight;
-
+    const { offsetX, offsetY, renderW, renderH } = computeVideoRenderBox(
+      vRect, vpRect, videoPlayer.videoWidth, videoPlayer.videoHeight
+    );
     const record = findClosestDetections(videoPlayer.currentTime);
     if (!record || !record.tracks || record.tracks.length === 0) {
       overlayCtx.restore();
       return;
     }
 
+    const { scaleX, scaleY } = resolveScaleFactors(
+      renderW, renderH, record, videoPlayer.videoWidth, videoPlayer.videoHeight
+    );
     for (let i = 0; i < record.tracks.length; i++) {
-      const track = record.tracks[i];
-      if (!track.bbox || track.bbox.length < 4) continue;
-      const [bx, by, bw, bh] = track.bbox;
-      const x = left + (bx * scaleX);
-      const y = top + (by * scaleY);
-      const w = bw * scaleX;
-      const h = bh * scaleY;
-
-      const isIdentified = Boolean(track.identity_label);
-      const strokeColor = isIdentified ? '#10b981' : '#06b6d4';
-      const fillColor = isIdentified ? 'rgba(16, 185, 129, 0.15)' : 'rgba(6, 182, 212, 0.15)';
-
-      // Bounding Box
-      overlayCtx.strokeStyle = strokeColor;
-      overlayCtx.lineWidth = 2;
-      overlayCtx.fillStyle = fillColor;
-      overlayCtx.fillRect(x, y, w, h);
-      overlayCtx.strokeRect(x, y, w, h);
-
-      // Label Tag
-      const conf = track.confidence ? ` ${(track.confidence * 100).toFixed(0)}%` : '';
-      const idTag = track.track_id != null ? ` #${track.track_id}` : '';
-      const labelText = (track.identity_label || track.label || 'object') + conf + idTag;
-
-      overlayCtx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      const textMetrics = overlayCtx.measureText(labelText);
-      const textHeight = 14;
-      const pad = 4;
-      const bgWidth = textMetrics.width + (pad * 2);
-      const bgHeight = textHeight + pad;
-      const labelY = Math.max(top, y - bgHeight);
-
-      overlayCtx.fillStyle = isIdentified ? 'rgba(5, 150, 105, 0.9)' : 'rgba(8, 145, 178, 0.9)';
-      overlayCtx.fillRect(x, labelY, bgWidth, bgHeight);
-
-      overlayCtx.fillStyle = '#ffffff';
-      overlayCtx.textBaseline = 'top';
-      overlayCtx.fillText(labelText, x + pad, labelY + 2);
+      drawTrackBox(record.tracks[i], offsetX, offsetY, scaleX, scaleY);
     }
 
     overlayCtx.restore();
@@ -245,8 +302,11 @@
     clear: clear,
     startLoop: startLoop,
     stopLoop: stopLoop,
+    computeVideoRenderBox: computeVideoRenderBox,
+    resolveScaleFactors: resolveScaleFactors,
     getCurrentDetections: () => currentDetections,
     getCurrentRunId: () => currentRunId,
+    getCurrentSourceResolution: () => currentSourceResolution,
   };
 
   if (document.readyState === 'loading') {

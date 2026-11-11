@@ -180,6 +180,7 @@
 
 .video-file-card {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   padding: 10px;
   gap: 10px;
@@ -209,7 +210,7 @@
 }
 
 .video-file-meta {
-  flex: 1 1 auto;
+  flex: 1 1 140px;
   min-width: 0;
   overflow: hidden;
 }
@@ -230,7 +231,76 @@
 
 .video-file-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.video-file-actions .btn-xs,
+.codec-notice-actions .btn-xs,
+.video-action-menu .btn-xs {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-action-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.video-action-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 124px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.video-action-menu:not([hidden]) {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
+}
+
+.video-action-menu .btn-xs {
+  width: 100%;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.codec-notice-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 0.85rem;
+}
+
+.codec-notice-message {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.codec-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 /* Active Job Indicators & Animations (Milestone 17) */

@@ -33,9 +33,9 @@ router.include_router(video_jobs_router)
 
 def _handle_auto_transcode(dest_path: str, safe_name: str) -> tuple[str, str, dict]:
     """Transcode uploaded video to H.264 if not web compatible."""
-    base_name, _ = os.path.splitext(safe_name)
-    transcoded_name = f"{base_name}_h264.mp4"
-    transcoded_path = os.path.join(VIDEOS_DIR, transcoded_name)
+    pair = VideoTranscodeService.get_h264_pair_info(dest_path)
+    transcoded_name = pair["output_filename"]
+    transcoded_path = pair["output_path"]
     try:
         VideoTranscodeService.transcode_to_h264(
             dest_path, transcoded_path, timeout=120.0
@@ -52,11 +52,15 @@ async def list_videos():
     """List uploaded and local video recordings in data/videos/."""
     files = []
     if os.path.exists(VIDEOS_DIR):
-        for f in os.listdir(VIDEOS_DIR):
+        for f in sorted(os.listdir(VIDEOS_DIR)):
             if f.lower().endswith((".mp4", ".avi", ".mkv", ".mov")):
                 full = os.path.join(VIDEOS_DIR, f)
                 stat = os.stat(full)
                 probe = VideoTranscodeService.probe_video(full)
+                is_web = probe.get("web_compatible", False)
+                pair = VideoTranscodeService.get_h264_pair_info(full)
+                has_converted = (not is_web) and pair["has_converted_h264"]
+                converted_name = pair["converted_filename"] if has_converted else None
                 files.append({
                     "filename": f,
                     "path": full,
@@ -65,7 +69,9 @@ async def list_videos():
                     "modified": stat.st_mtime,
                     "video_url": f"/videos/{f}",
                     "codec": probe.get("codec", "unknown"),
-                    "web_compatible": probe.get("web_compatible", False),
+                    "web_compatible": is_web,
+                    "has_converted_h264": has_converted,
+                    "converted_filename": converted_name,
                     "resolution": (
                         f"{probe.get('width', 0)}x{probe.get('height', 0)}"
                         if probe.get("width")

@@ -26,6 +26,26 @@ class VideoTranscodeService:
     """
 
     @staticmethod
+    def get_h264_pair_info(video_path: str) -> Dict[str, Any]:
+        """Return canonical _h264.mp4 output target and whether a valid paired copy exists."""
+        directory = os.path.dirname(video_path)
+        filename = os.path.basename(video_path)
+        base_name, _ = os.path.splitext(filename)
+        converted_filename = f"{base_name}_h264.mp4"
+        converted_path = os.path.join(directory, converted_filename)
+        exists = (
+            not base_name.lower().endswith("_h264")
+            and os.path.isfile(converted_path)
+            and os.path.getsize(converted_path) > 0
+        )
+        return {
+            "has_converted_h264": exists,
+            "converted_filename": converted_filename if exists else None,
+            "output_filename": converted_filename,
+            "output_path": converted_path,
+        }
+
+    @staticmethod
     def probe_video(path: str) -> Dict[str, Any]:
         """Inspect video file metadata, resolution, duration, and codec compatibility."""
         meta: Dict[str, Any] = {

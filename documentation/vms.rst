@@ -140,10 +140,13 @@ Video Studio & Scrubber Endpoints
      - Description
    * - ``GET``
      - ``/api/videos``
-     - List uploaded recording files in ``data/videos/``.
+     - List uploaded recording files in ``data/videos/`` with codec pairing flags (``has_converted_h264``, ``converted_filename``).
    * - ``POST``
      - ``/api/videos/upload``
      - Upload ``.mp4``, ``.avi``, or ``.mkv`` recording via multipart form data.
+   * - ``POST``
+     - ``/api/videos/{name}/transcode``
+     - Transcode recording to web-compatible H.264 MP4 (idempotent unless ``force=true``).
    * - ``DELETE``
      - ``/api/videos/{name}``
      - Delete recording file from disk.
@@ -152,7 +155,13 @@ Video Studio & Scrubber Endpoints
      - Register uploaded video file as an active camera stream in the pool.
    * - ``POST``
      - ``/api/videos/{name}/analyze``
-     - Run offline batch entity and sighting occurrence analytics.
+     - Run offline batch entity and sighting occurrence analytics (records ``source_resolution``, ``source_fps``, and container PTS).
+   * - ``GET``
+     - ``/api/videos/{name}/reports``
+     - Retrieve consolidated occurrence report history across original and paired ``_h264.mp4`` files.
+   * - ``GET``
+     - ``/api/videos/{name}/detections``
+     - Retrieve latest resolution-aware frame detection stream for scrubber overlay rendering.
    * - ``GET``
      - ``/videos/{name}``
      - Stream video file supporting HTML5 seeking and range requests.

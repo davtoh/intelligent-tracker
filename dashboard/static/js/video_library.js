@@ -6,6 +6,9 @@
 (function () {
   'use strict';
 
+  const pairedH264ByFilename = new Map();
+  let menuListenersBound = false;
+
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -23,6 +26,104 @@
     }
   }
 
+  function registerVideos(files) {
+    pairedH264ByFilename.clear();
+    if (!Array.isArray(files)) return;
+    files.forEach(file => {
+      if (file && !file.web_compatible && file.has_converted_h264 && file.converted_filename) {
+        pairedH264ByFilename.set(file.filename, {
+          convertedFilename: file.converted_filename,
+          videoUrl: `/videos/${encodeURIComponent(file.converted_filename)}`,
+        });
+      }
+    });
+  }
+
+  function getPairedH264(filename) {
+    return filename ? (pairedH264ByFilename.get(filename) || null) : null;
+  }
+
+  function closeAllActionMenus(exceptMenu = null) {
+    document.querySelectorAll('.video-action-menu').forEach(menu => {
+      if (menu !== exceptMenu) {
+        menu.hidden = true;
+        const toggle = menu.parentElement?.querySelector('.btn-action-menu-toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  function ensureMenuListeners() {
+    if (menuListenersBound) return;
+    menuListenersBound = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.video-action-dropdown')) closeAllActionMenus();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAllActionMenus();
+    });
+  }
+
+  function switchToH264(convertedFilename, convertedUrl) {
+    if (!convertedFilename) return;
+    const url = convertedUrl || `/videos/${encodeURIComponent(convertedFilename)}`;
+    if (typeof window.loadVideoIntoPlayer === 'function') {
+      window.loadVideoIntoPlayer(url, convertedFilename, true, 'h264');
+    } else {
+      window.dispatchEvent(new CustomEvent('video-select-request', { detail: { filename: convertedFilename } }));
+    }
+  }
+
+  function renderReconvertDropdown(filename, extraClass = '') {
+    const safeFile = escapeHtml(filename);
+    return `
+      <div class="video-action-dropdown ${extraClass}">
+        <button type="button" class="btn btn-xs btn-outline btn-action-menu-toggle" data-filename="${safeFile}" aria-haspopup="menu" aria-expanded="false" title="More conversion actions">▾</button>
+        <div class="video-action-menu glass-panel" role="menu" hidden>
+          <button type="button" role="menuitem" class="btn btn-xs btn-outline btn-reconvert-video" data-filename="${safeFile}" title="Force fresh H.264 transcode">↺ Re-convert</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindPairedActionControls(container, onReconvert) {
+    if (!container) return;
+    ensureMenuListeners();
+
+    container.querySelectorAll('.btn-switch-h264').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllActionMenus();
+        switchToH264(btn.getAttribute('data-converted'), btn.getAttribute('data-converted-url'));
+      });
+    });
+
+    container.querySelectorAll('.btn-action-menu-toggle').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = btn.parentElement?.querySelector('.video-action-menu');
+        if (!menu) return;
+        const willOpen = menu.hidden;
+        closeAllActionMenus(willOpen ? menu : null);
+        menu.hidden = !willOpen;
+        btn.setAttribute('aria-expanded', String(willOpen));
+      });
+    });
+
+    container.querySelectorAll('.btn-reconvert-video').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeAllActionMenus();
+        const fn = btn.getAttribute('data-filename');
+        if (onReconvert) {
+          onReconvert(fn, { force: true });
+        } else {
+          transcodeVideo(fn, null, { force: true });
+        }
+      });
+    });
+  }
+
   function getCodecNoticeElement() {
     let notice = document.getElementById('scrubber-codec-notice');
     if (!notice) {
@@ -37,27 +138,37 @@
     return notice;
   }
 
-  function showCodecNotice(message, filename, onConvert) {
+  function showCodecNotice(message, filename, onConvert, options = {}) {
     const notice = getCodecNoticeElement();
     if (!notice) return;
+    const paired = options.convertedFilename
+      ? { convertedFilename: options.convertedFilename, videoUrl: options.convertedUrl || `/videos/${encodeURIComponent(options.convertedFilename)}` }
+      : getPairedH264(filename);
+
+    let actionsHtml = '';
+    if (filename && paired?.convertedFilename) {
+      actionsHtml = `
+        <div class="codec-notice-actions">
+          <button type="button" class="btn btn-xs btn-primary btn-switch-h264 btn-notice-switch-h264" data-filename="${escapeHtml(filename)}" data-converted="${escapeHtml(paired.convertedFilename)}" data-converted-url="${escapeHtml(paired.videoUrl)}">▶ Switch to H.264</button>
+          ${renderReconvertDropdown(filename, 'notice-dropdown')}
+        </div>
+      `;
+    } else if (filename) {
+      actionsHtml = `<button type="button" class="btn btn-xs btn-primary btn-notice-convert" data-filename="${escapeHtml(filename)}">⚡ Convert to H.264</button>`;
+    }
+
     notice.style.display = 'flex';
-    notice.style.alignItems = 'center';
-    notice.style.justifyContent = 'space-between';
-    notice.style.padding = '10px 14px';
-    notice.style.marginBottom = '12px';
-    notice.style.borderRadius = '8px';
-    notice.style.background = 'rgba(245, 158, 11, 0.12)';
-    notice.style.border = '1px solid rgba(245, 158, 11, 0.4)';
-    notice.style.fontSize = '0.85rem';
     notice.innerHTML = `
-      <div style="flex:1; padding-right: 10px;">
+      <div class="codec-notice-message">
         <span style="color:#f59e0b; font-weight:600;">⚠️ Codec Compatibility:</span> ${escapeHtml(message)}
       </div>
-      ${filename ? `<button class="btn btn-xs btn-primary btn-notice-convert" data-filename="${escapeHtml(filename)}">⚡ Convert to H.264</button>` : ''}
+      ${actionsHtml}
     `;
 
-    if (onConvert) {
-      notice.querySelector('.btn-notice-convert')?.addEventListener('click', () => onConvert(filename));
+    if (filename && paired?.convertedFilename) {
+      bindPairedActionControls(notice, onConvert);
+    } else if (onConvert) {
+      notice.querySelector('.btn-notice-convert')?.addEventListener('click', () => onConvert(filename, { force: false }));
     }
   }
 
@@ -66,60 +177,84 @@
     if (notice) notice.style.display = 'none';
   }
 
-  async function transcodeVideo(filename, onSuccess) {
+  function restoreTranscodeButtonLabel(btn) {
+    btn.disabled = false;
+    if (btn.classList.contains('btn-reconvert-video')) {
+      btn.textContent = '↺ Re-convert';
+    } else if (btn.classList.contains('btn-notice-convert')) {
+      btn.textContent = '⚡ Convert to H.264';
+    } else {
+      btn.textContent = '⚡ Convert';
+    }
+  }
+
+  function handleAlreadyExistsTranscode(filename, res, btns, onSuccess) {
+    btns.forEach(restoreTranscodeButtonLabel);
+    hideCodecNotice();
+    showToast(`Using existing H.264 copy '${res.output_filename}'.`, 'info');
+    if (res.output_filename) {
+      pairedH264ByFilename.set(filename, {
+        convertedFilename: res.output_filename,
+        videoUrl: res.video_url || `/videos/${encodeURIComponent(res.output_filename)}`,
+      });
+    }
+    if (onSuccess) {
+      onSuccess(res);
+    } else {
+      if (typeof window.loadVideosList === 'function') window.loadVideosList();
+      if (window.VideoJobClient?.currentViewedFilename === filename && res.output_filename) {
+        switchToH264(res.output_filename, res.video_url);
+      }
+    }
+  }
+
+  async function runDirectTranscode(filename, force, btns, onSuccess) {
+    showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`, null);
+    const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode?force=${force}`, {
+      method: 'POST',
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      hideCodecNotice();
+      if (onSuccess) onSuccess(data);
+    } else {
+      const err = await resp.json();
+      showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
+    }
+    btns.forEach(restoreTranscodeButtonLabel);
+  }
+
+  async function transcodeVideo(filename, onSuccess, options = {}) {
     if (!filename) return;
+    const force = Boolean(options.force);
     const activeJob = window.VideoJobClient?.getActiveJob(filename);
     if (activeJob) {
       window.VideoJobClient.showConflictModal(
         activeJob,
         'Convert to H.264',
-        async () => {
-          try {
-            await window.VideoJobClient.startTranscode(filename);
-          } catch (err) {
-            showToast(`Transcode error: ${err.message}`, 'error');
-          }
-        },
+        () => window.VideoJobClient.startTranscode(filename, { ...options, force }).catch(
+          err => showToast(`Transcode error: ${err.message}`, 'error')
+        ),
         () => {}
       );
       return;
     }
 
     const btns = document.querySelectorAll(
-      `.btn-transcode-video[data-filename="${CSS.escape(filename)}"], .btn-notice-convert[data-filename="${CSS.escape(filename)}"]`
+      `.btn-transcode-video[data-filename="${CSS.escape(filename)}"], .btn-notice-convert[data-filename="${CSS.escape(filename)}"], .btn-reconvert-video[data-filename="${CSS.escape(filename)}"]`
     );
-    btns.forEach(b => {
-      b.disabled = true;
-      b.textContent = '⏳ Converting...';
-    });
+    btns.forEach(b => { b.disabled = true; b.textContent = '⏳ Converting...'; });
 
     try {
       if (window.VideoJobClient) {
-        await window.VideoJobClient.startTranscode(filename);
+        const res = await window.VideoJobClient.startTranscode(filename, { ...options, force });
+        if (res && res.already_exists) handleAlreadyExistsTranscode(filename, res, btns, onSuccess);
       } else {
-        showCodecNotice(`Transcoding '${filename}' to web-compatible H.264 MP4... Please wait.`, null);
-        const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/transcode`, {
-          method: 'POST'
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          hideCodecNotice();
-          if (onSuccess) onSuccess(data);
-        } else {
-          const err = await resp.json();
-          showToast(`Transcoding failed: ${err.detail || 'Error'}`, 'error');
-        }
-        btns.forEach(b => {
-          b.disabled = false;
-          b.textContent = b.classList.contains('btn-notice-convert') ? '⚡ Convert to H.264' : '⚡ Convert';
-        });
+        await runDirectTranscode(filename, force, btns, onSuccess);
       }
     } catch (e) {
       showToast(`Error during transcoding: ${e.message}`, 'error');
-      btns.forEach(b => {
-        b.disabled = false;
-        b.textContent = b.classList.contains('btn-notice-convert') ? '⚡ Convert to H.264' : '⚡ Convert';
-      });
+      btns.forEach(restoreTranscodeButtonLabel);
     }
   }
 
@@ -130,7 +265,7 @@
     if (job.job_type !== 'transcode') return;
 
     const btns = document.querySelectorAll(
-      `.btn-transcode-video[data-filename="${CSS.escape(job.filename)}"], .btn-notice-convert[data-filename="${CSS.escape(job.filename)}"]`
+      `.btn-transcode-video[data-filename="${CSS.escape(job.filename)}"], .btn-notice-convert[data-filename="${CSS.escape(job.filename)}"], .btn-reconvert-video[data-filename="${CSS.escape(job.filename)}"]`
     );
 
     if (type === 'job-started' || type === 'job-update') {
@@ -141,13 +276,17 @@
         });
       }
     } else if (type === 'job-finished') {
-      btns.forEach(b => {
-        b.disabled = false;
-        b.textContent = b.classList.contains('btn-notice-convert') ? '⚡ Convert to H.264' : '⚡ Convert';
-      });
+      btns.forEach(restoreTranscodeButtonLabel);
       if (job.status === 'completed') {
         hideCodecNotice();
         showToast(`Transcoding completed for '${job.filename}'!`, 'success');
+        if (job.result?.output_filename) {
+          const outUrl = job.result.video_url || `/videos/${encodeURIComponent(job.result.output_filename)}`;
+          pairedH264ByFilename.set(job.filename, {
+            convertedFilename: job.result.output_filename,
+            videoUrl: outUrl,
+          });
+        }
         if (typeof window.loadVideosList === 'function') {
           window.loadVideosList();
         }
@@ -244,32 +383,44 @@
 
   function renderVideoFileCard(file, currentFilename) {
     const isH264 = file.web_compatible;
+    const hasConverted = Boolean(!isH264 && file.has_converted_h264 && file.converted_filename);
     const isCurrent = Boolean(currentFilename && file.filename === currentFilename);
     const codecBadge = isH264
       ? `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.4);">H.264</span>`
       : `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(245,158,11,0.2); color:#f59e0b; border:1px solid rgba(245,158,11,0.4);">${escapeHtml((file.codec || 'HEVC').toUpperCase())}</span>`;
 
-    const convertBtn = !isH264
-      ? `<button class="btn btn-xs btn-outline btn-transcode-video" data-filename="${escapeHtml(file.filename)}" title="Convert to browser-compatible H.264 MP4">⚡ Convert</button>`
-      : '';
+    let convertControls = '';
+    if (!isH264 && hasConverted) {
+      const convertedUrl = `/videos/${encodeURIComponent(file.converted_filename)}`;
+      convertControls = `
+        <button type="button" class="btn btn-xs btn-primary btn-switch-h264" data-filename="${escapeHtml(file.filename)}" data-converted="${escapeHtml(file.converted_filename)}" data-converted-url="${escapeHtml(convertedUrl)}" title="Switch immediately to ${escapeHtml(file.converted_filename)}">▶ Switch to H.264</button>
+        ${renderReconvertDropdown(file.filename)}
+      `;
+    } else if (!isH264) {
+      convertControls = `<button type="button" class="btn btn-xs btn-outline btn-transcode-video" data-filename="${escapeHtml(file.filename)}" title="Convert to browser-compatible H.264 MP4">⚡ Convert</button>`;
+    }
 
     return `
-      <div class="video-file-card glass-panel ${isCurrent ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}" data-url="${escapeHtml(file.video_url)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec || '')}" role="listitem" ${isCurrent ? 'aria-selected="true"' : ''} tabindex="0" title="Click to load ${escapeHtml(file.filename)}">
+      <div class="video-file-card glass-panel ${isCurrent ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}" data-url="${escapeHtml(file.video_url)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec || '')}" data-has-converted="${hasConverted}" data-converted="${escapeHtml(file.converted_filename || '')}" role="listitem" ${isCurrent ? 'aria-selected="true"' : ''} tabindex="0" title="Click to load ${escapeHtml(file.filename)}">
         <div class="video-file-icon">📼</div>
         <div class="video-file-meta">
           <div class="video-filename truncate-trigger" data-full-text="${escapeHtml(file.filename)}" data-truncate-label="Video File" title="${escapeHtml(file.filename)}">${escapeHtml(window.TextTruncationManager ? window.TextTruncationManager.format(file.filename, { mode: 'middle', maxLength: 30, preserveExt: true }) : file.filename)}</div>
           <div class="video-filesize">${file.size_mb} MB • ${codecBadge} ${file.resolution ? `• ${file.resolution}` : ''}</div>
         </div>
         <div class="video-file-actions">
-          ${convertBtn}
-          <button class="btn btn-xs btn-primary btn-select-video" data-url="${escapeHtml(file.video_url)}" data-filename="${escapeHtml(file.filename)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec)}">▶ Load</button>
-          <button class="btn btn-xs btn-outline btn-del-video" data-filename="${escapeHtml(file.filename)}">🗑️</button>
+          ${convertControls}
+          <button type="button" class="btn btn-xs btn-primary btn-select-video" data-url="${escapeHtml(file.video_url)}" data-filename="${escapeHtml(file.filename)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec)}" data-has-converted="${hasConverted}" data-converted="${escapeHtml(file.converted_filename || '')}">▶ Load</button>
+          <button type="button" class="btn btn-xs btn-outline btn-del-video" data-filename="${escapeHtml(file.filename)}">🗑️</button>
         </div>
       </div>
     `;
   }
 
   window.VideoLibrary = {
+    registerVideos: registerVideos,
+    getPairedH264: getPairedH264,
+    switchToH264: switchToH264,
+    bindPairedActionControls: bindPairedActionControls,
     renderVideoFileCard: renderVideoFileCard,
     setActiveVideoCard: setActiveVideoCard,
     showCodecNotice: showCodecNotice,

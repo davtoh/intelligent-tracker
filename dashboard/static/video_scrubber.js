@@ -179,10 +179,10 @@
     if (err && err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
       msg = 'Codec not supported natively by browser (e.g. HEVC/H.265). Convert to standard H.264 MP4 for instant browser playback.';
     }
-    window.VideoLibrary?.showCodecNotice(msg, currentVideoFilename, (fn) => {
+    window.VideoLibrary?.showCodecNotice(msg, currentVideoFilename, (fn, opts) => {
       window.VideoLibrary?.transcodeVideo(fn, () => {
         loadVideosList();
-      });
+      }, opts);
     });
   }
 
@@ -193,10 +193,12 @@
       const files = await resp.json();
 
       if (!files || files.length === 0) {
+        window.VideoLibrary?.registerVideos?.([]);
         videoFilesList.innerHTML = '<div class="empty-state">No uploaded recordings found. Upload an MP4 or MKV recording to scrub and analyze.</div>';
         return;
       }
 
+      window.VideoLibrary?.registerVideos?.(files);
       videoFilesList.innerHTML = files.map(file => window.VideoLibrary?.renderVideoFileCard(file, currentVideoFilename) || '').join('');
       bindVideoCardActions();
       window.VideoLibrary?.setActiveVideoCard(currentVideoFilename);
@@ -204,7 +206,9 @@
 
       if (!currentVideoFilename && files.length > 0) {
         const preferred = files.find(f => f.web_compatible) || files[0];
-        loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec);
+        loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec, {
+          convertedFilename: preferred.converted_filename,
+        });
       }
     } catch (e) {
       console.warn('Could not load videos list:', e);
@@ -214,7 +218,7 @@
   function bindVideoCardActions() {
     videoFilesList.querySelectorAll('.video-file-card').forEach(card => {
       card.addEventListener('click', (e) => {
-        if (e.target.closest('button, a, input')) return;
+        if (e.target.closest('button, a, input, .video-action-dropdown')) return;
         const btn = card.querySelector('.btn-select-video');
         if (btn) btn.click();
       });
@@ -236,18 +240,27 @@
         const fn = btn.getAttribute('data-filename');
         const web = btn.getAttribute('data-web') === 'true';
         const codec = btn.getAttribute('data-codec');
-        loadVideoIntoPlayer(url, fn, web, codec);
+        const convertedFilename = btn.getAttribute('data-converted') || null;
+        loadVideoIntoPlayer(url, fn, web, codec, { convertedFilename });
       });
+    });
+
+    const onTranscodeDone = (data) => {
+      loadVideosList();
+      if (data?.output_filename) {
+        loadVideoIntoPlayer(data.video_url, data.output_filename, true, 'h264');
+      }
+    };
+
+    window.VideoLibrary?.bindPairedActionControls?.(videoFilesList, (fn, opts) => {
+      window.VideoLibrary?.transcodeVideo(fn, onTranscodeDone, opts);
     });
 
     videoFilesList.querySelectorAll('.btn-transcode-video').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const fn = btn.getAttribute('data-filename');
-        window.VideoLibrary?.transcodeVideo(fn, (data) => {
-          loadVideosList();
-          loadVideoIntoPlayer(data.video_url, data.output_filename, true, 'h264');
-        });
+        window.VideoLibrary?.transcodeVideo(fn, onTranscodeDone, { force: false });
       });
     });
 
@@ -281,7 +294,7 @@
     }
   }
 
-  function loadVideoIntoPlayer(url, filename, isWebCompatible, codec) {
+  function loadVideoIntoPlayer(url, filename, isWebCompatible, codec, options = {}) {
     if (!videoPlayer) return;
     currentVideoUrl = url;
     currentVideoFilename = filename;
@@ -312,7 +325,8 @@
       window.VideoLibrary?.showCodecNotice(
         `This video is encoded with '${(codec || 'HEVC').toUpperCase()}' which may not play in standard browsers without conversion.`,
         filename,
-        (fn) => window.VideoLibrary?.transcodeVideo(fn, () => loadVideosList())
+        (fn, opts) => window.VideoLibrary?.transcodeVideo(fn, () => loadVideosList(), opts),
+        options
       );
       const activeJob = window.VideoJobClient?.getActiveJob(filename);
       if (activeJob && activeJob.job_type === 'transcode') {
@@ -429,9 +443,11 @@
   }
 
   window.loadVideosList = loadVideosList;
+  window.loadVideoIntoPlayer = loadVideoIntoPlayer;
   window.VideoScrubber = {
     init: init,
     loadVideosList: loadVideosList,
+    loadVideoIntoPlayer: loadVideoIntoPlayer,
     onTabLeave: onTabLeave,
     onTabEnter: onTabEnter,
     getTabPolicy: () => tabPolicy,

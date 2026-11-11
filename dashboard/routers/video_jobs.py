@@ -34,6 +34,7 @@ async def transcode_video(
     filename: str,
     target_resolution: Optional[str] = "1080p",
     async_mode: bool = Query(True),
+    force: bool = Query(False),
 ):
     """Transcodes a video recording (e.g. HEVC/H.265 or AVI) to web-optimized H.264 MP4."""
     safe_name = os.path.basename(filename)
@@ -41,9 +42,9 @@ async def transcode_video(
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
-    base_name, _ = os.path.splitext(safe_name)
-    output_filename = f"{base_name}_h264.mp4"
-    output_path = os.path.join(VIDEOS_DIR, output_filename)
+    pair = VideoTranscodeService.get_h264_pair_info(path)
+    output_filename = pair["output_filename"]
+    output_path = pair["output_path"]
 
     job_mgr = get_video_job_manager()
     active_job = job_mgr.get_active_job_for_file(safe_name)
@@ -54,6 +55,21 @@ async def transcode_video(
                 "error": "conflict",
                 "message": f"A {active_job.job_type} job is already active for video '{safe_name}'.",
                 "active_job": active_job.to_dict(),
+            },
+        )
+
+    if not force and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+        stat = os.stat(output_path)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "already_exists": True,
+                "original_filename": safe_name,
+                "output_filename": output_filename,
+                "video_url": f"/videos/{output_filename}",
+                "size_bytes": stat.st_size,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2),
             },
         )
 
@@ -227,6 +243,28 @@ async def analyze_video(
         "classes": target_classes,
     }
 
+    def _finalize_report(indexer: VideoIndexer, summary: dict) -> dict:
+        report = indexer.generate_occurrence_report()
+        report["frames_processed"] = summary.get("processed_frames", 0)
+        report["total_detections"] = summary.get("total_detections", 0)
+        report["total_sightings"] = summary.get("identifications_count", 0)
+        report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
+        report["source_resolution"] = summary.get("source_resolution")
+        report["source_fps"] = summary.get("source_fps")
+        report["execution_summary"] = summary
+
+        # Persist stacked report and time-indexed detection stream to disk
+        run_rec = save_report_run(
+            filename=safe_name,
+            report=report,
+            config=config_meta,
+            frame_detections=summary.get("frame_detections"),
+            source_resolution=summary.get("source_resolution"),
+            source_fps=summary.get("source_fps"),
+        )
+        report["run_id"] = run_rec.get("run_id")
+        return report
+
     if is_async:
         def _runner(job, stop_event, progress_cb):
             indexer = _create_indexer()
@@ -236,22 +274,7 @@ async def analyze_video(
                 progress_callback=progress_cb,
                 stop_event=stop_event,
             )
-            report = indexer.generate_occurrence_report()
-            report["frames_processed"] = summary.get("processed_frames", 0)
-            report["total_detections"] = summary.get("total_detections", 0)
-            report["total_sightings"] = summary.get("identifications_count", 0)
-            report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
-            report["execution_summary"] = summary
-
-            # Persist stacked report and time-indexed detection stream to disk
-            run_rec = save_report_run(
-                filename=safe_name,
-                report=report,
-                config=config_meta,
-                frame_detections=summary.get("frame_detections"),
-            )
-            report["run_id"] = run_rec.get("run_id")
-            return report
+            return _finalize_report(indexer, summary)
 
         job = job_mgr.submit_job(
             job_type="analytics",
@@ -266,20 +289,7 @@ async def analyze_video(
 
     indexer = _create_indexer()
     summary = indexer.process_video(video_path=path, verbose=False)
-    report = indexer.generate_occurrence_report()
-    report["frames_processed"] = summary.get("processed_frames", 0)
-    report["total_detections"] = summary.get("total_detections", 0)
-    report["total_sightings"] = summary.get("identifications_count", 0)
-    report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
-    report["execution_summary"] = summary
-
-    run_rec = save_report_run(
-        filename=safe_name,
-        report=report,
-        config=config_meta,
-        frame_detections=summary.get("frame_detections"),
-    )
-    report["run_id"] = run_rec.get("run_id")
+    report = _finalize_report(indexer, summary)
     return {"status": "success", "report": report}
 
 

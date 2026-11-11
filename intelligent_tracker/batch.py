@@ -21,6 +21,7 @@ Provides:
 import os
 import sys
 import time
+import math
 import json
 import csv
 import argparse
@@ -117,9 +118,11 @@ class VideoIndexer:
 
         source_name = source_label or os.path.basename(video_path)
         total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        raw_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        fps = raw_fps if (math.isfinite(raw_fps) and raw_fps > 0.0) else 30.0
+        source_fps = round(fps, 4)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         duration_sec = total_video_frames / fps if fps > 0 else 0.0
 
         if verbose:
@@ -151,6 +154,9 @@ class VideoIndexer:
                 if not ret or frame is None:
                     break
 
+                if (width <= 0 or height <= 0) and hasattr(frame, "shape"):
+                    height, width = int(frame.shape[0]), int(frame.shape[1])
+
                 read_frames += 1
                 if max_frames > 0 and read_frames > max_frames:
                     break
@@ -160,7 +166,11 @@ class VideoIndexer:
                     continue
 
                 processed_frames += 1
-                video_timestamp = (read_frames - 1) / fps
+                pos_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+                if pos_msec is not None and math.isfinite(pos_msec) and pos_msec > 0.0:
+                    video_timestamp = pos_msec / 1000.0
+                else:
+                    video_timestamp = (read_frames - 1) / fps
 
                 # 1. Detect
                 detections = self.detector.detect(frame)
@@ -190,6 +200,7 @@ class VideoIndexer:
                     frame_detections.append({
                         "time": round(video_timestamp, 3),
                         "frame": read_frames - 1,
+                        "source_resolution": [width, height],
                         "tracks": active_tracks,
                     })
 
@@ -261,6 +272,8 @@ class VideoIndexer:
         return {
             "video_path": video_path,
             "source": source_name,
+            "source_resolution": [width, height],
+            "source_fps": source_fps,
             "total_frames_in_file": total_video_frames,
             "read_frames": read_frames,
             "processed_frames": processed_frames,

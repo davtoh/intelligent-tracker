@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-11] feat: Video Pairing, Idempotent Transcode & Resolution-Aware Overlay (M1)
+- **Type**: feat
+- **Summary**: Added H.264 pair detection in /api/videos, idempotent /transcode with force flag, unified _h264/base report and detection storage, container PTS + source_resolution propagation in BatchAnalyzer and VideoReportStore, Switch/Re-convert library and codec notice UI controls, and letterbox/pillarbox-compensated source_resolution overlay scaling.
+- **Files** (13):
+  - `intelligent_tracker/batch.py`
+  - `dashboard/services/video_transcoder.py`
+  - `dashboard/services/video_report_store.py`
+  - `dashboard/routers/videos.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `dashboard/static/js/video_jobs.js`
+  - `dashboard/static/js/video_library.js`
+  - ... (+5 more)
+- **Verification**: unittest discover tests (344 OK); Milestone 1 suites (22 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui audit OK
+
 ## [2026-11-10] feat: Video Studio SOTA Analytics, Canvas Overlay & Stacked Persistence Architecture
 - **Type**: feat
 - **Summary**: Implemented disk-backed stacked report history (`data/reports/{video}_reports.json`) and per-frame detection streaming (`data/reports/{video}_{run_id}_detections.json`). Separated raw detected objects (`total_detections`) from enrolled gallery sightings (`identifications_count`). Added synchronized real-time canvas bounding box overlay (`#scrubber-overlay-canvas`) over Scrubber player. Hardened `.video-file-card` selection, history run switcher dropdown, and active job container isolation.
@@ -129,35 +144,3 @@
   - `CentroidTracker`: Two-stage IoU and Euclidean distance matching with zero heavy dependencies.
   - `SortTracker`: Simple Online and Realtime Tracking using 2D kinematic Kalman filters in pure NumPy.
   - `TrackerFactory`: Registry for decoupled runtime instantiation (`centroid`, `sort`).
-
-## [Hardware & GUI Stabilization: Camera Auto-Detection & DirectShow Driver Unbind Cooldown] - 2026-10-23
-
-### 1. Objectives & Scope
-- **DirectShow Unbind Race Condition Resolution**:
-  - Diagnosed a race condition on Windows where probing device indices with DirectShow (`cv2.CAP_DSHOW`) left the kernel UVC device handle in a brief unbinding transition (~0.35s).
-  - When `find_first_real_camera` probed device index `0` and immediately released it with only a `0.05s` delay, a subsequent `cv2.VideoCapture(0, cv2.CAP_DSHOW)` in `VideoSource` found index `0` momentarily locked; DirectShow silently routed capture to the next available filter in the category (OBS Virtual Camera at index `1`).
-  - Added an unbind cooldown of `0.45s` on Windows in `find_first_real_camera` and `find_physical_cameras`, plus a transition settle check on index 0 to ensure deterministic, exclusive binding to the physical camera.
-- **Physical vs Virtual Camera Discrimination**:
-  - `is_physical_camera(cap)`: Distinguishes physical UVC hardware webcams from virtual software devices (OBS Virtual Camera, GoPro Webcam, ManyCam) by querying UVC hardware sensor registers (`CONTRAST`, `SHARPNESS`, `GAIN`, `SATURATION`, `BRIGHTNESS`). Virtual cameras return `-1.0` for all hardware registers.
-  - `resolve_camera_source(source)`: Automatically resolves `'real'`, `'auto'`, `'physical'`, `'hardware'`, or `'webcam'` to the first verified physical webcam, emitting clear console notifications (`[INFO] Auto-detected real physical camera at device index #0`), while warning and falling back safely to index `0` when disconnected (`[WARN] No physical hardware camera found with real data; defaulting to device index 0.`). Preserves numeric indices (`0`, `1`) deterministically.
-- **Interactive OpenCV HUD & Screen Inspection (`--gui opencv`)**:
-  - Left-click on any tracked bounding box in the GUI to inspect target telemetry (Track ID, label, confidence, dwell duration in seconds, velocity). Click in empty space to deselect.
-  - Spacebar: Real-time pause/resume without resetting tracking state.
-  - `d`: Clear/reset tracks and active target selection.
-  - Window `[X]` button / `q` / `ESC`: HighGUI event loop flushing and clean termination.
-
-## [Milestone 4] - 2026-10-24 - Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database
-
-### 1. Objectives & Scope
-- Deliver a persistent, embedded SQLite database (`TrackerDB` in `intelligent_tracker/database.py`) managing:
-  - `entities`: Name, category (`person`, `vehicle`, `vip`, `staff`, `visitor`, `delivery`), status, notes, timestamps.
-  - `entity_signatures`: Multi-dimensional feature vector BLOBs and representative thumbnail crops.
-  - `sightings`: Full chronological audit trail of where and when each entity was seen (track ID, camera source, timestamp, zone, bbox, confidence).
-  - Compound indexes on `(entity_id, timestamp)` and `(source, timestamp)` for rapid historical lookup.
-  - Comprehensive occurrence analytics (dwell duration approximation, distinct sources, zone journeys, JSON/CSV exports).
-- Implement visual Re-ID feature extractors in `intelligent_tracker/reid.py`:
-  - `BaseFeatureExtractor`: Abstract interface returning L2-normalized float32 vectors.
-  - `OnnxReIDExtractor`: Deep visual embedding extractor via ONNX Runtime with multi-platform execution provider cascade (CUDA -> DirectML -> OpenVINO -> CoreML -> CPU). Includes support for both dynamic and fixed batch architectures (e.g. OSNet x0.25).
-  - `ColorHistogramExtractor`: Ultra-lightweight CPU fallback using spatial-grid joint 3D HSV color histograms (zero neural network dependency, pure NumPy/OpenCV, sub-millisecond on Raspberry Pi CPU). Reconnects directly to the original project's descriptor vision (`self.descriptors`).
-  - `MockFeatureExtractor`: Deterministic synthetic feature generator for automated CI and headless testing.
-  - Vectorized `batch_cosine_similarity` for matrix-vector gallery matching.

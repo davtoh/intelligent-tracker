@@ -326,7 +326,7 @@ class TestVideoJobAPI(unittest.TestCase):
 
     def test_04_cancel_and_immediate_resubmit(self):
         """SC-04: Cancelling an active job allows immediate resubmission without 409 conflict."""
-        resp1 = self.client.post(f"/api/videos/{self.test_filename}/transcode?async_mode=true")
+        resp1 = self.client.post(f"/api/videos/{self.test_filename}/transcode?async_mode=true&force=true")
         self.assertEqual(resp1.status_code, 202)
         job_id = resp1.json()["job_id"]
 

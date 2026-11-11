@@ -142,9 +142,10 @@
     async startTranscode(filename, options = {}) {
       if (!filename) throw new Error('Missing filename');
       const targetRes = options.targetResolution || '1080p';
+      const force = Boolean(options.force);
 
       const resp = await fetch(
-        `/api/videos/${encodeURIComponent(filename)}/transcode?async_mode=true&target_resolution=${encodeURIComponent(targetRes)}`,
+        `/api/videos/${encodeURIComponent(filename)}/transcode?async_mode=true&target_resolution=${encodeURIComponent(targetRes)}&force=${force}`,
         { method: 'POST' }
       );
 
