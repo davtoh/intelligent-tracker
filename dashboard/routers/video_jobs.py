@@ -16,6 +16,11 @@ from dashboard.dependencies import (
 )
 from dashboard.schemas import VideoAnalyzeRequest
 from dashboard.services.video_jobs_service import get_video_job_manager
+from dashboard.services.video_report_store import (
+    get_detection_stream,
+    list_report_runs,
+    save_report_run,
+)
 from dashboard.services.video_transcoder import VideoTranscodeService
 from intelligent_tracker.batch import VideoIndexer
 from intelligent_tracker.database import TrackerDB
@@ -215,6 +220,13 @@ async def analyze_video(
                 classes=target_classes,
             )
 
+    config_meta = {
+        "detector": det,
+        "sample_rate": sr,
+        "confidence": conf,
+        "classes": target_classes,
+    }
+
     if is_async:
         def _runner(job, stop_event, progress_cb):
             indexer = _create_indexer()
@@ -226,16 +238,26 @@ async def analyze_video(
             )
             report = indexer.generate_occurrence_report()
             report["frames_processed"] = summary.get("processed_frames", 0)
-            report["total_detections"] = summary.get("identifications_count", 0)
+            report["total_detections"] = summary.get("total_detections", 0)
+            report["total_sightings"] = summary.get("identifications_count", 0)
             report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
             report["execution_summary"] = summary
+
+            # Persist stacked report and time-indexed detection stream to disk
+            run_rec = save_report_run(
+                filename=safe_name,
+                report=report,
+                config=config_meta,
+                frame_detections=summary.get("frame_detections"),
+            )
+            report["run_id"] = run_rec.get("run_id")
             return report
 
         job = job_mgr.submit_job(
             job_type="analytics",
             filename=safe_name,
             runner_fn=_runner,
-            initial_metrics={"detector": det, "sample_rate": sr},
+            initial_metrics=config_meta,
         )
         return JSONResponse(
             status_code=202,
@@ -246,9 +268,47 @@ async def analyze_video(
     summary = indexer.process_video(video_path=path, verbose=False)
     report = indexer.generate_occurrence_report()
     report["frames_processed"] = summary.get("processed_frames", 0)
-    report["total_detections"] = summary.get("identifications_count", 0)
+    report["total_detections"] = summary.get("total_detections", 0)
+    report["total_sightings"] = summary.get("identifications_count", 0)
     report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
     report["execution_summary"] = summary
+
+    run_rec = save_report_run(
+        filename=safe_name,
+        report=report,
+        config=config_meta,
+        frame_detections=summary.get("frame_detections"),
+    )
+    report["run_id"] = run_rec.get("run_id")
     return {"status": "success", "report": report}
+
+
+@router.get("/api/videos/{filename}/reports")
+async def get_video_reports(filename: str):
+    """Retrieve historical stacked analytics reports for a recorded video file."""
+    safe_name = os.path.basename(filename)
+    runs = list_report_runs(safe_name)
+    return runs
+
+
+@router.get("/api/videos/{filename}/reports/{run_id}/detections")
+async def get_video_run_detections(filename: str, run_id: str):
+    """Retrieve time-indexed frame detections stream for scrubber playback overlay."""
+    safe_name = os.path.basename(filename)
+    stream = get_detection_stream(safe_name, run_id)
+    if stream is None:
+        raise HTTPException(status_code=404, detail=f"No detections found for '{safe_name}' run '{run_id}'")
+    return stream
+
+
+@router.get("/api/videos/{filename}/detections")
+async def get_latest_video_detections(filename: str):
+    """Retrieve latest time-indexed frame detections stream for scrubber playback overlay."""
+    safe_name = os.path.basename(filename)
+    stream = get_detection_stream(safe_name, None)
+    if stream is None:
+        raise HTTPException(status_code=404, detail=f"No detections found for video '{safe_name}'")
+    return stream
+
 
 

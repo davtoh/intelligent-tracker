@@ -251,6 +251,15 @@ class TestVideoJobAPI(unittest.TestCase):
                 os.remove(transcoded)
             except OSError:
                 pass
+        # Clean up any generated reports for test clips
+        rep_dir = os.path.join("data", "reports")
+        if os.path.exists(rep_dir):
+            for fname in os.listdir(rep_dir):
+                if fname.startswith(cls.test_filename) or fname.startswith("test_job_api_clip"):
+                    try:
+                        os.remove(os.path.join(rep_dir, fname))
+                    except OSError:
+                        pass
 
     def test_01_api_transcode_async_and_conflict(self):
         """Verify 202 Accepted and 409 Conflict behavior for transcode jobs."""
@@ -376,6 +385,71 @@ class TestVideoJobAPI(unittest.TestCase):
         self.assertEqual(completed_job["status"], "completed")
         self.assertIsNotNone(completed_job["result"])
         self.assertIn("frames_processed", completed_job["result"])
+
+    def test_07_analytics_detections_count_and_persistence(self):
+        """Verify total_detections > 0 with mock detector and verify persistent report storage."""
+        resp = self.client.post(
+            f"/api/videos/{self.test_filename}/analyze?async_mode=false&detector=mock&sample_rate=1"
+        )
+        self.assertEqual(resp.status_code, 200)
+        report = resp.json()["report"]
+        self.assertGreater(report.get("total_detections", 0), 0)
+        self.assertEqual(report.get("total_sightings", 0), 0)
+        self.assertIn("run_id", report)
+        run_id = report["run_id"]
+
+        # Verify stacked reports query
+        rep_resp = self.client.get(f"/api/videos/{self.test_filename}/reports")
+        self.assertEqual(rep_resp.status_code, 200)
+        runs = rep_resp.json()
+        self.assertIsInstance(runs, list)
+        self.assertGreaterEqual(len(runs), 1)
+        self.assertEqual(runs[0]["run_id"], run_id)
+        self.assertEqual(runs[0]["metrics"]["total_detections"], report["total_detections"])
+
+        # Verify detection stream query
+        det_resp = self.client.get(f"/api/videos/{self.test_filename}/reports/{run_id}/detections")
+        self.assertEqual(det_resp.status_code, 200)
+        stream = det_resp.json()
+        self.assertEqual(stream["run_id"], run_id)
+        self.assertIn("frame_detections", stream)
+        self.assertGreater(len(stream["frame_detections"]), 0)
+        first_frame = stream["frame_detections"][0]
+        self.assertIn("time", first_frame)
+        self.assertIn("frame", first_frame)
+        self.assertIn("tracks", first_frame)
+        self.assertGreater(len(first_frame["tracks"]), 0)
+        track = first_frame["tracks"][0]
+        self.assertIn("track_id", track)
+        self.assertIn("bbox", track)
+        self.assertIn("confidence", track)
+
+        # Verify latest detections endpoint
+        latest_det_resp = self.client.get(f"/api/videos/{self.test_filename}/detections")
+        self.assertEqual(latest_det_resp.status_code, 200)
+        self.assertEqual(latest_det_resp.json()["run_id"], run_id)
+
+    def test_08_stacked_reports_multiple_runs(self):
+        """Verify multiple runs stack newest first with independent configurations."""
+        resp1 = self.client.post(
+            f"/api/videos/{self.test_filename}/analyze?async_mode=false&detector=mock&sample_rate=1&confidence=0.3"
+        )
+        self.assertEqual(resp1.status_code, 200)
+        run_id_1 = resp1.json()["report"]["run_id"]
+
+        resp2 = self.client.post(
+            f"/api/videos/{self.test_filename}/analyze?async_mode=false&detector=mock&sample_rate=2&confidence=0.5"
+        )
+        self.assertEqual(resp2.status_code, 200)
+        run_id_2 = resp2.json()["report"]["run_id"]
+
+        rep_resp = self.client.get(f"/api/videos/{self.test_filename}/reports")
+        self.assertEqual(rep_resp.status_code, 200)
+        runs = rep_resp.json()
+        self.assertGreaterEqual(len(runs), 2)
+        # Newest first
+        self.assertEqual(runs[0]["run_id"], run_id_2)
+        self.assertEqual(runs[1]["run_id"], run_id_1)
 
 
 if __name__ == "__main__":

@@ -133,11 +133,13 @@ class VideoIndexer:
 
         processed_frames = 0
         read_frames = 0
+        total_detections_count = 0
         matched_identifications = 0
         identified_entities = set()
         cancelled = False
         start_wall_time = time.time()
         last_cb_time = 0.0
+        frame_detections: List[Dict[str, Any]] = []
 
         try:
             while True:
@@ -162,6 +164,8 @@ class VideoIndexer:
 
                 # 1. Detect
                 detections = self.detector.detect(frame)
+                if detections:
+                    total_detections_count += len(detections)
 
                 # 2. Track
                 tracks = self.tracker.update(detections, timestamp=video_timestamp)
@@ -178,6 +182,16 @@ class VideoIndexer:
                     matched_identifications += len(events)
                     for ev in events:
                         identified_entities.add(ev.entity_id)
+
+                # Record frame-indexed active tracks for video overlay
+                track_objects = tracks.values() if isinstance(tracks, dict) else tracks
+                active_tracks = [t.to_dict() for t in track_objects if hasattr(t, "to_dict")]
+                if active_tracks:
+                    frame_detections.append({
+                        "time": round(video_timestamp, 3),
+                        "frame": read_frames - 1,
+                        "tracks": active_tracks,
+                    })
 
                 # 4. Optional Spatial Analytics
                 if self.analytics is not None:
@@ -252,9 +266,11 @@ class VideoIndexer:
             "processed_frames": processed_frames,
             "elapsed_seconds": round(elapsed_wall_time, 2),
             "video_duration_seconds": round(duration_sec, 2),
+            "total_detections": total_detections_count,
             "identifications_count": matched_identifications,
             "unique_entities_identified": list(identified_entities),
             "cancelled": cancelled,
+            "frame_detections": frame_detections,
         }
 
     def generate_occurrence_report(
