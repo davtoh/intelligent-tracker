@@ -229,8 +229,22 @@
     }
   }
 
+  function setActiveVideoCard(filename) {
+    const safeName = filename ? String(filename).trim() : null;
+    document.querySelectorAll('.video-file-card').forEach(card => {
+      const isMatch = safeName !== null && card.getAttribute('data-file') === safeName;
+      card.classList.toggle('active-video', isMatch);
+      if (isMatch) {
+        card.setAttribute('aria-selected', 'true');
+      } else {
+        card.removeAttribute('aria-selected');
+      }
+    });
+  }
+
   function renderVideoFileCard(file, currentFilename) {
     const isH264 = file.web_compatible;
+    const isCurrent = Boolean(currentFilename && file.filename === currentFilename);
     const codecBadge = isH264
       ? `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(16,185,129,0.2); color:#10b981; border:1px solid rgba(16,185,129,0.4);">H.264</span>`
       : `<span style="font-size:10px; padding:1px 5px; border-radius:3px; background:rgba(245,158,11,0.2); color:#f59e0b; border:1px solid rgba(245,158,11,0.4);">${escapeHtml((file.codec || 'HEVC').toUpperCase())}</span>`;
@@ -240,7 +254,7 @@
       : '';
 
     return `
-      <div class="video-file-card glass-panel ${file.filename === currentFilename ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}">
+      <div class="video-file-card glass-panel ${isCurrent ? 'active-video' : ''}" data-file="${escapeHtml(file.filename)}" data-url="${escapeHtml(file.video_url)}" data-web="${file.web_compatible}" data-codec="${escapeHtml(file.codec || '')}" role="listitem" ${isCurrent ? 'aria-selected="true"' : ''} tabindex="0" title="Click to load ${escapeHtml(file.filename)}">
         <div class="video-file-icon">📼</div>
         <div class="video-file-meta">
           <div class="video-filename truncate-trigger" data-full-text="${escapeHtml(file.filename)}" data-truncate-label="Video File" title="${escapeHtml(file.filename)}">${escapeHtml(window.TextTruncationManager ? window.TextTruncationManager.format(file.filename, { mode: 'middle', maxLength: 30, preserveExt: true }) : file.filename)}</div>
@@ -257,6 +271,7 @@
 
   window.VideoLibrary = {
     renderVideoFileCard: renderVideoFileCard,
+    setActiveVideoCard: setActiveVideoCard,
     showCodecNotice: showCodecNotice,
     hideCodecNotice: hideCodecNotice,
     transcodeVideo: transcodeVideo,

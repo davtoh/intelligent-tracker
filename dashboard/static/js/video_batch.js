@@ -82,19 +82,48 @@
     if (modal) modal.style.display = 'none';
   }
 
-  function renderReportCards(rep, filename, meta = {}) {
+  function renderReportCards(rep, filename, meta = {}, runs = [], activeRunId = null) {
     const detector = meta.detector || 'yolov8';
-    const stride = meta.sampleRate || 1;
+    const stride = meta.sampleRate || meta.sample_rate || 1;
     const conf = meta.confidence !== undefined ? meta.confidence : 0.40;
     const classes = meta.classes && meta.classes.length ? meta.classes.join(', ') : 'All Classes';
 
+    let historyDropdownHtml = '';
+    if (runs && runs.length > 0) {
+      const totalRuns = runs.length;
+      const optionsHtml = runs.map((r, idx) => {
+        const runNum = totalRuns - idx;
+        const rCfg = r.config || {};
+        const rDet = rCfg.detector || 'yolov8';
+        const rConf = rCfg.confidence !== undefined ? Number(rCfg.confidence).toFixed(2) : '0.40';
+        const rStride = rCfg.sample_rate || rCfg.sampleRate || 1;
+        const isLatest = idx === 0;
+        const tag = isLatest ? ' (Latest)' : (r.generated_at ? ` (${r.generated_at})` : '');
+        const label = `Run #${runNum} [${rDet} conf=${rConf}${rStride > 1 ? ` s=${rStride}` : ''}]${tag}`;
+        const isSelected = activeRunId ? r.run_id === activeRunId : isLatest;
+        return `<option value="${escapeHtml(r.run_id)}" ${isSelected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+      }).join('');
+
+      historyDropdownHtml = `
+        <div class="batch-history-switcher" style="display: flex; align-items: center; gap: 8px;">
+          <label for="batch-report-run-select" style="font-size: 11px; color: #94a3b8; font-weight: 500;">History:</label>
+          <select id="batch-report-run-select" class="form-select" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: rgba(30, 41, 59, 0.9); border: 1px solid rgba(255, 255, 255, 0.2); color: #e2e8f0; cursor: pointer; max-width: 280px;">
+            ${optionsHtml}
+          </select>
+        </div>
+      `;
+    }
+
     return `
       <div class="batch-report-card glass-panel">
-        <h4>📊 Occurrence Indexing Report (${escapeHtml(filename)})</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+          <h4 style="margin: 0;">📊 Occurrence Indexing Report (${escapeHtml(filename)})</h4>
+          ${historyDropdownHtml}
+        </div>
         <div class="batch-report-meta">
           <span class="batch-meta-pill accent">🧠 Model: ${escapeHtml(detector)}</span>
           <span class="batch-meta-pill cyan">⏱️ Stride: 1:${stride}</span>
-          <span class="batch-meta-pill">🎯 Conf ≥ ${conf.toFixed(2)}</span>
+          <span class="batch-meta-pill">🎯 Conf ≥ ${Number(conf).toFixed(2)}</span>
           <span class="batch-meta-pill green">🏷️ ${escapeHtml(classes)}</span>
         </div>
         <div class="kpi-row" style="margin-top: 10px;">
@@ -120,6 +149,47 @@
         </div>
       </div>
     `;
+  }
+
+  function bindHistoryDropdown(container, filename, runs) {
+    if (!container || !Array.isArray(runs) || runs.length === 0) return;
+    const select = container.querySelector('#batch-report-run-select');
+    if (!select) return;
+
+    select.addEventListener('change', (e) => {
+      const selectedRunId = e.target.value;
+      const targetRun = runs.find(r => r.run_id === selectedRunId);
+      if (!targetRun) return;
+
+      const meta = {
+        detector: targetRun.config?.detector || 'yolov8',
+        sampleRate: targetRun.config?.sample_rate || targetRun.config?.sampleRate || 1,
+        confidence: targetRun.config?.confidence !== undefined ? targetRun.config.confidence : 0.40,
+        classes: targetRun.config?.classes || null,
+      };
+
+      container.innerHTML = renderReportCards(
+        targetRun.report || targetRun.metrics || {},
+        filename,
+        meta,
+        runs,
+        selectedRunId
+      );
+      bindHistoryDropdown(container, filename, runs);
+      window.ScrubberOverlay?.loadDetections(filename, selectedRunId);
+    });
+  }
+
+  function syncContainerVisibility(filename) {
+    const container = document.getElementById('video-batch-report-container');
+    if (!container) return;
+    const target = filename || currentBatchFilename;
+    const activeJob = window.VideoJobClient?.getActiveJob(target);
+    if (activeJob && activeJob.job_type === 'analytics') {
+      container.style.display = 'none';
+    } else {
+      container.style.display = 'block';
+    }
   }
 
   async function runBatchAnalytics(filename, options = {}) {
@@ -163,12 +233,10 @@
         });
         const data = await resp.json();
         if (data.status === 'success') {
-          container.innerHTML = renderReportCards(data.report || {}, filename, {
-            detector: detector,
-            sampleRate: sampleRate,
-            confidence: confidence,
-            classes: classes,
-          });
+          await restoreReportForFile(filename);
+          if (data.report?.run_id) {
+            window.ScrubberOverlay?.loadDetections(filename, data.report.run_id);
+          }
         } else {
           container.innerHTML = `<div class="empty-state" style="color:#ef4444;">Analysis failed: ${escapeHtml(data.detail || 'Error')}</div>`;
         }
@@ -261,7 +329,7 @@
       }
     });
 
-    window.addEventListener('video-job-event', (e) => {
+    window.addEventListener('video-job-event', async (e) => {
       const { type, data } = e.detail || {};
       if (!data) return;
       const job = data;
@@ -277,29 +345,21 @@
             btn.disabled = false;
             btn.textContent = '⏳ Processing Analytics...';
           }
-          if (container && currentBatchFilename === job.filename && !container.querySelector('.batch-report-card')) {
-            container.innerHTML = `<div class="empty-state">⏳ Batch Video Analytics in progress for '<strong>${escapeHtml(job.filename)}</strong>'... Occurrence report will appear here upon completion.</div>`;
+          if (container && currentBatchFilename === job.filename) {
+            container.style.display = 'none';
           }
         }
       } else if (type === 'job-finished') {
-        if (job.status === 'completed' && job.result) {
-          const meta = {
-            detector: job.metrics?.detector || 'yolov8',
-            sampleRate: job.metrics?.sample_rate || 1,
-            confidence: job.metrics?.confidence || 0.40,
-            classes: job.metrics?.classes || null,
-          };
-          reportsByFilename.set(job.filename, { result: job.result, meta });
-        }
         if (currentBatchFilename === job.filename) {
           if (btn) {
             btn.disabled = false;
             btn.textContent = '⚡ Run Batch Analytics';
           }
           if (container) {
-            if (job.status === 'completed' && job.result) {
-              const meta = reportsByFilename.get(job.filename)?.meta || {};
-              container.innerHTML = renderReportCards(job.result, job.filename, meta);
+            container.style.display = 'block';
+            if (job.status === 'completed') {
+              await restoreReportForFile(job.filename);
+              window.ScrubberOverlay?.loadDetections(job.filename, job.result?.run_id || null);
             } else if (job.status === 'cancelled') {
               container.innerHTML = `<div class="empty-state" style="color:#f59e0b;">Analytics job for '${escapeHtml(job.filename)}' was cancelled.</div>`;
             } else if (job.status === 'failed' && window.VideoJobClient) {
@@ -313,6 +373,7 @@
 
   function setCurrentBatchFilename(filename) {
     currentBatchFilename = filename ? String(filename).trim() : null;
+    syncContainerVisibility(currentBatchFilename);
   }
 
   async function restoreReportForFile(filename) {
@@ -321,43 +382,71 @@
     const container = document.getElementById('video-batch-report-container');
     if (!container) return;
 
-    if (reportsByFilename.has(filename)) {
-      const cached = reportsByFilename.get(filename);
-      container.innerHTML = renderReportCards(cached.result, filename, cached.meta);
-      return;
-    }
+    syncContainerVisibility(filename);
 
     const activeJob = window.VideoJobClient?.getActiveJob(filename);
     if (activeJob && activeJob.job_type === 'analytics') {
-      container.innerHTML = `<div class="empty-state">⏳ Batch Video Analytics in progress for '<strong>${escapeHtml(filename)}</strong>'... Occurrence report will appear here upon completion.</div>`;
+      container.style.display = 'none';
       return;
     }
 
+    if (reportsByFilename.has(filename)) {
+      const cachedRuns = reportsByFilename.get(filename);
+      if (Array.isArray(cachedRuns) && cachedRuns.length > 0) {
+        const latest = cachedRuns[0];
+        const meta = {
+          detector: latest.config?.detector || 'yolov8',
+          sampleRate: latest.config?.sample_rate || latest.config?.sampleRate || 1,
+          confidence: latest.config?.confidence !== undefined ? latest.config.confidence : 0.40,
+          classes: latest.config?.classes || null,
+        };
+        container.innerHTML = renderReportCards(
+          latest.report || latest.metrics || {},
+          filename,
+          meta,
+          cachedRuns,
+          latest.run_id
+        );
+        bindHistoryDropdown(container, filename, cachedRuns);
+        container.style.display = 'block';
+        return;
+      }
+    }
+
     try {
-      const resp = await fetch(`/api/videos/jobs?filename=${encodeURIComponent(filename)}`);
+      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/reports`);
       if (resp.ok) {
-        const jobs = await resp.json();
-        const completed = jobs.find(j => j.job_type === 'analytics' && j.status === 'completed' && j.result);
-        if (completed) {
+        const runs = await resp.json();
+        if (currentBatchFilename !== filename) return;
+
+        if (Array.isArray(runs) && runs.length > 0) {
+          reportsByFilename.set(filename, runs);
+          const latest = runs[0];
           const meta = {
-            detector: completed.metrics?.detector || 'yolov8',
-            sampleRate: completed.metrics?.sample_rate || 1,
-            confidence: completed.metrics?.confidence || 0.40,
-            classes: completed.metrics?.classes || null,
+            detector: latest.config?.detector || 'yolov8',
+            sampleRate: latest.config?.sample_rate || latest.config?.sampleRate || 1,
+            confidence: latest.config?.confidence !== undefined ? latest.config.confidence : 0.40,
+            classes: latest.config?.classes || null,
           };
-          reportsByFilename.set(filename, { result: completed.result, meta });
-          if (currentBatchFilename === filename) {
-            container.innerHTML = renderReportCards(completed.result, filename, meta);
-            return;
-          }
+          container.innerHTML = renderReportCards(
+            latest.report || latest.metrics || {},
+            filename,
+            meta,
+            runs,
+            latest.run_id
+          );
+          bindHistoryDropdown(container, filename, runs);
+          container.style.display = 'block';
+          return;
         }
       }
     } catch (e) {
-      console.debug('Failed to restore report for', filename, e);
+      console.debug('Failed to restore stacked reports for', filename, e);
     }
 
     if (currentBatchFilename === filename) {
       container.innerHTML = '<div class="empty-state">Click <strong>⚡ Batch Video Analytics</strong> to catalog entity sightings and dwell times.</div>';
+      container.style.display = 'block';
     }
   }
 
@@ -373,6 +462,7 @@
     closeBatchModal: closeBatchModal,
     setCurrentBatchFilename: setCurrentBatchFilename,
     restoreReportForFile: restoreReportForFile,
+    syncContainerVisibility: syncContainerVisibility,
   };
 
   if (document.readyState === 'loading') {

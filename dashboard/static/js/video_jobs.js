@@ -377,6 +377,7 @@
       }
 
       const activeJob = this.getActiveJob(filename);
+      window.VideoBatch?.syncContainerVisibility?.(filename);
       if (activeJob) {
         if (banner) {
           this.renderProgressBar(banner, activeJob);
