@@ -121,6 +121,11 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         }
 
     @property
+    def is_connected(self) -> bool:
+        """Return True if acquisition backend is actively connected."""
+        return bool(getattr(self, "_is_connected", False))
+
+    @property
     def read_guard(self) -> Any:
         """Return the CaptureReadGuard protecting frame acquisition."""
         return self._get_read_guard()

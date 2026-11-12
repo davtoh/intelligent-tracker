@@ -6,10 +6,11 @@ from deadlocking acquisition worker threads or blocking server shutdown.
 """
 
 import logging
+import sys
 import threading
 import time
 from enum import Enum
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional, Set, Tuple
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -43,24 +44,47 @@ class _CaptureReadJob:
 
     def _run(self) -> None:
         """Worker loop executing cap.read() upon trigger notification."""
-        while not self.stopped:
-            if not self.trigger.wait(timeout=0.1):
-                continue
-            self.trigger.clear()
-            if self.stopped:
-                break
-            self.is_reading = True
+        com_initialized = False
+        if sys.platform == "win32":
             try:
-                ret, frame = self.cap.read()
-            except Exception as e:
-                logger.debug("Exception in cap.read() worker: %s", e)
-                ret, frame = False, None
-            finally:
-                self.is_reading = False
+                import ctypes
 
-            self.ret = ret
-            self.frame = frame
-            self.done.set()
+                ole32 = getattr(ctypes, "windll", None)
+                if ole32 is not None:
+                    hr = ole32.ole32.CoInitializeEx(None, 0)
+                    com_initialized = hr in (0, 1)
+            except Exception as e:
+                logger.debug("COM initialization skipped/failed: %s", e)
+
+        try:
+            while not self.stopped:
+                if not self.trigger.wait(timeout=0.1):
+                    continue
+                self.trigger.clear()
+                if self.stopped:
+                    break
+                self.is_reading = True
+                try:
+                    ret, frame = self.cap.read()
+                except Exception as e:
+                    logger.debug("Exception in cap.read() worker: %s", e)
+                    ret, frame = False, None
+                finally:
+                    self.is_reading = False
+
+                self.ret = ret
+                self.frame = frame
+                self.done.set()
+        finally:
+            if com_initialized:
+                try:
+                    import ctypes
+
+                    ole32 = getattr(ctypes, "windll", None)
+                    if ole32 is not None:
+                        ole32.ole32.CoUninitialize()
+                except Exception:
+                    pass
 
     def stop(self) -> None:
         """Signal worker to terminate loop."""
@@ -92,7 +116,22 @@ class CaptureReadGuard:
         self._consecutive_failures = 0
         self._current_job: Optional[_CaptureReadJob] = None
         self._active_cap: Any = None
-        self._lock = threading.Lock()
+        self._timed_out_caps: Set[int] = set()
+        self._unbound_caps: Set[int] = set()
+        self._last_read_timed_out: bool = False
+        self._lock = threading.RLock()
+
+    @property
+    def last_read_timed_out(self) -> bool:
+        """Return True if the most recent read() timed out."""
+        return self._last_read_timed_out
+
+    def is_cap_severed(self, cap: Any) -> bool:
+        """Return True if safe unbind was dispatched or cap timed out."""
+        if cap is None:
+            return True
+        with self._lock:
+            return id(cap) in self._timed_out_caps or id(cap) in self._unbound_caps
 
     @property
     def state(self) -> CircuitState:
@@ -124,6 +163,9 @@ class CaptureReadGuard:
         with self._lock:
             self._state = CircuitState.HEALTHY
             self._consecutive_failures = 0
+            self._last_read_timed_out = False
+            self._timed_out_caps.clear()
+            self._unbound_caps.clear()
 
     def trip(self, state: CircuitState = CircuitState.STALLED) -> None:
         """Manually trip circuit-breaker state."""
@@ -132,13 +174,23 @@ class CaptureReadGuard:
             if self._consecutive_failures < self.stalled_threshold:
                 self._consecutive_failures = self.stalled_threshold
 
-    def _ensure_job(self, cap: Any) -> _CaptureReadJob:
+    def _ensure_job(self, cap: Any) -> Optional[_CaptureReadJob]:
         """Ensure an active reader job matches the provided capture instance."""
-        if self._current_job is None or self._active_cap is not cap or not self._current_job.thread.is_alive():
-            if self._current_job:
-                self._current_job.stop()
-            self._active_cap = cap
-            self._current_job = _CaptureReadJob(cap)
+        if id(cap) in self._timed_out_caps:
+            return None
+
+        if self._current_job is not None:
+            if self._current_job.cap is cap:
+                if self._current_job.is_reading:
+                    return None
+                if self._current_job.thread.is_alive():
+                    return self._current_job
+            self._current_job.stop()
+            self._current_job = None
+            self._active_cap = None
+
+        self._active_cap = cap
+        self._current_job = _CaptureReadJob(cap)
         return self._current_job
 
     def _wait_interruptible(
@@ -171,12 +223,22 @@ class CaptureReadGuard:
         """
         if cap is None:
             self._record_failure()
+            self._last_read_timed_out = False
+            return False, None
+
+        if id(cap) in self._timed_out_caps:
+            self._last_read_timed_out = True
+            self._record_failure()
             return False, None
 
         effective_timeout = float(timeout) if timeout is not None else self.timeout
 
         with self._lock:
             job = self._ensure_job(cap)
+            if job is None:
+                self._record_failure()
+                self._last_read_timed_out = True
+                return False, None
             job.done.clear()
             job.trigger.set()
 
@@ -191,14 +253,17 @@ class CaptureReadGuard:
                 effective_timeout,
             )
             with self._lock:
+                self._last_read_timed_out = True
+                self._timed_out_caps.add(id(cap))
                 if self._current_job is job:
                     self._current_job.stop()
                     self._current_job = None
                     self._active_cap = None
                 self._record_failure()
-                self.safe_driver_unbind(cap)
+            self.safe_driver_unbind(cap)
             return False, None
 
+        self._last_read_timed_out = False
         ret, frame = job.ret, job.frame
         if ret and frame is not None:
             self.reset()
@@ -220,6 +285,12 @@ class CaptureReadGuard:
         if cap is None:
             return
 
+        cap_id = id(cap)
+        with self._lock:
+            if cap_id in self._unbound_caps:
+                return
+            self._unbound_caps.add(cap_id)
+
         def _do_unbind() -> None:
             try:
                 if self._safe_unbind_cb:
@@ -240,6 +311,9 @@ class CaptureReadGuard:
                 self._current_job.stop()
                 self._current_job = None
                 self._active_cap = None
+            self._timed_out_caps.clear()
+            self._unbound_caps.clear()
+            self._last_read_timed_out = False
 
 
 __all__ = ["CaptureReadGuard", "CircuitState"]

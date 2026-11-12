@@ -303,19 +303,22 @@ class CaptureWorkerMixin:
                 if not ret or frame is None:
                     if not self._running:
                         break
-                    if guard.is_reconnecting and self.auto_reconnect and not self.is_file:
+                    is_severed = getattr(guard, "last_read_timed_out", False)
+                    if is_severed or (guard.is_reconnecting and self.auto_reconnect and not self.is_file):
                         logger.warning(
-                            "VideoSource '%s': Circuit-breaker tripped to RECONNECTING. Unbinding driver.",
+                            "VideoSource '%s': Driver timed out or breaker tripped. Severing driver.",
                             self.source,
                         )
                         guard.safe_driver_unbind(self._cap)
                         self._cap = None
                         self._is_connected = False
-                        should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                        if not should_continue:
-                            break
-                        guard.reset()
-                        continue
+                        if self.auto_reconnect and not self.is_file:
+                            should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
+                            if not should_continue:
+                                break
+                            guard.reset()
+                            continue
+                        break
 
                     keep_going, consecutive_empty, reconnect_attempts = self._handle_empty_frame(
                         consecutive_empty, reconnect_attempts

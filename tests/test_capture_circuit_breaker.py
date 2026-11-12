@@ -54,6 +54,42 @@ class DummyQuickCap:
         self.release_called = True
 
 
+class TrackingHangingCap:
+    """Mock capture device that records concurrent and total read()/release() calls."""
+
+    def __init__(self, hang_delay: float = 3.0):
+        self.hang_delay = hang_delay
+        self.read_calls = 0
+        self.release_calls = 0
+        self.active_readers = 0
+        self.max_concurrent_readers = 0
+        self.is_opened = True
+        self.unblock_event = threading.Event()
+        self._lock = threading.Lock()
+
+    def isOpened(self) -> bool:
+        return self.is_opened
+
+    def read(self):
+        with self._lock:
+            self.read_calls += 1
+            self.active_readers += 1
+            if self.active_readers > self.max_concurrent_readers:
+                self.max_concurrent_readers = self.active_readers
+        try:
+            self.unblock_event.wait(timeout=self.hang_delay)
+            return False, None
+        finally:
+            with self._lock:
+                self.active_readers -= 1
+
+    def release(self):
+        with self._lock:
+            self.release_calls += 1
+            self.is_opened = False
+        self.unblock_event.set()
+
+
 class TestCaptureCircuitBreaker(unittest.TestCase):
     """Test suite for CaptureReadGuard, driver unbind, and circuit state machine."""
 
@@ -83,16 +119,11 @@ class TestCaptureCircuitBreaker(unittest.TestCase):
         """Verify consecutive empty frames trip HEALTHY -> STALLED -> RECONNECTING."""
         cap = DummyQuickCap(ret=False, frame=None)
 
-        # 1st failure
-        ret, frame = self.guard.read(cap, timeout=0.2)
-        self.assertFalse(ret)
-        self.assertEqual(self.guard.consecutive_failures, 1)
-        self.assertEqual(self.guard.state, CircuitState.HEALTHY)
-
-        # 2nd failure
-        self.guard.read(cap, timeout=0.2)
-        self.assertEqual(self.guard.consecutive_failures, 2)
-        self.assertEqual(self.guard.state, CircuitState.HEALTHY)
+        # 1st and 2nd failures
+        for expected in range(1, 3):
+            self.guard.read(cap, timeout=0.2)
+            self.assertEqual(self.guard.consecutive_failures, expected)
+            self.assertEqual(self.guard.state, CircuitState.HEALTHY)
 
         # 3rd failure -> trips to STALLED (stalled_threshold=3)
         self.guard.read(cap, timeout=0.2)
@@ -201,6 +232,81 @@ class TestCaptureCircuitBreaker(unittest.TestCase):
         self.assertLess(stop_duration, 1.0)
         self.assertFalse(source.is_alive())
         hanging_cap.release()
+
+    def test_timeout_severs_cap_without_spawning_concurrent_readers(self) -> None:
+        """Verify stalled capture device receives at most 1 read() call before release and self._cap is cleared."""
+        hanging_cap = TrackingHangingCap(hang_delay=3.0)
+        source = VideoSource(source="synthetic", auto_reconnect=False, read_timeout=0.1)
+        source._cap = hanging_cap
+        source._running = True
+        source._stop_event.clear()
+        source._thread = threading.Thread(target=source._capture_worker, daemon=True)
+        source._thread.start()
+
+        # Wait for read timeout to trigger and worker to sever handle and exit
+        for _ in range(30):
+            if source._cap is None and hanging_cap.release_calls > 0:
+                break
+            time.sleep(0.05)
+
+        source.stop()
+
+        # Invariants:
+        # 1. Stalled cap was read at most once (zero iterations 2-4 concurrent cascade)
+        self.assertEqual(hanging_cap.read_calls, 1)
+        self.assertEqual(hanging_cap.max_concurrent_readers, 1)
+        # 2. Release was dispatched
+        self.assertGreaterEqual(hanging_cap.release_calls, 1)
+        # 3. self._cap was immediately cleared without waiting for reconnect threshold
+        self.assertIsNone(source._cap)
+        self.assertFalse(source.is_connected)
+        hanging_cap.release()
+
+    def test_auto_reconnect_recovers_after_timeout(self) -> None:
+        """Verify VideoSource successfully re-opens capture after a timed-out driver is severed."""
+        hanging_cap = TrackingHangingCap(hang_delay=3.0)
+        source = VideoSource(source="synthetic", auto_reconnect=True, reconnect_delay=0.02, read_timeout=0.1)
+        source._cap = hanging_cap
+        source._running = True
+        source._stop_event.clear()
+        source._thread = threading.Thread(target=source._capture_worker, daemon=True)
+        source._thread.start()
+
+        # Should recover and read a synthetic frame
+        ret, frame = source.read(timeout=1.0)
+        source.stop()
+
+        self.assertTrue(ret)
+        self.assertIsNotNone(frame)
+        self.assertEqual(hanging_cap.read_calls, 1)
+        self.assertGreaterEqual(hanging_cap.release_calls, 1)
+        hanging_cap.release()
+
+    def test_com_initialization_on_win32_worker(self) -> None:
+        """Verify Windows COM apartment is initialized and uninitialized on reader worker thread."""
+        mock_ole32 = MagicMock()
+        mock_ole32.CoInitializeEx.return_value = 0  # S_OK
+
+        mock_windll = MagicMock()
+        mock_windll.ole32 = mock_ole32
+
+        with unittest.mock.patch("sys.platform", "win32"), \
+             unittest.mock.patch("ctypes.windll", mock_windll, create=True):
+            cap = DummyQuickCap(ret=True)
+            guard = CaptureReadGuard(timeout=0.2)
+            job = None
+            try:
+                ret, frame = guard.read(cap, timeout=0.2)
+                self.assertTrue(ret)
+                job = guard._current_job
+            finally:
+                guard.stop()
+                if job and job.thread and job.thread.is_alive():
+                    job.thread.join(timeout=1.0)
+
+            # Ensure COM was initialized and cleanly uninitialized
+            mock_ole32.CoInitializeEx.assert_called_once_with(None, 0)
+            mock_ole32.CoUninitialize.assert_called_once()
 
 
 class TestCameraPoolLockFreeTeardown(unittest.TestCase):
