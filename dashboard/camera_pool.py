@@ -452,28 +452,32 @@ class CameraPool:
                         logger.debug("Error signaling stop on manager: %s", e)
 
     def stop_all(self, parallel: bool = True):
-        """Stops all active camera streams concurrently in parallel."""
+        """Stops all active camera streams concurrently in parallel.
+
+        Adheres strictly to concurrency rules: never holds self._lock across
+        blocking thread joins or ThreadPoolExecutor teardowns.
+        """
+        # Pass 1: Broadcast immediate stop signal and snapshot managers under lock
         with self._lock:
-            # Pass 1: Broadcast immediate stop signal across all streams
             self.signal_stop_all()
-
-            # Pass 2: Concurrent or sequential teardown
-            def _stop_stream(m):
-                try:
-                    m.stop()
-                except Exception as e:
-                    logger.debug("Error stopping manager: %s", e)
-
             mgrs = list(self.streams.values())
-            if parallel and mgrs:
-                with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
-                    futures = [executor.submit(_stop_stream, m) for m in mgrs]
-                    for f in as_completed(futures):
-                        try:
-                            f.result()
-                        except Exception:
-                            pass
-            else:
-                for m in mgrs:
-                    _stop_stream(m)
             self.streams.clear()
+
+        # Pass 2: Concurrent or sequential teardown OUTSIDE lock
+        def _stop_stream(m):
+            try:
+                m.stop()
+            except Exception as e:
+                logger.debug("Error stopping manager: %s", e)
+
+        if parallel and mgrs:
+            with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
+                futures = [executor.submit(_stop_stream, m) for m in mgrs]
+                for f in as_completed(futures):
+                    try:
+                        f.result()
+                    except Exception:
+                        pass
+        else:
+            for m in mgrs:
+                _stop_stream(m)

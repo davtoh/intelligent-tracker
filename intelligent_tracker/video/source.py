@@ -32,6 +32,7 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         loop_video: bool = False,
         width: Optional[int] = None,
         height: Optional[int] = None,
+        read_timeout: float = 2.0,
     ):
         self.source = source
         self.buffer_size = max(1, int(buffer_size))
@@ -42,6 +43,7 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self.loop_video = bool(loop_video)
         self.target_width = width
         self.target_height = height
+        self.read_timeout = float(read_timeout)
 
         self.is_synthetic = False
         self.is_rtsp = False
@@ -117,6 +119,11 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
             "resolution": (self.width, self.height),
             "uptime_seconds": round(uptime, 1),
         }
+
+    @property
+    def read_guard(self) -> Any:
+        """Return the CaptureReadGuard protecting frame acquisition."""
+        return self._get_read_guard()
 
 
 __all__ = ["VideoSource"]

@@ -4,6 +4,7 @@ Re-exports 100% of video ingestion sources, synthetic generators, and physical c
 resolvers to preserve backward compatibility across all modules and tests.
 """
 
+from intelligent_tracker.video.capture_guard import CaptureReadGuard, CircuitState
 from intelligent_tracker.video.devices import (
     find_first_real_camera,
     find_physical_cameras,
@@ -14,6 +15,8 @@ from intelligent_tracker.video.source import VideoSource
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 
 __all__ = [
+    "CaptureReadGuard",
+    "CircuitState",
     "VideoSource",
     "SyntheticFrameGenerator",
     "is_physical_camera",

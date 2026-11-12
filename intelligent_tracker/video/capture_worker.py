@@ -33,6 +33,19 @@ class CaptureWorkerMixin:
     is_file: bool
     is_webcam: bool
     is_libcamera: bool
+    read_timeout: float
+    _read_guard: Optional[Any]
+
+    def _get_read_guard(self) -> Any:
+        """Return or lazily initialize the CaptureReadGuard."""
+        if not hasattr(self, "_read_guard") or self._read_guard is None:
+            from intelligent_tracker.video.capture_guard import CaptureReadGuard
+
+            self._read_guard = CaptureReadGuard(
+                timeout=getattr(self, "read_timeout", 2.0),
+                safe_unbind_cb=lambda cap: CameraDeviceHandler.safe_release(cap, settle_delay=0.1),
+            )
+        return self._read_guard
 
     def _classify_source(self) -> None:
         """Inspect source attribute to determine capture protocol and backend."""
@@ -270,6 +283,7 @@ class CaptureWorkerMixin:
         consecutive_empty = 0
         effective_fps = self.fps_limit or (self.source_fps if self.source_fps > 0 else 30.0)
         min_frame_time = (1.0 / effective_fps) if (self.is_file or self.fps_limit) else 0.0
+        guard = self._get_read_guard()
 
         try:
             while self._running:
@@ -284,8 +298,25 @@ class CaptureWorkerMixin:
                         break
                     continue
 
-                ret, frame = self._cap.read()
+                timeout = getattr(self, "read_timeout", 2.0)
+                ret, frame = guard.read(self._cap, timeout=timeout, stop_event=self._stop_event)
                 if not ret or frame is None:
+                    if not self._running:
+                        break
+                    if guard.is_reconnecting and self.auto_reconnect and not self.is_file:
+                        logger.warning(
+                            "VideoSource '%s': Circuit-breaker tripped to RECONNECTING. Unbinding driver.",
+                            self.source,
+                        )
+                        guard.safe_driver_unbind(self._cap)
+                        self._cap = None
+                        self._is_connected = False
+                        should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
+                        if not should_continue:
+                            break
+                        guard.reset()
+                        continue
+
                     keep_going, consecutive_empty, reconnect_attempts = self._handle_empty_frame(
                         consecutive_empty, reconnect_attempts
                     )
@@ -298,6 +329,7 @@ class CaptureWorkerMixin:
                     break
         finally:
             with self._lock:
+                guard.stop()
                 if self._cap:
                     CameraDeviceHandler.safe_release(self._cap, settle_delay=0.0)
                     self._cap = None
