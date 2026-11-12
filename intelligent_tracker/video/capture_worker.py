@@ -201,18 +201,23 @@ class CaptureWorkerMixin:
     ) -> Tuple[bool, int, int]:
         """Process empty frame conditions: video rewind, transient webcam retries, and reconnects."""
         if self.is_file and self.loop_video:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            ret, frame = self._cap.read()
-            if not ret or frame is None:
+            if self._cap:
                 try:
-                    self._cap.release()
-                except Exception:
-                    pass
-                if self._open_capture():
-                    ret, frame = self._cap.read()
-            if not ret or frame is None:
-                should_exit = self._stop_event.wait(timeout=0.02)
-                return not should_exit, consecutive_empty, reconnect_attempts
+                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                except Exception as e:
+                    logger.debug("Failed to rewind looping video: %s", e)
+            consecutive_empty += 1
+            if consecutive_empty > 5:
+                if self._cap:
+                    try:
+                        self._cap.release()
+                    except Exception:
+                        pass
+                    self._cap = None
+                self._open_capture()
+                consecutive_empty = 0
+            should_exit = self._stop_event.wait(timeout=0.02)
+            return not should_exit, consecutive_empty, reconnect_attempts
 
         elif self.is_webcam:
             consecutive_empty += 1

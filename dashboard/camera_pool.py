@@ -174,12 +174,8 @@ class CameraPool:
             custom_cfg["tracker"] = {"type": cfg["tracker"]}
 
         mgr = StreamManager(
-            config_path=self.base_config_path,
-            db_path=self.db_path,
-            camera_id=camera_id,
-            name=name,
-            source_override=resolved_source,
-            custom_cfg=custom_cfg if custom_cfg else None,
+            config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
+            name=name, source_override=resolved_source, custom_cfg=custom_cfg if custom_cfg else None,
         )
 
         self.streams[camera_id] = mgr
@@ -234,26 +230,20 @@ class CameraPool:
         Returns:
             The created StreamManager instance.
         """
+        old_mgr = None
         with self._lock:
-            # If camera already exists, remove/stop it first
+            # If camera already exists, pop old manager to stop outside lock
             if camera_id in self.streams:
-                self.remove_camera(camera_id)
+                old_mgr = self.streams.pop(camera_id, None)
 
             resolved_device_name = device_name or (details.get("device_name") if details else None)
             det_default = "mock" if (str(cam_type).lower() in ("synthetic", "mock") or str(source).lower() in ("synthetic", "mock")) else "yolov8"
 
             cam_entry = {
-                "id": camera_id,
-                "name": name,
-                "source": source,
-                "type": cam_type,
-                "enabled": enabled,
-                "detector": detector or det_default,
-                "tracker": tracker or "centroid",
+                "id": camera_id, "name": name, "source": source, "type": cam_type,
+                "enabled": enabled, "detector": detector or det_default, "tracker": tracker or "centroid",
                 "confidence": float(confidence) if confidence is not None else 0.40,
-                "classes": classes,
-                "details": details or {},
-                "device_name": resolved_device_name,
+                "classes": classes, "details": details or {}, "device_name": resolved_device_name,
                 "created_at": time.time(),
             }
 
@@ -261,18 +251,28 @@ class CameraPool:
             self.save_cameras()
 
             if enabled:
-                mgr = self._create_and_register_stream(camera_id, cam_entry, start=autostart)
+                mgr = self._create_and_register_stream(camera_id, cam_entry, start=False)
             else:
                 mgr = StreamManager(
-                    config_path=self.base_config_path,
-                    db_path=self.db_path,
-                    camera_id=camera_id,
-                    name=name,
-                    source_override=source,
+                    config_path=self.base_config_path, db_path=self.db_path,
+                    camera_id=camera_id, name=name, source_override=source,
                 )
                 self.streams[camera_id] = mgr
 
-            return mgr
+        if old_mgr:
+            try:
+                old_mgr.stop()
+            except Exception as e:
+                logger.debug("Error stopping old manager in add_camera: %s", e)
+
+        if enabled and autostart and mgr:
+            raw_source = cam_entry.get("source", "")
+            if isinstance(raw_source, int) or (isinstance(raw_source, str) and str(raw_source).isdigit()):
+                threading.Event().wait(0.15)
+            mgr.start()
+            logger.info("Started camera stream [%s] '%s' (%s)", camera_id, name, raw_source)
+
+        return mgr
 
     def update_camera(
         self,
@@ -331,29 +331,49 @@ class CameraPool:
             self.save_cameras()
 
             # Hot reload stream if necessary
+            old_mgr = None
             if source_changed or enabled_changed or device_name_changed or pipeline_changed:
                 if camera_id in self.streams:
                     old_mgr = self.streams.pop(camera_id)
-                    old_mgr.stop()
 
                 if cfg.get("enabled", True):
-                    self._create_and_register_stream(camera_id, cfg, start=True)
+                    self._create_and_register_stream(camera_id, cfg, start=False)
 
-            return True
+        if old_mgr:
+            try:
+                old_mgr.stop()
+            except Exception as e:
+                logger.debug("Error stopping old manager in update_camera: %s", e)
+
+        if (source_changed or enabled_changed or device_name_changed or pipeline_changed) and cfg.get("enabled", True):
+            with self._lock:
+                new_mgr = self.streams.get(camera_id)
+            if new_mgr and not new_mgr.is_running:
+                raw_source = cfg.get("source", "")
+                if isinstance(raw_source, int) or (isinstance(raw_source, str) and str(raw_source).isdigit()):
+                    threading.Event().wait(0.15)
+                new_mgr.start()
+
+        return True
 
     def remove_camera(self, camera_id: str) -> bool:
         """
         Stops and removes a camera stream dynamically from the pool.
+        Never holds self._lock across blocking worker teardown.
         """
         with self._lock:
             mgr = self.streams.pop(camera_id, None)
-            if mgr:
-                mgr.stop()
-
             removed_cfg = self.camera_configs.pop(camera_id, None)
             self.save_cameras()
-            logger.info("Removed camera [%s] from pool", camera_id)
-            return removed_cfg is not None
+
+        if mgr:
+            try:
+                mgr.stop()
+            except Exception as e:
+                logger.debug("Error stopping manager in remove_camera: %s", e)
+
+        logger.info("Removed camera [%s] from pool", camera_id)
+        return removed_cfg is not None
 
     def toggle_camera(self, camera_id: str, enabled: Optional[bool] = None) -> bool:
         """Enables or pauses a camera stream in the pool."""
@@ -409,22 +429,16 @@ class CameraPool:
                     health_status = "error"
 
                 result.append({
-                    "id": cam_id,
-                    "name": cfg.get("name", f"Camera {cam_id}"),
+                    "id": cam_id, "name": cfg.get("name", f"Camera {cam_id}"),
                     "source": str(cfg.get("source", "synthetic")),
                     "type": cfg.get("type", "synthetic" if is_synth else "rtsp"),
-                    "detector": cfg.get("detector", "yolov8"),
-                    "tracker": cfg.get("tracker", "centroid"),
-                    "confidence": cfg.get("confidence", 0.40),
-                    "classes": cfg.get("classes"),
-                    "enabled": cfg.get("enabled", True),
-                    "status": health_status,
+                    "detector": cfg.get("detector", "yolov8"), "tracker": cfg.get("tracker", "centroid"),
+                    "confidence": cfg.get("confidence", 0.40), "classes": cfg.get("classes"),
+                    "enabled": cfg.get("enabled", True), "status": health_status,
                     "error_code": health.error_code if health.error_code != "OK" else None,
-                    "error_message": health.last_error,
-                    "suggested_action": health.suggested_action,
+                    "error_message": health.last_error, "suggested_action": health.suggested_action,
                     "device_name": cfg.get("device_name") or (cfg.get("details") or {}).get("device_name"),
-                    "fps": round(telemetry.get("fps", 0.0), 1),
-                    "resolution": res_str,
+                    "fps": round(telemetry.get("fps", 0.0), 1), "resolution": res_str,
                     "active_tracks_count": len(telemetry.get("active_tracks", [])),
                     "source_type": "synthetic" if is_synth else "physical",
                 })

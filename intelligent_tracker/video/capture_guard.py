@@ -292,6 +292,18 @@ class CaptureReadGuard:
             self._unbound_caps.add(cap_id)
 
         def _do_unbind() -> None:
+            com_initialized = False
+            if sys.platform == "win32":
+                try:
+                    import ctypes
+
+                    ole32 = getattr(ctypes, "windll", None)
+                    if ole32 is not None:
+                        hr = ole32.ole32.CoInitializeEx(None, 0)
+                        com_initialized = hr in (0, 1)
+                except Exception as e:
+                    logger.debug("COM initialization in unbind worker skipped/failed: %s", e)
+
             try:
                 if self._safe_unbind_cb:
                     self._safe_unbind_cb(cap)
@@ -300,6 +312,16 @@ class CaptureReadGuard:
                     CameraDeviceHandler.safe_release(cap, settle_delay=0.1)
             except Exception as e:
                 logger.debug("Exception during background driver unbind: %s", e)
+            finally:
+                if com_initialized:
+                    try:
+                        import ctypes
+
+                        ole32 = getattr(ctypes, "windll", None)
+                        if ole32 is not None:
+                            ole32.ole32.CoUninitialize()
+                    except Exception:
+                        pass
 
         t = threading.Thread(target=_do_unbind, name="SafeDriverUnbindWorker", daemon=True)
         t.start()

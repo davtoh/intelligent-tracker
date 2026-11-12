@@ -308,6 +308,33 @@ class TestCaptureCircuitBreaker(unittest.TestCase):
             mock_ole32.CoInitializeEx.assert_called_once_with(None, 0)
             mock_ole32.CoUninitialize.assert_called_once()
 
+    def test_com_initialization_on_win32_unbind_worker(self) -> None:
+        """Verify Windows COM apartment is initialized and uninitialized on safe_driver_unbind thread."""
+        mock_ole32 = MagicMock()
+        mock_ole32.CoInitializeEx.return_value = 0  # S_OK
+
+        mock_windll = MagicMock()
+        mock_windll.ole32 = mock_ole32
+
+        unbind_done = threading.Event()
+
+        def mock_unbind(cap):
+            unbind_done.set()
+
+        with unittest.mock.patch("sys.platform", "win32"), \
+             unittest.mock.patch("ctypes.windll", mock_windll, create=True):
+            guard = CaptureReadGuard(timeout=0.1, safe_unbind_cb=mock_unbind)
+            cap = DummyQuickCap(ret=True)
+            try:
+                guard.safe_driver_unbind(cap)
+                self.assertTrue(unbind_done.wait(timeout=1.0))
+                time.sleep(0.05)  # Let worker thread finish finally block
+            finally:
+                guard.stop()
+
+            mock_ole32.CoInitializeEx.assert_called_once_with(None, 0)
+            mock_ole32.CoUninitialize.assert_called_once()
+
 
 class TestCameraPoolLockFreeTeardown(unittest.TestCase):
     """Verify CameraPool.stop_all releases locks before joining worker threads."""
@@ -351,6 +378,70 @@ class TestCameraPoolLockFreeTeardown(unittest.TestCase):
         stop_thread.join(timeout=1.0)
         self.assertFalse(stop_thread.is_alive())
         self.assertEqual(len(pool.streams), 0)
+
+    def test_remove_camera_releases_lock_during_teardown(self) -> None:
+        """Verify CameraPool._lock is accessible while remove_camera is stopping stream."""
+        pool = CameraPool(autostart=False)
+        stop_entered = threading.Event()
+        can_proceed_stop = threading.Event()
+
+        class SlowStreamManager:
+            def stop(self):
+                stop_entered.set()
+                can_proceed_stop.wait(timeout=1.0)
+
+        mock_stream = SlowStreamManager()
+        pool.streams = {"cam_01": mock_stream}
+        pool.camera_configs = {"cam_01": {"id": "cam_01", "name": "Test"}}
+
+        remove_thread = threading.Thread(target=lambda: pool.remove_camera("cam_01"), daemon=True)
+        remove_thread.start()
+
+        self.assertTrue(stop_entered.wait(timeout=1.0))
+        lock_acquired = pool._lock.acquire(timeout=0.2)
+        try:
+            self.assertTrue(lock_acquired, "CameraPool._lock was blocked during remove_camera stop()!")
+        finally:
+            if lock_acquired:
+                pool._lock.release()
+
+        can_proceed_stop.set()
+        remove_thread.join(timeout=1.0)
+        self.assertFalse(remove_thread.is_alive())
+        self.assertNotIn("cam_01", pool.streams)
+
+    def test_update_camera_releases_lock_during_teardown(self) -> None:
+        """Verify CameraPool._lock is accessible while update_camera is restarting stream."""
+        pool = CameraPool(autostart=False)
+        stop_entered = threading.Event()
+        can_proceed_stop = threading.Event()
+
+        class SlowStreamManager:
+            def stop(self):
+                stop_entered.set()
+                can_proceed_stop.wait(timeout=1.0)
+
+        mock_stream = SlowStreamManager()
+        pool.streams = {"cam_01": mock_stream}
+        pool.camera_configs = {"cam_01": {"id": "cam_01", "name": "Old", "source": "0", "enabled": True}}
+
+        update_thread = threading.Thread(
+            target=lambda: pool.update_camera("cam_01", source="synthetic"),
+            daemon=True,
+        )
+        update_thread.start()
+
+        self.assertTrue(stop_entered.wait(timeout=1.0))
+        lock_acquired = pool._lock.acquire(timeout=0.2)
+        try:
+            self.assertTrue(lock_acquired, "CameraPool._lock was blocked during update_camera stop()!")
+        finally:
+            if lock_acquired:
+                pool._lock.release()
+
+        can_proceed_stop.set()
+        update_thread.join(timeout=1.0)
+        self.assertFalse(update_thread.is_alive())
 
 
 if __name__ == "__main__":
