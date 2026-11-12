@@ -151,9 +151,14 @@ const makeEl = (tag = 'div', id = '') => {
     set: (html) => {
       el._html = String(html);
       el._children = [];
+      el.textContent = '';
       const stack = [el];
       const tagRe = /<(\\/?)(div|button|select|option|span|h4|label|code|strong)\\b([^>]*)>/gi;
+      let lastIdx = 0;
       for (let m; (m = tagRe.exec(el._html)) !== null;) {
+        const chunk = el._html.slice(lastIdx, m.index);
+        if (chunk.trim()) stack[stack.length - 1].textContent += chunk.trim();
+        lastIdx = tagRe.lastIndex;
         const isClose = m[1] === '/';
         const tagName = m[2].toLowerCase();
         if (isClose) {
@@ -733,6 +738,59 @@ console.log(JSON.stringify({
         self.assertEqual(res["playCalls"], 0)
         self.assertEqual(res["saved"]["time"], 18)
         self.assertFalse(res["saved"]["wasPlaying"])
+
+    def test_reconvert_button_text_containment_and_dimensions(self):
+        """Rendered .video-action-menu overrides .glass-panel clamping and contains full Re-convert label."""
+        res = self._run_js(
+            ["video_library.js"],
+            """
+const files = [
+  { filename: 'cam_1.mp4', video_url: '/videos/cam_1.mp4', size_mb: 10.0, codec: 'hevc', web_compatible: false, has_converted_h264: true, converted_filename: 'cam_1_h264.mp4' },
+];
+sandbox.VideoLibrary.registerVideos(files);
+listContainer.innerHTML = sandbox.VideoLibrary.renderVideoFileCard(files[0], 'cam_1.mp4');
+sandbox.VideoLibrary.bindPairedActionControls(listContainer);
+
+const toggle = listContainer.querySelector('.btn-action-menu-toggle');
+const menu = listContainer.querySelector('.video-action-menu');
+const reconvertBtn = menu.querySelector('.btn-reconvert-video');
+toggle.click();
+
+console.log(JSON.stringify({
+  menuHidden: menu.hidden,
+  menuHasGlassPanel: menu.classList.contains('glass-panel'),
+  menuRole: menu.getAttribute('role'),
+  btnText: reconvertBtn.textContent,
+  btnRole: reconvertBtn.getAttribute('role'),
+  btnHasXsClass: reconvertBtn.classList.contains('btn-xs'),
+}));
+""",
+        )
+        self.assertFalse(res["menuHidden"])
+        self.assertTrue(res["menuHasGlassPanel"])
+        self.assertEqual(res["menuRole"], "menu")
+        self.assertEqual(res["btnText"], "↺ Re-convert")
+        self.assertEqual(res["btnRole"], "menuitem")
+        self.assertTrue(res["btnHasXsClass"])
+
+        scrubber_css = (CSS_DIR / "scrubber.css").read_text(encoding="utf-8")
+        menu_glass_match = re.search(r"\.video-action-menu\.glass-panel\s*\{([^}]*)\}", scrubber_css)
+        self.assertIsNotNone(menu_glass_match, "Expected .video-action-menu.glass-panel specificity override")
+        menu_glass_block = menu_glass_match.group(1)
+        min_width_match = re.search(r"min-width:\s*(\d+)px;", menu_glass_block)
+        self.assertIsNotNone(min_width_match)
+        self.assertGreaterEqual(int(min_width_match.group(1)), 124)
+        self.assertIn("width: max-content;", menu_glass_block)
+        self.assertNotRegex(menu_glass_block, r"max-width:\s*100%;")
+        self.assertIn("max-width: calc(100vw - 32px);", menu_glass_block)
+
+        btn_blocks = re.findall(r"(?:\A|\n)\s*\.video-action-menu\s+\.btn-xs\s*\{([^}]*)\}", scrubber_css)
+        self.assertTrue(btn_blocks, "Expected .video-action-menu .btn-xs rule block in scrubber.css")
+        combined_btn_css = "\n".join(btn_blocks)
+        self.assertIn("width: 100%;", combined_btn_css)
+        self.assertIn("white-space: nowrap;", combined_btn_css)
+        self.assertRegex(combined_btn_css, r"background:\s*rgba\(")
+        self.assertNotIn("text-overflow: ellipsis", combined_btn_css)
 
 
 if __name__ == "__main__":

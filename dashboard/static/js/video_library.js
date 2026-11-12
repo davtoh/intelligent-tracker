@@ -74,8 +74,8 @@
     if (menuListenersBound) return;
     menuListenersBound = true;
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.video-action-dropdown')) closeAllActionMenus();
-    });
+      if (!e.target?.closest?.('.video-action-dropdown')) closeAllActionMenus();
+    }, true);
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeAllActionMenus();
     });
