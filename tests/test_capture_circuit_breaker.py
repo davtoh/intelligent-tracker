@@ -2,6 +2,8 @@
 Unit tests for CaptureReadGuard, camera read circuit-breaker, and lock-free pool teardown.
 """
 
+import os
+import tempfile
 import threading
 import time
 import unittest
@@ -339,9 +341,14 @@ class TestCaptureCircuitBreaker(unittest.TestCase):
 class TestCameraPoolLockFreeTeardown(unittest.TestCase):
     """Verify CameraPool.stop_all releases locks before joining worker threads."""
 
+    def setUp(self) -> None:
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_dir.cleanup)
+        self._config_file = os.path.join(self._tmp_dir.name, "cameras.json")
+
     def test_stop_all_releases_lock_during_worker_teardown(self) -> None:
         """Verify self._lock is accessible while managers are stopping."""
-        pool = CameraPool(autostart=False)
+        pool = CameraPool(config_file=self._config_file, autostart=False)
         stop_entered = threading.Event()
         can_proceed_stop = threading.Event()
 
@@ -381,7 +388,7 @@ class TestCameraPoolLockFreeTeardown(unittest.TestCase):
 
     def test_remove_camera_releases_lock_during_teardown(self) -> None:
         """Verify CameraPool._lock is accessible while remove_camera is stopping stream."""
-        pool = CameraPool(autostart=False)
+        pool = CameraPool(config_file=self._config_file, autostart=False)
         stop_entered = threading.Event()
         can_proceed_stop = threading.Event()
 
@@ -412,7 +419,7 @@ class TestCameraPoolLockFreeTeardown(unittest.TestCase):
 
     def test_update_camera_releases_lock_during_teardown(self) -> None:
         """Verify CameraPool._lock is accessible while update_camera is restarting stream."""
-        pool = CameraPool(autostart=False)
+        pool = CameraPool(config_file=self._config_file, autostart=False)
         stop_entered = threading.Event()
         can_proceed_stop = threading.Event()
 

@@ -23,6 +23,7 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
   ```
 - Ensure 100% green test passes across all unit and integration tests.
 - When adding new modules or fixing bugs, add corresponding unit tests in `tests/test_<module>.py`.
+- **Strict Test State & Config Isolation**: Tests must NEVER read from or write to live repository config, database, or output paths (`configs/cameras.json`, `data/*.db`, `data/reports/`, or root backup archives) via default constructor arguments. Always pass an isolated `tempfile.TemporaryDirectory()` path to stateful managers (e.g. `CameraPool(config_file=os.path.join(tmpdir, "cameras.json"), autostart=False)`, `TrackerDB(db_path=...)`) and register cleanup via `addCleanup()` or `tearDown()`.
 - Never leave temporary `scratch/` directories or browser profiles inside the repository root.
 
 ## 4. Documentation Standards (OS-Agnostic)
