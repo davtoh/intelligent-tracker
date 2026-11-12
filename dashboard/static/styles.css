@@ -22,6 +22,7 @@
 /* 5. Feature Views & Video Studio Scrubber */
 @import url("css/views.css");
 @import url("css/scrubber.css");
+@import url("css/scrubber_overlays.css");
 
 /* 6. Scenario Studio, Topology & Spatial Analysis */
 @import url("css/studio.css");

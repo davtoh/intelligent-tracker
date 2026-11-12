@@ -28,6 +28,7 @@
 | 14 | Dynamic Detector & Pipeline Configuration (Phase 1) | ✅ **COMPLETE** |
 | 15 | System Capabilities Discovery & Camera AI Config Modal (Phase 2) | ✅ **COMPLETE** |
 | 16 | Video Library & Batch Analysis UI Integration (Phase 3) | ✅ **COMPLETE** |
+| 17 | Video Processing Concurrency, Progress Engine & Interactive Cancellation | ✅ **COMPLETE** |
 
 ---
 
@@ -325,7 +326,7 @@ $env:MPLBACKEND="Agg"
   - Intel NUC: OpenVINO execution provider hooks.
 
 **6c — CI/CD:**
-- `.github/workflows/ci.yml`: Python 3.10, 3.11, 3.12 matrix, ruff lint, unit test suite, and Sphinx docs build.
+- `.github/workflows/ci.yml`: Python 3.11, 3.12 matrix, fail-safe timeouts, ruff lint, unit test suite, and Sphinx docs build.
 - Badge on `README.rst`.
 
 **6d — Sphinx Documentation Modernization:**
@@ -664,6 +665,19 @@ $env:MPLBACKEND='Agg'; .\.venv\Scripts\python.exe -m unittest discover tests
 5. **Video Scrubber UI Coordinator (`dashboard/static/video_scrubber.js`):** Updated `#btn-video-add-camera` and `#btn-video-analyze` click handlers to open interactive configuration modals with graceful fallbacks.
 6. **Automated Unit & Integration Regression Suite (`tests/test_video_batch_feed_ui.py`):** Added 5 unit tests verifying batch analysis JSON payloads, query parameter fallbacks, feed promotion stream registration in `CameraPool`, Pydantic validation bounds, and 404 error handling.
 
+## ✅ [Milestone 17] — Video Processing Concurrency, Progress Engine & Interactive Cancellation (COMPLETE)
+**Status: COMPLETE** — Verified: 332/332 tests pass; Sphinx docs built cleanly with 0 warnings.
+**Scope:** Eliminates task collisions, cross-video state leaks, and lack of visibility when transcoding or analyzing video recordings in the Intelligent Tracker Studio. Introduces an asynchronous backend coordinator, non-blocking polling endpoints, interruptible subprocess/thread cancellation, and a unified frontend client coordinator.
+
+### Deliverables Completed:
+1. **Core Worker Cancellation & Progress Hooks (`intelligent_tracker/batch.py` & `dashboard/services/video_transcoder.py`):** Added `progress_callback` and `stop_event` parameters to `VideoIndexer.process_video` and introduced `VideoTranscodeService.transcode_to_h264_async` with stdout parsing (`-progress pipe:1`) and Windows process group cancellation (`CREATE_NEW_PROCESS_GROUP`).
+2. **Asynchronous Video Job Coordinator (`dashboard/services/video_jobs_service.py`):** Implemented thread-safe `VideoJobManager` singleton with bounded concurrency (`BoundedSemaphore(2)`), per-video mutual exclusion (preventing concurrent tasks on the same file), job history capacity pruning, and sub-10ms cancellation signaling.
+3. **REST Endpoints for Video Jobs (`dashboard/routers/videos.py`):** Refactored `/api/videos/{filename}/transcode` and `/api/videos/{filename}/analyze` to return 202 Accepted with `job_id` (and 409 Conflict with active job metadata on duplicate clicks). Added `GET /api/videos/jobs/{job_id}`, `GET /api/videos/jobs`, and `POST /api/videos/jobs/{job_id}/cancel`.
+4. **Frontend Video Job Client (`dashboard/static/js/video_jobs.js`):** Implemented `VideoJobClient` managing polling, event subscriptions, interactive conflict modal (`#modal-job-conflict`) allowing 1-click "Cancel & Proceed" or "Keep Running", inline animated progress bar rendering with live metrics, and floating background task pills when navigating between videos.
+5. **Video Batch & Library Submodule Integration (`dashboard/static/js/video_batch.js` & `dashboard/static/js/video_library.js`):** Connected batch analytics and H.264 transcoding triggers to `VideoJobClient`, updating inline progress tracks, report cards, and dismissible error banners without UI blocking.
+6. **Video Scrubber State Isolation (`dashboard/static/video_scrubber.js`):** Synchronized UI controls on video switch in `loadVideoIntoPlayer`, preventing button lockups and progress bar cross-contamination.
+7. **Automated Unit & Integration Regression Suite (`tests/test_video_jobs.py`):** Added 10 tests verifying worker progress callbacks, early cancellation, job manager concurrency limits, per-video conflict rejection (409), REST job endpoints, and clean cleanup.
+
 ## Dependency Graph
 
 ```
@@ -683,6 +697,7 @@ M1 (Env & Core) ✅
                                                                           └── M14 (Dynamic Detector & Pipeline Configuration) ✅
                                                                                  └── M15 (System Capabilities & Camera AI Config Modal) ✅
                                                                                         └── M16 (Video Library & Batch Analysis UI Integration) ✅
+                                                                                               └── M17 (Video Job Concurrency & Progress Engine) ✅
 ```
 
 ---

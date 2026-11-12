@@ -67,9 +67,10 @@ Key Capabilities
 
 5. **Video Studio & Playback Scrubber**:
    - Upload recorded footage (``.mp4``, ``.avi``, ``.mkv``, ``.mov``) via web UI or REST API into ``data/videos/``.
+   - Automatic parent/H.264 child pairing with one-click ``▶ Switch to H.264`` and ``↺ Re-convert`` actions.
    - Precise frame-stepping controls (``< -1 Frame``, ``> +1 Frame``) and variable playback rates (1x, 2x, 4x, 8x).
    - One-click registration of recorded video as an active live camera feed.
-   - One-click offline occurrence indexing via ``BatchVideoIndexer`` generating detection tallies, dwell times, and sighting records in ``TrackerDB``.
+   - One-click offline occurrence indexing via ``BatchVideoIndexer`` generating detection tallies, dwell times, and sighting records in ``TrackerDB``, paired with resolution-independent multi-layer canvas overlays (``#scrubber-overlay-layers``) and live progressive detection streaming.
 
 6. **State Persistence, Auto-Restore & Full Import/Export**:
    - **One-Click Snapshot Export**: Packages SQLite database (``tracker.db``), face and entity crops (``data/crops/``), and configurations (``configs/``) into a portable, versioned ``.zip`` archive with SHA-256 checksums.
@@ -140,10 +141,13 @@ Video Studio & Scrubber Endpoints
      - Description
    * - ``GET``
      - ``/api/videos``
-     - List uploaded recording files in ``data/videos/``.
+     - List uploaded recording files in ``data/videos/`` with codec pairing flags (``has_converted_h264``, ``converted_filename``).
    * - ``POST``
      - ``/api/videos/upload``
      - Upload ``.mp4``, ``.avi``, or ``.mkv`` recording via multipart form data.
+   * - ``POST``
+     - ``/api/videos/{name}/transcode``
+     - Transcode recording to web-compatible H.264 MP4 (idempotent unless ``force=true``).
    * - ``DELETE``
      - ``/api/videos/{name}``
      - Delete recording file from disk.
@@ -152,7 +156,16 @@ Video Studio & Scrubber Endpoints
      - Register uploaded video file as an active camera stream in the pool.
    * - ``POST``
      - ``/api/videos/{name}/analyze``
-     - Run offline batch entity and sighting occurrence analytics.
+     - Run offline batch entity and sighting occurrence analytics (records ``source_resolution``, ``source_fps``, and container PTS).
+   * - ``GET``
+     - ``/api/videos/{name}/reports``
+     - Retrieve consolidated occurrence report history across original and paired ``_h264.mp4`` files.
+   * - ``GET``
+     - ``/api/videos/{name}/detections``
+     - Retrieve latest resolution-aware frame detection stream for scrubber overlay rendering.
+   * - ``GET``
+     - ``/api/videos/{name}/jobs/{job_id}/stream``
+     - Stream progressive frame detections incrementally (`?since=N`) while an analytics job is active.
    * - ``GET``
      - ``/videos/{name}``
      - Stream video file supporting HTML5 seeking and range requests.

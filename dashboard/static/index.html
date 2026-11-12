@@ -329,8 +329,11 @@
       <div class="scrubber-grid">
         <div class="glass-panel video-player-card">
           <div class="card-header">
-            <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback
-              Scrubber</h3>
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto;">
+              <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback
+                Scrubber</h3>
+              <span id="scrubber-header-job-badge" class="badge-running-job" style="display: none;"></span>
+            </div>
             <div class="card-actions">
               <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera
                 Feed</button>
@@ -338,8 +341,12 @@
             </div>
           </div>
 
+          <!-- Prominent Active Video Job Banner (Milestone 17) -->
+          <div id="scrubber-active-job-banner" style="display: none; margin-bottom: 12px;"></div>
+
           <div class="scrubber-viewport">
             <video id="scrubber-video-player" playsinline></video>
+            <canvas id="scrubber-overlay-canvas"></canvas>
           </div>
 
           <!-- Interactive Playback Scrubber Toolbar -->
@@ -348,6 +355,9 @@
               <input type="range" id="scrubber-timeline-slider" min="0" max="100" value="0" step="0.1" />
               <span id="scrubber-time-display" class="time-display">0:00 / 0:00 (Frame #0)</span>
             </div>
+            <div id="scrubber-overlay-layers" class="scrubber-overlay-layers" role="toolbar" focusgroup="toolbar wrap"
+              aria-label="Overlay detection layers" aria-controls="scrubber-overlay-canvas" hidden></div>
+            <p id="scrubber-overlay-layers-status" class="scrubber-sr-only" role="status" aria-live="polite"></p>
             <div class="scrubber-controls-row">
               <div class="scrubber-buttons-left">
                 <button class="btn btn-sm btn-outline" id="scrubber-btn-prev" title="Step Back 1 Frame">&lt; -1
@@ -1647,6 +1657,8 @@
   <script src="/static/js/camera_discovery.js"></script>
   <script src="/static/js/camera_ai_config.js"></script>
   <script src="/static/js/camera_grid.js"></script>
+  <script src="/static/js/video_jobs.js"></script>
+  <script src="/static/js/video_batch_reports.js"></script>
   <script src="/static/js/video_batch.js"></script>
   <script src="/static/js/video_library.js"></script>
   <script src="/static/js/video_feed_modal.js"></script>
@@ -1662,6 +1674,12 @@
   <script src="/static/js/nav_tabs_manager.js"></script>
   <script src="/static/camera_manager.js"></script>
   <script src="/static/js/camera_diagnostics_ui.js"></script>
+  <script src="/static/js/scrubber_overlay_renderer.js"></script>
+  <script src="/static/js/overlay_layer_toolbar.js"></script>
+  <script src="/static/js/overlay_layers.js"></script>
+  <script src="/static/js/scrubber_overlay.js"></script>
+  <script src="/static/js/scrubber_playback_state.js"></script>
+  <script src="/static/js/scrubber_library_bridge.js"></script>
   <script src="/static/video_scrubber.js"></script>
   <script src="/static/studio.js"></script>
   <script src="/static/review_and_rsac.js"></script>

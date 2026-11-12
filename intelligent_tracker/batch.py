@@ -21,10 +21,13 @@ Provides:
 import os
 import sys
 import time
+import math
 import json
 import csv
 import argparse
-from typing import Dict, List, Optional, Any, Tuple
+import logging
+import threading
+from typing import Dict, List, Optional, Any, Tuple, Callable
 
 import cv2
 import numpy as np
@@ -35,6 +38,25 @@ from intelligent_tracker.matcher import GalleryMatcher
 from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.analytics import AnalyticsEngine
+
+logger = logging.getLogger(__name__)
+
+
+def _dispatch_frame_flush(
+    callback: Optional[Callable[[List[Dict[str, Any]], Dict[str, Any]], None]],
+    frame_detections: List[Dict[str, Any]],
+    last_flushed_idx: int,
+    meta: Dict[str, Any],
+) -> int:
+    """Emit newly collected frame detections to a progressive stream listener."""
+    if callback is None:
+        return last_flushed_idx
+    chunk = list(frame_detections[last_flushed_idx:])
+    try:
+        callback(chunk, meta)
+    except Exception as cb_err:
+        logger.debug("Frame flush callback error: %s", cb_err)
+    return len(frame_detections)
 
 
 class VideoIndexer:
@@ -89,6 +111,10 @@ class VideoIndexer:
         source_label: Optional[str] = None,
         max_frames: int = 0,
         verbose: bool = True,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        stop_event: Optional[threading.Event] = None,
+        frame_flush_callback: Optional[Callable[[List[Dict[str, Any]], Dict[str, Any]], None]] = None,
+        flush_interval: int = 30,
     ) -> Dict[str, Any]:
         """
         Process a recorded video file, catalog occurrences into TrackerDB,
@@ -98,6 +124,10 @@ class VideoIndexer:
         :param source_label: Custom name for the video source (defaults to filename).
         :param max_frames: Max frames to process (0 = whole video).
         :param verbose: Print progress to stdout.
+        :param progress_callback: Optional callback receiving progress dict.
+        :param stop_event: Optional threading.Event to interrupt indexing early.
+        :param frame_flush_callback: Optional callback receiving (chunk, meta) periodically.
+        :param flush_interval: Processed frame interval for progressive flushes (default 30).
         :return: Execution summary dictionary.
         """
         if not os.path.isfile(video_path):
@@ -109,9 +139,11 @@ class VideoIndexer:
 
         source_name = source_label or os.path.basename(video_path)
         total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        raw_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        fps = raw_fps if (math.isfinite(raw_fps) and raw_fps > 0.0) else 30.0
+        source_fps = round(fps, 4)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         duration_sec = total_video_frames / fps if fps > 0 else 0.0
 
         if verbose:
@@ -125,15 +157,29 @@ class VideoIndexer:
 
         processed_frames = 0
         read_frames = 0
+        total_detections_count = 0
         matched_identifications = 0
         identified_entities = set()
+        cancelled = False
         start_wall_time = time.time()
+        last_cb_time = 0.0
+        frame_detections: List[Dict[str, Any]] = []
+        last_flushed_idx = 0
+        last_video_timestamp = 0.0
+        flush_step = max(1, int(flush_interval))
 
         try:
             while True:
+                if stop_event is not None and stop_event.is_set():
+                    cancelled = True
+                    break
+
                 ret, frame = cap.read()
                 if not ret or frame is None:
                     break
+
+                if (width <= 0 or height <= 0) and hasattr(frame, "shape"):
+                    height, width = int(frame.shape[0]), int(frame.shape[1])
 
                 read_frames += 1
                 if max_frames > 0 and read_frames > max_frames:
@@ -144,10 +190,17 @@ class VideoIndexer:
                     continue
 
                 processed_frames += 1
-                video_timestamp = (read_frames - 1) / fps
+                pos_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+                if pos_msec is not None and math.isfinite(pos_msec) and pos_msec > 0.0:
+                    video_timestamp = pos_msec / 1000.0
+                else:
+                    video_timestamp = (read_frames - 1) / fps
+                last_video_timestamp = video_timestamp
 
                 # 1. Detect
                 detections = self.detector.detect(frame)
+                if detections:
+                    total_detections_count += len(detections)
 
                 # 2. Track
                 tracks = self.tracker.update(detections, timestamp=video_timestamp)
@@ -165,11 +218,60 @@ class VideoIndexer:
                     for ev in events:
                         identified_entities.add(ev.entity_id)
 
+                # Record frame-indexed active tracks for video overlay
+                track_objects = tracks.values() if isinstance(tracks, dict) else tracks
+                active_tracks = [t.to_dict() for t in track_objects if hasattr(t, "to_dict")]
+                if active_tracks:
+                    frame_detections.append({
+                        "time": round(video_timestamp, 3),
+                        "frame": read_frames - 1,
+                        "source_resolution": [width, height],
+                        "tracks": active_tracks,
+                    })
+
                 # 4. Optional Spatial Analytics
                 if self.analytics is not None:
                     self.analytics.update(tracks, timestamp=video_timestamp)
 
-                # Progress printing
+                # 5. Progressive Detection Chunk Flush (every flush_step processed frames)
+                if frame_flush_callback is not None and processed_frames % flush_step == 0:
+                    last_flushed_idx = _dispatch_frame_flush(
+                        frame_flush_callback,
+                        frame_detections,
+                        last_flushed_idx,
+                        {
+                            "source_resolution": [width, height],
+                            "source_fps": source_fps,
+                            "processed_frames": processed_frames,
+                            "read_frames": read_frames,
+                            "total_frames": total_video_frames,
+                            "latest_time": round(video_timestamp, 3),
+                            "cancelled": False,
+                            "final": False,
+                        },
+                    )
+
+                # Progress reporting via callback or stdout
+                now = time.time()
+                if (read_frames % 10 == 0 or (now - last_cb_time) >= 0.25):
+                    last_cb_time = now
+                    pct = (read_frames / total_video_frames * 100) if total_video_frames > 0 else 0.0
+                    elapsed = now - start_wall_time
+                    fps_eff = processed_frames / elapsed if elapsed > 0 else 0.0
+                    if progress_callback is not None:
+                        try:
+                            progress_callback({
+                                "read_frames": read_frames,
+                                "total_frames": total_video_frames,
+                                "processed_frames": processed_frames,
+                                "percent": round(pct, 1),
+                                "fps": round(fps_eff, 1),
+                                "sightings": matched_identifications,
+                                "elapsed": round(elapsed, 1),
+                            })
+                        except Exception as cb_err:
+                            logger.debug("Progress callback error: %s", cb_err)
+
                 if verbose and processed_frames % 20 == 0:
                     pct = (read_frames / total_video_frames * 100) if total_video_frames > 0 else 0
                     elapsed = time.time() - start_wall_time
@@ -186,21 +288,62 @@ class VideoIndexer:
             del cap
 
         elapsed_wall_time = time.time() - start_wall_time
+        final_pct = 100.0 if (not cancelled and read_frames >= total_video_frames and total_video_frames > 0) else (
+            (read_frames / total_video_frames * 100) if total_video_frames > 0 else 0.0
+        )
+        if progress_callback is not None:
+            try:
+                progress_callback({
+                    "read_frames": read_frames,
+                    "total_frames": total_video_frames,
+                    "processed_frames": processed_frames,
+                    "percent": round(final_pct, 1),
+                    "fps": round(processed_frames / max(1e-4, elapsed_wall_time), 1),
+                    "sightings": matched_identifications,
+                    "elapsed": round(elapsed_wall_time, 1),
+                    "cancelled": cancelled,
+                })
+            except Exception as cb_err:
+                logger.debug("Final progress callback error: %s", cb_err)
+
+        if frame_flush_callback is not None:
+            last_flushed_idx = _dispatch_frame_flush(
+                frame_flush_callback,
+                frame_detections,
+                last_flushed_idx,
+                {
+                    "source_resolution": [width, height],
+                    "source_fps": source_fps,
+                    "processed_frames": processed_frames,
+                    "read_frames": read_frames,
+                    "total_frames": total_video_frames,
+                    "latest_time": round(last_video_timestamp, 3),
+                    "cancelled": cancelled,
+                    "final": True,
+                },
+            )
+
         if verbose:
-            print("\n[COMPLETED] Indexed {} frames in {:.2f}s ({:.1f} FPS)".format(
-                processed_frames, elapsed_wall_time, processed_frames / max(1e-4, elapsed_wall_time)
+            tag = "[CANCELLED]" if cancelled else "[COMPLETED]"
+            print("\n{} Indexed {} frames in {:.2f}s ({:.1f} FPS)".format(
+                tag, processed_frames, elapsed_wall_time, processed_frames / max(1e-4, elapsed_wall_time)
             ))
 
         return {
             "video_path": video_path,
             "source": source_name,
+            "source_resolution": [width, height],
+            "source_fps": source_fps,
             "total_frames_in_file": total_video_frames,
             "read_frames": read_frames,
             "processed_frames": processed_frames,
             "elapsed_seconds": round(elapsed_wall_time, 2),
             "video_duration_seconds": round(duration_sec, 2),
+            "total_detections": total_detections_count,
             "identifications_count": matched_identifications,
             "unique_entities_identified": list(identified_entities),
+            "cancelled": cancelled,
+            "frame_detections": frame_detections,
         }
 
     def generate_occurrence_report(

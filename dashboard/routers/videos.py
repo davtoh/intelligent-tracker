@@ -9,33 +9,33 @@ transcoding, dynamic camera registration, and HTML5 video streaming/seeking.
 
 import logging
 import os
-import subprocess
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     VIDEOS_DIR,
-    get_active_stream_manager,
     get_camera_pool,
     set_camera_pool,
 )
-from dashboard.schemas import VideoAddAsCameraRequest, VideoAnalyzeRequest
+from dashboard.routers.video_jobs import router as video_jobs_router
+from dashboard.schemas import VideoAddAsCameraRequest
+from dashboard.services.video_jobs_service import get_video_job_manager
 from dashboard.services.video_transcoder import VideoTranscodeService
-from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.videos")
 
 router = APIRouter(tags=["Videos & Scrubber"])
-
+# Compose async jobs router (transcoding, analytics, job progress polling, cancellation)
+router.include_router(video_jobs_router)
 
 def _handle_auto_transcode(dest_path: str, safe_name: str) -> tuple[str, str, dict]:
     """Transcode uploaded video to H.264 if not web compatible."""
-    base_name, _ = os.path.splitext(safe_name)
-    transcoded_name = f"{base_name}_h264.mp4"
-    transcoded_path = os.path.join(VIDEOS_DIR, transcoded_name)
+    pair = VideoTranscodeService.get_h264_pair_info(dest_path)
+    transcoded_name = pair["output_filename"]
+    transcoded_path = pair["output_path"]
     try:
         VideoTranscodeService.transcode_to_h264(
             dest_path, transcoded_path, timeout=120.0
@@ -52,11 +52,16 @@ async def list_videos():
     """List uploaded and local video recordings in data/videos/."""
     files = []
     if os.path.exists(VIDEOS_DIR):
-        for f in os.listdir(VIDEOS_DIR):
-            if f.lower().endswith((".mp4", ".avi", ".mkv", ".mov")):
+        for f in sorted(os.listdir(VIDEOS_DIR)):
+            lower_name = f.lower()
+            if lower_name.endswith((".mp4", ".avi", ".mkv", ".mov")) and not lower_name.endswith(".part.mp4"):
                 full = os.path.join(VIDEOS_DIR, f)
                 stat = os.stat(full)
                 probe = VideoTranscodeService.probe_video(full)
+                is_web = probe.get("web_compatible", False)
+                pair = VideoTranscodeService.get_h264_pair_info(full)
+                has_converted = (not is_web) and pair["has_converted_h264"]
+                converted_name = pair["converted_filename"] if has_converted else None
                 files.append({
                     "filename": f,
                     "path": full,
@@ -65,7 +70,9 @@ async def list_videos():
                     "modified": stat.st_mtime,
                     "video_url": f"/videos/{f}",
                     "codec": probe.get("codec", "unknown"),
-                    "web_compatible": probe.get("web_compatible", False),
+                    "web_compatible": is_web,
+                    "has_converted_h264": has_converted,
+                    "converted_filename": converted_name,
                     "resolution": (
                         f"{probe.get('width', 0)}x{probe.get('height', 0)}"
                         if probe.get("width")
@@ -119,45 +126,6 @@ async def upload_video(
     }
 
 
-@router.post("/api/videos/{filename}/transcode")
-async def transcode_video(
-    filename: str, target_resolution: Optional[str] = "1080p"
-):
-    """Transcodes a video recording (e.g. HEVC/H.265 or AVI) to web-optimized H.264 MP4."""
-    safe_name = os.path.basename(filename)
-    path = os.path.join(VIDEOS_DIR, safe_name)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Video file not found")
-
-    base_name, _ = os.path.splitext(safe_name)
-    output_filename = f"{base_name}_h264.mp4"
-    output_path = os.path.join(VIDEOS_DIR, output_filename)
-
-    try:
-        VideoTranscodeService.transcode_to_h264(
-            input_path=path,
-            output_path=output_path,
-            target_resolution=target_resolution,
-            timeout=300.0,
-        )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(
-            status_code=504, detail="Transcoding timed out on large file."
-        )
-    except Exception as e:
-        logger.error("Transcode failed for %s: %s", safe_name, e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    stat = os.stat(output_path)
-    return {
-        "status": "success",
-        "original_filename": safe_name,
-        "output_filename": output_filename,
-        "video_url": f"/videos/{output_filename}",
-        "size_mb": round(stat.st_size / (1024 * 1024), 2),
-    }
-
-
 @router.delete("/api/videos/{filename}")
 async def delete_video(filename: str):
     """Delete a recording from data/videos/."""
@@ -165,6 +133,8 @@ async def delete_video(filename: str):
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
+    job_mgr = get_video_job_manager()
+    job_mgr.cancel_active_job_for_file(safe_name, wait_timeout=2.0)
     os.remove(path)
     return {"status": "success", "deleted": safe_name}
 
@@ -225,69 +195,6 @@ async def add_video_as_camera(
         "confidence": conf,
         "classes": target_classes,
     }
-
-
-@router.post("/api/videos/{filename}/analyze")
-async def analyze_video(
-    filename: str,
-    sample_rate: int = Query(1, ge=1),
-    detector: Optional[str] = Query(None, description="Detector model name (e.g. yolov8, mock)"),
-    confidence: Optional[float] = Query(None, ge=0.01, le=1.0, description="Detection confidence threshold"),
-    classes: Optional[str] = Query(None, description="Comma-separated class filter names (e.g. person,car)"),
-    req: Optional[VideoAnalyzeRequest] = None,
-):
-    """Run offline occurrence indexer and entity analytics on a video recording."""
-    safe_name = os.path.basename(filename)
-    path = os.path.join(VIDEOS_DIR, safe_name)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Video file not found")
-
-    from intelligent_tracker.batch import VideoIndexer
-
-    sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
-    det = req.detector if (req and req.detector is not None) else (detector or "yolov8")
-    conf = req.confidence if (req and req.confidence is not None) else (confidence if confidence is not None else 0.40)
-    raw_classes = (req.classes if req and req.classes is not None else None) or classes
-
-    if isinstance(raw_classes, str):
-        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
-    elif isinstance(raw_classes, (list, tuple, set)):
-        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
-    else:
-        target_classes = None
-
-    mgr = get_active_stream_manager()
-    db = mgr.db if (mgr and mgr.db) else TrackerDB("data/tracker.db")
-
-    try:
-        indexer = VideoIndexer(
-            db=db,
-            detector_name=det,
-            sample_rate=sr,
-            conf_threshold=conf,
-            classes=target_classes,
-        )
-    except Exception as e:
-        logger.warning(
-            "VideoIndexer initialization with detector '%s' failed (%s), falling back to mock",
-            det,
-            e,
-        )
-        indexer = VideoIndexer(
-            db=db,
-            detector_name="mock",
-            sample_rate=sr,
-            conf_threshold=conf,
-            classes=target_classes,
-        )
-
-    summary = indexer.process_video(video_path=path, verbose=False)
-    report = indexer.generate_occurrence_report()
-    report["frames_processed"] = summary.get("processed_frames", 0)
-    report["total_detections"] = summary.get("identifications_count", 0)
-    report["unique_entities_identified"] = len(summary.get("unique_entities_identified", []))
-    report["execution_summary"] = summary
-    return {"status": "success", "report": report}
 
 
 @router.api_route("/videos/{filename}", methods=["GET", "HEAD"])
