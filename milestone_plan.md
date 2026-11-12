@@ -326,7 +326,7 @@ $env:MPLBACKEND="Agg"
   - Intel NUC: OpenVINO execution provider hooks.
 
 **6c — CI/CD:**
-- `.github/workflows/ci.yml`: Python 3.10, 3.11, 3.12 matrix, ruff lint, unit test suite, and Sphinx docs build.
+- `.github/workflows/ci.yml`: Python 3.11, 3.12 matrix, fail-safe timeouts, ruff lint, unit test suite, and Sphinx docs build.
 - Badge on `README.rst`.
 
 **6d — Sphinx Documentation Modernization:**
