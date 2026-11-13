@@ -103,19 +103,19 @@ Measured against live workspace baseline (`260` files, `48,150` lines, `94` API 
 ---
 
 ### Milestone 4: Multi-Camera Entity Handoff, FOV Overlap Deduplication & Tactical World Minimap *(Deferred to Next Turn / Milestone)*
-- [ ] **intelligent_tracker/world/handoff.py**: Implement `MultiCameraHandoffCoordinator` (`< 240` lines, `<= 9` methods) providing:
+- [x] **intelligent_tracker/world/handoff.py**: Implement `MultiCameraHandoffCoordinator` (`< 240` lines, `<= 9` methods) providing:
   1. **Overlapping FOV Deduplication**: Merge concurrent session `WorldEntity` nodes across overlapping cameras when global Euclidean distance $d(E_1, E_2) \le R_{\text{overlap}}$ (default `1.2` meters) and category/Re-ID similarity match, maintaining a single `WorldEntity` with multi-camera `camera_tracks`.
   2. **Cross-Camera Transit Handoff**: Match newly appearing camera tracks against active `CrossCameraTopology` priors and global `(X, Y)` velocity projections so an entity transitioning across non-overlapping or adjacent cameras preserves a single continuous `WorldEntity` ID and `global_trajectory`.
-- [ ] **intelligent_tracker/world/minimap.py**: Implement `WorldTacticalMinimap` (`< 230` lines, `<= 8` methods) generating both a structured JSON telemetry payload (`build_world_minimap_telemetry`) and a top-down multi-camera OpenCV BEV canvas (`render_world_minimap`) showing calibrated camera origins, projected zones, directed transition edges, and live `WorldEntity` global `(X, Y)` positions and trails.
-- [ ] **intelligent_tracker/world/__init__.py**: Export `TransitionEdgeNode`, `WorldTransitionRegistry`, `MultiCameraHandoffCoordinator`, and `WorldTacticalMinimap`.
-- [ ] **dashboard/routers/topology.py**: Add `GET /api/topology/world-map` endpoint (`<= 20` lines) returning the unified global world minimap telemetry (active `WorldEntity` global `(X, Y)` coordinates, trajectories, calibrated camera poses, and directed transition links).
-- [ ] **tests/test_multi_camera_handoff.py**: Add the Step 4 Golden Synthetic Two-Camera Handoff & Overlap Deduplication test suite verifying that a subject moving from `cam_01` to `cam_02` maintains one continuous `WorldEntity` ID, a continuous global `(X, Y)` path, accurate `/api/topology/world-map` telemetry, and multi-hop `TrajectoryJourneySearcher` reconstruction.
-- [ ] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
+- [x] **intelligent_tracker/world/minimap.py**: Implement `WorldTacticalMinimap` (`< 230` lines, `<= 8` methods) generating both a structured JSON telemetry payload (`build_world_minimap_telemetry`) and a top-down multi-camera OpenCV BEV canvas (`render_world_minimap`) showing calibrated camera origins, projected zones, directed transition edges, and live `WorldEntity` global `(X, Y)` positions and trails.
+- [x] **intelligent_tracker/world/__init__.py**: Export `TransitionEdgeNode`, `WorldTransitionRegistry`, `MultiCameraHandoffCoordinator`, and `WorldTacticalMinimap`.
+- [x] **dashboard/routers/topology.py**: Add `GET /api/topology/world-map` endpoint (`<= 20` lines) returning the unified global world minimap telemetry (active `WorldEntity` global `(X, Y)` coordinates, trajectories, calibrated camera poses, and directed transition links).
+- [x] **tests/test_multi_camera_handoff.py**: Add the Step 4 Golden Synthetic Two-Camera Handoff & Overlap Deduplication test suite verifying that a subject moving from `cam_01` to `cam_02` maintains one continuous `WorldEntity` ID, a continuous global `(X, Y)` path, accurate `/api/topology/world-map` telemetry, and multi-hop `TrajectoryJourneySearcher` reconstruction.
+- [x] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
 
 **Definition of Done (DoD)**:
-- [ ] Synthetic two-camera handoff and overlapping FOV tests verify a single `WorldEntity` maintains continuous ID, global `(X, Y)` path, tactical world minimap telemetry, and accurate journey reconstruction across cameras.
-- [ ] Every modified/created file in Step 4 complies with the `< 350`L file, `<= 12` methods/class, and `<= 40`L function budgets (`diagnose.py arch-map --path .`).
-- [ ] Full test suite (`MPLBACKEND=Agg python -m unittest discover tests`) and Sphinx docs (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`) pass with zero warnings.
+- [x] Synthetic two-camera handoff and overlapping FOV tests verify a single `WorldEntity` maintains continuous ID, global `(X, Y)` path, tactical world minimap telemetry, and accurate journey reconstruction across cameras.
+- [x] Every modified/created file in Step 4 complies with the `< 350`L file, `<= 12` methods/class, and `<= 40`L function budgets (`diagnose.py arch-map --path .`).
+- [x] Full test suite (`MPLBACKEND=Agg python -m unittest discover tests`) and Sphinx docs (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`) pass with zero warnings.
 
 ---
 

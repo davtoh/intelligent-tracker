@@ -9,6 +9,8 @@ from intelligent_tracker.world.events import (
     WorldPolicyUpdatedEvent,
 )
 from intelligent_tracker.world.graph import WorldGraph
+from intelligent_tracker.world.handoff import MultiCameraHandoffCoordinator
+from intelligent_tracker.world.minimap import WorldTacticalMinimap
 from intelligent_tracker.world.nodes import (
     CameraNode,
     TransitionEdgeNode,
@@ -26,6 +28,7 @@ __all__ = [
     "CameraWorldPose",
     "EntityStateChangedEvent",
     "GlobalCoordinateMapper",
+    "MultiCameraHandoffCoordinator",
     "NodeAddedEvent",
     "NodeRemovedEvent",
     "TransitionEdgeNode",
@@ -37,6 +40,7 @@ __all__ = [
     "WorldPolicy",
     "WorldPolicyUpdatedEvent",
     "WorldRuleEngine",
+    "WorldTacticalMinimap",
     "WorldTransitionRegistry",
     "ZoneNode",
 ]

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-13] feat: Step 4 Milestone 4: Multi-Camera Handoff, FOV Deduplication & Tactical World Minimap
+- **Type**: feat
+- **Summary**: Implemented MultiCameraHandoffCoordinator, WorldTacticalMinimap, GET /api/topology/world-map, and golden two-camera handoff tests.
+- **Files** (7):
+  - `intelligent_tracker/world/handoff.py`
+  - `intelligent_tracker/world/_handoff_helpers.py`
+  - `intelligent_tracker/world/minimap.py`
+  - `intelligent_tracker/world/_minimap_render.py`
+  - `intelligent_tracker/world/__init__.py`
+  - `dashboard/routers/topology.py`
+  - `tests/test_multi_camera_handoff.py`
+- **Verification**: 495/495 unittest pass + Sphinx -W clean + arch-map compliant
+
 ## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
 - **Type**: refactor
 - **Summary**: Decomposed dashboard/static/index.html into 9 tab partials and 4 modal partials rendered via Jinja2 on GET /, and added Step 3 architecture budget verification tests.
@@ -126,18 +139,3 @@
   - `dashboard/static/js/video_library.js`
   - ... (+5 more)
 - **Verification**: 334/334 tests pass (37.2s); 12/12 dedicated video jobs tests pass (0.89s); 0 warnings Sphinx docs build
-
-## [2026-11-09] feat: System Capabilities API & Camera AI Configuration Modal (Milestone 2)
-- **Type**: feat
-- **Summary**: Implemented dynamic AI capabilities discovery endpoint (`/api/system/capabilities`) exposing detectors, trackers, Re-ID extractors, and COCO classes. Extended the VMS camera modal with an AI Detector & Tracking Intelligence section, bidirectional confidence slider/numeric inputs, class filter presets, and quick physical webcam presets. Normalized SortTracker and CentroidTracker kwargs (`max_age` / `max_disappeared`).
-- **Files** (8):
-  - `dashboard/routers/system.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/services/pipeline_factory.py`
-  - `intelligent_tracker/tracker/sort.py`
-  - `dashboard/static/css/camera_ai_config.css`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/camera_manager.js`
-  - `dashboard/static/index.html`
-  - `tests/test_camera_detector_config.py`
-- **Verification**: 317/317 tests pass (36.71s); 0 warnings Sphinx HTML build.

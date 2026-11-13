@@ -14,8 +14,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     VIDEOS_DIR,
+    get_camera_pool,
     get_db,
     get_scenario_mgr,
 )
@@ -27,6 +29,7 @@ from intelligent_tracker.journey import (
 )
 from intelligent_tracker.scenarios import ScenarioManager
 from intelligent_tracker.topology import SpatialTransitionLink
+from intelligent_tracker.world import WorldGraph, WorldTacticalMinimap
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.topology")
 
@@ -114,6 +117,17 @@ async def list_active_priors(
             if not camera_id or p.target_camera == camera_id:
                 out.append(p.to_dict())
     return out
+
+
+@router.get("/api/topology/world-map")
+async def get_topology_world_map(
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+    pool: CameraPool | None = Depends(get_camera_pool),
+):
+    """Return unified global world minimap telemetry across cameras, zones, edges, and entities."""
+    world_graph = sm.world_graph or (getattr(pool, "world_graph", None) if pool else None) or WorldGraph()
+    minimap = WorldTacticalMinimap(world_graph, coordinate_mapper=sm.coordinate_mapper)
+    return minimap.build_world_minimap_telemetry()
 
 
 @router.get("/api/journey/search")

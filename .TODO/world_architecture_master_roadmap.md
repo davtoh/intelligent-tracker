@@ -64,16 +64,16 @@
 ---
 
 ## Step 4: Global World Coordinates & Multi-Camera Continuity
-- **Goal**: Fuse per-camera 2D homography (`GroundPlaneHomography`) into a unified global `WorldGraph` coordinate plane so an object moving across cameras stays one continuous `WorldEntity`.
-- **Pre-Plan Evaluation Check**:
-  - Inspect `intelligent_tracker/homography.py`, `intelligent_tracker/topology.py`, `intelligent_tracker/journey.py`, and `dashboard/routers/topology.py`.
-- **Target Scope**:
-  - **Mandatory Pre-Flight Split (`Split-Before-You-Grow`)**: Decompose `intelligent_tracker/scenarios.py` (496L) and `intelligent_tracker/journey.py` (432L) below 350 lines before adding Global World Coordinate methods.
-  - Add `GlobalCoordinateMapper` inside `intelligent_tracker/world/coordinates.py` mapping camera pixel feet/centroids $\rightarrow$ global world $(X, Y)$ meters.
-  - Represent `CrossCameraTopology` transitions as first-class directed edges in `WorldGraph` with Bayesian transit priors.
-  - Unify multi-camera entity handoff, deduplication across overlapping camera FOVs, and tactical world minimap telemetry.
-- **Definition of Done**:
-  - Synthetic two-camera handoff test verifies a single `WorldEntity` maintains continuous ID, global `(X, Y)` path, and accurate journey reconstruction across cameras.
+- [x] **Goal**: Fuse per-camera 2D homography (`GroundPlaneHomography`) into a unified global `WorldGraph` coordinate plane so an object moving across cameras stays one continuous `WorldEntity`.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Inspect `intelligent_tracker/homography.py`, `intelligent_tracker/topology.py`, `intelligent_tracker/journey.py`, and `dashboard/routers/topology.py`.
+- [x] **Target Scope**:
+  - [x] **Mandatory Pre-Flight Split (`Split-Before-You-Grow`)**: Decompose `intelligent_tracker/scenarios.py` (496L) and `intelligent_tracker/journey.py` (432L) below 350 lines before adding Global World Coordinate methods.
+  - [x] Add `GlobalCoordinateMapper` inside `intelligent_tracker/world/coordinates.py` mapping camera pixel feet/centroids $\rightarrow$ global world $(X, Y)$ meters.
+  - [x] Represent `CrossCameraTopology` transitions as first-class directed edges in `WorldGraph` with Bayesian transit priors.
+  - [x] Unify multi-camera entity handoff, deduplication across overlapping camera FOVs, and tactical world minimap telemetry.
+- [x] **Definition of Done**:
+  - [x] Synthetic two-camera handoff test verifies a single `WorldEntity` maintains continuous ID, global `(X, Y)` path, and accurate journey reconstruction across cameras.
 
 ---
 
