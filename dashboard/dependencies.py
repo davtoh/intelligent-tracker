@@ -223,7 +223,7 @@ def get_active_stream_manager(camera_id: Optional[str] = None) -> Optional[Strea
 def get_db() -> TrackerDB:
     """Retrieve TrackerDB instance from active stream or create fallback."""
     mgr = get_active_stream_manager()
-    if mgr and mgr.db:
+    if mgr and mgr.db and getattr(mgr.db, "_conn", None) is not None:
         return mgr.db
     return TrackerDB()
 
