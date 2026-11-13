@@ -131,6 +131,64 @@ class TestWorldLegacyCompatibility(unittest.TestCase):
         self.assertFalse(sm.delete_zone("cam_01", "nonexistent_zone"))
         self.assertFalse(sm.delete_tripwire("cam_01", "nonexistent_tw"))
 
+    def test_periferials_shim_reexports_and_mock_lifecycle(self) -> None:
+        import intelligent_tracker.periferials as perif_mod
+        from intelligent_tracker.video.legacy_camera import (
+            CameraError,
+            MockVideoCapture,
+            PiCamera,
+            PiRGBArray,
+            UnifiedCamera,
+        )
+        from intelligent_tracker.video.legacy_sync import SyncCameras, VideoStream
+
+        for name, expected in (
+            ("CameraError", CameraError),
+            ("MockVideoCapture", MockVideoCapture),
+            ("UnifiedCamera", UnifiedCamera),
+            ("PiRGBArray", PiRGBArray),
+            ("PiCamera", PiCamera),
+            ("VideoStream", VideoStream),
+            ("SyncCameras", SyncCameras),
+        ):
+            self.assertIs(getattr(perif_mod, name), expected)
+
+        with UnifiedCamera("mock") as cam:
+            buf = PiRGBArray(cam, size=(160, 120))
+            frame = cam.capture(buf, format="bgr")
+            self.assertIsNotNone(frame)
+            self.assertEqual(frame.shape[2], 3)
+
+        stream = VideoStream("mock", resolution=(160, 120), framerate=30)
+        stream._warm_up_time = 0
+        with stream as active_stream:
+            self.assertFalse(active_stream.closed())
+            self.assertIsNotNone(active_stream.get_frame())
+        self.assertTrue(stream.closed())
+
+        sync = SyncCameras(["mock"], resolution=(160, 120), framerate=30)
+        for s in sync.streams:
+            s._warm_up_time = 0
+        with sync:
+            frames = sync.capture()
+            self.assertEqual(len(frames), 1)
+            self.assertIsNotNone(frames[0])
+        self.assertTrue(sync.closed())
+
+    def test_step3_milestone3_modularity_budgets(self) -> None:
+        perif_path = ROOT_DIR / "intelligent_tracker" / "periferials.py"
+        perif_lines = len(perif_path.read_text(encoding="utf-8").splitlines())
+        self.assertLess(perif_lines, 50)
+
+        self.assertFalse((ROOT_DIR / "intelligent_tracker" / "analytics.py").exists())
+        budget_files = list((ROOT_DIR / "intelligent_tracker" / "analytics").glob("*.py")) + [
+            ROOT_DIR / "intelligent_tracker" / "video" / "legacy_camera.py",
+            ROOT_DIR / "intelligent_tracker" / "video" / "legacy_sync.py",
+        ]
+        for file_path in budget_files:
+            line_count = len(file_path.read_text(encoding="utf-8").splitlines())
+            self.assertLess(line_count, 260, f"{file_path.name} exceeded 260 lines ({line_count})")
+
 
 if __name__ == "__main__":
     unittest.main()

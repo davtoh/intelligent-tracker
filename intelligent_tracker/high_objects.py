@@ -19,7 +19,8 @@ from time import time
 # import third party modules
 #from RRtoolbox.lib.plotter import fastplt  # DEBUG
 from .core import Space, Group, Agent
-from .periferials import UnifiedCamera, SyncCameras, PiCamera
+from .video.legacy_camera import PiCamera, UnifiedCamera
+from .video.legacy_sync import SyncCameras
 from .detectors import Detector
 import numpy as np
 from threading import Thread, RLock, Event

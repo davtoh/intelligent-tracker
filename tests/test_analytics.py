@@ -273,6 +273,132 @@ class TestAnalyticsAndGeometry(unittest.TestCase):
         self.assertEqual(len(tripwire_events), 1)
         self.assertIsNotNone(tripwire_events[0].snapshot_base64)
 
+    def test_analytics_submodule_imports_and_heatmap_dict_tuples(self):
+        from intelligent_tracker.analytics.engine import AnalyticsEngine as EngineSub
+        from intelligent_tracker.analytics.heatmap import OccupancyHeatmap as HeatmapSub
+        from intelligent_tracker.analytics.zone_stats import (
+            evaluate_tripwire_crossings,
+            evaluate_zone_capacity_limits,
+            evaluate_zone_updates,
+        )
+
+        self.assertIs(EngineSub, AnalyticsEngine)
+        self.assertIs(HeatmapSub, OccupancyHeatmap)
+        self.assertTrue(callable(evaluate_tripwire_crossings))
+        self.assertTrue(callable(evaluate_zone_updates))
+        self.assertTrue(callable(evaluate_zone_capacity_limits))
+
+        hm = OccupancyHeatmap(width=100, height=100, decay_rate=None, radius=10)
+        hm.update({1: (25, 25), 2: Track(track_id=2, bbox=(65, 65, 10, 10))})
+        self.assertGreater(hm.density[25, 25], 0.5)
+        self.assertGreater(hm.density[70, 70], 0.5)
+
+    def test_zone_stats_rsac_pet_and_capacity_helpers(self):
+        from types import SimpleNamespace
+        from intelligent_tracker.analytics.zone_stats import (
+            evaluate_tripwire_crossings,
+            evaluate_zone_capacity_limits,
+            evaluate_zone_updates,
+        )
+        from intelligent_tracker.events import EventBus
+
+        bus = EventBus()
+        events_log = []
+        tw = Tripwire(line_segment=((0, 50), (100, 50)), name="entry_line")
+        t1 = Track(track_id=1, bbox=(40, 55, 20, 20), label="dog", timestamp=1.0)
+        tw_events = evaluate_tripwire_crossings(
+            tracks={1: t1},
+            prev_centroids={1: (50, 40)},
+            tripwires={"entry_line": tw},
+            camera_id="cam_01",
+            event_bus=bus,
+            active_frame=None,
+            now=1.0,
+            events_log=events_log,
+        )
+        self.assertEqual(len(tw_events), 1)
+        self.assertEqual(tw.total_in, 1)
+
+        # RSAC violation branch
+        zone_sec = ZoneROI(polygon=[(0, 0), (100, 0), (100, 100), (0, 100)], name="sec", capacity_limit=1)
+        rsac_deny = SimpleNamespace(
+            evaluate_access=lambda **kw: SimpleNamespace(
+                is_pet_suppressed=False, allowed=False, reason="Unauthorized", severity="high"
+            )
+        )
+        t2 = Track(track_id=2, bbox=(20, 20, 10, 10), label="person", timestamp=2.0)
+        z_events = evaluate_zone_updates(
+            tracks={1: t1, 2: t2},
+            zones={"sec": zone_sec},
+            camera_id="cam_01",
+            event_bus=bus,
+            rsac_manager=rsac_deny,
+            pet_whitelist=None,
+            active_frame=None,
+            now=2.0,
+            events_log=events_log,
+        )
+        self.assertTrue(any(getattr(ev, "event_type", "") == "rsac_violation" for ev in z_events))
+
+        # RSAC pet suppression branch
+        zone_pet = ZoneROI(polygon=[(0, 0), (100, 0), (100, 100), (0, 100)], name="porch")
+        rsac_pet = SimpleNamespace(
+            evaluate_access=lambda **kw: SimpleNamespace(
+                is_pet_suppressed=True, allowed=True, reason="", severity="info"
+            )
+        )
+        z_pet_events = evaluate_zone_updates(
+            tracks={1: t1},
+            zones={"porch": zone_pet},
+            camera_id="cam_01",
+            event_bus=bus,
+            rsac_manager=rsac_pet,
+            pet_whitelist=None,
+            active_frame=None,
+            now=3.0,
+            events_log=events_log,
+        )
+        self.assertTrue(any(getattr(ev, "event_type", "") == "pet_activity" for ev in z_pet_events))
+
+        # Pet whitelist fallback branch (rsac_manager=None)
+        zone_wl = ZoneROI(polygon=[(0, 0), (100, 0), (100, 100), (0, 100)], name="yard")
+        z_wl_events = evaluate_zone_updates(
+            tracks={1: t1},
+            zones={"yard": zone_wl},
+            camera_id="cam_01",
+            event_bus=bus,
+            rsac_manager=None,
+            pet_whitelist={"dog"},
+            active_frame=None,
+            now=4.0,
+            events_log=events_log,
+        )
+        self.assertTrue(any(getattr(ev, "event_type", "") == "pet_activity" for ev in z_wl_events))
+
+        # Capacity exceeded and cleared transitions
+        cap_exceeded = evaluate_zone_capacity_limits(
+            zones={"sec": zone_sec},
+            camera_id="cam_01",
+            event_bus=bus,
+            active_frame=None,
+            now=5.0,
+            events_log=events_log,
+        )
+        self.assertEqual(len(cap_exceeded), 1)
+        self.assertEqual(cap_exceeded[0].breach_type, "exceeded")
+
+        zone_sec.update({}, timestamp=6.0)
+        cap_cleared = evaluate_zone_capacity_limits(
+            zones={"sec": zone_sec},
+            camera_id="cam_01",
+            event_bus=bus,
+            active_frame=None,
+            now=6.0,
+            events_log=events_log,
+        )
+        self.assertEqual(len(cap_cleared), 1)
+        self.assertEqual(cap_cleared[0].breach_type, "cleared")
+
 
 if __name__ == "__main__":
     unittest.main()
