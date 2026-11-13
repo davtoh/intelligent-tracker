@@ -68,13 +68,13 @@ Measured against workspace baseline before edits:
 ---
 
 ### Milestone 2: Canonical `FrameProcessor.step()` & CLI/Dashboard Parity Fixture *(Deferred to Next Turn)*
-- [ ] **intelligent_tracker/pipeline/frame_processor.py**: Implement `FrameStepResult` and `FrameProcessor` (`step(frame, timestamp=None, max_dim=None, target_size=None)`) unifying frame resizing, `detector.detect(frame)`, `tracker.update(detections, timestamp=now)`, `analytics.update(...)`, optional `topology.record_zone_exit(...)`, `gallery_matcher.match_tracks(...)`, `EntityIdentifiedEvent` / `RestrictedEntityAlert` publishing, and rolling FPS calculation.
-- [ ] **intelligent_tracker/pipeline/__init__.py**: Re-export `FrameProcessor` and `FrameStepResult`.
-- [ ] **tests/test_pipeline_parity.py**: Add golden headless parity test (`detector=mock`, `source=synthetic`, isolated `TemporaryDirectory` DB) verifying identical detections, active tracks (`centroid` and `sort`), zone/tripwire counts, Re-ID identification events, and governance behavior when initialized via CLI config vs Dashboard config.
+- [x] **intelligent_tracker/pipeline/frame_processor.py**: Implement `FrameStepResult` and `FrameProcessor` (`step(frame, timestamp=None, max_dim=None, target_size=None)`) unifying frame resizing, `detector.detect(frame)`, `tracker.update(detections, timestamp=now)`, `analytics.update(...)`, optional `topology.record_zone_exit(...)`, `gallery_matcher.match_tracks(...)`, `EntityIdentifiedEvent` / `RestrictedEntityAlert` publishing, and rolling FPS calculation.
+- [x] **intelligent_tracker/pipeline/__init__.py**: Re-export `FrameProcessor` and `FrameStepResult`.
+- [x] **tests/test_pipeline_parity.py**: Add golden headless parity test (`detector=mock`, `source=synthetic`, isolated `TemporaryDirectory` DB) verifying identical detections, active tracks (`centroid` and `sort`), zone/tripwire counts, Re-ID identification events, and governance behavior when initialized via CLI config vs Dashboard config.
 
 **Definition of Done (DoD)**:
-- `FrameProcessor.step()` produces identical, non-empty track and analytics state across `centroid` and `sort` trackers without `tracker.update(..., frame=frame)` errors.
-- `MPLBACKEND=Agg python -m unittest tests/test_pipeline_config.py tests/test_pipeline_parity.py` passes 100%.
+- [x] `FrameProcessor.step()` produces identical, non-empty track and analytics state across `centroid` and `sort` trackers without `tracker.update(..., frame=frame)` errors.
+- [x] `MPLBACKEND=Agg python -m unittest tests/test_pipeline_config.py tests/test_pipeline_parity.py` passes 100%.
 
 ---
 
