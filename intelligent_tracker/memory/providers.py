@@ -204,7 +204,7 @@ class GeminiSemanticProvider:
         url = f"{self.endpoint_base}/v1beta/models/{self.model}:generateContent"
         resp = requests.post(
             url,
-            params={"key": self.api_key},
+            headers={"x-goog-api-key": self.api_key},
             json={"contents": [{"parts": [{"text": prompt}]}]},
             timeout=self.timeout_s,
         )

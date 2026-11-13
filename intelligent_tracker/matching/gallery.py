@@ -16,6 +16,7 @@ from intelligent_tracker.tracker import Track, check_track_occlusions
 from intelligent_tracker.matching.types import EntityIdentifiedEvent, SessionEntity
 from intelligent_tracker.matching.session_gallery import SessionGalleryManager
 from intelligent_tracker.matching.adaptive_memory import apply_bounded_ema_update
+from intelligent_tracker.matching._gallery_signals import apply_track_confidence_signals, emit_periodic_sighting
 
 logger = logging.getLogger(__name__)
 
@@ -108,15 +109,10 @@ def _process_confirmed_identification(
             timestamp=now,
         )
 
-    if matcher.db is not None:
-        last_log = matcher._last_sighting_time.get(tid)
-        if last_log is None or (now - last_log >= matcher.sighting_interval) or (now < last_log):
-            matcher.db.add_sighting(
-                entity_id=entity_id, track_id=tid, source=source,
-                timestamp=now, zone_id=zone_id, bbox=track.bbox, confidence=best_score,
-            )
-            matcher._last_sighting_time[tid] = now
-
+    emit_periodic_sighting(
+        matcher, entity_id=entity_id, name=name, category=category,
+        track=track, confidence=best_score, source=source, zone_id=zone_id, timestamp=now,
+    )
     return event
 
 
@@ -152,6 +148,7 @@ class GalleryMatcher:
         self.camera_id = camera_id
         self.active_learning = active_learning
         self.world_bridge = world_bridge
+        self.fts_index = kwargs.get("fts_index")
         self.auto_adaptive_memory = bool(auto_adaptive_memory)
         self.ema_alpha = float(ema_alpha)
         self.ema_confidence_threshold = float(ema_confidence_threshold)
@@ -257,7 +254,9 @@ class GalleryMatcher:
             return None
 
         matched_priors = {}
+        raw_similarities = None
         if self.topology is not None:
+            raw_similarities = similarities.copy()
             matched_priors = _apply_topology_priors(
                 self.topology, self.gallery_entity_ids, self.gallery_names,
                 similarities, source, zone_id, now,
@@ -267,6 +266,11 @@ class GalleryMatcher:
         best_score = float(similarities[best_idx])
 
         if best_score >= self.reid_threshold:
+            apply_track_confidence_signals(
+                track, extractor=self.extractor, query_vec=query_vec, gallery_matrix=self.gallery_matrix,
+                gallery_entity_ids=self.gallery_entity_ids, similarities=similarities,
+                raw_similarities=raw_similarities, matched_priors=matched_priors, best_idx=best_idx,
+            )
             if self.topology is not None and best_idx in matched_priors:
                 self.topology.consume_prior(matched_priors[best_idx].prior_id)
             return _process_confirmed_identification(

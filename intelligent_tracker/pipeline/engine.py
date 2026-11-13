@@ -41,6 +41,8 @@ class PipelineEngine:
         bundle.event_pipeline, bundle.event_bus = build_events(config, bundle.analytics)
         bundle.confidence_engine = build_confidence_engine(bundle.db, bundle.event_bus)
         bundle.event_fts_index = build_memory_index(config, bundle.db, bundle.event_bus)
+        if bundle.gallery_matcher is not None and bundle.event_fts_index is not None:
+            bundle.gallery_matcher.fts_index = bundle.event_fts_index
 
     @classmethod
     def _assemble_governance_and_world(

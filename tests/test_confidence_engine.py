@@ -214,7 +214,7 @@ class TestConfidenceEngine(unittest.TestCase):
 
         # PipelineEngine wiring (governance on + off)
         bundle_on = PipelineEngine.from_dict(
-            {"camera_id": "cam_pipe", "detector": {"model": "mock"}},
+            {"camera_id": "cam_pipe", "detector": {"model": "mock"}, "reid": {"model": "mock"}},
             db_path=self.db_path, source_override=None, enable_governance=True,
         )
         self.addCleanup(bundle_on.close)
@@ -223,7 +223,7 @@ class TestConfidenceEngine(unittest.TestCase):
         self.assertIs(bundle_on.active_learning.confidence_engine, bundle_on.confidence_engine)
 
         bundle_off = PipelineEngine.from_dict(
-            {"camera_id": "cam_nogov", "detector": {"model": "mock"}},
+            {"camera_id": "cam_nogov", "detector": {"model": "mock"}, "reid": {"model": "mock"}},
             db_path=None, source_override=None, enable_governance=False,
         )
         self.addCleanup(bundle_off.close)

@@ -108,6 +108,21 @@ class CameraPoolQueryMixin:
         sm = self.primary_stream
         return sm.enrollment_manager if sm else None
 
+    @property
+    def confidence_engine(self) -> Any | None:
+        """Return shared or active stream ConfidenceEngine across multi-camera pools."""
+        shared = getattr(self, "_confidence_engine", None)
+        if shared is not None:
+            return shared
+        sm = self.primary_stream
+        if sm is not None and getattr(sm, "confidence_engine", None) is not None:
+            return sm.confidence_engine
+        for stream in (getattr(self, "streams", None) or {}).values():
+            eng = getattr(stream, "confidence_engine", None)
+            if eng is not None:
+                return eng
+        return None
+
     def reload_all_galleries(self) -> None:
         """Reload Re-ID galleries and RSAC policies across all active streams."""
         with self._lock:

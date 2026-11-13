@@ -42,6 +42,7 @@ _stream_manager: Optional[StreamManager] = None
 _scenario_manager: Optional[ScenarioManager] = None
 _lifecycle_manager: Optional[StreamLifecycleManager] = None
 _db: Optional[TrackerDB] = None
+_confidence_engine: Optional[ConfidenceEngine] = None
 _world_query_engine: Optional[WorldQueryEngine] = None
 _owned_fallback_db: Optional[TrackerDB] = None
 _shutdown_event: Optional[asyncio.Event] = None
@@ -65,21 +66,24 @@ def bind_app_state(
     scenario_manager: Optional[ScenarioManager] = None,
     lifecycle_manager: Optional[StreamLifecycleManager] = None,
     db: Optional[TrackerDB] = None,
+    confidence_engine: Optional[ConfidenceEngine] = None,
     world_query_engine: Optional[WorldQueryEngine] = None,
 ) -> None:
     """Bind core runtime services to ``app.state`` and sync standalone fallbacks."""
-    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db, _world_query_engine
+    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db, _confidence_engine, _world_query_engine
     app.state.camera_pool = camera_pool
     app.state.stream_manager = stream_manager
     app.state.scenario_manager = scenario_manager
     app.state.lifecycle_manager = lifecycle_manager
     app.state.db = db
+    app.state.confidence_engine = confidence_engine
     app.state.world_query_engine = world_query_engine
     _camera_pool = camera_pool
     _stream_manager = stream_manager
     _scenario_manager = scenario_manager
     _lifecycle_manager = lifecycle_manager
     _db = db
+    _confidence_engine = confidence_engine
     _world_query_engine = world_query_engine
 
 
@@ -312,7 +316,12 @@ def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:
         return state_engine
     db = get_db(conn)
     pool, mgr, scen_mgr = get_camera_pool(conn), get_active_stream_manager(conn=conn), get_scenario_manager(conn)
-    conf_engine = getattr(mgr, "confidence_engine", None) or ConfidenceEngine(db=db)
+    conf_engine = (
+        _from_app_state(conn, "confidence_engine", _confidence_engine)
+        or getattr(pool, "confidence_engine", None)
+        or getattr(mgr, "confidence_engine", None)
+        or ConfidenceEngine(db=db)
+    )
     world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None) or getattr(mgr, "world_graph", None)
     provider = GeminiSemanticProvider() if os.getenv("WORLD_QUERY_PROVIDER", "").strip().lower() == "gemini" else None
     return WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)

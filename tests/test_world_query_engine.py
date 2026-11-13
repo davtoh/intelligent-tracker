@@ -266,6 +266,10 @@ class TestWorldQueryEngineAndProviders(unittest.TestCase):
             self.assertEqual(ok_res.provider, "gemini")
             self.assertEqual(ok_res.answer, "Gemini: Alice was seen in lobby.")
             post_mock.assert_called_once()
+            call_args = post_mock.call_args
+            self.assertNotIn("test-key", call_args.args[0])
+            self.assertIsNone(call_args.kwargs.get("params"))
+            self.assertEqual(call_args.kwargs.get("headers"), {"x-goog-api-key": "test-key"})
 
 
 class TestPipelineMemoryIndexingWiring(unittest.TestCase):

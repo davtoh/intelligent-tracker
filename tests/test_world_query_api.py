@@ -168,6 +168,30 @@ class TestWorldQueryApi(unittest.TestCase):
         self.assertEqual(all_events.status_code, 200)
         self.assertEqual(all_events.json()["count"], 2)
 
+    def test_get_world_query_engine_resolves_pool_and_state_confidence_engine(self) -> None:
+        """Multi-camera CameraPool and app.state share ConfidenceEngine with WorldQueryEngine."""
+        from types import SimpleNamespace
+        from dashboard.services.camera_pool_queries import CameraPoolQueryMixin, CameraPoolStateMixin
+
+        class _DummyPool(CameraPoolStateMixin, CameraPoolQueryMixin):
+            def __init__(self, primary, streams):
+                self._coordinator = SimpleNamespace(streams=streams, get_stream=lambda cid=None: primary)
+                self.world_graph = None
+
+        pool_conf = ConfidenceEngine(db=self.db)
+        pool_no_primary = _DummyPool(None, {"cam_02": SimpleNamespace(confidence_engine=pool_conf)})
+        self.assertIs(pool_no_primary.confidence_engine, pool_conf)
+
+        bind_app_state(app, db=self.db, camera_pool=pool_no_primary)
+        conn = SimpleNamespace(app=app)
+        resolved_pool = get_world_query_engine(conn)
+        self.assertIs(resolved_pool.confidence_engine, pool_conf)
+
+        state_conf = ConfidenceEngine(db=self.db)
+        bind_app_state(app, db=self.db, camera_pool=pool_no_primary, confidence_engine=state_conf)
+        resolved_state = get_world_query_engine(conn)
+        self.assertIs(resolved_state.confidence_engine, state_conf)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -133,6 +133,7 @@ class StreamWorker:
                     world_graph=getattr(self.manager, "world_graph", None),
                     world_bridge=getattr(self.manager, "world_bridge", None),
                     world_rule_engine=getattr(self.manager, "world_rule_engine", None),
+                    confidence_engine=getattr(self.manager, "confidence_engine", None),
                 )
             self._processor = FrameProcessor(bundle, topology=getattr(self.manager, "topology", None))
 

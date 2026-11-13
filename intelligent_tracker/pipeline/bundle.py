@@ -293,7 +293,8 @@ def build_governance(
         )
         if gallery_matcher is not None:
             gallery_matcher.active_learning = al_mgr
-        enr_mgr = UniversalEnrollmentManager(db=db, extractor=reid_extractor, matcher=gallery_matcher)
+        enr_extractor = reid_extractor or (ReIDExtractorFactory.create("mock") if not config.reid_model else None)
+        enr_mgr = UniversalEnrollmentManager(db=db, extractor=enr_extractor, matcher=gallery_matcher)
     except Exception as exc:
         logger.warning("ActiveLearning / Enrollment initialization warning: %s", exc)
     return rsac_mgr, al_mgr, enr_mgr
