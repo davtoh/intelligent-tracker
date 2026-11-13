@@ -1,5 +1,6 @@
 """Scoped WorldGraph subsystem for cameras, spatial nodes, live entities, and policies."""
 
+from intelligent_tracker.world.entity_bridge import WorldEntityBridge
 from intelligent_tracker.world.events import (
     EntityStateChangedEvent,
     NodeAddedEvent,
@@ -15,6 +16,7 @@ from intelligent_tracker.world.nodes import (
     WorldPolicy,
     ZoneNode,
 )
+from intelligent_tracker.world.rules import WorldRuleEngine
 
 __all__ = [
     "CameraNode",
@@ -23,10 +25,12 @@ __all__ = [
     "NodeRemovedEvent",
     "TripwireNode",
     "WorldEntity",
+    "WorldEntityBridge",
     "WorldGraph",
     "WorldNode",
     "WorldPolicy",
     "WorldPolicyUpdatedEvent",
+    "WorldRuleEngine",
     "ZoneNode",
 ]
 

@@ -64,11 +64,18 @@ def _process_confirmed_identification(
     name = matcher.gallery_names[best_idx]
     category = matcher.gallery_categories[best_idx]
 
-    track.entity_id = entity_id
-    track.entity_name = name
-    track.entity_category = category
-    track.reid_score = best_score
-    track.identity_label = name
+    if matcher.world_bridge is not None:
+        matcher.world_bridge.sync_track_identification(
+            source, track, entity_id,
+            name=name, category=category, confidence=best_score,
+            zone_id=zone_id, timestamp=now,
+        )
+    else:
+        track.entity_id = entity_id
+        track.entity_name = name
+        track.entity_category = category
+        track.reid_score = best_score
+        track.identity_label = name
 
     event = None
     was_identified = tid in matcher._identified_tracks
@@ -105,13 +112,8 @@ def _process_confirmed_identification(
         last_log = matcher._last_sighting_time.get(tid)
         if last_log is None or (now - last_log >= matcher.sighting_interval) or (now < last_log):
             matcher.db.add_sighting(
-                entity_id=entity_id,
-                track_id=tid,
-                source=source,
-                timestamp=now,
-                zone_id=zone_id,
-                bbox=track.bbox,
-                confidence=best_score,
+                entity_id=entity_id, track_id=tid, source=source,
+                timestamp=now, zone_id=zone_id, bbox=track.bbox, confidence=best_score,
             )
             matcher._last_sighting_time[tid] = now
 
@@ -141,6 +143,7 @@ class GalleryMatcher:
         ema_confidence_threshold: float = 0.75,
         min_anchor_similarity: float = 0.65,
         max_drift_threshold: Optional[float] = None,
+        world_bridge: Optional[Any] = None,
         **kwargs,
     ):
         self.db = db
@@ -148,6 +151,7 @@ class GalleryMatcher:
         self.topology = topology
         self.camera_id = camera_id
         self.active_learning = active_learning
+        self.world_bridge = world_bridge
         self.auto_adaptive_memory = bool(auto_adaptive_memory)
         self.ema_alpha = float(ema_alpha)
         self.ema_confidence_threshold = float(ema_confidence_threshold)
@@ -213,12 +217,9 @@ class GalleryMatcher:
                         for s in all_sigs
                     }
                     logger.info(
-                        "GalleryMatcher: %d active signatures in database skipped due to dimension mismatch "
-                        "(gallery dims: %s vs extractor %s dim: %d). Use matching extractor (e.g. --reid dual) to match.",
-                        len(all_sigs),
-                        ", ".join(str(d) for d in sorted(other_dims) if d > 0),
-                        self.extractor.__class__.__name__,
-                        expected_dim,
+                        "GalleryMatcher: %d active signatures skipped (dim mismatch: %s vs %s dim=%d).",
+                        len(all_sigs), ", ".join(str(d) for d in sorted(other_dims) if d > 0),
+                        self.extractor.__class__.__name__, expected_dim,
                     )
             except Exception:
                 pass
@@ -277,14 +278,9 @@ class GalleryMatcher:
             cand_name = self.gallery_names[best_idx] if best_idx < len(self.gallery_names) else ""
             cand_cat = self.gallery_categories[best_idx] if best_idx < len(self.gallery_categories) else ""
             self.active_learning.consider_candidate(
-                track=track,
-                frame=frame,
-                similarity=best_score,
-                suggested_entity_id=cand_eid,
-                suggested_name=cand_name,
-                suggested_category=cand_cat,
-                camera_id=source,
-                timestamp=now,
+                track=track, frame=frame, similarity=best_score,
+                suggested_entity_id=cand_eid, suggested_name=cand_name,
+                suggested_category=cand_cat, camera_id=source, timestamp=now,
             )
         return None
 
@@ -330,6 +326,12 @@ class GalleryMatcher:
                 )
                 if not matched:
                     self._session_manager.allocate_new_session_entity(track, feat, now)
+            if self.world_bridge is not None and getattr(track, "session_id", None) is not None:
+                self.world_bridge.sync_session_track(
+                    source, track, track.session_id,
+                    label=track.identity_label or "", category=track.label,
+                    zone_id=zone_id, timestamp=now,
+                )
 
         return None
 
@@ -363,30 +365,23 @@ class GalleryMatcher:
             if ev is not None:
                 events.append(ev)
 
+        if self.world_bridge is not None:
+            self.world_bridge.prune_stale_tracks(camera_id=source, active_track_ids=active_tids, timestamp=now)
+            self.world_bridge.sync_camera_tracks(source, tracks, zone_lookup=zone_lookup, timestamp=now)
+
         return events
 
     def _apply_bounded_ema_update(
-        self,
-        entity_id: int,
-        query_vec: Optional[np.ndarray] = None,
-        gallery_idx: Optional[int] = None,
-        timestamp: Optional[float] = None,
-        candidate_features: Optional[np.ndarray] = None,
-        track_confidence: float = 0.9,
+        self, entity_id: int, query_vec: Optional[np.ndarray] = None,
+        gallery_idx: Optional[int] = None, timestamp: Optional[float] = None,
+        candidate_features: Optional[np.ndarray] = None, track_confidence: float = 0.9,
     ) -> bool:
         """Continuously adapt running descriptor centroid using Bounded Exponential Moving Average."""
         return apply_bounded_ema_update(
-            db=self.db,
-            gallery_matrix=self.gallery_matrix,
-            gallery_entity_ids=self.gallery_entity_ids,
-            ema_alpha=self.ema_alpha,
-            min_anchor_similarity=self.min_anchor_similarity,
-            entity_id=entity_id,
-            query_vec=query_vec,
-            gallery_idx=gallery_idx,
-            timestamp=timestamp,
-            candidate_features=candidate_features,
-            track_confidence=track_confidence,
+            db=self.db, gallery_matrix=self.gallery_matrix, gallery_entity_ids=self.gallery_entity_ids,
+            ema_alpha=self.ema_alpha, min_anchor_similarity=self.min_anchor_similarity,
+            entity_id=entity_id, query_vec=query_vec, gallery_idx=gallery_idx,
+            timestamp=timestamp, candidate_features=candidate_features, track_confidence=track_confidence,
         )
 
     def reassign_track(
@@ -395,18 +390,21 @@ class GalleryMatcher:
         new_entity_id: int,
         frame: Optional[np.ndarray] = None,
     ) -> bool:
-        """Manually reassign a track to a different entity and optionally enroll
-
-        the current crop as a new signature to improve future matching.
-        """
+        """Manually reassign a track to a different entity and optionally enroll a crop."""
         entity = self.db.get_entity(new_entity_id) if self.db is not None else None
         if not entity:
             return False
 
-        track.entity_id = new_entity_id
-        track.entity_name = entity["name"]
-        track.entity_category = entity["category"]
-        track.reid_score = 1.0
+        if self.world_bridge is not None:
+            self.world_bridge.reassign_track(
+                self.camera_id, track, new_entity_id,
+                name=entity["name"], category=entity["category"],
+            )
+        else:
+            track.entity_id = new_entity_id
+            track.entity_name = entity["name"]
+            track.entity_category = entity["category"]
+            track.reid_score = 1.0
 
         self._identified_tracks[track.track_id] = {
             "entity_id": new_entity_id,

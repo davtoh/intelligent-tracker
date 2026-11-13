@@ -67,15 +67,15 @@ Measured against workspace baseline before edits (`230` files, `45,956` lines, `
 ---
 
 ### Milestone 2: `WorldRuleEngine` & `WorldEntityBridge` (`Track` ↔ `WorldEntity` ↔ `Entity`) *(Deferred to Next Turn / Milestone)*
-- [ ] **intelligent_tracker/world/rules.py**: Implement `WorldRuleEngine(world_graph, event_bus)` subscribing to `ZoneEvent`, `TripwireCrossEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`, and `WorldPolicyUpdatedEvent` to reactively update zone occupancy, entity restriction flags, and policy parameters in `WorldGraph`, with an explicit `start()`/`stop()` lifecycle.
-- [ ] **intelligent_tracker/world/entity_bridge.py**: Implement `WorldEntityBridge(world_graph, db=None)` providing `sync_track_identification()`, `sync_session_track()`, `sync_camera_tracks()` (state-change/throttled updates for 30 FPS efficiency), `reassign_track()`, and `prune_stale_tracks()` so `Track` ↔ `WorldEntity` ↔ `Entity` mapping has one SSOT.
-- [ ] **intelligent_tracker/matching/gallery.py**: Add optional `world_bridge: WorldEntityBridge | None = None` support to `GalleryMatcher`, delegating track identification, session fallback linkage, and manual reassignment through `WorldEntityBridge` when attached while preserving 100% existing behavior when `world_bridge=None` (net line delta `<= 0` or `< 430` lines).
-- [ ] **intelligent_tracker/world/__init__.py**: Re-export `WorldRuleEngine` and `WorldEntityBridge`.
-- [ ] **tests/test_world_entity_bridge.py**: Add isolated unit tests (with `tempfile.TemporaryDirectory` `TrackerDB`) verifying `Track` ↔ `WorldEntity` ↔ `Entity` convergence across two cameras for the same `entity_id`, session-to-persistent promotion, `GalleryMatcher.reassign_track()` sync, stale track cleanup, and `WorldRuleEngine` reactive policy/occupancy updates via `EventBus`.
+- [x] **intelligent_tracker/world/rules.py**: Implement `WorldRuleEngine(world_graph, event_bus)` subscribing to `ZoneEvent`, `TripwireCrossEvent`, `EntityIdentifiedEvent`, `RestrictedEntityAlert`, and `WorldPolicyUpdatedEvent` to reactively update zone occupancy, entity restriction flags, and policy parameters in `WorldGraph`, with an explicit `start()`/`stop()` lifecycle.
+- [x] **intelligent_tracker/world/entity_bridge.py**: Implement `WorldEntityBridge(world_graph, db=None)` providing `sync_track_identification()`, `sync_session_track()`, `sync_camera_tracks()` (state-change/throttled updates for 30 FPS efficiency), `reassign_track()`, and `prune_stale_tracks()` so `Track` ↔ `WorldEntity` ↔ `Entity` mapping has one SSOT.
+- [x] **intelligent_tracker/matching/gallery.py**: Add optional `world_bridge: WorldEntityBridge | None = None` support to `GalleryMatcher`, delegating track identification, session fallback linkage, and manual reassignment through `WorldEntityBridge` when attached while preserving 100% existing behavior when `world_bridge=None` (net line delta `<= 0` or `< 430` lines).
+- [x] **intelligent_tracker/world/__init__.py**: Re-export `WorldRuleEngine` and `WorldEntityBridge`.
+- [x] **tests/test_world_entity_bridge.py**: Add isolated unit tests (with `tempfile.TemporaryDirectory` `TrackerDB`) verifying `Track` ↔ `WorldEntity` ↔ `Entity` convergence across two cameras for the same `entity_id`, session-to-persistent promotion, `GalleryMatcher.reassign_track()` sync, stale track cleanup, and `WorldRuleEngine` reactive policy/occupancy updates via `EventBus`.
 
 **Definition of Done (DoD)**:
-- [ ] Cross-camera detections for the same persistent `Entity` converge onto one `WorldEntity` node with accurate per-camera `camera_tracks` and `active_zones` bindings.
-- [ ] `MPLBACKEND=Agg python -m unittest tests/test_world_graph.py tests/test_world_entity_bridge.py tests/test_reid_matcher.py` passes 100%.
+- [x] Cross-camera detections for the same persistent `Entity` converge onto one `WorldEntity` node with accurate per-camera `camera_tracks` and `active_zones` bindings.
+- [x] `MPLBACKEND=Agg python -m unittest tests/test_world_graph.py tests/test_world_entity_bridge.py tests/test_reid_matcher.py` passes 100%.
 
 ---
 

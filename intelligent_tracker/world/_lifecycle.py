@@ -220,3 +220,52 @@ def remove_non_camera_node(
         return True, events
 
     return False, events
+
+
+def find_entity_by_track(graph: Any, camera_id: str, track_id: int) -> WorldEntity | None:
+    """Return a deep copy of the WorldEntity currently bound to (camera_id, track_id)."""
+    with graph._lock:
+        for entity in graph._entities.values():
+            if entity.camera_tracks.get(camera_id) == track_id:
+                return deepcopy(entity)
+    return None
+
+
+def list_entities_snapshot(graph: Any, camera_id: str | None = None) -> list[WorldEntity]:
+    """Return isolated copies of live WorldEntities, optionally filtered by camera_id."""
+    with graph._lock:
+        return [
+            deepcopy(entity)
+            for entity in graph._entities.values()
+            if camera_id is None or camera_id in entity.camera_tracks
+        ]
+
+
+def resolve_zone_node(graph: Any, camera_id: str, zone_id: str) -> ZoneNode | None:
+    """Resolve a ZoneNode by scoped node_id or (camera_id, zone_id)."""
+    if not zone_id:
+        return None
+    scoped_id = zone_id if ":zone:" in zone_id else f"{camera_id}:zone:{zone_id}"
+    with graph._lock:
+        zone = graph._zones.get(scoped_id) or graph._zones.get(zone_id)
+        if zone is None:
+            for candidate in graph._zones.values():
+                if candidate.camera_id == camera_id and candidate.zone_id == zone_id:
+                    zone = candidate
+                    break
+        return deepcopy(zone) if zone is not None else None
+
+
+def resolve_tripwire_node(graph: Any, camera_id: str, tripwire_id: str) -> TripwireNode | None:
+    """Resolve a TripwireNode by scoped node_id or (camera_id, tripwire_id)."""
+    if not tripwire_id:
+        return None
+    scoped_id = tripwire_id if ":tripwire:" in tripwire_id else f"{camera_id}:tripwire:{tripwire_id}"
+    with graph._lock:
+        tw = graph._tripwires.get(scoped_id) or graph._tripwires.get(tripwire_id)
+        if tw is None:
+            for candidate in graph._tripwires.values():
+                if candidate.camera_id == camera_id and candidate.tripwire_id == tripwire_id:
+                    tw = candidate
+                    break
+        return deepcopy(tw) if tw is not None else None
