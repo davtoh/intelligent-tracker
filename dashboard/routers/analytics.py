@@ -13,7 +13,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 import numpy as np
 
@@ -27,11 +27,12 @@ router = APIRouter(tags=["Analytics & Timeline"])
 
 @router.get("/analytics/heatmap")
 async def get_heatmap(
+    request: Request,
     camera_id: Optional[str] = None,
     format: str = Query("image", description="'image' or 'json'"),
 ):
     """Retrieve the accumulated spatial occupancy density heatmap."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
@@ -50,10 +51,12 @@ async def get_heatmap(
 
 @router.post("/analytics/heatmap/toggle")
 async def toggle_heatmap(
-    camera_id: Optional[str] = None, enabled: Optional[bool] = None
+    request: Request,
+    camera_id: Optional[str] = None,
+    enabled: Optional[bool] = None,
 ):
     """Toggle live heatmap blending overlay on the camera feed."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
     res = mgr.toggle_heatmap(enabled)
@@ -61,9 +64,9 @@ async def toggle_heatmap(
 
 
 @router.get("/entities")
-async def list_entities(category: Optional[str] = None):
+async def list_entities(request: Request, category: Optional[str] = None):
     """List enrolled gallery identities with appearance counters and sample thumbnails."""
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         return []
 
@@ -94,9 +97,9 @@ async def list_entities(category: Optional[str] = None):
 
 
 @router.post("/entities")
-async def create_entity(req: EntityCreateRequest):
+async def create_entity(req: EntityCreateRequest, request: Request):
     """Enroll a new identity into the persistent Re-ID gallery database."""
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -119,9 +122,9 @@ async def create_entity(req: EntityCreateRequest):
 
 
 @router.get("/entities/{entity_id}")
-async def get_entity_details(entity_id: int):
+async def get_entity_details(entity_id: int, request: Request):
     """Get single enrolled entity details with signatures and recent sightings."""
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -139,9 +142,9 @@ async def get_entity_details(entity_id: int):
 
 
 @router.delete("/entities/{entity_id}")
-async def delete_entity(entity_id: int):
+async def delete_entity(entity_id: int, request: Request):
     """Remove entity and its signatures from the gallery."""
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         raise HTTPException(status_code=503, detail="Database unavailable")
 
@@ -175,6 +178,7 @@ def _enrich_sighting(s: dict, db) -> dict:
 
 @router.get("/sightings")
 async def query_sightings(
+    request: Request,
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
     zone_id: Optional[str] = None,
@@ -183,7 +187,7 @@ async def query_sightings(
     limit: int = 50,
 ):
     """Search historical sighting timeline records with entity, zone, and time filters."""
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         return []
 
@@ -206,9 +210,9 @@ async def query_sightings(
 
 
 @router.get("/events")
-async def list_recent_events(limit: int = 50):
+async def list_recent_events(request: Request, limit: int = 50):
     """Get recent security and tracking alerts from EventBus ring buffer."""
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.event_bus:
         return []
 
@@ -225,13 +229,13 @@ async def list_recent_events(limit: int = 50):
 
 
 @router.post("/tag")
-async def tag_bounding_box(req: TagRequest):
+async def tag_bounding_box(req: TagRequest, request: Request):
     """
     Interactive click-to-tag bounding box capability:
     Tags an active track or bounding box from browser, generates visual embedding,
     and enrolls into the Re-ID gallery database.
     """
-    mgr = get_active_stream_manager(req.camera_id)
+    mgr = get_active_stream_manager(req.camera_id, conn=request)
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 

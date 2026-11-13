@@ -33,7 +33,7 @@ async def get_live_stream(camera_id: str, request: Request):
     """
     from fastapi.responses import StreamingResponse
 
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if not mgr:
         raise HTTPException(
             status_code=503,
@@ -104,7 +104,7 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, camera_id: str):
     Supports client commands (e.g. toggle heatmap, ping).
     """
     await websocket.accept()
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=websocket)
     if not mgr:
         await websocket.close(code=1013, reason="Service unavailable")
         return

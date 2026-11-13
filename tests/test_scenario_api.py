@@ -13,8 +13,8 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
-import dashboard.app as app_module
 from dashboard.camera_pool import CameraPool
+from dashboard.dependencies import bind_app_state, clear_app_state
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.scenarios import ScenarioManager
 
@@ -38,23 +38,25 @@ class TestScenarioApi(unittest.TestCase):
             db_path=cls.db_path,
             autostart=False,
         )
-        app_module.camera_pool = cls.pool
-        app_module.stream_manager = cls.pool.primary_stream
 
         # Set up ScenarioManager in app
         cls.scenario_mgr = ScenarioManager(
             config_path=cls.scenarios_yaml,
             db=cls.db,
         )
-        app_module.scenario_manager = cls.scenario_mgr
+        bind_app_state(
+            app,
+            camera_pool=cls.pool,
+            stream_manager=cls.pool.primary_stream,
+            scenario_manager=cls.scenario_mgr,
+            db=cls.db,
+        )
 
         cls.client = TestClient(app)
 
     @classmethod
     def tearDownClass(cls):
-        app_module.camera_pool = None
-        app_module.stream_manager = None
-        app_module.scenario_manager = None
+        clear_app_state(app)
         if cls.pool:
             cls.pool.stop_all()
         if hasattr(cls, "db") and cls.db:

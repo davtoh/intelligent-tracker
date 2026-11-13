@@ -25,6 +25,7 @@ from intelligent_tracker.journey import (
     JourneyVideoExporter,
     TrajectoryJourneySearcher,
 )
+from intelligent_tracker.scenarios import ScenarioManager
 from intelligent_tracker.topology import SpatialTransitionLink
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.topology")
@@ -33,9 +34,8 @@ router = APIRouter(tags=["Topology & Journey"])
 
 
 @router.get("/api/topology/transitions")
-async def list_spatial_transitions():
+async def list_spatial_transitions(sm: ScenarioManager = Depends(get_scenario_mgr)):
     """List registered cross-camera spatial transition links."""
-    sm = get_scenario_mgr()
     return [
         l.to_dict()
         for l in sm.topology.list_links()
@@ -44,9 +44,11 @@ async def list_spatial_transitions():
 
 
 @router.post("/api/topology/transitions")
-async def create_spatial_transition(req: SpatialTransitionRequest):
+async def create_spatial_transition(
+    req: SpatialTransitionRequest,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Define a predictive spatial transition link between camera zones."""
-    sm = get_scenario_mgr()
     link_id = (
         req.link_id
         or f"link_{req.source_camera}_{req.source_zone}_to_{req.target_camera}_{req.target_zone}".replace(
@@ -84,9 +86,11 @@ async def create_spatial_transition(req: SpatialTransitionRequest):
 
 
 @router.delete("/api/topology/transitions/{link_id}")
-async def delete_spatial_transition(link_id: str):
+async def delete_spatial_transition(
+    link_id: str,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Delete a spatial transition link by ID."""
-    sm = get_scenario_mgr()
     deleted = sm.topology.remove_link(link_id)
     if sm.db:
         db_del = sm.db.delete_spatial_transition(link_id)
@@ -97,9 +101,11 @@ async def delete_spatial_transition(link_id: str):
 
 
 @router.get("/api/topology/priors")
-async def list_active_priors(camera_id: Optional[str] = None):
+async def list_active_priors(
+    camera_id: Optional[str] = None,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """List currently active predictive spatial priors within valid transit windows."""
-    sm = get_scenario_mgr()
     now = time.time()
     priors = sm.topology.active_priors
     out = []

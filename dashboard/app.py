@@ -36,6 +36,8 @@ from dashboard.dependencies import (
     _get_rsac_mgr,
     _get_scenario_mgr,
     _reload_all_galleries,
+    bind_app_state,
+    clear_app_state,
     get_active_learning_mgr,
     get_active_stream_manager,
     get_camera_pool,
@@ -43,15 +45,10 @@ from dashboard.dependencies import (
     get_enrollment_mgr,
     get_lifecycle_manager,
     get_rsac_mgr,
-    get_scenario_manager,
     get_scenario_mgr,
     get_stream_manager,
     reload_all_galleries,
-    set_camera_pool,
-    set_lifecycle_manager,
-    set_scenario_manager,
     set_shutting_down,
-    set_stream_manager,
 )
 from dashboard.routers import (
     analytics_router,
@@ -126,39 +123,39 @@ _probe_video_file = VideoTranscodeService.probe_video
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
     """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
-    global stream_manager, camera_pool, scenario_manager, lifecycle_manager
     install_shutdown_handlers()
     set_parent_death_signal()
     start_parent_watchdog()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
-    camera_pool = CameraPool()
-    set_camera_pool(camera_pool)
-    stream_manager = camera_pool.primary_stream
-    set_stream_manager(stream_manager)
-    scenario_manager = ScenarioManager(world_graph=getattr(camera_pool, "world_graph", None))
-    set_scenario_manager(scenario_manager)
-    db = stream_manager.db if stream_manager else None
-    lifecycle_manager = StreamLifecycleManager(db=db, camera_pool=camera_pool)
-    set_lifecycle_manager(lifecycle_manager)
+    pool = CameraPool()
+    primary_sm = pool.primary_stream
+    scen_mgr = ScenarioManager(world_graph=getattr(pool, "world_graph", None))
+    db = primary_sm.db if primary_sm else None
+    lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
+    bind_app_state(
+        application,
+        camera_pool=pool,
+        stream_manager=primary_sm,
+        scenario_manager=scen_mgr,
+        lifecycle_manager=lifecycle_mgr,
+        db=db,
+    )
 
-    # Apply loaded scenarios to active streams
-    if camera_pool:
-        for sm in camera_pool.streams.values():
-            scenario_manager.apply_to_stream_manager(sm)
-    elif stream_manager:
-        scenario_manager.apply_to_stream_manager(stream_manager)
+    for sm in pool.streams.values():
+        scen_mgr.apply_to_stream_manager(sm)
 
     yield
     logger.info("Shutting down Intelligent Tracker CameraPool...")
     set_shutting_down(True)
-    if lifecycle_manager:
-        lifecycle_manager.stop_sampler()
-    if camera_pool:
-        await async_shutdown_pool(camera_pool)
-    elif stream_manager:
-        await asyncio.to_thread(stream_manager.stop)
+    if lifecycle_mgr:
+        lifecycle_mgr.stop_sampler()
+    if pool:
+        await async_shutdown_pool(pool)
+    elif primary_sm:
+        await asyncio.to_thread(primary_sm.stop)
+    clear_app_state(application)
     stop_parent_watchdog()
 
 

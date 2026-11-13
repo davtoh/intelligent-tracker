@@ -10,10 +10,11 @@ Provides:
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import get_camera_pool
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from intelligent_tracker.camera_device import CameraDeviceHandler
@@ -23,20 +24,11 @@ logger = logging.getLogger("intelligent_tracker.dashboard.routers.camera_diagnos
 router = APIRouter(prefix="/api/cameras", tags=["Camera Diagnostics"])
 
 
-def _resolve_pool():
-    pool = get_camera_pool()
-    if not pool:
-        from dashboard.camera_pool import CameraPool
-        from dashboard.dependencies import set_camera_pool
-        pool = CameraPool(autostart=False)
-        set_camera_pool(pool)
-    return pool
-
-
 @router.get("/diagnostics/summary")
-async def get_diagnostics_summary() -> Dict[str, Any]:
+async def get_diagnostics_summary(
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+) -> Dict[str, Any]:
     """Summary of operational health across all registered camera streams."""
-    pool = _resolve_pool()
     cameras = pool.list_cameras() if pool else []
     total = len(cameras)
     online = sum(1 for c in cameras if c.get("status") == "online")
@@ -56,9 +48,11 @@ async def get_diagnostics_summary() -> Dict[str, Any]:
 
 
 @router.get("/{camera_id}/diagnostics")
-async def get_camera_diagnostics(camera_id: str) -> Dict[str, Any]:
+async def get_camera_diagnostics(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+) -> Dict[str, Any]:
     """Fetch structured health telemetry, stack traces, and suggested fixes for a camera."""
-    pool = _resolve_pool()
     cfg = pool.camera_configs.get(camera_id) if pool else None
 
     health_mgr = CameraHealthManager()
@@ -77,9 +71,11 @@ async def get_camera_diagnostics(camera_id: str) -> Dict[str, Any]:
 
 
 @router.post("/{camera_id}/release")
-async def release_camera_device(camera_id: str) -> Dict[str, Any]:
+async def release_camera_device(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+) -> Dict[str, Any]:
     """Release DirectShow COM or worker process lock holding this camera's hardware index."""
-    pool = _resolve_pool()
     cfg = pool.camera_configs.get(camera_id) if pool else None
     if not cfg:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found in VMS pool")
@@ -108,9 +104,11 @@ async def release_camera_device(camera_id: str) -> Dict[str, Any]:
 
 
 @router.post("/{camera_id}/probe")
-async def probe_camera_channel(camera_id: str) -> Dict[str, Any]:
+async def probe_camera_channel(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+) -> Dict[str, Any]:
     """Perform real-time hardware or network probe on a registered camera channel."""
-    pool = _resolve_pool()
     cfg = pool.camera_configs.get(camera_id) if pool else None
     if not cfg:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found in VMS pool")

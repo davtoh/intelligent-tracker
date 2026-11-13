@@ -14,7 +14,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
-import dashboard.app as dashboard_module
+from dashboard.dependencies import bind_app_state, clear_app_state
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.database import TrackerDB
 
@@ -27,7 +27,7 @@ class TestDashboardApp(unittest.TestCase):
 
         # Initialize test StreamManager with mock components and synthetic video
         cls.manager = StreamManager(db_path=cls.db_path, camera_id="cam_01")
-        dashboard_module.stream_manager = cls.manager
+        bind_app_state(app, stream_manager=cls.manager, db=cls.manager.db)
         cls.manager.start()
 
         # Let the worker run a couple frames
@@ -36,6 +36,7 @@ class TestDashboardApp(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        clear_app_state(app)
         if cls.manager:
             cls.manager.stop()
         if os.path.exists(cls.test_dir):
