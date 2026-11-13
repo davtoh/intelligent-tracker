@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
+- **Type**: refactor
+- **Summary**: Decomposed dashboard/static/index.html into 9 tab partials and 4 modal partials rendered via Jinja2 on GET /, and added Step 3 architecture budget verification tests.
+- **Files** (4):
+  - `dashboard/app.py`
+  - `dashboard/static/index.html`
+  - `dashboard/static/partials/`
+  - `tests/test_step3_architecture_budgets.py`
+- **Verification**: python -m unittest discover tests (471 passed)
+
 ## [2026-11-13] feat: Step 2 Milestone 4: Dead Import Cleanup, Legacy Compatibility & Final Sign-Off
 - **Type**: feat
 - **Summary**: Removed dead high_objects/unused imports from scenarios.py and topology.py, added optional WorldGraph sync hooks in ScenarioManager, documented legacy compatibility boundaries in spaces.py and high_objects.py, guarded closed DB fallback in video_analytics_service.py, and verified all 450 unit/integration tests and Sphinx docs build.
@@ -131,16 +141,3 @@
   - `dashboard/static/index.html`
   - `tests/test_camera_detector_config.py`
 - **Verification**: 317/317 tests pass (36.71s); 0 warnings Sphinx HTML build.
-
-## [2026-11-09] feat: Dynamic Detector & Pipeline Configuration (Milestone 1)
-- **Type**: feat
-- **Summary**: Implemented dynamic Edge AI detector selection, confidence thresholds, and class filtering contracts across Pydantic schemas, CameraPool orchestrator, StreamPipelineFactory, and VideoRouter. Fixed broken VideoIndexer offline batch occurrence analytics import and parameterized feed promotion.
-- **Files** (7):
-  - `dashboard/schemas.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/routers/cameras.py`
-  - `dashboard/routers/videos.py`
-  - `dashboard/services/pipeline_factory.py`
-  - `intelligent_tracker/batch.py`
-  - `tests/test_camera_detector_config.py`
-- **Verification**: 315/315 tests pass (36.01s); Sphinx HTML build succeeds with 0 warnings.

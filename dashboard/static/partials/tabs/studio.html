@@ -1,0 +1,94 @@
+    <!-- TAB 6: WORLD SCENARIO STUDIO & BEV MINIMAP (Milestone 8) -->
+    <section class="tab-pane" id="tab-studio" role="tabpanel">
+      <div class="studio-layout-grid">
+        <!-- Main Studio Drawing Stage -->
+        <div class="studio-main-col glass-panel">
+          <div class="studio-toolbar">
+            <div class="toolbar-group">
+              <span class="toolbar-title">🎨 Tools:</span>
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-zone"
+                title="Draw Polygonal Zone (Click vertices, double click to close)">
+                🟢 Draw Zone
+              </button>
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-draw-tripwire"
+                title="Draw Virtual Tripwire Line">
+                ⚡ Draw Tripwire
+              </button>
+              <button class="btn btn-sm btn-outline studio-tool-btn" id="btn-mode-homography"
+                title="Calibrate 4-point Ground Plane Homography">
+                📐 Calibrate BEV (4 Pts)
+              </button>
+              <button class="btn btn-sm btn-outline" id="btn-studio-clear" title="Clear current points and exit mode">
+                ✕ Clear / Reset
+              </button>
+            </div>
+            <div class="studio-cam-select">
+              <label for="studio-camera-select">Channel:</label>
+              <select id="studio-camera-select" class="form-select-sm">
+                <option value="cam_01">cam_01</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Studio Status Notification Banner -->
+          <div class="studio-status-banner" id="studio-status-banner">
+            Click a tool above to start drawing zones, directional tripwires, or calibrating the ground plane
+            homography.
+          </div>
+
+          <!-- Studio Interactive Viewport with Drawing Canvas -->
+          <div class="studio-canvas-container" id="studio-canvas-wrapper">
+            <img id="studio-live-img" src="/stream/cam_01" alt="Studio Feed" />
+            <canvas id="studio-drawing-canvas" width="640" height="480"></canvas>
+          </div>
+        </div>
+
+        <!-- Studio Sidebar: BEV Minimap, Scenarios & Cross-Camera Transitions -->
+        <aside class="sidebar-column studio-sidebar">
+          <!-- Top-Down Bird's-Eye-View (BEV) Minimap Card -->
+          <div class="glass-panel bev-minimap-card">
+            <div class="panel-header">
+              <h3>🗺️ 2D Top-Down Minimap (BEV)</h3>
+              <span class="badge" id="bev-metric-scale">Calibrated</span>
+            </div>
+            <div class="bev-canvas-wrapper">
+              <canvas id="bev-minimap-canvas" width="320" height="320"></canvas>
+            </div>
+            <div class="bev-legend">
+              <span class="legend-item"><span class="dot green"></span> Normal / VIP</span>
+              <span class="legend-item"><span class="dot red"></span> Restricted</span>
+              <span class="legend-item"><span class="arrow-icon">↗</span> Velocity</span>
+            </div>
+          </div>
+
+          <!-- Active Zones & Tripwires Card -->
+          <div class="glass-panel studio-scenarios-card">
+            <div class="panel-header">
+              <h3>Active Zones & Tripwires</h3>
+            </div>
+            <div class="studio-items-group">
+              <div class="group-subhead">Polygonal Zones</div>
+              <div id="studio-zones-list" class="studio-items-scroll">
+                <div class="empty-state">Loading zones...</div>
+              </div>
+
+              <div class="group-subhead" style="margin-top: 10px;">Tripwires</div>
+              <div id="studio-tripwires-list" class="studio-items-scroll">
+                <div class="empty-state">Loading tripwires...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cross-Camera Spatial Transition Links Card -->
+          <div class="glass-panel studio-topology-card">
+            <div class="panel-header">
+              <h3>Spatial Transitions</h3>
+              <button class="btn btn-xs btn-primary" id="btn-add-transition-link">+ Add Transition</button>
+            </div>
+            <div id="topology-links-list" class="topology-links-list">
+              <div class="empty-state">Loading spatial transition links...</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>

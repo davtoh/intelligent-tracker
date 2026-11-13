@@ -1,0 +1,189 @@
+    <!-- TAB 1: LIVE MONITOR (WITH MULTI-CAMERA GRID) -->
+    <section class="tab-pane active" id="tab-live" role="tabpanel">
+      <div class="live-grid">
+        <!-- Live Video Viewport -->
+        <div class="video-card glass-panel" id="live-video-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">🎥</span>
+              <span id="video-stream-title">Camera Feed: CAM_01</span>
+            </div>
+            <div class="card-actions">
+              <!-- Active Camera Dropdown -->
+              <div class="camera-select-wrapper">
+                <select id="active-camera-select" class="form-select-sm" title="Select Focused Camera">
+                  <option value="cam_01">Main Entrance (cam_01)</option>
+                </select>
+              </div>
+
+              <!-- Multi-Grid Switcher -->
+              <div class="grid-switcher-group" title="Multi-Camera Grid Layout">
+                <button class="btn btn-sm btn-outline grid-switch-btn active" data-grid="1x1"
+                  title="Single Focused View (1x1)">1x1</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="2x2"
+                  title="Quad Multi-View (2x2)">2x2</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="3x3"
+                  title="Matrix Multi-View (3x3)">3x3</button>
+              </div>
+
+              <span class="resolution-badge" id="stream-res-badge">640x480</span>
+              <button class="btn btn-sm btn-outline" id="toggle-heatmap-btn" title="Toggle Heatmap Overlay">
+                🔥 Heatmap: OFF
+              </button>
+              <button class="btn btn-sm btn-outline" id="fullscreen-btn" title="Fullscreen">
+                ⛶ Fullscreen
+              </button>
+            </div>
+          </div>
+
+          <!-- Single Camera Focused Container (1x1 mode) -->
+          <div class="video-container" id="video-wrapper">
+            <!-- MJPEG Video Stream -->
+            <img id="live-stream-img" src="/stream/cam_01" alt="Live Camera Stream" />
+            <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
+            <canvas id="interactive-canvas"></canvas>
+            <!-- Hover Inspection Tooltip -->
+            <div class="track-hover-tooltip" id="track-tooltip" style="display: none;">
+              <div class="tooltip-header" id="tooltip-title">Track #--</div>
+              <div class="tooltip-body" id="tooltip-body">Confidence: -- | Dwell: --s</div>
+              <button class="btn btn-xs btn-primary tooltip-tag-btn" id="tooltip-tag-btn">🏷️ Tag Entity</button>
+            </div>
+          </div>
+
+          <!-- Multi-Camera Grid Container (2x2, 3x3 mode) -->
+          <div id="multi-grid-container" class="multi-camera-grid" style="display: none;"></div>
+
+          <!-- Live Player HUD Toolbar (Milestone 10) -->
+          <div class="live-player-hud glass-panel">
+            <div class="hud-left">
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-stream-pause-play"
+                title="Pause / Resume Live MJPEG Feed">
+                <span class="hud-icon" id="stream-pause-icon">⏸️</span>
+                <span id="stream-pause-text">Pause Feed</span>
+              </button>
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-stream-reconnect" title="Force Stream Reconnect">
+                🔄 Reconnect
+              </button>
+              <span class="stream-status-badge online" id="live-stream-status-badge">
+                <span class="pulse-dot"></span> <span id="live-stream-status-text">LIVE</span>
+              </span>
+            </div>
+            <div class="hud-center">
+              <span class="stream-telemetry-text" id="stream-telemetry-hud">CAM_01 • 640x480 • 0.0 FPS</span>
+            </div>
+            <div class="hud-right">
+              <button class="btn btn-sm btn-primary hud-btn" id="btn-quick-tag"
+                title="Click-to-Tag detected track directly on feed">
+                🏷️ Click-to-Tag
+              </button>
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-snapshot-save"
+                title="Save Instant Evidence Snapshot">
+                📸 Snapshot
+              </button>
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-fullscreen-toggle" title="Toggle Fullscreen">
+                ⛶ Fullscreen
+              </button>
+            </div>
+          </div>
+
+          <!-- Floating Overlays Control Toolbar (Milestone 8) -->
+          <div class="floating-overlay-toolbar glass-panel">
+            <div class="overlay-toolbar-label">
+              <span>👁️ Video Overlays:</span>
+            </div>
+            <div class="overlay-toggles-row">
+              <label class="overlay-toggle-chip" title="Toggle Object Bounding Boxes">
+                <input type="checkbox" id="overlay-toggle-bboxes" checked />
+                <span>📦 Boxes</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Track IDs and Recognized Names">
+                <input type="checkbox" id="overlay-toggle-track_ids" checked />
+                <span>🏷️ IDs</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Zone Dwell Time Timers">
+                <input type="checkbox" id="overlay-toggle-dwell_timers" checked />
+                <span>⏱️ Dwell</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Kinematic Velocity Movement Vectors">
+                <input type="checkbox" id="overlay-toggle-velocity" checked />
+                <span>↗️ Velocity</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Spatial Polygonal Zones">
+                <input type="checkbox" id="overlay-toggle-zones" checked />
+                <span>🟢 Zones</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Directional Virtual Tripwires">
+                <input type="checkbox" id="overlay-toggle-tripwires" checked />
+                <span>⚡ Tripwires</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Real-Time Density Heatmap Overlay">
+                <input type="checkbox" id="overlay-toggle-heatmap" />
+                <span>🔥 Heatmap</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle 2D Bird's-Eye Minimap Picture-in-Picture">
+                <input type="checkbox" id="overlay-toggle-bev_minimap" />
+                <span>🗺️ BEV Minimap</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Top Status HUD Information Bar">
+                <input type="checkbox" id="overlay-toggle-hud_bar" checked />
+                <span>ℹ️ Top HUD</span>
+              </label>
+              <label class="overlay-toggle-chip" title="Toggle Real-Time Toast Alert Notifications">
+                <input type="checkbox" id="overlay-toggle-toast_prompts" checked />
+                <span>🔔 Live Toasts</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Telemetry Sidebar -->
+        <aside class="sidebar-column">
+          <!-- Metric KPI Cards -->
+          <div class="kpi-row">
+            <div class="kpi-card glass-panel">
+              <div class="kpi-label">Active Tracks</div>
+              <div class="kpi-value cyan" id="kpi-active-tracks">0</div>
+              <div class="kpi-sub" id="kpi-tracks-sub">In view</div>
+            </div>
+            <div class="kpi-card glass-panel">
+              <div class="kpi-label">Total Crossed</div>
+              <div class="kpi-value green" id="kpi-total-crossed">0</div>
+              <div class="kpi-sub">Tripwire entries</div>
+            </div>
+          </div>
+
+          <!-- Zone Occupancy Meter -->
+          <div class="glass-panel zone-panel">
+            <div class="panel-header">
+              <h3>Zone Occupancy</h3>
+              <span class="panel-badge" id="zone-count-badge">0 zones</span>
+            </div>
+            <div class="zones-list" id="zones-container">
+              <div class="empty-state">Loading zone status...</div>
+            </div>
+          </div>
+
+          <!-- Tripwires Telemetry -->
+          <div class="glass-panel tripwire-panel">
+            <div class="panel-header">
+              <h3>Virtual Tripwires</h3>
+              <span class="panel-badge">Bidirectional</span>
+            </div>
+            <div class="tripwires-list" id="tripwires-container">
+              <div class="empty-state">No tripwires active</div>
+            </div>
+          </div>
+
+          <!-- Live Alerts Mini Feed -->
+          <div class="glass-panel alerts-mini-panel">
+            <div class="panel-header">
+              <h3>Recent Alerts</h3>
+              <button class="btn-link" id="view-all-alerts-link">View All</button>
+            </div>
+            <div class="alerts-mini-list" id="live-alerts-feed">
+              <div class="empty-state">No active security alerts</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>

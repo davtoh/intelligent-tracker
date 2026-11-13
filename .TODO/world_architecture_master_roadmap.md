@@ -48,18 +48,18 @@
 ---
 
 ## Step 3: Monolith Decomposition, DI Cleanup & SQLite Concurrency Hardening
-- **Goal**: Bring every active Python/HTML/JS module under the `AGENTS.md` 350/500-line and 10/12-method ceilings and eliminate multi-thread SQLite contention and `sys.modules` DI hacks.
-- **Pre-Plan Evaluation Check**:
-  - Run `diagnose.py arch-map --path .` and check all `HARD (>=500L)`, `WARN (350-499L)`, and `CLASS (>12 methods)` entries.
-- **Target Scope**:
-  - Split `dashboard/camera_pool.py` (497L, 19 methods) into `CameraConfigStore`, `StreamPoolCoordinator`, and a thin `CameraPool` facade (< 250L).
-  - Refactor `dashboard/dependencies.py` to use FastAPI `app.state` + standard `app.dependency_overrides` instead of `sys.modules.get("dashboard.app")`.
-  - Split `intelligent_tracker/analytics.py` (667L) into `intelligent_tracker/analytics/` (`engine.py`, `heatmap.py`, `zone_stats.py`) with facade re-exports.
-  - Consolidate/split `intelligent_tracker/periferials.py` (510L) into `intelligent_tracker/video/` and decompose `dashboard/static/index.html` (1,688L) into clean template partials/components.
-  - Introduce thread-safe SQLite WAL pooling / serialized write coordinator in `intelligent_tracker/database.py` and remove direct `TrackerDB("data/tracker.db")` instantiations in routers (e.g., `dashboard/routers/topology.py`).
-- **Definition of Done**:
-  - Zero active runtime files >= 500 lines (except explicitly frozen/archived legacy files with deprecation notices).
-  - Concurrent multi-stream sighting write stress test passes with zero `database is locked` errors.
+- [x] **Goal**: Bring every active Python/HTML/JS module under the `AGENTS.md` 350/500-line and 10/12-method ceilings and eliminate multi-thread SQLite contention and `sys.modules` DI hacks.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py arch-map --path .` and check all `HARD (>=500L)`, `WARN (350-499L)`, and `CLASS (>12 methods)` entries.
+- [x] **Target Scope**:
+  - [x] Split `dashboard/camera_pool.py` (497L, 19 methods) into `CameraConfigStore`, `StreamPoolCoordinator`, and a thin `CameraPool` facade (< 250L).
+  - [x] Refactor `dashboard/dependencies.py` to use FastAPI `app.state` + standard `app.dependency_overrides` instead of `sys.modules.get("dashboard.app")`.
+  - [x] Split `intelligent_tracker/analytics.py` (667L) into `intelligent_tracker/analytics/` (`engine.py`, `heatmap.py`, `zone_stats.py`) with facade re-exports.
+  - [x] Consolidate/split `intelligent_tracker/periferials.py` (510L) into `intelligent_tracker/video/` and decompose `dashboard/static/index.html` (1,688L) into clean template partials/components.
+  - [x] Introduce thread-safe SQLite WAL pooling / serialized write coordinator in `intelligent_tracker/database.py` and remove direct `TrackerDB("data/tracker.db")` instantiations in routers (e.g., `dashboard/routers/topology.py`).
+- [x] **Definition of Done**:
+  - [x] Zero active runtime files >= 500 lines (except explicitly frozen/archived legacy files with deprecation notices).
+  - [x] Concurrent multi-stream sighting write stress test passes with zero `database is locked` errors.
 
 ---
 

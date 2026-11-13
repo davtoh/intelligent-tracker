@@ -1,0 +1,26 @@
+    <!-- TAB 7: TRAJECTORY JOURNEY SEARCH & VIDEO EXPORTER (Milestone 8) -->
+    <section class="tab-pane" id="tab-journey" role="tabpanel">
+      <div class="journey-wrapper">
+        <div class="glass-panel toolbar-panel">
+          <div class="toolbar-left">
+            <div class="search-box journey-search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="journey-search-query"
+                placeholder="Enter Entity Name (e.g. Alice) or Track ID (e.g. 42)..." />
+            </div>
+            <button class="btn btn-primary" id="btn-journey-search">🔎 Search Journey</button>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-success" id="btn-journey-export">🎬 Export Journey MP4</button>
+          </div>
+        </div>
+
+        <div id="journey-export-status" class="journey-status-area"></div>
+
+        <!-- Trajectory Journey Results Container -->
+        <div id="journey-results-container" class="journey-results-container">
+          <div class="empty-state">Enter an entity name or track ID above to reconstruct their cross-camera trajectory
+            journey.</div>
+        </div>
+      </div>
+    </section>

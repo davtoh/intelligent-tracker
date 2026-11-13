@@ -1,0 +1,29 @@
+    <!-- TAB 8: REVIEW & LEARN ACTIVE LEARNING INBOX (Milestone 9) -->
+    <section class="tab-pane" id="tab-review" role="tabpanel">
+      <div class="review-wrapper">
+        <div class="glass-panel toolbar-panel">
+          <div class="toolbar-left">
+            <h3 style="margin: 0; font-size: 16px; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+              <span>🧠 Review & Learn Inbox</span>
+              <span class="badge" id="review-inbox-counter">0 Candidates</span>
+            </h3>
+            <div class="filter-group review-filter-group">
+              <button class="btn btn-xs btn-outline review-filter-btn active" data-status="pending">Pending</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="confirmed">Confirmed</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="reassigned">Reassigned</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="enrolled_new">New Enrolled</button>
+              <button class="btn btn-xs btn-outline review-filter-btn" data-status="dismissed">Dismissed</button>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-sm btn-outline" id="btn-refresh-review-queue">🔄 Refresh Queue</button>
+          </div>
+        </div>
+
+        <!-- Review Grid Container -->
+        <div id="review-queue-container" class="review-queue-grid">
+          <div class="empty-state">No pending review candidates in queue. Borderline detections (0.45 &lt; sim &lt;
+            0.70) are automatically routed here for human-in-the-loop verification.</div>
+        </div>
+      </div>
+    </section>

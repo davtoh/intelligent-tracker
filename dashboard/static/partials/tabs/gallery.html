@@ -1,0 +1,30 @@
+    <!-- TAB 2: ENTITY GALLERY VIEW -->
+    <section class="tab-pane" id="tab-gallery" role="tabpanel">
+      <div class="gallery-wrapper">
+        <div class="glass-panel toolbar-panel">
+          <div class="toolbar-left">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="gallery-search-input" placeholder="Search enrolled entities by name or note..." />
+            </div>
+            <div class="filter-pills" id="gallery-category-filters">
+              <button class="filter-pill active" data-category="">All</button>
+              <button class="filter-pill" data-category="staff">Staff</button>
+              <button class="filter-pill" data-category="vip">VIP</button>
+              <button class="filter-pill" data-category="restricted">Restricted</button>
+              <button class="filter-pill" data-category="person">Customer / Guest</button>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-primary" id="btn-enroll-modal">
+              ➕ Enroll New Identity
+            </button>
+          </div>
+        </div>
+
+        <!-- Gallery Cards Grid -->
+        <div class="gallery-grid" id="entity-gallery-grid">
+          <div class="empty-state">Loading gallery identities...</div>
+        </div>
+      </div>
+    </section>

@@ -1,0 +1,171 @@
+  <!-- Modal 8: Scenario Studio Spatial Zone Builder (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-zone" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>🟢 Spatial Zone Builder</h3>
+        <button class="modal-close-btn" id="modal-zone-close">&times;</button>
+      </div>
+      <form id="studio-zone-form">
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="modal-zone-name-input">Zone Name *</label>
+            <input type="text" id="modal-zone-name-input" class="form-input"
+              placeholder="e.g. Vault Perimeter, Door Exit" required />
+          </div>
+          <div class="form-group">
+            <label for="modal-zone-category-select">Category Filter</label>
+            <select id="modal-zone-category-select" class="form-input">
+              <option value="">All Categories (Unfiltered)</option>
+              <option value="person">Person</option>
+              <option value="vehicle">Vehicle</option>
+              <option value="staff">Staff Member</option>
+              <option value="vip">VIP Resident</option>
+              <option value="restricted">Restricted / Watchlist</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-zone-dwell-input">Dwell Threshold (s)</label>
+              <input type="number" id="modal-zone-dwell-input" class="form-input" value="5.0" min="0.5" step="0.5" />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-zone-capacity-input">Capacity Limit</label>
+              <input type="number" id="modal-zone-capacity-input" class="form-input" placeholder="0 = Unlimited" min="0"
+                value="0" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-zone-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-zone-save">💾 Save Zone</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 9: Scenario Studio Tripwire Builder (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-tripwire" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>⚡ Directional Tripwire Builder</h3>
+        <button class="modal-close-btn" id="modal-tripwire-close">&times;</button>
+      </div>
+      <form id="studio-tripwire-form">
+        <div class="modal-body-scroll">
+          <div class="form-group">
+            <label for="modal-tripwire-name-input">Tripwire Name *</label>
+            <input type="text" id="modal-tripwire-name-input" class="form-input"
+              placeholder="e.g. Entrance Line, Hallway A" required />
+          </div>
+          <div class="form-group">
+            <label for="modal-tripwire-bidir-select">Detection Crossing Direction</label>
+            <select id="modal-tripwire-bidir-select" class="form-input">
+              <option value="1">Bidirectional (Detect Both IN & OUT)</option>
+              <option value="0">One-Way (Point A to Point B only)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-tripwire-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-tripwire-save">⚡ Save Tripwire</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 10: Scenario Studio Ground Plane Homography Calibration (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-homography" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>📐 Ground Plane Homography Calibration</h3>
+        <button class="modal-close-btn" id="modal-homography-close">&times;</button>
+      </div>
+      <form id="studio-homography-form">
+        <div class="modal-body-scroll">
+          <p style="font-size: 13px; color: #94a3b8; margin-bottom: 14px;">
+            Specify real-world ground metric dimensions for the selected 4-corner quadrangle.
+          </p>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-homography-width-input">Ground Width (m) *</label>
+              <input type="number" id="modal-homography-width-input" class="form-input" value="10.0" min="0.5"
+                step="0.1" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-homography-height-input">Ground Height (m) *</label>
+              <input type="number" id="modal-homography-height-input" class="form-input" value="10.0" min="0.5"
+                step="0.1" required />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-homography-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-homography-save">📐 Calibrate Ground
+            Plane</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 11: Cross-Camera Spatial Transition Link (Slice 1B) -->
+  <div class="modal-backdrop" id="modal-studio-transition" style="display: none;">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h3>🔗 Cross-Camera Spatial Transition Link</h3>
+        <button class="modal-close-btn" id="modal-transition-close">&times;</button>
+      </div>
+      <form id="studio-transition-form">
+        <div class="modal-body-scroll">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-trans-src-cam-input">Source Camera ID *</label>
+              <input type="text" id="modal-trans-src-cam-input" class="form-input" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-trans-src-zone-input">Source Zone Name *</label>
+              <input type="text" id="modal-trans-src-zone-input" class="form-input" placeholder="e.g. Door Exit"
+                required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-trans-tgt-cam-input">Target Camera ID *</label>
+              <input type="text" id="modal-trans-tgt-cam-input" class="form-input" placeholder="e.g. cam_02" required />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-trans-tgt-zone-input">Target Zone Name *</label>
+              <input type="text" id="modal-trans-tgt-zone-input" class="form-input" placeholder="e.g. Door Entrance"
+                required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="modal-trans-tmin-input">Min Transit Time (s)</label>
+              <input type="number" id="modal-trans-tmin-input" class="form-input" value="2.0" min="0.1" step="0.5" />
+            </div>
+            <div class="form-group col-6">
+              <label for="modal-trans-tmax-input">Max Transit Time (s)</label>
+              <input type="number" id="modal-trans-tmax-input" class="form-input" value="15.0" min="1.0" step="0.5" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="modal-trans-boost-input">Spatial Prior Bonus (0.1 to 0.5)</label>
+            <input type="number" id="modal-trans-boost-input" class="form-input" value="0.35" min="0.05" max="0.9"
+              step="0.05" />
+          </div>
+          <div class="form-group">
+            <label
+              style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #e2e8f0; font-size: 13px;">
+              <input type="checkbox" id="modal-trans-bidir-cb" style="accent-color: #06b6d4;" />
+              <span>Make transition link bidirectional</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="modal-transition-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-modal-transition-save">🔗 Create Transition
+            Link</button>
+        </div>
+      </form>
+    </div>
+  </div>

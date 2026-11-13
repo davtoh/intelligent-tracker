@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+import jinja2
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
@@ -204,8 +205,8 @@ async def serve_index():
     """Serve the modern single-page dashboard."""
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(STATIC_DIR))
+        return HTMLResponse(content=env.get_template("index.html").render())
     return HTMLResponse("<h1>Intelligent Tracker Dashboard Initializing...</h1>")
 
 
