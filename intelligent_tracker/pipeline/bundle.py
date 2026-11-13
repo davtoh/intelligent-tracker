@@ -20,6 +20,14 @@ from intelligent_tracker.reid import ReIDExtractorFactory
 from intelligent_tracker.rsac import RSACManager
 from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.video import VideoSource
+from intelligent_tracker.world import (
+    CameraNode,
+    TripwireNode,
+    WorldEntityBridge,
+    WorldGraph,
+    WorldRuleEngine,
+    ZoneNode,
+)
 
 logger = logging.getLogger("intelligent_tracker.pipeline.bundle")
 
@@ -51,6 +59,9 @@ class PipelineBundle:
     enrollment_manager: UniversalEnrollmentManager | None = None
     event_bus: EventBus | None = None
     event_pipeline: dict[str, Any] | None = None
+    world_graph: WorldGraph | None = None
+    world_bridge: WorldEntityBridge | None = None
+    world_rule_engine: WorldRuleEngine | None = None
     writer: Any = None
     _closed: bool = False
 
@@ -63,6 +74,7 @@ class PipelineBundle:
         _safe_call(self.writer, "release")
         _safe_call(self.video_source, "stop")
         _safe_call(self.video_source, "release")
+        _safe_call(self.world_rule_engine, "stop")
 
         if isinstance(self.event_pipeline, dict):
             _safe_call(self.event_pipeline.get("rule_engine"), "stop")
@@ -199,6 +211,7 @@ def build_reid(
             db=db,
             extractor=extractor,
             reid_threshold=config.reid_threshold,
+            camera_id=config.camera_id,
         )
         return extractor, matcher
     except Exception as exc:
@@ -224,6 +237,7 @@ def build_events(
 
     if event_bus is None and config.enable_event_bus_fallback:
         event_bus = EventBus(capacity=500)
+        event_bus.start()
 
     if analytics is not None and event_bus is not None:
         analytics.event_bus = event_bus
@@ -268,3 +282,67 @@ def build_writer(config: PipelineConfig) -> Any:
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     res_w, res_h = config.resolution
     return cv2.VideoWriter(config.output_path, fourcc, float(config.framerate), (res_w, res_h))
+
+
+def _register_world_children(
+    graph: WorldGraph,
+    config: PipelineConfig,
+    analytics: AnalyticsEngine | None,
+) -> None:
+    """Register camera zones and tripwires in WorldGraph from analytics or config."""
+    zones = (
+        [(z.name, z.polygon, z.capacity_limit) for z in analytics.zones.values()]
+        if analytics is not None
+        else [
+            (str(z.get("name", "zone")), z.get("polygon"), z.get("capacity_limit", z.get("max_occupancy")))
+            for z in config.zones if z.get("polygon") and len(z["polygon"]) >= 3
+        ]
+    )
+    for name, poly, cap in zones:
+        graph.register_zone(ZoneNode(
+            zone_id=name, camera_id=config.camera_id, name=name,
+            points=[(float(pt[0]), float(pt[1])) for pt in poly], max_occupancy=cap,
+        ))
+    tripwires = (
+        [(tw.name, tw.pt1, tw.pt2, tw.bidirectional) for tw in analytics.tripwires.values()]
+        if analytics is not None
+        else [
+            (str(tw.get("name", "tripwire")), tw["line"][0], tw["line"][1], bool(tw.get("bidirectional", True)))
+            for tw in config.tripwires if tw.get("line") and len(tw["line"]) >= 2
+        ]
+    )
+    for name, pt1, pt2, bidir in tripwires:
+        graph.register_tripwire(TripwireNode(
+            tripwire_id=name, camera_id=config.camera_id, name=name,
+            pt1=(float(pt1[0]), float(pt1[1])), pt2=(float(pt2[0]), float(pt2[1])),
+            direction="both" if bidir else "in",
+        ))
+
+
+def build_world(
+    config: PipelineConfig,
+    *,
+    world_graph: WorldGraph | None = None,
+    db: TrackerDB | None = None,
+    analytics: AnalyticsEngine | None = None,
+    gallery_matcher: GalleryMatcher | None = None,
+    event_bus: EventBus | None = None,
+) -> tuple[WorldGraph, WorldEntityBridge, WorldRuleEngine | None]:
+    """Initialize scoped WorldGraph, WorldEntityBridge, and optional WorldRuleEngine."""
+    graph = world_graph if world_graph is not None else WorldGraph(event_bus=event_bus)
+    graph.register_camera(CameraNode(
+        camera_id=config.camera_id,
+        name=config.camera_id,
+        source=str(config.source),
+        enabled=True,
+    ))
+    _register_world_children(graph, config, analytics)
+    bridge = WorldEntityBridge(graph, db=db)
+    if gallery_matcher is not None:
+        gallery_matcher.camera_id = config.camera_id
+        gallery_matcher.world_bridge = bridge
+    rule_engine: WorldRuleEngine | None = None
+    if event_bus is not None:
+        rule_engine = WorldRuleEngine(graph, event_bus)
+        rule_engine.start()
+    return graph, bridge, rule_engine

@@ -32,6 +32,7 @@ from intelligent_tracker.pipeline.bundle import (
 )
 from intelligent_tracker.rsac import RSACManager
 from intelligent_tracker.video import VideoSource
+from intelligent_tracker.world import WorldEntityBridge, WorldGraph, WorldRuleEngine
 
 
 @dataclass
@@ -50,6 +51,9 @@ class StreamPipelineBundle:
     enrollment_manager: UniversalEnrollmentManager | None = None
     event_bus: EventBus | None = None
     event_pipeline: Any = None
+    world_graph: WorldGraph | None = None
+    world_bridge: WorldEntityBridge | None = None
+    world_rule_engine: WorldRuleEngine | None = None
     pipeline_bundle: PipelineBundle | None = None
 
 
@@ -68,6 +72,7 @@ class StreamPipelineFactory:
         db_path: str,
         camera_id: str,
         source_override: Any = None,
+        world_graph: WorldGraph | None = None,
     ) -> StreamPipelineBundle:
         """Instantiate and wire complete computer vision pipeline via PipelineEngine."""
         data = dict(cfg or {})
@@ -83,7 +88,7 @@ class StreamPipelineFactory:
         if "loop" not in data.get("video", {}):
             config.loop_video = True
 
-        bundle = PipelineEngine.build(config)
+        bundle = PipelineEngine.build(config, world_graph=world_graph)
         return StreamPipelineBundle(
             db=bundle.db,
             video_source=bundle.video_source,
@@ -97,6 +102,9 @@ class StreamPipelineFactory:
             enrollment_manager=bundle.enrollment_manager,
             event_bus=bundle.event_bus,
             event_pipeline=bundle.event_pipeline,
+            world_graph=bundle.world_graph,
+            world_bridge=bundle.world_bridge,
+            world_rule_engine=bundle.world_rule_engine,
             pipeline_bundle=bundle,
         )
 

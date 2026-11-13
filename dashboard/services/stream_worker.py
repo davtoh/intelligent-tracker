@@ -130,6 +130,9 @@ class StreamWorker:
                     enrollment_manager=getattr(self.manager, "enrollment_manager", None),
                     event_bus=getattr(self.manager, "event_bus", None),
                     event_pipeline=getattr(self.manager, "event_pipeline", None),
+                    world_graph=getattr(self.manager, "world_graph", None),
+                    world_bridge=getattr(self.manager, "world_bridge", None),
+                    world_rule_engine=getattr(self.manager, "world_rule_engine", None),
                 )
             self._processor = FrameProcessor(bundle, topology=getattr(self.manager, "topology", None))
 
@@ -140,6 +143,7 @@ class StreamWorker:
         bundle.analytics = getattr(self.manager, "analytics", bundle.analytics)
         bundle.gallery_matcher = getattr(self.manager, "gallery_matcher", bundle.gallery_matcher)
         bundle.event_bus = getattr(self.manager, "event_bus", bundle.event_bus)
+        bundle.world_bridge = getattr(self.manager, "world_bridge", bundle.world_bridge)
         return self._processor
 
     def run(self) -> None:

@@ -66,13 +66,24 @@ class FrameProcessor:
         bundle: PipelineBundle,
         *,
         topology: Any = None,
+        world_bridge: Any = None,
         fps_window: int = 30,
     ) -> None:
         self.bundle = bundle
         self.topology = topology
+        self._world_bridge = world_bridge
         self.frame_count = 0
         self.measured_fps = 0.0
         self._fps_history: deque[float] = deque(maxlen=max(1, int(fps_window)))
+
+    @property
+    def world_bridge(self) -> Any:
+        """Return explicit or bundle-owned WorldEntityBridge."""
+        return self._world_bridge if self._world_bridge is not None else self.bundle.world_bridge
+
+    @world_bridge.setter
+    def world_bridge(self, value: Any) -> None:
+        self._world_bridge = value
 
     def reset_fps(self) -> None:
         """Clear accumulated frame count and rolling FPS history."""
@@ -96,7 +107,9 @@ class FrameProcessor:
         tracks = self._run_tracker(detections, now)
         analytics_res = self._run_analytics(processed, tracks, now)
         self._handle_zone_exits(analytics_res, tracks, now)
-        identifications = self._run_reid(processed, tracks, now)
+        zone_lookup = self._build_zone_lookup(tracks)
+        identifications = self._run_reid(processed, tracks, now, zone_lookup=zone_lookup)
+        self._sync_world_bridge(tracks, zone_lookup, now)
 
         elapsed_s = max(time.perf_counter() - t_perf, 1e-6)
         self.frame_count += 1
@@ -184,11 +197,63 @@ class FrameProcessor:
                 timestamp=timestamp,
             )
 
+    def _camera_id(self) -> str:
+        """Resolve active camera identifier from analytics or config."""
+        return (
+            getattr(self.bundle.analytics, "camera_id", None)
+            or getattr(self.bundle.config, "camera_id", None)
+            or "default"
+        )
+
+    def _build_zone_lookup(self, tracks: dict[int, Any]) -> dict[int, str]:
+        """Map active track IDs to their occupied analytics zone name."""
+        analytics = self.bundle.analytics
+        if analytics is None or not tracks:
+            return {}
+        zone_lookup: dict[int, str] = {}
+        for z_name, zone in getattr(analytics, "zones", {}).items():
+            for tid in getattr(zone, "current_occupants", ()):
+                if tid in tracks and tid not in zone_lookup:
+                    zone_lookup[tid] = str(z_name)
+        return zone_lookup
+
+    def _sync_world_bridge(
+        self,
+        tracks: dict[int, Any],
+        zone_lookup: dict[int, str],
+        timestamp: float,
+    ) -> None:
+        """Push throttled track/zone state and stale prunes into WorldEntityBridge."""
+        bridge = self.world_bridge
+        if bridge is None:
+            return
+        matcher = self.bundle.gallery_matcher
+        if matcher is not None and tracks and getattr(matcher, "world_bridge", None) is bridge:
+            return
+        camera_id = self._camera_id()
+        try:
+            bridge.prune_stale_tracks(
+                camera_id=camera_id,
+                active_track_ids=set(tracks.keys()),
+                timestamp=timestamp,
+            )
+            if tracks:
+                bridge.sync_camera_tracks(
+                    camera_id,
+                    tracks,
+                    zone_lookup=zone_lookup,
+                    timestamp=timestamp,
+                )
+        except Exception as exc:
+            logger.debug("World bridge sync error: %s", exc)
+
     def _run_reid(
         self,
         frame: np.ndarray,
         tracks: dict[int, Any],
         timestamp: float,
+        *,
+        zone_lookup: dict[int, str] | None = None,
     ) -> list[Any]:
         """Run Re-ID gallery matching and publish identification/restricted events."""
         matcher = self.bundle.gallery_matcher
@@ -197,12 +262,15 @@ class FrameProcessor:
         try:
             if self.topology is not None and getattr(matcher, "topology", None) is None:
                 matcher.topology = self.topology
+            if self.world_bridge is not None and getattr(matcher, "world_bridge", None) is None:
+                matcher.world_bridge = self.world_bridge
             events = list(
                 matcher.match_tracks(
                     tracks=tracks,
                     frame=frame,
-                    source=str(self.bundle.config.source),
+                    source=self._camera_id(),
                     timestamp=timestamp,
+                    zone_lookup=zone_lookup,
                 )
                 or []
             )

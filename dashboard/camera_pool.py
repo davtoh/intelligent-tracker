@@ -10,15 +10,17 @@ Handles automatic boot restoration and state persistence via `configs/cameras.js
 """
 
 import os
-import sys
 import time
 import json
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 
+from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.stream_manager import StreamManager
+from intelligent_tracker.camera_resolver import CameraPathResolver
+from intelligent_tracker.world import WorldGraph
 
 logger = logging.getLogger("intelligent_tracker.camera_pool")
 
@@ -45,6 +47,7 @@ class CameraPool:
         self._lock = threading.RLock()
         self.camera_configs: Dict[str, Dict[str, Any]] = {}
         self.streams: Dict[str, StreamManager] = {}
+        self.world_graph = WorldGraph()
 
         # Auto-restore configured cameras
         self.load_cameras()
@@ -152,10 +155,6 @@ class CameraPool:
         raw_source = cfg.get("source", "synthetic")
         device_name = cfg.get("device_name") or cfg.get("details", {}).get("device_name")
         name = cfg.get("name", f"Camera {camera_id.upper()}")
-
-        from intelligent_tracker.camera_resolver import CameraPathResolver
-        from dashboard.services.camera_diagnostics import CameraHealthManager
-
         resolved_source, meta = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
         is_source_error = meta.get("status") == "error"
 
@@ -176,6 +175,7 @@ class CameraPool:
         mgr = StreamManager(
             config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
             name=name, source_override=resolved_source, custom_cfg=custom_cfg if custom_cfg else None,
+            world_graph=self.world_graph,
         )
 
         self.streams[camera_id] = mgr
@@ -255,7 +255,7 @@ class CameraPool:
             else:
                 mgr = StreamManager(
                     config_path=self.base_config_path, db_path=self.db_path,
-                    camera_id=camera_id, name=name, source_override=source,
+                    camera_id=camera_id, name=name, source_override=source, world_graph=self.world_graph,
                 )
                 self.streams[camera_id] = mgr
 
@@ -372,6 +372,7 @@ class CameraPool:
             except Exception as e:
                 logger.debug("Error stopping manager in remove_camera: %s", e)
 
+        self.world_graph.remove_camera(camera_id)
         logger.info("Removed camera [%s] from pool", camera_id)
         return removed_cfg is not None
 
@@ -420,7 +421,6 @@ class CameraPool:
                     res_str = f"{mgr.video_source.width}x{mgr.video_source.height}"
                     is_synth = mgr.video_source.is_synthetic
 
-                from dashboard.services.camera_diagnostics import CameraHealthManager
                 health = CameraHealthManager().get_health(cam_id)
                 health_status = "paused" if not cfg.get("enabled", True) else (
                     health.status if health.status != "unknown" else ("online" if is_running else "offline")

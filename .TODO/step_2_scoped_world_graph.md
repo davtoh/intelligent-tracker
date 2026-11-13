@@ -80,17 +80,17 @@ Measured against workspace baseline before edits (`230` files, `45,956` lines, `
 ---
 
 ### Milestone 3: Live `PipelineEngine`, `FrameProcessor`, `CliAppRunner` & `CameraPool` Integration *(Deferred to Next Turn / Milestone)*
-- [ ] **intelligent_tracker/pipeline/bundle.py**: Add `world_graph`, `world_bridge`, and `world_rule_engine` fields to `PipelineBundle`, register camera/zones/tripwires via `build_world()`, and stop `world_rule_engine` cleanly in `PipelineBundle.close()`.
-- [ ] **intelligent_tracker/pipeline/engine.py**: Accept optional `world_graph: WorldGraph | None = None` in `PipelineEngine.build()`, `from_dict()`, and `from_cli_args()` (instantiating a scoped `WorldGraph` when omitted) and wire `world_bridge` into `GalleryMatcher` and `FrameProcessor`.
-- [ ] **intelligent_tracker/pipeline/frame_processor.py**: Push state-change / throttled track & zone updates into `world_bridge` inside `FrameProcessor.step()` without blocking 30 FPS detection/tracking.
-- [ ] **dashboard/services/pipeline_factory.py**: Thread optional `world_graph` through `StreamPipelineFactory.build()` and `StreamPipelineBundle` into `PipelineEngine.build()`.
-- [ ] **dashboard/stream_manager.py**: Accept optional `world_graph: WorldGraph | None = None`, forward it to `StreamPipelineFactory.build()`, and store `self.world_graph` / `self.world_bridge`.
-- [ ] **dashboard/camera_pool.py**: Own a scoped `self.world_graph = WorldGraph()` on `CameraPool` (keeping net line count `< 500` via concise delegation), pass it to `StreamManager`, and invoke `self.world_graph.remove_camera(camera_id)` outside `self._lock` in `remove_camera()`.
-- [ ] **tests/test_world_pipeline_integration.py**: Add headless end-to-end tests (`detector=mock`, `source=synthetic`, isolated `TemporaryDirectory` DB & `CameraPool(autostart=False)`) verifying CLI `PipelineEngine` and Dashboard `CameraPool` register cameras, zones, tripwires, and tracked `WorldEntity` nodes into scoped `WorldGraph`s, and `CameraPool.remove_camera()` triggers cascading removal.
+- [x] **intelligent_tracker/pipeline/bundle.py**: Add `world_graph`, `world_bridge`, and `world_rule_engine` fields to `PipelineBundle`, register camera/zones/tripwires via `build_world()`, and stop `world_rule_engine` cleanly in `PipelineBundle.close()`.
+- [x] **intelligent_tracker/pipeline/engine.py**: Accept optional `world_graph: WorldGraph | None = None` in `PipelineEngine.build()`, `from_dict()`, and `from_cli_args()` (instantiating a scoped `WorldGraph` when omitted) and wire `world_bridge` into `GalleryMatcher` and `FrameProcessor`.
+- [x] **intelligent_tracker/pipeline/frame_processor.py**: Push state-change / throttled track & zone updates into `world_bridge` inside `FrameProcessor.step()` without blocking 30 FPS detection/tracking.
+- [x] **dashboard/services/pipeline_factory.py**: Thread optional `world_graph` through `StreamPipelineFactory.build()` and `StreamPipelineBundle` into `PipelineEngine.build()`.
+- [x] **dashboard/stream_manager.py**: Accept optional `world_graph: WorldGraph | None = None`, forward it to `StreamPipelineFactory.build()`, and store `self.world_graph` / `self.world_bridge`.
+- [x] **dashboard/camera_pool.py**: Own a scoped `self.world_graph = WorldGraph()` on `CameraPool` (keeping net line count `< 500` via concise delegation), pass it to `StreamManager`, and invoke `self.world_graph.remove_camera(camera_id)` outside `self._lock` in `remove_camera()`.
+- [x] **tests/test_world_pipeline_integration.py**: Add headless end-to-end tests (`detector=mock`, `source=synthetic`, isolated `TemporaryDirectory` DB & `CameraPool(autostart=False)`) verifying CLI `PipelineEngine` and Dashboard `CameraPool` register cameras, zones, tripwires, and tracked `WorldEntity` nodes into scoped `WorldGraph`s, and `CameraPool.remove_camera()` triggers cascading removal.
 
 **Definition of Done (DoD)**:
-- [ ] Both CLI (`PipelineEngine`) and Dashboard (`CameraPool` + `StreamManager`) run against live scoped `WorldGraph` instances with cascading node teardown on camera removal.
-- [ ] `MPLBACKEND=Agg python -m unittest tests/test_world_pipeline_integration.py tests/test_pipeline_parity.py tests/test_cli_runner.py tests/test_dashboard.py tests/test_graceful_shutdown_perf.py` passes 100%.
+- [x] Both CLI (`PipelineEngine`) and Dashboard (`CameraPool` + `StreamManager`) run against live scoped `WorldGraph` instances with cascading node teardown on camera removal.
+- [x] `MPLBACKEND=Agg python -m unittest tests/test_world_pipeline_integration.py tests/test_pipeline_parity.py tests/test_cli_runner.py tests/test_dashboard.py tests/test_graceful_shutdown_perf.py` passes 100%.
 
 ---
 

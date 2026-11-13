@@ -21,6 +21,7 @@ from dashboard.services.stream_worker import StreamWorker
 from dashboard.services.pipeline_factory import StreamPipelineFactory, load_stream_config
 
 from intelligent_tracker.homography import GroundPlaneHomography
+from intelligent_tracker.world import WorldGraph
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
@@ -75,6 +76,8 @@ def _init_manager_config(
     manager.enrollment_manager = None
     manager.event_bus = None
     manager.event_pipeline = None
+    manager.world_bridge = None
+    manager.world_rule_engine = None
 
 
 def _init_manager_runtime(manager: "StreamManager") -> None:
@@ -116,10 +119,12 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
         name: Optional[str] = None,
         source_override: Optional[Any] = None,
         custom_cfg: Optional[Dict[str, Any]] = None,
+        world_graph: Optional[WorldGraph] = None,
     ) -> None:
         self.camera_id = camera_id
         self.name = name or f"Camera {camera_id.upper()}"
         self.source_override = source_override
+        self.world_graph = world_graph
         _init_manager_config(self, config_path, db_path, custom_cfg)
         _init_manager_runtime(self)
         self._init_subsystems()
@@ -155,6 +160,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
             db_path=self.db_path,
             camera_id=self.camera_id,
             source_override=self.source_override,
+            world_graph=self.world_graph,
         )
         self.db = bundle.db
         self.video_source = bundle.video_source
@@ -168,6 +174,9 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
         self.enrollment_manager = bundle.enrollment_manager
         self.event_bus = bundle.event_bus
         self.event_pipeline = bundle.event_pipeline
+        self.world_graph = bundle.world_graph
+        self.world_bridge = bundle.world_bridge
+        self.world_rule_engine = bundle.world_rule_engine
         self._pipeline_bundle = bundle.pipeline_bundle
         self._latest_jpeg = self._create_placeholder_jpeg("Camera Initializing...")
 
@@ -200,13 +209,19 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
         with self._lock:
             if self.video_source:
                 self.video_source.release()
+            if getattr(self, "world_rule_engine", None) is not None:
+                self.world_rule_engine.stop()
+            pipe_bus = None
             if self.event_pipeline:
                 if "rule_engine" in self.event_pipeline and hasattr(self.event_pipeline["rule_engine"], "stop"):
                     self.event_pipeline["rule_engine"].stop()
-                if "event_bus" in self.event_pipeline and hasattr(self.event_pipeline["event_bus"], "stop"):
-                    self.event_pipeline["event_bus"].stop(timeout=0.2)
-            elif self.event_bus and hasattr(self.event_bus, "stop"):
+                pipe_bus = self.event_pipeline.get("event_bus")
+                if pipe_bus and hasattr(pipe_bus, "stop"):
+                    pipe_bus.stop(timeout=0.2)
+            if self.event_bus and self.event_bus is not pipe_bus and hasattr(self.event_bus, "stop"):
                 self.event_bus.stop(timeout=0.2)
+            if self.db and hasattr(self.db, "close"):
+                self.db.close()
             logger.info("StreamManager stopped for %s", self.camera_id)
 
     def _worker_loop(self) -> None:

@@ -12,9 +12,11 @@ from intelligent_tracker.pipeline.bundle import (
     build_reid,
     build_tracker,
     build_video_source,
+    build_world,
     build_writer,
 )
 from intelligent_tracker.pipeline.config import PipelineConfig
+from intelligent_tracker.world import WorldGraph
 
 
 class PipelineEngine:
@@ -26,6 +28,7 @@ class PipelineEngine:
         config: PipelineConfig,
         *,
         raise_on_detector_error: bool | None = None,
+        world_graph: WorldGraph | None = None,
     ) -> PipelineBundle:
         """Instantiate and wire all pipeline subsystems without calling sys.exit()."""
         bundle = PipelineBundle(config=config)
@@ -49,6 +52,18 @@ class PipelineEngine:
                 bundle.reid_extractor,
                 bundle.event_bus,
             )
+            (
+                bundle.world_graph,
+                bundle.world_bridge,
+                bundle.world_rule_engine,
+            ) = build_world(
+                config,
+                world_graph=world_graph,
+                db=bundle.db,
+                analytics=bundle.analytics,
+                gallery_matcher=bundle.gallery_matcher,
+                event_bus=bundle.event_bus,
+            )
             bundle.writer = build_writer(config)
         except Exception:
             bundle.close()
@@ -61,11 +76,16 @@ class PipelineEngine:
         cfg: dict[str, Any] | None = None,
         *,
         raise_on_detector_error: bool | None = None,
+        world_graph: WorldGraph | None = None,
         **config_kwargs: Any,
     ) -> PipelineBundle:
         """Normalize a config dictionary and build a PipelineBundle."""
         config = PipelineConfig.from_dict(cfg, **config_kwargs)
-        return cls.build(config, raise_on_detector_error=raise_on_detector_error)
+        return cls.build(
+            config,
+            raise_on_detector_error=raise_on_detector_error,
+            world_graph=world_graph,
+        )
 
     @classmethod
     def from_cli_args(
@@ -74,8 +94,13 @@ class PipelineEngine:
         cfg: dict[str, Any] | None = None,
         *,
         raise_on_detector_error: bool | None = None,
+        world_graph: WorldGraph | None = None,
     ) -> PipelineBundle:
         """Normalize CLI arguments + config dict and build a PipelineBundle."""
         config = PipelineConfig.from_cli_args(args, cfg)
-        return cls.build(config, raise_on_detector_error=raise_on_detector_error)
+        return cls.build(
+            config,
+            raise_on_detector_error=raise_on_detector_error,
+            world_graph=world_graph,
+        )
 
