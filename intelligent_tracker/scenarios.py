@@ -9,11 +9,10 @@ Provides:
 - Real-time application of spatial scenarios into active StreamManager pipelines
   without restarting the server.
 - High-level scenario CRUD methods for Scenario Studio REST APIs.
-- Realization of Scene, Area, and Line from intelligent_tracker.high_objects.
+- Optional synchronization of zone and tripwire nodes into a scoped WorldGraph.
 """
 
 import os
-import json
 import logging
 from typing import Dict, List, Optional, Tuple, Any, Union
 
@@ -22,18 +21,71 @@ try:
 except ImportError:
     yaml = None
 
-import cv2
-import numpy as np
-
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.geometry import ZoneROI, Tripwire
-from intelligent_tracker.high_objects import Scene, Area, Line
 from intelligent_tracker.homography import GroundPlaneHomography
 from intelligent_tracker.topology import CrossCameraTopology, SpatialTransitionLink
+from intelligent_tracker.world import TripwireNode, WorldGraph, ZoneNode
 
 logger = logging.getLogger("intelligent_tracker.scenarios")
 
 DEFAULT_SCENARIOS_PATH = "configs/scenarios.yaml"
+
+
+def _sync_zone_to_world(
+    world_graph: Optional[WorldGraph],
+    camera_id: str,
+    name: str,
+    polygon: List[Union[List[float], Tuple[float, float]]],
+    capacity_limit: Optional[int],
+) -> None:
+    """Register or update a ZoneNode in an attached WorldGraph."""
+    if world_graph is None or len(polygon) < 3:
+        return
+    world_graph.register_zone(
+        ZoneNode(
+            zone_id=name,
+            camera_id=camera_id,
+            name=name,
+            points=[(float(pt[0]), float(pt[1])) for pt in polygon],
+            max_occupancy=capacity_limit,
+        )
+    )
+
+
+def _sync_tripwire_to_world(
+    world_graph: Optional[WorldGraph],
+    camera_id: str,
+    name: str,
+    line_segment: List[Union[List[float], Tuple[float, float]]],
+    bidirectional: bool,
+) -> None:
+    """Register or update a TripwireNode in an attached WorldGraph."""
+    if world_graph is None or len(line_segment) < 2:
+        return
+    pt1, pt2 = line_segment[0], line_segment[1]
+    world_graph.register_tripwire(
+        TripwireNode(
+            tripwire_id=name,
+            camera_id=camera_id,
+            name=name,
+            pt1=(float(pt1[0]), float(pt1[1])),
+            pt2=(float(pt2[0]), float(pt2[1])),
+            direction="both" if bidirectional else "in",
+        )
+    )
+
+
+def _remove_child_from_world(
+    world_graph: Optional[WorldGraph],
+    camera_id: str,
+    child_kind: str,
+    name: str,
+) -> None:
+    """Remove a zone or tripwire node from an attached WorldGraph if present."""
+    if world_graph is None:
+        return
+    world_graph.remove_node(f"{camera_id}:{child_kind}:{name}")
 
 
 class ScenarioManager:
@@ -48,10 +100,12 @@ class ScenarioManager:
         config_path: str = DEFAULT_SCENARIOS_PATH,
         db: Optional[TrackerDB] = None,
         db_path: str = "data/tracker.db",
+        world_graph: Optional[WorldGraph] = None,
     ):
         self.config_path = config_path
         self.db = db or TrackerDB(db_path)
         self.topology = CrossCameraTopology()
+        self.world_graph = world_graph
 
         # camera_id -> Dict of zones, tripwires, homography
         # {
@@ -306,6 +360,7 @@ class ScenarioManager:
             )
 
         self.save_to_yaml()
+        _sync_zone_to_world(self.world_graph, camera_id, name, polygon, capacity_limit)
         return z
 
     def delete_zone(self, camera_id: str, name: str) -> bool:
@@ -322,6 +377,7 @@ class ScenarioManager:
 
         if deleted:
             self.save_to_yaml()
+        _remove_child_from_world(self.world_graph, camera_id, "zone", name)
         return deleted
 
     def save_tripwire(
@@ -352,6 +408,7 @@ class ScenarioManager:
             )
 
         self.save_to_yaml()
+        _sync_tripwire_to_world(self.world_graph, camera_id, name, line_segment, bidirectional)
         return tw
 
     def delete_tripwire(self, camera_id: str, name: str) -> bool:
@@ -368,6 +425,7 @@ class ScenarioManager:
 
         if deleted:
             self.save_to_yaml()
+        _remove_child_from_world(self.world_graph, camera_id, "tripwire", name)
         return deleted
 
     def save_homography(

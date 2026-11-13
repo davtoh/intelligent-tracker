@@ -55,7 +55,9 @@ def parse_analyze_options(
 
 def _resolve_db() -> TrackerDB:
     mgr = get_active_stream_manager()
-    return mgr.db if (mgr and mgr.db) else TrackerDB("data/tracker.db")
+    if mgr and mgr.db and getattr(mgr.db, "_conn", None) is not None:
+        return mgr.db
+    return TrackerDB("data/tracker.db")
 
 
 def create_video_indexer(db: TrackerDB, opts: dict[str, Any]) -> VideoIndexer:

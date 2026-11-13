@@ -52,6 +52,9 @@ class TestScenarioApi(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        app_module.camera_pool = None
+        app_module.stream_manager = None
+        app_module.scenario_manager = None
         if cls.pool:
             cls.pool.stop_all()
         if hasattr(cls, "db") and cls.db:

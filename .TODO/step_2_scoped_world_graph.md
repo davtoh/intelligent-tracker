@@ -95,16 +95,16 @@ Measured against workspace baseline before edits (`230` files, `45,956` lines, `
 ---
 
 ### Milestone 4: Dead Import Cleanup, Legacy Compatibility & Final Sign-Off *(Deferred to Next Turn / Milestone)*
-- [ ] **intelligent_tracker/scenarios.py**: Remove dead `from intelligent_tracker.high_objects import Scene, Area, Line` import (and any verified unused imports such as `cv2`, `json`, `numpy`), and add optional `world_graph` sync hooks in `save_zone`, `delete_zone`, `save_tripwire`, `delete_tripwire`.
-- [ ] **intelligent_tracker/topology.py**: Remove dead `from intelligent_tracker.high_objects import Scene, Area, Line` import.
-- [ ] **intelligent_tracker/core/spaces.py**: Document legacy compatibility boundary (`MetaSpace`, `Space`) pointing new code to `intelligent_tracker.world.WorldGraph` while preserving existing tests (`tests/test_core_spaces.py`, `tests/test_core_groups.py`, `tests/test_core_efficiency.py`).
-- [ ] **intelligent_tracker/high_objects.py**: Add deprecation notice marking `World`, `Scene`, `Area`, `Line` as legacy Matplotlib compatibility adapters until `run_legacy_forms_gui` is retired.
-- [ ] **tests/test_world_legacy_compat.py**: Verify via AST parsing that `scenarios.py` and `topology.py` no longer import `high_objects`, `intelligent_tracker.world` has zero `dashboard`/`scripts` imports, and legacy `Space`/`World` compatibility remains intact.
-- [ ] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
+- [x] **intelligent_tracker/scenarios.py**: Remove dead `from intelligent_tracker.high_objects import Scene, Area, Line` import (and any verified unused imports such as `cv2`, `json`, `numpy`), and add optional `world_graph` sync hooks in `save_zone`, `delete_zone`, `save_tripwire`, `delete_tripwire`.
+- [x] **intelligent_tracker/topology.py**: Remove dead `from intelligent_tracker.high_objects import Scene, Area, Line` import.
+- [x] **intelligent_tracker/core/spaces.py**: Document legacy compatibility boundary (`MetaSpace`, `Space`) pointing new code to `intelligent_tracker.world.WorldGraph` while preserving existing tests (`tests/test_core_spaces.py`, `tests/test_core_groups.py`, `tests/test_core_efficiency.py`).
+- [x] **intelligent_tracker/high_objects.py**: Add deprecation notice marking `World`, `Scene`, `Area`, `Line` as legacy Matplotlib compatibility adapters until `run_legacy_forms_gui` is retired.
+- [x] **tests/test_world_legacy_compat.py**: Verify via AST parsing that `scenarios.py` and `topology.py` no longer import `high_objects`, `intelligent_tracker.world` has zero `dashboard`/`scripts` imports, and legacy `Space`/`World` compatibility remains intact.
+- [x] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
 
 **Definition of Done (DoD)**:
-- [ ] Full test suite (`MPLBACKEND=Agg python -m unittest discover tests`) passes 100% with zero leaked threads or test artifacts.
-- [ ] `diagnose.py arch-map --path .` confirms dead `high_objects` imports removed from `scenarios.py` and `topology.py`, all new `world/` modules `< 350` lines, and `dashboard/camera_pool.py` `< 500` lines.
+- [x] Full test suite (`MPLBACKEND=Agg python -m unittest discover tests`) passes 100% with zero leaked threads or test artifacts.
+- [x] `diagnose.py arch-map --path .` confirms dead `high_objects` imports removed from `scenarios.py` and `topology.py`, all new `world/` modules `< 350` lines, and `dashboard/camera_pool.py` `< 500` lines.
 
 ---
 

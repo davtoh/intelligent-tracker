@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
+"""Legacy Matplotlib simulation compatibility adapters (World, Scene, Area, Line).
+
+.. deprecated::
+    ``World``, ``Scene``, ``Area``, and ``Line`` are maintained strictly as
+    legacy Matplotlib compatibility adapters until
+    :func:`intelligent_tracker.cli.runner.run_legacy_forms_gui` is retired.
+    New spatial orchestration, camera/zone/tripwire lifecycles, and live
+    entity tracking must use :class:`intelligent_tracker.world.WorldGraph`.
+"""
 
 # import built-in modules
 import sys

@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-13] feat: Step 2 Milestone 4: Dead Import Cleanup, Legacy Compatibility & Final Sign-Off
+- **Type**: feat
+- **Summary**: Removed dead high_objects/unused imports from scenarios.py and topology.py, added optional WorldGraph sync hooks in ScenarioManager, documented legacy compatibility boundaries in spaces.py and high_objects.py, guarded closed DB fallback in video_analytics_service.py, and verified all 450 unit/integration tests and Sphinx docs build.
+- **Files** (8):
+  - `dashboard/app.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `intelligent_tracker/core/spaces.py`
+  - `intelligent_tracker/high_objects.py`
+  - `intelligent_tracker/scenarios.py`
+  - `intelligent_tracker/topology.py`
+  - `tests/test_scenario_api.py`
+  - `tests/test_world_legacy_compat.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-13] feat: Step 1 Milestone 4: pyproject.toml & Package Entrypoints
 - **Type**: feat
 - **Summary**: Extracted intelligent_tracker/cli/ctl.py and dashboard/server.py from scripts/, converted scripts/stream_ctl.py and scripts/run_dashboard.py to thin wrappers, added PEP 621 pyproject.toml with console_scripts, and added tests/test_entrypoints.py.
@@ -130,13 +144,3 @@
   - `intelligent_tracker/batch.py`
   - `tests/test_camera_detector_config.py`
 - **Verification**: 315/315 tests pass (36.01s); Sphinx HTML build succeeds with 0 warnings.
-
-## [2026-11-06] feat: Universal Runtime Trace Recorder & Dashboard Boot Resilience
-- **Type**: feat
-- **Summary**: Integrated global trace_recorder engine into system-diagnostics and wired FastAPI exception middleware. Fixed uvicorn reload directory watcher bounds, camera pool offline state handling, and spawned process PYTHONPATH propagation on Windows.
-- **Files** (4):
-  - `dashboard/app.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/services/diagnostic_bridge.py`
-  - `scripts/run_dashboard.py`
-- **Verification**: 308 tests passed in intelligent_tracker (36.99s); 116 tests passed in system-diagnostics (3.64s)

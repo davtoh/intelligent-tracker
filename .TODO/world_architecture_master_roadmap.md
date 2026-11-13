@@ -33,17 +33,17 @@
 ---
 
 ## Step 2: Scoped `WorldGraph` & Unified `WorldEntity` Lifecycle
-- **Goal**: Replace the disconnected `MetaSpace` (`core/spaces.py`) and unused `high_objects.py` with a thread-safe, reactive `WorldGraph` powering the live runtime.
-- **Pre-Plan Evaluation Check**:
-  - Check all imports of `spaces.py`, `high_objects.py`, `scenarios.py`, `topology.py`, and `detectors/objects.py`.
-- **Target Scope**:
-  - Create `intelligent_tracker/world/` (`graph.py`, `nodes.py`, `rules.py`, `entity_bridge.py`).
-  - Implement scoped `WorldGraph` with `CameraNode`, `ZoneNode`, `TripwireNode`, `WorldEntity`, cascading detach/delete invariants, and reactive rule propagation via `EventBus`.
-  - Bridge `Track` (30 FPS kinematics) $\leftrightarrow$ `WorldEntity` (live graph state) $\leftrightarrow$ `Entity` (persistent DB identity), removing ad-hoc glue from `GalleryMatcher`.
-  - Remove dead `Scene, Area, Line` imports in `scenarios.py` and `topology.py`; provide clean deprecation/compatibility adapter for legacy `high_objects.py` / `core/spaces.py` tests until retired.
-- **Definition of Done**:
-  - Live `CameraPool` and CLI `PipelineEngine` register cameras, zones, tripwires, and tracked entities into a `WorldGraph`.
-  - Cascading node removal, multi-camera entity state updates, and rule propagation are verified by isolated unit tests.
+- [x] **Goal**: Replace the disconnected `MetaSpace` (`core/spaces.py`) and unused `high_objects.py` with a thread-safe, reactive `WorldGraph` powering the live runtime.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Check all imports of `spaces.py`, `high_objects.py`, `scenarios.py`, `topology.py`, and `detectors/objects.py`.
+- [x] **Target Scope**:
+  - [x] Create `intelligent_tracker/world/` (`graph.py`, `nodes.py`, `rules.py`, `entity_bridge.py`).
+  - [x] Implement scoped `WorldGraph` with `CameraNode`, `ZoneNode`, `TripwireNode`, `WorldEntity`, cascading detach/delete invariants, and reactive rule propagation via `EventBus`.
+  - [x] Bridge `Track` (30 FPS kinematics) $\leftrightarrow$ `WorldEntity` (live graph state) $\leftrightarrow$ `Entity` (persistent DB identity), removing ad-hoc glue from `GalleryMatcher`.
+  - [x] Remove dead `Scene, Area, Line` imports in `scenarios.py` and `topology.py`; provide clean deprecation/compatibility adapter for legacy `high_objects.py` / `core/spaces.py` tests until retired.
+- [x] **Definition of Done**:
+  - [x] Live `CameraPool` and CLI `PipelineEngine` register cameras, zones, tripwires, and tracked entities into a `WorldGraph`.
+  - [x] Cascading node removal, multi-camera entity state updates, and rule propagation are verified by isolated unit tests.
 
 ---
 

@@ -137,7 +137,7 @@ async def lifespan(app: FastAPI):
     set_camera_pool(camera_pool)
     stream_manager = camera_pool.primary_stream
     set_stream_manager(stream_manager)
-    scenario_manager = ScenarioManager()
+    scenario_manager = ScenarioManager(world_graph=getattr(camera_pool, "world_graph", None))
     set_scenario_manager(scenario_manager)
     db = stream_manager.db if stream_manager else None
     lifecycle_manager = StreamLifecycleManager(db=db, camera_pool=camera_pool)

@@ -4,7 +4,7 @@
 Cross-Camera Topological Space Awareness Module.
 
 Provides:
-- Multi-camera spatial topology modeling realizing the vision of Scene, Area, and Line.
+- Multi-camera spatial topology modeling for cross-camera camera/zone transitions.
 - Spatial Transition Links between cameras (e.g., Camera 1 'Door Exit' -> Camera 2 'Door Entrance').
 - Predictive spatial priors generated on zone exit within transit time windows [T_min, T_max].
 - Weighted Re-ID scoring combining visual similarity with topological spatial priors to eliminate
@@ -16,11 +16,9 @@ import time
 import uuid
 import logging
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional, Tuple, Any, Union
+from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
-
-from intelligent_tracker.high_objects import Scene, Area, Line
 
 logger = logging.getLogger("intelligent_tracker.topology")
 
