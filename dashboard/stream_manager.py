@@ -14,24 +14,13 @@ import logging
 import threading
 from typing import Any, Dict, Optional
 
-import numpy as np
-
 from dashboard.services.stream_subscribers import StreamSubscriberRegistry, StreamSubscriberMixin
 from dashboard.services.frame_overlay import FrameOverlayRenderer
 from dashboard.services.stream_media import StreamMediaMixin
 from dashboard.services.stream_worker import StreamWorker
 from dashboard.services.pipeline_factory import StreamPipelineFactory, load_stream_config
 
-from intelligent_tracker.video import VideoSource
-from intelligent_tracker.analytics import AnalyticsEngine
-from intelligent_tracker.database import TrackerDB
-from intelligent_tracker.matcher import GalleryMatcher
-from intelligent_tracker.events import EventBus
 from intelligent_tracker.homography import GroundPlaneHomography
-from intelligent_tracker.topology import CrossCameraTopology
-from intelligent_tracker.rsac import RSACManager
-from intelligent_tracker.active_learning import ActiveLearningManager
-from intelligent_tracker.enrollment import UniversalEnrollmentManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
@@ -179,6 +168,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
         self.enrollment_manager = bundle.enrollment_manager
         self.event_bus = bundle.event_bus
         self.event_pipeline = bundle.event_pipeline
+        self._pipeline_bundle = bundle.pipeline_bundle
         self._latest_jpeg = self._create_placeholder_jpeg("Camera Initializing...")
 
     def signal_stop(self) -> None:
@@ -214,9 +204,9 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
                 if "rule_engine" in self.event_pipeline and hasattr(self.event_pipeline["rule_engine"], "stop"):
                     self.event_pipeline["rule_engine"].stop()
                 if "event_bus" in self.event_pipeline and hasattr(self.event_pipeline["event_bus"], "stop"):
-                    self.event_pipeline["event_bus"].stop()
+                    self.event_pipeline["event_bus"].stop(timeout=0.2)
             elif self.event_bus and hasattr(self.event_bus, "stop"):
-                self.event_bus.stop()
+                self.event_bus.stop(timeout=0.2)
             logger.info("StreamManager stopped for %s", self.camera_id)
 
     def _worker_loop(self) -> None:

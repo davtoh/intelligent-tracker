@@ -135,6 +135,11 @@ def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
         default=60,
         help="Maximum frames to process in headless mode before exiting (0 = run indefinitely)",
     )
+    parser.add_argument(
+        "--governance",
+        action="store_true",
+        help="Enable RSAC, active learning, and universal enrollment governance subsystems",
+    )
 
 
 def parse_args(args: Optional[list] = None) -> argparse.Namespace:

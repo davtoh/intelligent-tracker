@@ -79,16 +79,16 @@ Measured against workspace baseline before edits:
 ---
 
 ### Milestone 3: Rewire `CliAppRunner`, `StreamWorker`, `StreamPipelineFactory` & `StreamManager` *(Deferred to Next Turn)*
-- [ ] **intelligent_tracker/cli/pipeline_builder.py**: Delegate `resolve_pipeline_params` and `build_pipeline` to `PipelineConfig.from_cli_args()` and `PipelineEngine.from_cli_args()`, preserving `PipelineContext` compatibility and optional CLI governance wiring (`--governance` / config flag).
-- [ ] **intelligent_tracker/cli/runner.py**: Refactor `CliAppRunner._process_frame` and `_shutdown` to invoke `FrameProcessor.step()` and `PipelineBundle.close()` while preserving interactive OpenCV UI controls and MQTT occupancy publishing.
-- [ ] **dashboard/services/pipeline_factory.py**: Refactor `StreamPipelineFactory.build` and `_init_*` helpers to delegate to `PipelineConfig.from_dict()` and `PipelineEngine.build()`, preserving `StreamPipelineBundle` and `_init_detector` return contracts.
-- [ ] **dashboard/services/stream_worker.py**: Refactor `StreamWorker._process_vision_pipeline` and FPS tracking to invoke `FrameProcessor.step()`, eliminating the broken `tracker.update(detections, frame=frame)` call and duplicated Re-ID/zone-exit logic.
-- [ ] **dashboard/stream_manager.py**: Remove the 10 unused imports flagged by `diagnose.py arch-map` while preserving all public attributes and lifecycle behavior.
-- [ ] **tests/test_cli_runner.py**: Add headless CLI integration tests (`--headless --frames 5 --detector mock --source synthetic`, isolated DB) exercising `build_pipeline`, `CliAppRunner.run()`, and `main.py` backward compatibility.
+- [x] **intelligent_tracker/cli/pipeline_builder.py**: Delegate `resolve_pipeline_params` and `build_pipeline` to `PipelineConfig.from_cli_args()` and `PipelineEngine.from_cli_args()`, preserving `PipelineContext` compatibility and optional CLI governance wiring (`--governance` / config flag).
+- [x] **intelligent_tracker/cli/runner.py**: Refactor `CliAppRunner._process_frame` and `_shutdown` to invoke `FrameProcessor.step()` and `PipelineBundle.close()` while preserving interactive OpenCV UI controls and MQTT occupancy publishing.
+- [x] **dashboard/services/pipeline_factory.py**: Refactor `StreamPipelineFactory.build` and `_init_*` helpers to delegate to `PipelineConfig.from_dict()` and `PipelineEngine.build()`, preserving `StreamPipelineBundle` and `_init_detector` return contracts.
+- [x] **dashboard/services/stream_worker.py**: Refactor `StreamWorker._process_vision_pipeline` and FPS tracking to invoke `FrameProcessor.step()`, eliminating the broken `tracker.update(detections, frame=frame)` call and duplicated Re-ID/zone-exit logic.
+- [x] **dashboard/stream_manager.py**: Remove the 10 unused imports flagged by `diagnose.py arch-map` while preserving all public attributes and lifecycle behavior.
+- [x] **tests/test_cli_runner.py**: Add headless CLI integration tests (`--headless --frames 5 --detector mock --source synthetic`, isolated DB) exercising `build_pipeline`, `CliAppRunner.run()`, and `main.py` backward compatibility.
 
 **Definition of Done (DoD)**:
-- Neither `CliAppRunner` nor `StreamWorker` duplicates detection/tracking/analytics/Re-ID stepping logic.
-- `MPLBACKEND=Agg python -m unittest tests/test_cli_runner.py tests/test_camera_detector_config.py tests/test_dashboard.py tests/test_hibernation.py tests/test_graceful_shutdown_perf.py tests/test_events_rules.py` passes 100% with zero leaked threads or test artifacts.
+- [x] Neither `CliAppRunner` nor `StreamWorker` duplicates detection/tracking/analytics/Re-ID stepping logic.
+- [x] `MPLBACKEND=Agg python -m unittest tests/test_cli_runner.py tests/test_camera_detector_config.py tests/test_dashboard.py tests/test_hibernation.py tests/test_graceful_shutdown_perf.py tests/test_events_rules.py` passes 100% with zero leaked threads or test artifacts.
 
 ---
 
