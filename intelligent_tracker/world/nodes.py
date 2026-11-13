@@ -127,6 +127,7 @@ class WorldEntity(WorldNode):
     name: str = ""
     category: str = "unknown"
     confidence: float = 0.0
+    confidence_breakdown: dict[str, Any] = field(default_factory=dict)
     restricted: bool = False
     camera_tracks: dict[str, int] = field(default_factory=dict)
     active_zones: dict[str, set[str]] = field(default_factory=dict)

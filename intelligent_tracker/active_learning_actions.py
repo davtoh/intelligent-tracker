@@ -22,8 +22,18 @@ def _emit_feedback(
     on_feedback: Callable[[dict[str, Any]], None] | None, action: str,
     entity_id: int | None, review_id: int, item: dict[str, Any] | None,
     reviewer: str, previous_entity_id: int | None = None,
+    confidence_engine: Any | None = None,
 ) -> None:
-    """Invoke optional confidence feedback hook without breaking DB resolution."""
+    """Invoke optional confidence engine & feedback hook without breaking DB resolution."""
+    if confidence_engine is not None:
+        try:
+            sim = item.get("similarity") if isinstance(item, dict) else None
+            confidence_engine.record_human_feedback(
+                entity_id=entity_id, action=action, previous_entity_id=previous_entity_id,
+                similarity=sim, reviewer=reviewer,
+            )
+        except Exception as exc:
+            logger.warning("Active learning confidence_engine update failed: %s", exc)
     if on_feedback is None:
         return
     payload = {
@@ -54,10 +64,12 @@ class ActiveLearningActions:
     def __init__(
         self, db: TrackerDB, matcher: Any | None = None,
         on_feedback: Callable[[dict[str, Any]], None] | None = None,
+        confidence_engine: Any | None = None,
     ) -> None:
         self.db = db
         self.matcher = matcher
         self.on_feedback = on_feedback
+        self.confidence_engine = confidence_engine
 
     def _extract_crop_embedding(self, crop_path: str) -> np.ndarray | None:
         """Load crop from disk and extract feature embedding via matcher extractor."""
@@ -86,7 +98,10 @@ class ActiveLearningActions:
             item["crop_path"], review_id, "confirmed", "active_learning_confirm",
             f"Confirmed from Review #{review_id} by {reviewer}", reviewer,
         )
-        _emit_feedback(self.on_feedback, "confirm", entity_id, review_id, item, reviewer)
+        _emit_feedback(
+            self.on_feedback, "confirm", entity_id, review_id, item, reviewer,
+            confidence_engine=self.confidence_engine,
+        )
         return True
 
     def reassign(self, review_id: int, new_entity_id: int, reviewer: str = "operator") -> bool:
@@ -102,6 +117,7 @@ class ActiveLearningActions:
         _emit_feedback(
             self.on_feedback, "reassign", new_entity_id, review_id, item, reviewer,
             previous_entity_id=item.get("suggested_entity_id"),
+            confidence_engine=self.confidence_engine,
         )
         return True
 
@@ -124,6 +140,7 @@ class ActiveLearningActions:
         _emit_feedback(
             self.on_feedback, "enroll_new", entity_id, review_id, item, reviewer,
             previous_entity_id=item.get("suggested_entity_id"),
+            confidence_engine=self.confidence_engine,
         )
         return entity_id
 
@@ -132,7 +149,10 @@ class ActiveLearningActions:
         item = self.db.get_review_item(review_id)
         updated = self.db.update_review_status(review_id, status="dismissed", reviewed_by=reviewer)
         if updated and item is not None:
-            _emit_feedback(self.on_feedback, "dismiss", item.get("suggested_entity_id"), review_id, item, reviewer)
+            _emit_feedback(
+                self.on_feedback, "dismiss", item.get("suggested_entity_id"), review_id, item, reviewer,
+                confidence_engine=self.confidence_engine,
+            )
         return updated
 
     def confirm_candidate(self, item_id: int, notes: str = "", reviewer: str = "operator") -> dict[str, Any]:

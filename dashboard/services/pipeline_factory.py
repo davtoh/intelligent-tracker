@@ -14,6 +14,7 @@ from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.events import EventBus
 from intelligent_tracker.matcher import GalleryMatcher
+from intelligent_tracker.memory import ConfidenceEngine
 from intelligent_tracker.pipeline import (
     PipelineBundle,
     PipelineConfig,
@@ -51,6 +52,7 @@ class StreamPipelineBundle:
     enrollment_manager: UniversalEnrollmentManager | None = None
     event_bus: EventBus | None = None
     event_pipeline: Any = None
+    confidence_engine: ConfidenceEngine | None = None
     world_graph: WorldGraph | None = None
     world_bridge: WorldEntityBridge | None = None
     world_rule_engine: WorldRuleEngine | None = None
@@ -90,22 +92,14 @@ class StreamPipelineFactory:
 
         bundle = PipelineEngine.build(config, world_graph=world_graph)
         return StreamPipelineBundle(
-            db=bundle.db,
-            video_source=bundle.video_source,
-            detector=bundle.detector,
-            tracker=bundle.tracker,
-            analytics=bundle.analytics,
-            reid_extractor=bundle.reid_extractor,
-            gallery_matcher=bundle.gallery_matcher,
-            rsac_manager=bundle.rsac_manager,
-            active_learning=bundle.active_learning,
-            enrollment_manager=bundle.enrollment_manager,
-            event_bus=bundle.event_bus,
-            event_pipeline=bundle.event_pipeline,
-            world_graph=bundle.world_graph,
-            world_bridge=bundle.world_bridge,
-            world_rule_engine=bundle.world_rule_engine,
-            pipeline_bundle=bundle,
+            db=bundle.db, video_source=bundle.video_source, detector=bundle.detector,
+            tracker=bundle.tracker, analytics=bundle.analytics,
+            reid_extractor=bundle.reid_extractor, gallery_matcher=bundle.gallery_matcher,
+            rsac_manager=bundle.rsac_manager, active_learning=bundle.active_learning,
+            enrollment_manager=bundle.enrollment_manager, event_bus=bundle.event_bus,
+            event_pipeline=bundle.event_pipeline, confidence_engine=bundle.confidence_engine,
+            world_graph=bundle.world_graph, world_bridge=bundle.world_bridge,
+            world_rule_engine=bundle.world_rule_engine, pipeline_bundle=bundle,
         )
 
     @staticmethod

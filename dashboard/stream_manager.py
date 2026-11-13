@@ -76,6 +76,7 @@ def _init_manager_config(
     manager.enrollment_manager = None
     manager.event_bus = None
     manager.event_pipeline = None
+    manager.confidence_engine = None
     manager.world_bridge = None
     manager.world_rule_engine = None
 
@@ -174,6 +175,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
         self.enrollment_manager = bundle.enrollment_manager
         self.event_bus = bundle.event_bus
         self.event_pipeline = bundle.event_pipeline
+        self.confidence_engine = bundle.confidence_engine
         self.world_graph = bundle.world_graph
         self.world_bridge = bundle.world_bridge
         self.world_rule_engine = bundle.world_rule_engine

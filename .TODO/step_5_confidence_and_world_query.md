@@ -74,15 +74,15 @@ Static snapshot run via `diagnose.py arch-map --path .` prior to Step 5 design:
 ---
 
 ### Milestone 2: Long-Term Confidence Engine & Pipeline / Active-Learning Integration — *Deferred to Next Turn / Milestone*
-- [ ] **intelligent_tracker/memory/__init__.py & intelligent_tracker/memory/confidence.py**: Implement `ConfidenceEvidence` dataclass and `ConfidenceEngine` (`< 260` lines, $\le 10$ methods) computing calibrated presence confidence in `[0.0, 1.0]` from multi-modal signals (face similarity, body similarity, temporal streak consistency, `CrossCameraTopology` transition prior, human confirmations) balanced against ambiguity conflict and staleness time-decay.
-- [ ] **intelligent_tracker/world/entity_bridge.py & intelligent_tracker/world/nodes.py**: Feed `ConfidenceEngine.record_observation()` on tracked entity updates so `WorldEntity.confidence` reflects calibrated multi-modal confidence without blocking 30 FPS tracking or bloating `matching/gallery.py`.
-- [ ] **intelligent_tracker/active_learning_actions.py**: Hook `confirm` / `reassign` / `dismiss` operator decisions into `ConfidenceEngine.record_human_feedback()` so verified matches reinforce identity confidence and reassignments/dismissals decay conflicting priors.
-- [ ] **intelligent_tracker/pipeline/bundle.py & intelligent_tracker/pipeline/engine.py**: Instantiate `ConfidenceEngine` backed by `TrackerDB` (`MemoryMixin`) in `PipelineBundle` and wire it cleanly into `WorldEntityBridge` and `ActiveLearningManager`.
-- [ ] **tests/test_confidence_engine.py**: Add unit and integration tests proving repeated consistent multi-modal sightings measurably increase presence confidence, ambiguous/conflicting or stale observations decay confidence, human confirmation boosts confidence, and state persists across `TrackerDB` restarts.
+- [x] **intelligent_tracker/memory/__init__.py & intelligent_tracker/memory/confidence.py**: Implement `ConfidenceEvidence` dataclass and `ConfidenceEngine` (`< 260` lines, $\le 10$ methods) computing calibrated presence confidence in `[0.0, 1.0]` from multi-modal signals (face similarity, body similarity, temporal streak consistency, `CrossCameraTopology` transition prior, human confirmations) balanced against ambiguity conflict and staleness time-decay.
+- [x] **intelligent_tracker/world/entity_bridge.py & intelligent_tracker/world/nodes.py**: Feed `ConfidenceEngine.record_observation()` on tracked entity updates so `WorldEntity.confidence` reflects calibrated multi-modal confidence without blocking 30 FPS tracking or bloating `matching/gallery.py`.
+- [x] **intelligent_tracker/active_learning_actions.py**: Hook `confirm` / `reassign` / `dismiss` operator decisions into `ConfidenceEngine.record_human_feedback()` so verified matches reinforce identity confidence and reassignments/dismissals decay conflicting priors.
+- [x] **intelligent_tracker/pipeline/bundle.py & intelligent_tracker/pipeline/engine.py**: Instantiate `ConfidenceEngine` backed by `TrackerDB` (`MemoryMixin`) in `PipelineBundle` and wire it cleanly into `WorldEntityBridge` and `ActiveLearningManager`.
+- [x] **tests/test_confidence_engine.py**: Add unit and integration tests proving repeated consistent multi-modal sightings measurably increase presence confidence, ambiguous/conflicting or stale observations decay confidence, human confirmation boosts confidence, and state persists across `TrackerDB` restarts.
 
 **Definition of Done (DoD)**:
-- `ConfidenceEngine` unit and persistence tests pass 100% across all branches (cold start, multi-modal boost, topology prior boost, ambiguity penalty, time decay, human confirm/reject).
-- `diagnose.py arch-map --path .` confirms all modified files remain below 350 lines.
+- [x] `ConfidenceEngine` unit and persistence tests pass 100% across all branches (cold start, multi-modal boost, topology prior boost, ambiguity penalty, time decay, human confirm/reject).
+- [x] `diagnose.py arch-map --path .` confirms all modified files remain below 350 lines.
 
 ---
 

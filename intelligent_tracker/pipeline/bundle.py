@@ -15,6 +15,8 @@ from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.events import EventBus, setup_event_pipeline
 from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.matcher import GalleryMatcher
+from intelligent_tracker.memory import ConfidenceEngine
+from intelligent_tracker.pipeline._world_setup import register_world_children
 from intelligent_tracker.pipeline.config import PipelineConfig
 from intelligent_tracker.reid import ReIDExtractorFactory
 from intelligent_tracker.rsac import RSACManager
@@ -22,11 +24,9 @@ from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.video import VideoSource
 from intelligent_tracker.world import (
     CameraNode,
-    TripwireNode,
     WorldEntityBridge,
     WorldGraph,
     WorldRuleEngine,
-    ZoneNode,
 )
 
 logger = logging.getLogger("intelligent_tracker.pipeline.bundle")
@@ -59,6 +59,7 @@ class PipelineBundle:
     enrollment_manager: UniversalEnrollmentManager | None = None
     event_bus: EventBus | None = None
     event_pipeline: dict[str, Any] | None = None
+    confidence_engine: ConfidenceEngine | None = None
     world_graph: WorldGraph | None = None
     world_bridge: WorldEntityBridge | None = None
     world_rule_engine: WorldRuleEngine | None = None
@@ -244,6 +245,14 @@ def build_events(
     return event_pipeline, event_bus
 
 
+def build_confidence_engine(
+    db: TrackerDB | None,
+    event_bus: EventBus | None = None,
+) -> ConfidenceEngine:
+    """Instantiate ConfidenceEngine backed by TrackerDB when available."""
+    return ConfidenceEngine(db=db, event_bus=event_bus)
+
+
 def build_governance(
     config: PipelineConfig,
     db: TrackerDB | None,
@@ -251,6 +260,7 @@ def build_governance(
     gallery_matcher: GalleryMatcher | None,
     reid_extractor: Any,
     event_bus: EventBus | None,
+    confidence_engine: ConfidenceEngine | None = None,
 ) -> tuple[RSACManager | None, ActiveLearningManager | None, UniversalEnrollmentManager | None]:
     """Initialize RSAC, active learning, and universal enrollment managers."""
     if not config.enable_governance or db is None:
@@ -265,7 +275,9 @@ def build_governance(
     except Exception as exc:
         logger.warning("RSACManager initialization warning: %s", exc)
     try:
-        al_mgr = ActiveLearningManager(db=db, matcher=gallery_matcher, event_bus=event_bus)
+        al_mgr = ActiveLearningManager(
+            db=db, matcher=gallery_matcher, event_bus=event_bus, confidence_engine=confidence_engine,
+        )
         if gallery_matcher is not None:
             gallery_matcher.active_learning = al_mgr
         enr_mgr = UniversalEnrollmentManager(db=db, extractor=reid_extractor, matcher=gallery_matcher)
@@ -284,41 +296,6 @@ def build_writer(config: PipelineConfig) -> Any:
     return cv2.VideoWriter(config.output_path, fourcc, float(config.framerate), (res_w, res_h))
 
 
-def _register_world_children(
-    graph: WorldGraph,
-    config: PipelineConfig,
-    analytics: AnalyticsEngine | None,
-) -> None:
-    """Register camera zones and tripwires in WorldGraph from analytics or config."""
-    zones = (
-        [(z.name, z.polygon, z.capacity_limit) for z in analytics.zones.values()]
-        if analytics is not None
-        else [
-            (str(z.get("name", "zone")), z.get("polygon"), z.get("capacity_limit", z.get("max_occupancy")))
-            for z in config.zones if z.get("polygon") and len(z["polygon"]) >= 3
-        ]
-    )
-    for name, poly, cap in zones:
-        graph.register_zone(ZoneNode(
-            zone_id=name, camera_id=config.camera_id, name=name,
-            points=[(float(pt[0]), float(pt[1])) for pt in poly], max_occupancy=cap,
-        ))
-    tripwires = (
-        [(tw.name, tw.pt1, tw.pt2, tw.bidirectional) for tw in analytics.tripwires.values()]
-        if analytics is not None
-        else [
-            (str(tw.get("name", "tripwire")), tw["line"][0], tw["line"][1], bool(tw.get("bidirectional", True)))
-            for tw in config.tripwires if tw.get("line") and len(tw["line"]) >= 2
-        ]
-    )
-    for name, pt1, pt2, bidir in tripwires:
-        graph.register_tripwire(TripwireNode(
-            tripwire_id=name, camera_id=config.camera_id, name=name,
-            pt1=(float(pt1[0]), float(pt1[1])), pt2=(float(pt2[0]), float(pt2[1])),
-            direction="both" if bidir else "in",
-        ))
-
-
 def build_world(
     config: PipelineConfig,
     *,
@@ -327,6 +304,7 @@ def build_world(
     analytics: AnalyticsEngine | None = None,
     gallery_matcher: GalleryMatcher | None = None,
     event_bus: EventBus | None = None,
+    confidence_engine: ConfidenceEngine | None = None,
 ) -> tuple[WorldGraph, WorldEntityBridge, WorldRuleEngine | None]:
     """Initialize scoped WorldGraph, WorldEntityBridge, and optional WorldRuleEngine."""
     graph = world_graph if world_graph is not None else WorldGraph(event_bus=event_bus)
@@ -336,8 +314,14 @@ def build_world(
         source=str(config.source),
         enabled=True,
     ))
-    _register_world_children(graph, config, analytics)
-    bridge = WorldEntityBridge(graph, db=db, coordinate_mapper=getattr(graph, "coordinate_mapper", None), handoff_coordinator=getattr(graph, "handoff_coordinator", None))
+    register_world_children(graph, config, analytics)
+    bridge = WorldEntityBridge(
+        graph,
+        db=db,
+        coordinate_mapper=getattr(graph, "coordinate_mapper", None),
+        handoff_coordinator=getattr(graph, "handoff_coordinator", None),
+        confidence_engine=confidence_engine,
+    )
     if gallery_matcher is not None:
         gallery_matcher.camera_id = config.camera_id
         gallery_matcher.world_bridge = bridge

@@ -5,6 +5,7 @@ from typing import Any
 from intelligent_tracker.pipeline.bundle import (
     PipelineBundle,
     build_analytics,
+    build_confidence_engine,
     build_database,
     build_detector,
     build_events,
@@ -23,6 +24,59 @@ class PipelineEngine:
     """Canonical factory assembling a complete PipelineBundle from PipelineConfig."""
 
     @classmethod
+    def _assemble_core(
+        cls,
+        bundle: PipelineBundle,
+        config: PipelineConfig,
+        raise_on_detector_error: bool | None,
+    ) -> None:
+        """Assemble core capture, detection, tracking, analytics, Re-ID, and events."""
+        bundle.db = build_database(config.db_path)
+        bundle.video_source = build_video_source(config)
+        bundle.detector = build_detector(config, raise_on_error=raise_on_detector_error)
+        bundle.tracker = build_tracker(config)
+        bundle.analytics = build_analytics(config, bundle.video_source)
+        bundle.reid_extractor, bundle.gallery_matcher = build_reid(config, bundle.db)
+        bundle.event_pipeline, bundle.event_bus = build_events(config, bundle.analytics)
+        bundle.confidence_engine = build_confidence_engine(bundle.db, bundle.event_bus)
+
+    @classmethod
+    def _assemble_governance_and_world(
+        cls,
+        bundle: PipelineBundle,
+        config: PipelineConfig,
+        world_graph: WorldGraph | None,
+    ) -> None:
+        """Assemble governance, world graph bridge, and optional video writer."""
+        (
+            bundle.rsac_manager,
+            bundle.active_learning,
+            bundle.enrollment_manager,
+        ) = build_governance(
+            config,
+            bundle.db,
+            bundle.analytics,
+            bundle.gallery_matcher,
+            bundle.reid_extractor,
+            bundle.event_bus,
+            confidence_engine=bundle.confidence_engine,
+        )
+        (
+            bundle.world_graph,
+            bundle.world_bridge,
+            bundle.world_rule_engine,
+        ) = build_world(
+            config,
+            world_graph=world_graph,
+            db=bundle.db,
+            analytics=bundle.analytics,
+            gallery_matcher=bundle.gallery_matcher,
+            event_bus=bundle.event_bus,
+            confidence_engine=bundle.confidence_engine,
+        )
+        bundle.writer = build_writer(config)
+
+    @classmethod
     def build(
         cls,
         config: PipelineConfig,
@@ -33,38 +87,8 @@ class PipelineEngine:
         """Instantiate and wire all pipeline subsystems without calling sys.exit()."""
         bundle = PipelineBundle(config=config)
         try:
-            bundle.db = build_database(config.db_path)
-            bundle.video_source = build_video_source(config)
-            bundle.detector = build_detector(config, raise_on_error=raise_on_detector_error)
-            bundle.tracker = build_tracker(config)
-            bundle.analytics = build_analytics(config, bundle.video_source)
-            bundle.reid_extractor, bundle.gallery_matcher = build_reid(config, bundle.db)
-            bundle.event_pipeline, bundle.event_bus = build_events(config, bundle.analytics)
-            (
-                bundle.rsac_manager,
-                bundle.active_learning,
-                bundle.enrollment_manager,
-            ) = build_governance(
-                config,
-                bundle.db,
-                bundle.analytics,
-                bundle.gallery_matcher,
-                bundle.reid_extractor,
-                bundle.event_bus,
-            )
-            (
-                bundle.world_graph,
-                bundle.world_bridge,
-                bundle.world_rule_engine,
-            ) = build_world(
-                config,
-                world_graph=world_graph,
-                db=bundle.db,
-                analytics=bundle.analytics,
-                gallery_matcher=bundle.gallery_matcher,
-                event_bus=bundle.event_bus,
-            )
-            bundle.writer = build_writer(config)
+            cls._assemble_core(bundle, config, raise_on_detector_error)
+            cls._assemble_governance_and_world(bundle, config, world_graph)
         except Exception:
             bundle.close()
             raise

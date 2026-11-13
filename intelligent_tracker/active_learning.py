@@ -32,6 +32,7 @@ class ActiveLearningManager:
         crops_dir: str = "data/crops",
         event_bus: Any | None = None,
         on_feedback: Callable[[dict[str, Any]], None] | None = None,
+        confidence_engine: Any | None = None,
     ) -> None:
         self.db = db
         self.matcher = matcher
@@ -41,6 +42,7 @@ class ActiveLearningManager:
         self.crops_dir = crops_dir
         self.event_bus = event_bus
         self.on_feedback = on_feedback
+        self.confidence_engine = confidence_engine
 
         self._triage = ActiveLearningTriage(
             db=db,
@@ -54,6 +56,7 @@ class ActiveLearningManager:
             db=db,
             matcher=matcher,
             on_feedback=on_feedback,
+            confidence_engine=confidence_engine,
         )
         self._last_queued = self._triage._last_queued
 

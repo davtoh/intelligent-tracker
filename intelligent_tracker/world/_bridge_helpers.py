@@ -87,6 +87,45 @@ def decorate_track_identity(
     track.identity_label = name
 
 
+def calibrate_entity_confidence(
+    confidence_engine: Any,
+    entity: WorldEntity,
+    track: Any,
+    *,
+    entity_id: int,
+    visual_similarity: float,
+    camera_id: str,
+    zone_id: str,
+    timestamp: float,
+) -> None:
+    """Update WorldEntity.confidence via ConfidenceEngine without blocking 30 FPS tracking."""
+    if confidence_engine is None:
+        entity.confidence = max(entity.confidence, float(visual_similarity))
+        return
+    state = confidence_engine.record_observation(
+        entity_id=int(entity_id),
+        visual_similarity=float(visual_similarity),
+        face_score=float(getattr(track, "face_score", 0.0) or 0.0),
+        body_score=float(getattr(track, "body_score", 0.0) or 0.0),
+        topology_prior=float(getattr(track, "topology_prior", 0.0) or 0.0),
+        ambiguity=float(getattr(track, "reid_ambiguity", 0.0) or 0.0),
+        camera_id=camera_id,
+        zone_id=zone_id,
+        timestamp=timestamp,
+    )
+    entity.confidence = state.confidence
+    entity.confidence_breakdown = {
+        "confidence": state.confidence,
+        "face_score": state.face_score,
+        "body_score": state.body_score,
+        "streak_count": state.streak_count,
+        "observation_count": state.observation_count,
+        "confirmation_count": state.confirmation_count,
+        "rejection_count": state.rejection_count,
+        "ambiguity_penalty": state.ambiguity_penalty,
+    }
+
+
 def replace_zone_entity_ref(
     graph: WorldGraph,
     camera_id: str,

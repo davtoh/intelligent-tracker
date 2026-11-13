@@ -6,6 +6,7 @@ from typing import Any
 
 from intelligent_tracker.world._bridge_helpers import (
     append_bounded_trajectory,
+    calibrate_entity_confidence,
     compute_global_track_xy,
     decorate_track_identity,
     detach_track_from_other_entities,
@@ -34,6 +35,7 @@ class WorldEntityBridge:
         stale_ttl: float = 30.0,
         coordinate_mapper: GlobalCoordinateMapper | None = None,
         handoff_coordinator: Any = None,
+        confidence_engine: Any = None,
         max_trajectory_points: int = 120,
     ) -> None:
         self.world_graph = world_graph
@@ -49,6 +51,11 @@ class WorldEntityBridge:
             handoff_coordinator
             if handoff_coordinator is not None
             else getattr(world_graph, "handoff_coordinator", None)
+        )
+        self.confidence_engine = (
+            confidence_engine
+            if confidence_engine is not None
+            else getattr(world_graph, "confidence_engine", None)
         )
         self.max_trajectory_points = max(1, int(max_trajectory_points))
         self._lock = threading.Lock()
@@ -106,7 +113,10 @@ class WorldEntityBridge:
 
         entity.name = resolved_name
         entity.category = resolved_cat
-        entity.confidence = max(entity.confidence, float(confidence))
+        calibrate_entity_confidence(
+            self.confidence_engine, entity, track, entity_id=int(entity_id),
+            visual_similarity=float(confidence), camera_id=camera_id, zone_id=zone_id, timestamp=now,
+        )
         entity.restricted = entity.restricted or (resolved_cat.lower() in _RESTRICTED_CATEGORIES)
         return self._finalize_entity_sync(entity, camera_id, track, zone_id, now)
 
