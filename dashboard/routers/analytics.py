@@ -68,6 +68,9 @@ async def list_entities(category: Optional[str] = None):
         return []
 
     entities = mgr.db.list_entities(category=category)
+    sighting_counts = mgr.db.query_sighting_counts(
+        [ent["id"] for ent in entities]
+    )
     result = []
     for ent in entities:
         ent_dict = dict(ent)
@@ -75,17 +78,7 @@ async def list_entities(category: Optional[str] = None):
         sightings = mgr.db.query_sightings(entity_id=ent_id, limit=1)
         sigs = mgr.db.get_signatures(entity_id=ent_id)
 
-        with mgr.db._lock:
-            cur = mgr.db._conn.cursor()
-            try:
-                cur.execute(
-                    "SELECT COUNT(*) FROM sightings WHERE entity_id = ?", (ent_id,)
-                )
-                count = cur.fetchone()[0]
-            finally:
-                cur.close()
-
-        ent_dict["appearance_count"] = count
+        ent_dict["appearance_count"] = sighting_counts.get(ent_id, 0)
         ent_dict["signature_count"] = len(sigs)
         ent_dict["thumbnail_url"] = (
             f"/crops/{os.path.basename(sigs[0]['crop_path'])}"

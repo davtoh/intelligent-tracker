@@ -12,11 +12,11 @@ import os
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from dashboard.dependencies import (
     VIDEOS_DIR,
-    get_active_stream_manager,
+    get_db,
     get_scenario_mgr,
 )
 from dashboard.schemas import JourneyExportRequest, SpatialTransitionRequest
@@ -117,10 +117,9 @@ async def search_trajectory_journey(
     track_id: Optional[int] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
+    db: TrackerDB = Depends(get_db),
 ):
     """Reconstruct an entity's complete chronological trajectory across multiple cameras."""
-    mgr = get_active_stream_manager()
-    db = mgr.db if (mgr and mgr.db) else TrackerDB()
     searcher = TrajectoryJourneySearcher(db)
     journey = searcher.search_journey(
         entity_id=entity_id,
@@ -133,10 +132,11 @@ async def search_trajectory_journey(
 
 
 @router.post("/api/journey/export")
-async def export_journey_video_route(req: JourneyExportRequest):
+async def export_journey_video_route(
+    req: JourneyExportRequest,
+    db: TrackerDB = Depends(get_db),
+):
     """Slices and concatenates cross-camera video segments into a downloadable MP4 journey file."""
-    mgr = get_active_stream_manager()
-    db = mgr.db if (mgr and mgr.db) else TrackerDB()
     searcher = TrajectoryJourneySearcher(db)
     journey = searcher.search_journey(
         entity_id=req.entity_id,
