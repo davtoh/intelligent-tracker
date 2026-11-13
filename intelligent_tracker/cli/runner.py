@@ -1,5 +1,6 @@
 """Intelligent Tracker CLI - Interactive Runner & Execution Loop."""
 
+import sys
 import time
 from typing import Any
 
@@ -188,7 +189,20 @@ class CliAppRunner:
 def run_cli(args: Any = None) -> None:
     """CLI entrypoint: parse args, build pipeline, and execute runner."""
     from intelligent_tracker.cli.arguments import load_config, parse_args
+    from intelligent_tracker.cli.ask import run_ask_cli
 
+    if args is None and len(sys.argv) > 1 and sys.argv[1] == "ask":
+        code = run_ask_cli(sys.argv[2:])
+        if code != 0:
+            sys.exit(code)
+        return
+    if isinstance(args, (list, tuple)):
+        if args and args[0] == "ask":
+            code = run_ask_cli(list(args[1:]))
+            if code != 0:
+                sys.exit(code)
+            return
+        args = parse_args(list(args))
     if args is None:
         args = parse_args()
     cfg = load_config(args.config)

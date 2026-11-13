@@ -254,3 +254,15 @@ class PetWhitelistRequest(BaseModel):
 class RollbackRequest(BaseModel):
     notes: Optional[str] = Field(None, description="Optional reason for descriptor rollback")
 
+
+class WorldQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Natural-language or keyword world timeline query")
+    entity_id: Optional[int] = Field(None, description="Optional explicit entity ID filter")
+    camera_id: Optional[str] = Field(None, description="Optional explicit camera ID filter")
+    zone_id: Optional[str] = Field(None, description="Optional explicit zone ID filter")
+    event_type: Optional[str] = Field(None, description="Optional explicit timeline event type filter")
+    start_time: Optional[float] = Field(None, description="Optional UNIX start timestamp")
+    end_time: Optional[float] = Field(None, description="Optional UNIX end timestamp")
+    limit: int = Field(15, ge=1, le=200, description="Maximum number of timeline citations to return")
+    include_world_snapshot: bool = Field(True, description="Include live WorldGraph snapshot context")
+

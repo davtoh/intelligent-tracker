@@ -100,17 +100,17 @@ Static snapshot run via `diagnose.py arch-map --path .` prior to Step 5 design:
 ---
 
 ### Milestone 4: Dashboard API, CLI `ask` Parity, Sphinx Documentation & Final Verification — *Deferred to Next Turn / Milestone*
-- [ ] **dashboard/routers/world.py**: Create `APIRouter(prefix="/api/world", tags=["World Intelligence & Query"])` (`< 180` lines, handlers 5–15L) exposing `POST /api/world/query`, `GET /api/world/confidence/{entity_id}`, and `GET /api/world/timeline`.
-- [ ] **dashboard/dependencies.py & dashboard/app.py**: Register `get_world_query_engine` via `app.state` / `Depends` (preserving existing DI patterns) and mount `world_router` in `dashboard/app.py`.
-- [ ] **intelligent_tracker/cli/ask.py, intelligent_tracker/cli/runner.py & intelligent_tracker/cli/ctl.py**: Implement `intelligent-tracker ask "..."` and `intelligent-tracker-ctl ask "..."` supporting offline `TrackerDB`/`WorldQueryEngine` queries and optional remote server mode via env/flag (`--url`), with JSON and human-readable output.
-- [ ] **documentation/**: Add/update Sphinx documentation in `documentation/` covering `intelligent_tracker.memory`, `ConfidenceEngine`, `WorldQueryEngine`, `POST /api/world/query`, and `intelligent-tracker ask`.
-- [ ] **tests/test_world_query_api.py & tests/test_cli_ask.py**: Test `POST /api/world/query`, confidence/timeline endpoints via FastAPI `TestClient` with isolated `TemporaryDirectory()` DBs, and CLI `ask` subcommand parity (offline + remote mock + error branches).
-- [ ] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
+- [x] **dashboard/routers/world.py**: Create `APIRouter(prefix="/api/world", tags=["World Intelligence & Query"])` (`< 180` lines, handlers 5–15L) exposing `POST /api/world/query`, `GET /api/world/confidence/{entity_id}`, and `GET /api/world/timeline`.
+- [x] **dashboard/dependencies.py & dashboard/app.py**: Register `get_world_query_engine` via `app.state` / `Depends` (preserving existing DI patterns) and mount `world_router` in `dashboard/app.py`.
+- [x] **intelligent_tracker/cli/ask.py, intelligent_tracker/cli/runner.py & intelligent_tracker/cli/ctl.py**: Implement `intelligent-tracker ask "..."` and `intelligent-tracker-ctl ask "..."` supporting offline `TrackerDB`/`WorldQueryEngine` queries and optional remote server mode via env/flag (`--url`), with JSON and human-readable output.
+- [x] **documentation/**: Add/update Sphinx documentation in `documentation/` covering `intelligent_tracker.memory`, `ConfidenceEngine`, `WorldQueryEngine`, `POST /api/world/query`, and `intelligent-tracker ask`.
+- [x] **tests/test_world_query_api.py & tests/test_cli_ask.py**: Test `POST /api/world/query`, confidence/timeline endpoints via FastAPI `TestClient` with isolated `TemporaryDirectory()` DBs, and CLI `ask` subcommand parity (offline + remote mock + error branches).
+- [x] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
 
 **Definition of Done (DoD)**:
-- Full regression test suite (`python -m unittest discover tests`) passes 100% in headless mode (`MPLBACKEND=Agg`).
-- Sphinx build (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`) passes with zero warnings.
-- `diagnose.py arch-map --path .` reports zero new modularity ceiling violations and clean `intelligent_tracker/` $\leftrightarrow$ `dashboard/` layering.
+- [x] Full regression test suite (`python -m unittest discover tests`) passes 100% in headless mode (`MPLBACKEND=Agg`).
+- [x] Sphinx build (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`) passes with zero warnings.
+- [x] `diagnose.py arch-map --path .` reports zero new modularity ceiling violations and clean `intelligent_tracker/` $\leftrightarrow$ `dashboard/` layering.
 
 ---
 

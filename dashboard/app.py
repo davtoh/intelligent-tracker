@@ -48,6 +48,7 @@ from dashboard.dependencies import (
     get_rsac_mgr,
     get_scenario_mgr,
     get_stream_manager,
+    get_world_query_engine,
     reload_all_galleries,
     set_shutting_down,
 )
@@ -61,6 +62,7 @@ from dashboard.routers import (
     system_router,
     topology_router,
     videos_router,
+    world_router,
 )
 from dashboard.schemas import (
     CameraAddRequest,
@@ -83,6 +85,7 @@ from dashboard.schemas import (
     SpatialTransitionRequest,
     TagRequest,
     TripwireCreateRequest,
+    WorldQueryRequest,
     ZoneCreateRequest,
 )
 from dashboard.services.diagnostic_bridge import (
@@ -213,6 +216,7 @@ def create_app() -> FastAPI:
     application.include_router(analytics_router)
     application.include_router(videos_router)
     application.include_router(topology_router)
+    application.include_router(world_router)
 
     return application
 
@@ -245,6 +249,7 @@ __all__ = [
     "get_rsac_mgr",
     "get_active_learning_mgr",
     "get_enrollment_mgr",
+    "get_world_query_engine",
     "reload_all_galleries",
     "_get_db",
     "_get_rsac_mgr",
@@ -277,4 +282,5 @@ __all__ = [
     "EntityCreateRequest",
     "EntityUpdateRequest",
     "TagRequest",
+    "WorldQueryRequest",
 ]

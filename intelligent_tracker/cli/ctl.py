@@ -17,6 +17,8 @@ import time
 import urllib.parse
 import urllib.request
 
+from intelligent_tracker.cli.ask import add_ask_arguments, execute_ask_args
+
 
 def resolve_dashboard_url(explicit_url: str | None = None) -> str:
     """Resolve the dashboard base URL from CLI flag or environment variables."""
@@ -235,6 +237,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     metrics_parser = subparsers.add_parser("metrics", help="Show historical system resource telemetry samples")
     metrics_parser.add_argument("--limit", type=int, default=15, help="Number of samples to show")
+
+    ask_parser = subparsers.add_parser("ask", help="Query semantic timeline, confidence, and world state")
+    add_ask_arguments(ask_parser, include_url=False)
+    ask_parser.add_argument("--url", dest="ask_url", default=None, help="Override dashboard API URL")
     return parser
 
 
@@ -242,6 +248,12 @@ def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for intelligent-tracker-ctl."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "ask":
+        code = execute_ask_args(args, fallback_url=args.url)
+        if code != 0:
+            sys.exit(code)
+        return
 
     try:
         app_url = resolve_dashboard_url(args.url)

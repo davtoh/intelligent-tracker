@@ -23,6 +23,7 @@ from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.lifecycle import StreamLifecycleManager
+from intelligent_tracker.memory import ConfidenceEngine, GeminiSemanticProvider, WorldQueryEngine
 from intelligent_tracker.rsac import RSACManager
 from intelligent_tracker.scenarios import ScenarioManager
 
@@ -41,6 +42,7 @@ _stream_manager: Optional[StreamManager] = None
 _scenario_manager: Optional[ScenarioManager] = None
 _lifecycle_manager: Optional[StreamLifecycleManager] = None
 _db: Optional[TrackerDB] = None
+_world_query_engine: Optional[WorldQueryEngine] = None
 _owned_fallback_db: Optional[TrackerDB] = None
 _shutdown_event: Optional[asyncio.Event] = None
 _is_shutting_down: bool = False
@@ -63,19 +65,22 @@ def bind_app_state(
     scenario_manager: Optional[ScenarioManager] = None,
     lifecycle_manager: Optional[StreamLifecycleManager] = None,
     db: Optional[TrackerDB] = None,
+    world_query_engine: Optional[WorldQueryEngine] = None,
 ) -> None:
     """Bind core runtime services to ``app.state`` and sync standalone fallbacks."""
-    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db
+    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db, _world_query_engine
     app.state.camera_pool = camera_pool
     app.state.stream_manager = stream_manager
     app.state.scenario_manager = scenario_manager
     app.state.lifecycle_manager = lifecycle_manager
     app.state.db = db
+    app.state.world_query_engine = world_query_engine
     _camera_pool = camera_pool
     _stream_manager = stream_manager
     _scenario_manager = scenario_manager
     _lifecycle_manager = lifecycle_manager
     _db = db
+    _world_query_engine = world_query_engine
 
 
 def clear_app_state(app: FastAPI) -> None:
@@ -298,6 +303,19 @@ def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManage
     if mgr and mgr.enrollment_manager:
         return mgr.enrollment_manager
     return UniversalEnrollmentManager(db=get_db(conn))
+
+
+def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:
+    """Resolve WorldQueryEngine from ``app.state`` or build from active DB and WorldGraph."""
+    state_engine = _from_app_state(conn, "world_query_engine", _world_query_engine)
+    if state_engine is not None:
+        return state_engine
+    db = get_db(conn)
+    pool, mgr, scen_mgr = get_camera_pool(conn), get_active_stream_manager(conn=conn), get_scenario_manager(conn)
+    conf_engine = getattr(mgr, "confidence_engine", None) or ConfidenceEngine(db=db)
+    world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None) or getattr(mgr, "world_graph", None)
+    provider = GeminiSemanticProvider() if os.getenv("WORLD_QUERY_PROVIDER", "").strip().lower() == "gemini" else None
+    return WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
 
 
 def reload_all_galleries(conn: HTTPConnection = None) -> None:

@@ -9,6 +9,13 @@ from intelligent_tracker.cli.arguments import (
     load_config,
     parse_resolution,
 )
+from intelligent_tracker.cli.ask import (
+    build_ask_parser,
+    execute_ask_args,
+    query_local_world,
+    query_remote_world,
+    run_ask_cli,
+)
 from intelligent_tracker.cli.pipeline_builder import (
     PipelineContext,
     resolve_pipeline_params,
@@ -30,6 +37,11 @@ __all__ = [
     "parse_args",
     "load_config",
     "parse_resolution",
+    "build_ask_parser",
+    "execute_ask_args",
+    "query_local_world",
+    "query_remote_world",
+    "run_ask_cli",
     "PipelineContext",
     "resolve_pipeline_params",
     "build_pipeline",

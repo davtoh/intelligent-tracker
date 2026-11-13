@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-13] feat: Step 5 Milestone 4: World Query API, CLI ask Parity & Sphinx Docs
+- **Type**: feat
+- **Summary**: Added /api/world/query, /api/world/confidence/{entity_id}, /api/world/timeline FastAPI routes, get_world_query_engine DI, intelligent-tracker ask and intelligent-tracker-ctl ask CLI parity, Sphinx documentation, and API/CLI parity tests.
+- **Files** (14):
+  - `dashboard/routers/world.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/dependencies.py`
+  - `dashboard/schemas.py`
+  - `dashboard/app.py`
+  - `intelligent_tracker/cli/ask.py`
+  - `intelligent_tracker/cli/runner.py`
+  - `intelligent_tracker/cli/ctl.py`
+  - ... (+6 more)
+- **Verification**: 522/522 unittest pass + Sphinx -W clean + arch-map compliant
+
 ## [2026-11-13] feat: Step 4 Milestone 4: Multi-Camera Handoff, FOV Deduplication & Tactical World Minimap
 - **Type**: feat
 - **Summary**: Implemented MultiCameraHandoffCoordinator, WorldTacticalMinimap, GET /api/topology/world-map, and golden two-camera handoff tests.
@@ -124,18 +139,3 @@
   - `dashboard/static/video_scrubber.js`
   - `tests/test_video_jobs.py`
 - **Verification**: 337/337 tests pass (36.96s); 15/15 dedicated video jobs tests pass (1.09s); 0 warnings Sphinx HTML documentation build
-
-## [2026-11-10] feat: Video Job Concurrency, Progress Engine & Interactive Cancellation (Milestone 17)
-- **Type**: feat
-- **Summary**: Implemented thread-safe VideoJobManager coordinator with BoundedSemaphore(2), per-video mutual exclusion, joinable cancellation, and job polling. Decoupled async job router into video_jobs.py. Added VideoJobClient frontend coordinator with animated progress bars, background task pills, and interactive 409 conflict modal. Added 12 unit and integration tests.
-- **Files** (13):
-  - `dashboard/routers/videos.py`
-  - `dashboard/schemas.py`
-  - `dashboard/services/video_jobs_service.py`
-  - `dashboard/services/video_transcoder.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/js/video_jobs.js`
-  - `dashboard/static/js/video_library.js`
-  - ... (+5 more)
-- **Verification**: 334/334 tests pass (37.2s); 12/12 dedicated video jobs tests pass (0.89s); 0 warnings Sphinx docs build

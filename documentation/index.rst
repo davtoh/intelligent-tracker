@@ -44,6 +44,7 @@ Documentation Contents
    analytics
    reid
    events
+   memory_and_world_query
 
 .. toctree::
    :maxdepth: 2

@@ -117,6 +117,9 @@ REST API Endpoints
 - ``GET /events``: Retrieve recent security and tracking alerts from EventBus.
 - ``POST /tag``: Interactive click-to-tag bounding box endpoint.
 - ``GET /status``: System hardware telemetry (CPU %, RAM %, active pipeline FPS, memory).
+- ``POST /api/world/query``: Natural-language and structured semantic Q&A over FTS5 timelines, confidence state, and ``WorldGraph``.
+- ``GET /api/world/confidence/{entity_id}``: Retrieve calibrated long-term confidence telemetry for an entity.
+- ``GET /api/world/timeline``: BM25 full-text and structured search across indexed world timeline events.
 
 Modernized Responsive UI & Ergonomics (Milestone 10)
 ----------------------------------------------------

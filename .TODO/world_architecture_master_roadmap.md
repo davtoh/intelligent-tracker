@@ -78,17 +78,17 @@
 ---
 
 ## Step 5: Long-Term Confidence Engine & Pluggable Semantic Q&A (`WorldQueryEngine`)
-- **Goal**: Transform historical sightings, Re-ID learning, and event logs into an intelligent, queryable World memory with calibrated confidence and optional VLM/LLM natural-language understanding.
-- **Pre-Plan Evaluation Check**:
-  - Inspect `intelligent_tracker/repositories/`, `intelligent_tracker/matching/adaptive_memory.py`, `intelligent_tracker/active_learning.py`, and `dashboard/routers/analytics.py`.
-- **Target Scope**:
-  - **Mandatory Pre-Flight Split (`Split-Before-You-Grow`)**: Decompose `intelligent_tracker/active_learning.py` (457L) below 350 lines before adding Long-Term Confidence Engine hooks.
-  - Create `intelligent_tracker/memory/` (`confidence.py`, `fts_index.py`, `query_engine.py`, `providers.py`).
-  - **Confidence Engine**: Track multi-modal evidence accumulation (face + body + temporal consistency + topology prior + human confirmations) vs. drift/ambiguity decay so presence confidence improves measurably over repeated sightings.
-  - **Semantic Timeline & FTS Index**: Index sightings, zone crossings, RSAC breaches, and optional clip captions in SQLite FTS5.
-  - **Pluggable `WorldQueryEngine`**: Deterministic local structured/FTS parser + optional `SemanticProvider` (Gemini / local VLM/LLM) exposed via `POST /api/world/query` and CLI `intelligent-tracker ask "..."`.
-- **Definition of Done**:
-  - Offline natural-language/structured queries (with mock/deterministic provider) accurately retrieve sightings, presence confidence, and security timelines; optional VLM provider integration is cleanly isolated behind a protocol.
+- [x] **Goal**: Transform historical sightings, Re-ID learning, and event logs into an intelligent, queryable World memory with calibrated confidence and optional VLM/LLM natural-language understanding.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Inspect `intelligent_tracker/repositories/`, `intelligent_tracker/matching/adaptive_memory.py`, `intelligent_tracker/active_learning.py`, and `dashboard/routers/analytics.py`.
+- [x] **Target Scope**:
+  - [x] **Mandatory Pre-Flight Split (`Split-Before-You-Grow`)**: Decompose `intelligent_tracker/active_learning.py` (457L) below 350 lines before adding Long-Term Confidence Engine hooks.
+  - [x] Create `intelligent_tracker/memory/` (`confidence.py`, `fts_index.py`, `query_engine.py`, `providers.py`).
+  - [x] **Confidence Engine**: Track multi-modal evidence accumulation (face + body + temporal consistency + topology prior + human confirmations) vs. drift/ambiguity decay so presence confidence improves measurably over repeated sightings.
+  - [x] **Semantic Timeline & FTS Index**: Index sightings, zone crossings, RSAC breaches, and optional clip captions in SQLite FTS5.
+  - [x] **Pluggable `WorldQueryEngine`**: Deterministic local structured/FTS parser + optional `SemanticProvider` (Gemini / local VLM/LLM) exposed via `POST /api/world/query` and CLI `intelligent-tracker ask "..."`.
+- [x] **Definition of Done**:
+  - [x] Offline natural-language/structured queries (with mock/deterministic provider) accurately retrieve sightings, presence confidence, and security timelines; optional VLM provider integration is cleanly isolated behind a protocol.
 
 ---
 
