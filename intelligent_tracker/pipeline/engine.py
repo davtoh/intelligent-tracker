@@ -10,6 +10,7 @@ from intelligent_tracker.pipeline.bundle import (
     build_detector,
     build_events,
     build_governance,
+    build_memory_index,
     build_reid,
     build_tracker,
     build_video_source,
@@ -39,6 +40,7 @@ class PipelineEngine:
         bundle.reid_extractor, bundle.gallery_matcher = build_reid(config, bundle.db)
         bundle.event_pipeline, bundle.event_bus = build_events(config, bundle.analytics)
         bundle.confidence_engine = build_confidence_engine(bundle.db, bundle.event_bus)
+        bundle.event_fts_index = build_memory_index(config, bundle.db, bundle.event_bus)
 
     @classmethod
     def _assemble_governance_and_world(

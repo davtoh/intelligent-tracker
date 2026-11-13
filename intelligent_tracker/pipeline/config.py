@@ -148,6 +148,7 @@ class PipelineConfig:
     db_path: str | None = None
     enable_governance: bool = False
     enable_event_bus_fallback: bool = False
+    enable_memory_indexing: bool = True
     heatmap_enabled: bool = True
     heatmap_decay: float | None = 0.998
     show_heatmap: bool = False
@@ -168,6 +169,7 @@ class PipelineConfig:
         detector_fallback_mock: bool = True,
         enable_governance: bool = True,
         enable_event_bus_fallback: bool = True,
+        enable_memory_indexing: bool = True,
         default_source: str = "synthetic",
         default_detector: str = "mock",
         probe_db_reid: bool = False,
@@ -182,6 +184,7 @@ class PipelineConfig:
         db_cfg = data.get("database", {})
         ana_cfg = data.get("analytics", {})
         vis_cfg = data.get("visualization", {})
+        mem_cfg = data.get("memory", {})
         hm_cfg = ana_cfg.get("heatmap", {})
 
         raw_source = source_override if source_override is not None else video_cfg.get("source", default_source)
@@ -222,6 +225,7 @@ class PipelineConfig:
             db_path=resolved_db,
             enable_governance=enable_governance,
             enable_event_bus_fallback=enable_event_bus_fallback,
+            enable_memory_indexing=bool(mem_cfg.get("indexing", enable_memory_indexing)),
             heatmap_enabled=bool(hm_cfg.get("enabled", True)),
             heatmap_decay=float(decay_val) if decay_val is not None else None,
             show_heatmap=bool(vis_cfg.get("draw_heatmap", False)),

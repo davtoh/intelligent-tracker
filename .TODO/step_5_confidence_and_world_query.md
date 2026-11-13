@@ -87,15 +87,15 @@ Static snapshot run via `diagnose.py arch-map --path .` prior to Step 5 design:
 ---
 
 ### Milestone 3: Semantic Timeline FTS Index & Pluggable `WorldQueryEngine` — *Deferred to Next Turn / Milestone*
-- [ ] **intelligent_tracker/memory/fts_index.py**: Implement `EventFTSIndex` (`< 220` lines, $\le 10$ methods) subscribing to `EventBus` (`Sighting`, `ZoneEvent`, `TripwireCrossEvent`, `RSACViolationEvent`, `PetActivityEvent`, `EntityStateChangedEvent`) and indexing normalized timeline documents + optional clip captions into `TrackerDB` FTS5 outside locks.
-- [ ] **intelligent_tracker/memory/providers.py**: Implement `@runtime_checkable SemanticProvider` protocol, `PrivacyMaskingFilter` (metadata-only default + PII/crop redaction guard), `LocalDeterministicProvider` (zero-dependency offline formatter), `GeminiSemanticProvider` (optional cloud adapter configured solely via environment variables with safe offline fallback), and `MockSemanticProvider` (`< 220` lines).
-- [ ] **intelligent_tracker/memory/query_engine.py**: Implement `WorldQueryEngine` (`< 260` lines, $\le 10$ methods) combining deterministic query parsing (entity name, zone, camera, event type, time range, confidence intent) + FTS5 BM25 retrieval + `ConfidenceEngine` lookup + `WorldGraph.snapshot()`, with optional `SemanticProvider` natural-language synthesis.
-- [ ] **intelligent_tracker/pipeline/bundle.py**: Attach `EventFTSIndex` to `EventBus` when memory indexing is enabled so live pipeline events flow into the searchable timeline.
-- [ ] **tests/test_world_query_engine.py**: Verify `EventBus` $\rightarrow$ `EventFTSIndex` ingestion (sightings, zone crossings, RSAC breaches, clip captions), offline structured/FTS Q&A accuracy, `MockSemanticProvider` swapping, `GeminiSemanticProvider` unconfigured/offline error handling, and `PrivacyMaskingFilter` egress redaction.
+- [x] **intelligent_tracker/memory/fts_index.py**: Implement `EventFTSIndex` (`< 220` lines, $\le 10$ methods) subscribing to `EventBus` (`Sighting`, `ZoneEvent`, `TripwireCrossEvent`, `RSACViolationEvent`, `PetActivityEvent`, `EntityStateChangedEvent`) and indexing normalized timeline documents + optional clip captions into `TrackerDB` FTS5 outside locks.
+- [x] **intelligent_tracker/memory/providers.py**: Implement `@runtime_checkable SemanticProvider` protocol, `PrivacyMaskingFilter` (metadata-only default + PII/crop redaction guard), `LocalDeterministicProvider` (zero-dependency offline formatter), `GeminiSemanticProvider` (optional cloud adapter configured solely via environment variables with safe offline fallback), and `MockSemanticProvider` (`< 220` lines).
+- [x] **intelligent_tracker/memory/query_engine.py**: Implement `WorldQueryEngine` (`< 260` lines, $\le 10$ methods) combining deterministic query parsing (entity name, zone, camera, event type, time range, confidence intent) + FTS5 BM25 retrieval + `ConfidenceEngine` lookup + `WorldGraph.snapshot()`, with optional `SemanticProvider` natural-language synthesis.
+- [x] **intelligent_tracker/pipeline/bundle.py**: Attach `EventFTSIndex` to `EventBus` when memory indexing is enabled so live pipeline events flow into the searchable timeline.
+- [x] **tests/test_world_query_engine.py**: Verify `EventBus` $\rightarrow$ `EventFTSIndex` ingestion (sightings, zone crossings, RSAC breaches, clip captions), offline structured/FTS Q&A accuracy, `MockSemanticProvider` swapping, `GeminiSemanticProvider` unconfigured/offline error handling, and `PrivacyMaskingFilter` egress redaction.
 
 **Definition of Done (DoD)**:
-- Offline natural-language/structured queries accurately retrieve sightings, presence confidence, and security timelines without any external API key.
-- Optional VLM/LLM provider protocol and privacy filter pass all isolation and fallback branch tests.
+- [x] Offline natural-language/structured queries accurately retrieve sightings, presence confidence, and security timelines without any external API key.
+- [x] Optional VLM/LLM provider protocol and privacy filter pass all isolation and fallback branch tests.
 
 ---
 

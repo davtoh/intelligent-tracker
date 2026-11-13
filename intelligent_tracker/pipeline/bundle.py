@@ -15,7 +15,7 @@ from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.events import EventBus, setup_event_pipeline
 from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.matcher import GalleryMatcher
-from intelligent_tracker.memory import ConfidenceEngine
+from intelligent_tracker.memory import ConfidenceEngine, EventFTSIndex
 from intelligent_tracker.pipeline._world_setup import register_world_children
 from intelligent_tracker.pipeline.config import PipelineConfig
 from intelligent_tracker.reid import ReIDExtractorFactory
@@ -60,6 +60,7 @@ class PipelineBundle:
     event_bus: EventBus | None = None
     event_pipeline: dict[str, Any] | None = None
     confidence_engine: ConfidenceEngine | None = None
+    event_fts_index: EventFTSIndex | None = None
     world_graph: WorldGraph | None = None
     world_bridge: WorldEntityBridge | None = None
     world_rule_engine: WorldRuleEngine | None = None
@@ -86,6 +87,7 @@ class PipelineBundle:
             if bus is not None and bus is not self.event_bus:
                 _safe_call(bus, "stop")
 
+        _safe_call(self.event_fts_index, "detach")
         _safe_call(self.event_bus, "stop")
         _safe_call(self.db, "close")
 
@@ -251,6 +253,17 @@ def build_confidence_engine(
 ) -> ConfidenceEngine:
     """Instantiate ConfidenceEngine backed by TrackerDB when available."""
     return ConfidenceEngine(db=db, event_bus=event_bus)
+
+
+def build_memory_index(
+    config: PipelineConfig,
+    db: TrackerDB | None,
+    event_bus: EventBus | None,
+) -> EventFTSIndex | None:
+    """Attach EventFTSIndex to EventBus when memory indexing is enabled."""
+    if not config.enable_memory_indexing or db is None or event_bus is None:
+        return None
+    return EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
 
 
 def build_governance(
