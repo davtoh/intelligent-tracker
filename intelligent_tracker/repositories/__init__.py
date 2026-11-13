@@ -20,6 +20,7 @@ from intelligent_tracker.repositories.learning_repo import LearningMixin
 from intelligent_tracker.repositories.rsac_repo import RsacMixin
 from intelligent_tracker.repositories.whitelist_repo import WhitelistMixin
 from intelligent_tracker.repositories.telemetry_repo import TelemetryMixin
+from intelligent_tracker.repositories.memory_repo import MemoryMixin
 
 __all__ = [
     "SQLiteConnectionCoordinator",
@@ -34,5 +35,6 @@ __all__ = [
     "RsacMixin",
     "WhitelistMixin",
     "TelemetryMixin",
+    "MemoryMixin",
 ]
 
