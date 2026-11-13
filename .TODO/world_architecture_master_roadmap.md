@@ -16,19 +16,19 @@
 ---
 
 ## Step 1: Unified `PipelineEngine`, Config SSOT & Package Entrypoints
-- **Goal**: Eliminate duplicate pipeline creation and duplicated frame inference loops between `intelligent_tracker/cli/` and `dashboard/services/`.
-- **Why First**: Every subsequent improvement (`WorldGraph`, RSAC parity, confidence scoring, telemetry) currently has to be wired twice. Unifying this first cuts future work in half.
-- **Pre-Plan Evaluation Check**:
-  - Run `diagnose.py arch-map --path . --json` and inspect `cli/pipeline_builder.py`, `cli/runner.py`, `dashboard/services/pipeline_factory.py`, `dashboard/services/stream_worker.py`, `dashboard/stream_manager.py`.
-- **Target Scope**:
-  - Create `intelligent_tracker/pipeline/` (`config.py`, `engine.py`, `frame_processor.py`, `bundle.py`).
-  - Normalize resolution parsing (`"1280x720"` and `[1280, 720]`) and optional governance wiring (RSAC, ActiveLearning, Enrollment) in one shared builder.
-  - Refactor `CliAppRunner` and `StreamWorker` to invoke `FrameProcessor.step()`.
-  - Remove unused imports in `dashboard/stream_manager.py` flagged by `arch-map`.
-  - Add `pyproject.toml` with standardized `console_scripts` (`intelligent-tracker`, `intelligent-tracker-server`, `intelligent-tracker-ctl`) while keeping `main.py` backward compatible.
-- **Definition of Done**:
-  - CLI and Dashboard instantiate pipelines through `intelligent_tracker.pipeline`.
-  - Parity tests prove identical detector/tracker/matcher/zone behavior from one shared config in headless mode (`detector=mock`).
+- [x] **Goal**: Eliminate duplicate pipeline creation and duplicated frame inference loops between `intelligent_tracker/cli/` and `dashboard/services/`.
+- [x] **Why First**: Every subsequent improvement (`WorldGraph`, RSAC parity, confidence scoring, telemetry) currently has to be wired twice. Unifying this first cuts future work in half.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py arch-map --path . --json` and inspect `cli/pipeline_builder.py`, `cli/runner.py`, `dashboard/services/pipeline_factory.py`, `dashboard/services/stream_worker.py`, `dashboard/stream_manager.py`.
+- [x] **Target Scope**:
+  - [x] Create `intelligent_tracker/pipeline/` (`config.py`, `engine.py`, `frame_processor.py`, `bundle.py`).
+  - [x] Normalize resolution parsing (`"1280x720"` and `[1280, 720]`) and optional governance wiring (RSAC, ActiveLearning, Enrollment) in one shared builder.
+  - [x] Refactor `CliAppRunner` and `StreamWorker` to invoke `FrameProcessor.step()`.
+  - [x] Remove unused imports in `dashboard/stream_manager.py` flagged by `arch-map`.
+  - [x] Add `pyproject.toml` with standardized `console_scripts` (`intelligent-tracker`, `intelligent-tracker-server`, `intelligent-tracker-ctl`) while keeping `main.py` backward compatible.
+- [x] **Definition of Done**:
+  - [x] CLI and Dashboard instantiate pipelines through `intelligent_tracker.pipeline`.
+  - [x] Parity tests prove identical detector/tracker/matcher/zone behavior from one shared config in headless mode (`detector=mock`).
 
 ---
 

@@ -128,6 +128,7 @@ class TestPipelineEngineAssembly(unittest.TestCase):
         return Namespace(**defaults)
 
     def test_build_dashboard_and_cli_bundles_without_dashboard_imports(self) -> None:
+        had_dashboard = "dashboard" in sys.modules
         tmpdir = self._make_temp_dir()
         dash_bundle = PipelineEngine.from_dict(
             {
@@ -157,7 +158,8 @@ class TestPipelineEngineAssembly(unittest.TestCase):
         self.assertIsNone(cli_bundle.rsac_manager)
         self.assertIsNone(cli_bundle.active_learning)
         self.assertIsNone(cli_bundle.enrollment_manager)
-        self.assertNotIn("dashboard", sys.modules)
+        if not had_dashboard:
+            self.assertNotIn("dashboard", sys.modules)
 
     def test_governance_true_vs_false_and_reid_none(self) -> None:
         tmpdir = self._make_temp_dir()

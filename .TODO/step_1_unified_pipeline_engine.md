@@ -93,17 +93,17 @@ Measured against workspace baseline before edits:
 ---
 
 ### Milestone 4: `pyproject.toml`, Package Entrypoints & Final Verification *(Deferred to Next Turn)*
-- [ ] **intelligent_tracker/cli/ctl.py**: Extract terminal controller CLI (`cmd_list`, `cmd_stats`, `cmd_evict`, `cmd_prune`, `cmd_history`, `cmd_metrics`, `main`) using `$APP_URL` / `TRACKER_DASHBOARD_URL` env override fallback instead of hardcoding `localhost` blindly when configured.
-- [ ] **scripts/stream_ctl.py**: Convert to a thin wrapper delegating to `intelligent_tracker.cli.ctl:main`.
-- [ ] **dashboard/server.py**: Extract ASGI dashboard server launcher (`parse_args`, `resolve_config`, `preflight_port_check`, `main`) cleanly inside `dashboard/`.
-- [ ] **scripts/run_dashboard.py**: Convert to a thin backward-compatible wrapper re-exporting and delegating to `dashboard.server` so `tests/test_run_dashboard.py` and `tests/test_process_supervisor.py` remain unbroken.
-- [ ] **pyproject.toml**: Create canonical PEP 621 package configuration matching `requirements.txt` dependencies and defining `[project.scripts]` (`intelligent-tracker = "intelligent_tracker.cli:main"`, `intelligent-tracker-server = "dashboard.server:main"`, `intelligent-tracker-ctl = "intelligent_tracker.cli.ctl:main"`).
-- [ ] **tests/test_entrypoints.py**: Verify `pyproject.toml` script targets resolve cleanly, `intelligent_tracker` never imports `dashboard` or `scripts`, and `--help` succeeds for all 3 entrypoints.
-- [ ] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
+- [x] **intelligent_tracker/cli/ctl.py**: Extract terminal controller CLI (`cmd_list`, `cmd_stats`, `cmd_evict`, `cmd_prune`, `cmd_history`, `cmd_metrics`, `main`) using `$APP_URL` / `TRACKER_DASHBOARD_URL` env override fallback instead of hardcoding `localhost` blindly when configured.
+- [x] **scripts/stream_ctl.py**: Convert to a thin wrapper delegating to `intelligent_tracker.cli.ctl:main`.
+- [x] **dashboard/server.py**: Extract ASGI dashboard server launcher (`parse_args`, `resolve_config`, `preflight_port_check`, `main`) cleanly inside `dashboard/`.
+- [x] **scripts/run_dashboard.py**: Convert to a thin backward-compatible wrapper re-exporting and delegating to `dashboard.server` so `tests/test_run_dashboard.py` and `tests/test_process_supervisor.py` remain unbroken.
+- [x] **pyproject.toml**: Create canonical PEP 621 package configuration matching `requirements.txt` dependencies and defining `[project.scripts]` (`intelligent-tracker = "intelligent_tracker.cli:main"`, `intelligent-tracker-server = "dashboard.server:main"`, `intelligent-tracker-ctl = "intelligent_tracker.cli.ctl:main"`).
+- [x] **tests/test_entrypoints.py**: Verify `pyproject.toml` script targets resolve cleanly, `intelligent_tracker` never imports `dashboard` or `scripts`, and `--help` succeeds for all 3 entrypoints.
+- [x] **CHANGELOG.md**: Record milestone completion via `diagnose.py changelog add`.
 
 **Definition of Done (DoD)**:
-- Full regression suite (`MPLBACKEND=Agg python -m unittest discover tests`) passes 100%.
-- `diagnose.py arch-map --path .` confirms zero unused imports in `dashboard/stream_manager.py`, zero new modularity warnings (>= 350L), and clean downward coupling (`intelligent_tracker` free of `dashboard`/`scripts` imports).
+- [x] Full regression suite (`MPLBACKEND=Agg python -m unittest discover tests`) passes 100%.
+- [x] `diagnose.py arch-map --path .` confirms zero unused imports in `dashboard/stream_manager.py`, zero new modularity warnings (>= 350L), and clean downward coupling (`intelligent_tracker` free of `dashboard`/`scripts` imports).
 
 ---
 

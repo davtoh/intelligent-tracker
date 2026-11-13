@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-13] feat: Step 1 Milestone 4: pyproject.toml & Package Entrypoints
+- **Type**: feat
+- **Summary**: Extracted intelligent_tracker/cli/ctl.py and dashboard/server.py from scripts/, converted scripts/stream_ctl.py and scripts/run_dashboard.py to thin wrappers, added PEP 621 pyproject.toml with console_scripts, and added tests/test_entrypoints.py.
+- **Files** (7):
+  - `intelligent_tracker/cli/ctl.py`
+  - `scripts/stream_ctl.py`
+  - `dashboard/server.py`
+  - `scripts/run_dashboard.py`
+  - `pyproject.toml`
+  - `tests/test_entrypoints.py`
+  - `tests/test_pipeline_config.py`
+- **Verification**: 427/427 unit tests passed (unittest discover tests); arch-map verified zero new modularity warnings
+
 ## [2026-11-12] feat: CaptureReadGuard Concurrency & COM Hardening
 - **Type**: feat
 - **Summary**: Hardened VideoSource and CameraPool against Windows COM DirectShow deadlocks and race conditions. Initialized COM on reader and safe driver unbind worker threads, removed unguarded reads during video looping, and made CameraPool remove_camera and update_camera lock-free during stream teardown.
@@ -127,18 +140,3 @@
   - `dashboard/services/diagnostic_bridge.py`
   - `scripts/run_dashboard.py`
 - **Verification**: 308 tests passed in intelligent_tracker (36.99s); 116 tests passed in system-diagnostics (3.64s)
-
-## [2026-11-05] fix: Thread Safety, 12-Factor Env and Defensive Logging Fixes
-- **Type**: fix
-- **Summary**: Implemented interruptible Event.wait in WebhookDispatcher, MqttPublisher, and LifecycleManager; parameterized MQTT_BROKER; replaced JS empty catch blocks with console.debug
-- **Files** (9):
-  - `MIGRATION_LOG.md`
-  - `dashboard/static/js/telemetry.js`
-  - `dashboard/static/js/text_truncation_manager.js`
-  - `dashboard/static/video_scrubber.js`
-  - `intelligent_tracker/events/mqtt.py`
-  - `intelligent_tracker/events/webhooks.py`
-  - `intelligent_tracker/lifecycle.py`
-  - `tests/test_events_dispatchers.py`
-  - ... (+1 more)
-- **Verification**: diagnose.py tests (308 passed, 0 regressions)
