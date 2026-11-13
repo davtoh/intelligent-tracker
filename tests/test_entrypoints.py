@@ -57,11 +57,8 @@ class TestEntrypoints(unittest.TestCase):
             self.assertIn("usage:", proc.stdout.lower(), f"{name} --help missing usage output")
 
     def test_core_package_never_imports_dashboard_or_scripts(self) -> None:
-        """intelligent_tracker/ must never import dashboard, and must not add scripts imports."""
+        """intelligent_tracker/ must never import dashboard or scripts."""
         core_root = REPO_ROOT / "intelligent_tracker"
-        known_legacy_scripts_imports = {
-            ("intelligent_tracker/detectors/onnx_detector.py", "scripts.download_models"),
-        }
         violations: list[str] = []
 
         for py_file in core_root.rglob("*.py"):
@@ -75,9 +72,7 @@ class TestEntrypoints(unittest.TestCase):
                             violations.append(f"{rel_path}: import {alias.name}")
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     top = node.module.split(".", 1)[0]
-                    if top == "dashboard" or (
-                        top == "scripts" and (rel_path, node.module) not in known_legacy_scripts_imports
-                    ):
+                    if top in {"dashboard", "scripts"}:
                         violations.append(f"{rel_path}: from {node.module}")
 
         self.assertEqual(violations, [], f"Layering violations found: {violations}")

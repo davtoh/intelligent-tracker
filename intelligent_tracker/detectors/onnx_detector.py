@@ -28,7 +28,7 @@ def resolve_model_path(model_path: Optional[str]) -> str:
         candidate = os.path.join(repo_root, "models", "yolov8n.onnx")
         if not os.path.isfile(candidate):
             try:
-                from scripts.download_models import ensure_model
+                from intelligent_tracker.detectors.model_loader import ensure_model
 
                 candidate = ensure_model("yolov8n")
             except Exception:
@@ -309,7 +309,7 @@ def _create_yolov8_detector(*args, **kwargs):
         model_path = os.path.join(repo_root, "models", "yolov8n.onnx")
         if not os.path.isfile(model_path):
             try:
-                from scripts.download_models import ensure_model
+                from intelligent_tracker.detectors.model_loader import ensure_model
 
                 model_path = ensure_model("yolov8n")
             except Exception:
@@ -325,7 +325,7 @@ def _create_yolo11_detector(*args, **kwargs):
         model_path = os.path.join(repo_root, "models", "yolo11n.onnx")
         if not os.path.isfile(model_path):
             try:
-                from scripts.download_models import ensure_model
+                from intelligent_tracker.detectors.model_loader import ensure_model
 
                 model_path = ensure_model("yolo11n")
             except Exception:
