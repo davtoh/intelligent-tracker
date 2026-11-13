@@ -91,6 +91,11 @@ from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
 )
+from dashboard.services.process_supervisor import (
+    set_parent_death_signal,
+    start_parent_watchdog,
+    stop_parent_watchdog,
+)
 from dashboard.services.shutdown_handler import (
     GracefulCancellationMiddleware,
     async_shutdown_pool,
@@ -125,6 +130,8 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
     global stream_manager, camera_pool, scenario_manager, lifecycle_manager
     install_shutdown_handlers()
+    set_parent_death_signal()
+    start_parent_watchdog()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     camera_pool = CameraPool()
     set_camera_pool(camera_pool)
@@ -152,6 +159,7 @@ async def lifespan(app: FastAPI):
         await async_shutdown_pool(camera_pool)
     elif stream_manager:
         await asyncio.to_thread(stream_manager.stop)
+    stop_parent_watchdog()
 
 
 def create_app() -> FastAPI:

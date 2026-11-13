@@ -158,3 +158,13 @@ def apply_windows_iocp_patch() -> bool:
         logger.warning("Failed to apply Windows IOCP resilience patch: %s", e)
         return False
 
+
+def apply_windows_process_containment() -> bool:
+    """
+    Assign the current process and its child hierarchy to a Win32 Job Object
+    configured with KILL_ON_JOB_CLOSE to guarantee atomic process tree containment.
+    """
+    from dashboard.services.process_supervisor import assign_to_job_object
+    return assign_to_job_object()
+
+

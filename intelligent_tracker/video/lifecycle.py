@@ -72,6 +72,11 @@ class CaptureLifecycleMixin:
         self._is_paused = False
         self._stop_event.set()
         self._pause_event.set()
+        if hasattr(self, "_read_guard") and self._read_guard is not None:
+            try:
+                self._read_guard.stop()
+            except Exception:
+                pass
         try:
             self._queue.put_nowait(None)
         except Exception:

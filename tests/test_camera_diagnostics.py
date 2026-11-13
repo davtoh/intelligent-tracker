@@ -4,6 +4,8 @@
 Unit tests for Camera Health Manager and Diagnostics API Router.
 """
 
+import os
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -17,12 +19,17 @@ class TestCameraDiagnostics(unittest.TestCase):
     """Test suite for CameraHealthManager state transitions and diagnostic endpoints."""
 
     def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp_dir.cleanup)
         self.health_mgr = CameraHealthManager()
         from dashboard.dependencies import get_camera_pool, set_camera_pool
         from dashboard.camera_pool import CameraPool
         pool = get_camera_pool()
         if pool is None:
-            pool = CameraPool(autostart=False)
+            pool = CameraPool(
+                config_file=os.path.join(self._tmp_dir.name, "cameras.json"),
+                autostart=False,
+            )
             set_camera_pool(pool)
         pool.camera_configs["synthetic_01"] = {
             "id": "synthetic_01",

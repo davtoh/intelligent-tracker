@@ -81,6 +81,29 @@ def resolve_config(args: argparse.Namespace) -> tuple[str, int, bool]:
     return host, port, reload
 
 
+def preflight_port_check(port: int, host: str = "0.0.0.0") -> bool:
+    """Verify port availability before launching Uvicorn; auto-reclaim if occupied by stale tracker."""
+    from dashboard.services.process_supervisor import (
+        check_port_available,
+        find_port_listeners,
+        reclaim_port,
+    )
+
+    if check_port_available(port, host=host):
+        return True
+
+    pids = find_port_listeners(port)
+    pids_desc = f"PID(s): {pids}" if pids else "unknown process"
+    print(f"  [Port Pre-Flight] Port {port} is occupied ({pids_desc}). Attempting auto-reclaim...")
+
+    if reclaim_port(port, force=False):
+        print(f"  [Port Pre-Flight] Successfully reclaimed port {port}.")
+        return True
+
+    print(f"  [Port Pre-Flight] Warning: Port {port} could not be automatically reclaimed. Startup may fail.")
+    return False
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     host, port, reload = resolve_config(args)
@@ -88,6 +111,10 @@ def main(argv: list[str] | None = None) -> None:
     print(f"=== Starting Intelligent Tracker Dashboard ===")
     print(f"  Target: http://{host}:{port}")
     print(f"  Reload: {reload} (directories: dashboard/, intelligent_tracker/)")
+
+    from dashboard.services.process_supervisor import assign_to_job_object
+    assign_to_job_object()
+    preflight_port_check(port, host=host)
 
     uvicorn_kwargs = {
         "host": host,
@@ -100,6 +127,7 @@ def main(argv: list[str] | None = None) -> None:
         uvicorn_kwargs["reload_excludes"] = ["data/*", "logs/*", "*.db*", "*.sqlite*", ".diagnostics/*"]
 
     uvicorn.run("dashboard.app:app", **uvicorn_kwargs)
+
 
 
 if __name__ == "__main__":

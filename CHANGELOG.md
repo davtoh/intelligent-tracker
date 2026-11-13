@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-12] feat: CaptureReadGuard Concurrency & COM Hardening
+- **Type**: feat
+- **Summary**: Hardened VideoSource and CameraPool against Windows COM DirectShow deadlocks and race conditions. Initialized COM on reader and safe driver unbind worker threads, removed unguarded reads during video looping, and made CameraPool remove_camera and update_camera lock-free during stream teardown.
+- **Files** (4):
+  - `intelligent_tracker/video/capture_guard.py`
+  - `intelligent_tracker/video/capture_worker.py`
+  - `dashboard/camera_pool.py`
+  - `tests/test_capture_circuit_breaker.py`
+- **Verification**: Ran 409 tests in 50.7s: 100% passed
+
 ## [2026-11-11] feat: Milestone 3: Layer-Isolated Scaling & Policy-Governed Scrubber Timeline Persistence
 - **Type**: feat
 - **Summary**: Removed primary-layer sourceResolution cross-contamination in ScrubberOverlay.render(), extracted ScrubberPlaybackState & ScrubberLibraryBridge to keep VideoScrubber modular (<390L), persisted per-stem playback timestamps across original/_h264 pairs & recordings honoring #scrubber-tab-policy, and verified 372/372 unit tests plus headless CDP.
@@ -132,19 +142,3 @@
   - `tests/test_events_dispatchers.py`
   - ... (+1 more)
 - **Verification**: diagnose.py tests (308 passed, 0 regressions)
-
-## [Milestone 1] - 2026-10-21 - Environment & Core Engine Revitalization
-
-### 1. Objectives & Scope
-- Revitalize 8-year legacy computer vision project (CCTV / Raspberry Pi object tracking).
-- Set up a clean, modern Python 3.12 64-bit environment (`.venv`) while maintaining knowledge of historical Anaconda 3.7 (`InteligentTracker`) environment.
-- Adapt project rules (`rules/*.md`) from previous Django template to Intelligent Tracker computer vision, RTSP edge security, and modern Python guidelines.
-- Diagnose and fix immediate cross-platform compatibility blockers in tests (e.g. Unix-only `resource` module, defunct `RRtoolbox` imports).
-- Prepare cross-platform setup guide (`SETUP_GUIDE.md`) for Windows, Linux (Raspberry Pi / Debian / Ubuntu), and macOS.
-- Build modernization roadmap (`TODO_MODERNIZATION.md`) addressing YOLOv8/v11 Edge, RTSP analytics, and alerting.
-
-### 2. Files Touched
-- `rules/comment_preservation.md`: Adapted examples to OpenCV, Haar cascades, and computer vision mathematics.
-- `rules/environment_and_execution.md`: Updated virtualenv paths, test commands, execution workflows, and cross-platform instructions.
-- `rules/milestone_workflow.md`: Structured incremental computer vision milestones and automated verification procedures.
-- `rules/security_and_standards.md`: Added RTSP camera secret handling, GDPR video privacy, OpenCV frame buffer memory leak safety, and modern Python standards.
