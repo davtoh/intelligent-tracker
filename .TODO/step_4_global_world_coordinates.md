@@ -72,20 +72,20 @@ Measured against live workspace baseline (`260` files, `48,150` lines, `94` API 
 ---
 
 ### Milestone 2: `GlobalCoordinateMapper` & Unified `WorldEntity` Ground Plane Projection *(Deferred to Next Turn / Milestone)*
-- [ ] **intelligent_tracker/world/coordinates.py**: Implement `CameraWorldPose` (`camera_id`, `origin_x`, `origin_y`, `yaw_deg`, `scale`) and thread-safe `GlobalCoordinateMapper` transforming camera pixel contact points $(u, v)$ $\rightarrow$ local metric $(X_{\text{local}}, Y_{\text{local}})$ via `GroundPlaneHomography` $\rightarrow$ global world $(X_{\text{global}}, Y_{\text{global}})$ meters via 2D rigid rotation/translation:
+- [x] **intelligent_tracker/world/coordinates.py**: Implement `CameraWorldPose` (`camera_id`, `origin_x`, `origin_y`, `yaw_deg`, `scale`) and thread-safe `GlobalCoordinateMapper` transforming camera pixel contact points $(u, v)$ $\rightarrow$ local metric $(X_{\text{local}}, Y_{\text{local}})$ via `GroundPlaneHomography` $\rightarrow$ global world $(X_{\text{global}}, Y_{\text{global}})$ meters via 2D rigid rotation/translation:
   $$\begin{pmatrix} X_{\text{global}} \\ Y_{\text{global}} \end{pmatrix} = \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix} \begin{pmatrix} X_{\text{local}} \\ Y_{\text{local}} \end{pmatrix} + \begin{pmatrix} X_0 \\ Y_0 \end{pmatrix}$$
   including inverse `global_to_camera()`, `project_track_bbox()`, and `project_polygon()` (`< 240` lines, `<= 10` methods, `<= 35` lines/method).
-- [ ] **intelligent_tracker/world/nodes.py**: Add `global_trajectory: list[tuple[float, float, float]]` (bounded history of `(X, Y, timestamp)`) to `WorldEntity` and optional `world_pose: tuple[float, float, float] = (0.0, 0.0, 0.0)` to `CameraNode`.
-- [ ] **intelligent_tracker/world/_bridge_helpers.py**: Add `compute_global_track_xy()` and `append_bounded_trajectory()` helpers so `WorldEntityBridge` updates `WorldEntity.global_xy` and `WorldEntity.global_trajectory` cleanly without bloating `entity_bridge.py`.
-- [ ] **intelligent_tracker/world/entity_bridge.py**: Accept optional `coordinate_mapper: GlobalCoordinateMapper | None = None` (or resolve from `world_graph`) to project track bounding boxes into global `(X, Y)` coordinates on every entity sync (`< 310` lines, `<= 10` methods).
-- [ ] **intelligent_tracker/world/__init__.py**: Export `CameraWorldPose` and `GlobalCoordinateMapper`.
-- [ ] **intelligent_tracker/scenarios.py**: Register/update camera homographies on `world_graph` / `GlobalCoordinateMapper` when `save_homography` or `load_scenarios` runs.
-- [ ] **intelligent_tracker/journey.py** & **intelligent_tracker/journey_segmenter.py**: Add optional `global_start_xy`, `global_end_xy`, and `global_path` fields to `JourneyHop` and `EntityJourney`, computed when a `coordinate_mapper` or camera homography is available.
-- [ ] **tests/test_global_coordinates.py**: Add unit tests covering `GlobalCoordinateMapper` forward/inverse rigid transforms across multiple translated/rotated cameras, `WorldEntityBridge` live `global_xy` & trajectory updates, and `TrajectoryJourneySearcher` global path projection.
+- [x] **intelligent_tracker/world/nodes.py**: Add `global_trajectory: list[tuple[float, float, float]]` (bounded history of `(X, Y, timestamp)`) to `WorldEntity` and optional `world_pose: tuple[float, float, float] = (0.0, 0.0, 0.0)` to `CameraNode`.
+- [x] **intelligent_tracker/world/_bridge_helpers.py**: Add `compute_global_track_xy()` and `append_bounded_trajectory()` helpers so `WorldEntityBridge` updates `WorldEntity.global_xy` and `WorldEntity.global_trajectory` cleanly without bloating `entity_bridge.py`.
+- [x] **intelligent_tracker/world/entity_bridge.py**: Accept optional `coordinate_mapper: GlobalCoordinateMapper | None = None` (or resolve from `world_graph`) to project track bounding boxes into global `(X, Y)` coordinates on every entity sync (`< 310` lines, `<= 10` methods).
+- [x] **intelligent_tracker/world/__init__.py**: Export `CameraWorldPose` and `GlobalCoordinateMapper`.
+- [x] **intelligent_tracker/scenarios.py**: Register/update camera homographies on `world_graph` / `GlobalCoordinateMapper` when `save_homography` or `load_scenarios` runs.
+- [x] **intelligent_tracker/journey.py** & **intelligent_tracker/journey_segmenter.py**: Add optional `global_start_xy`, `global_end_xy`, and `global_path` fields to `JourneyHop` and `EntityJourney`, computed when a `coordinate_mapper` or camera homography is available.
+- [x] **tests/test_global_coordinates.py**: Add unit tests covering `GlobalCoordinateMapper` forward/inverse rigid transforms across multiple translated/rotated cameras, `WorldEntityBridge` live `global_xy` & trajectory updates, and `TrajectoryJourneySearcher` global path projection.
 
 **Definition of Done (DoD)**:
-- [ ] `GlobalCoordinateMapper` accurately projects pixel tracks and polygons into unified global `(X, Y)` meters and updates `WorldEntity.global_xy` and `global_trajectory`.
-- [ ] `MPLBACKEND=Agg python -m unittest tests/test_global_coordinates.py tests/test_world_entity_bridge.py tests/test_journey.py` passes 100%.
+- [x] `GlobalCoordinateMapper` accurately projects pixel tracks and polygons into unified global `(X, Y)` meters and updates `WorldEntity.global_xy` and `global_trajectory`.
+- [x] `MPLBACKEND=Agg python -m unittest tests/test_global_coordinates.py tests/test_world_entity_bridge.py tests/test_journey.py` passes 100%.
 
 ---
 

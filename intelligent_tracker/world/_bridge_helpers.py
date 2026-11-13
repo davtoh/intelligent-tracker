@@ -3,8 +3,9 @@
 from typing import Any
 
 from intelligent_tracker.world._lifecycle import find_entity_by_track, resolve_zone_node
+from intelligent_tracker.world.coordinates import project_bbox_from_camera_node
 from intelligent_tracker.world.graph import WorldGraph
-from intelligent_tracker.world.nodes import WorldEntity
+from intelligent_tracker.world.nodes import CameraNode, WorldEntity
 
 
 def scoped_session_id(camera_id: str, session_id: int | str) -> str:
@@ -29,6 +30,46 @@ def extract_global_xy(track: Any) -> tuple[float, float] | None:
     if coords is None or len(coords) < 2:
         return None
     return (float(coords[0]), float(coords[1]))
+
+
+def compute_global_track_xy(
+    track: Any,
+    *,
+    camera_id: str = "",
+    coordinate_mapper: Any = None,
+    world_graph: WorldGraph | None = None,
+) -> tuple[float, float] | None:
+    """Resolve global (X, Y) meters via GlobalCoordinateMapper, CameraNode calibration, or Track fallback."""
+    bbox = getattr(track, "bbox", None)
+    if bbox is not None and len(bbox) >= 4 and camera_id:
+        if coordinate_mapper is not None and coordinate_mapper.has_camera(camera_id):
+            return coordinate_mapper.project_track_bbox(camera_id, bbox)
+        if world_graph is not None:
+            cam_node = world_graph.get_node(camera_id, node_type="camera")
+            if isinstance(cam_node, CameraNode):
+                projected = project_bbox_from_camera_node(cam_node, bbox)
+                if projected is not None:
+                    return projected
+    return extract_global_xy(track)
+
+
+def append_bounded_trajectory(
+    entity: WorldEntity,
+    xy: tuple[float, float] | None,
+    timestamp: float,
+    *,
+    max_points: int = 120,
+) -> None:
+    """Append (X, Y, timestamp) to WorldEntity.global_trajectory while enforcing bounded length."""
+    if xy is None:
+        return
+    limit = max(1, int(max_points))
+    point = (float(xy[0]), float(xy[1]), float(timestamp))
+    if entity.global_trajectory and entity.global_trajectory[-1] == point:
+        return
+    entity.global_trajectory.append(point)
+    if len(entity.global_trajectory) > limit:
+        del entity.global_trajectory[:-limit]
 
 
 def decorate_track_identity(

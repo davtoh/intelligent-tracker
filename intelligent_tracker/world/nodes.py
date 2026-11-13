@@ -39,6 +39,7 @@ class CameraNode(WorldNode):
     zone_ids: set[str] = field(default_factory=set)
     tripwire_ids: set[str] = field(default_factory=set)
     homography: list[list[float]] | None = None
+    world_pose: tuple[float, float, float] = (0.0, 0.0, 0.0)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -130,6 +131,7 @@ class WorldEntity(WorldNode):
     camera_tracks: dict[str, int] = field(default_factory=dict)
     active_zones: dict[str, set[str]] = field(default_factory=dict)
     global_xy: tuple[float, float] | None = None
+    global_trajectory: list[tuple[float, float, float]] = field(default_factory=list)
     last_seen: float = field(default_factory=time.time)
 
     def __post_init__(self) -> None:

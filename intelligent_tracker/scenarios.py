@@ -25,7 +25,8 @@ from intelligent_tracker.scenario_storage import (
     sync_zone_to_world,
 )
 from intelligent_tracker.topology import CrossCameraTopology
-from intelligent_tracker.world import WorldGraph
+from intelligent_tracker.world import GlobalCoordinateMapper, WorldGraph
+from intelligent_tracker.world.coordinates import sync_homography_to_world
 
 logger = logging.getLogger("intelligent_tracker.scenarios")
 
@@ -45,11 +46,13 @@ class ScenarioManager(ScenarioStorageMixin):
         db: TrackerDB | None = None,
         db_path: str = "data/tracker.db",
         world_graph: WorldGraph | None = None,
+        coordinate_mapper: GlobalCoordinateMapper | None = None,
     ):
         self.config_path = config_path
         self.db = db or TrackerDB(db_path)
         self.topology = CrossCameraTopology()
         self.world_graph = world_graph
+        self.coordinate_mapper = coordinate_mapper
         self.cameras: dict[str, dict[str, Any]] = {}
         self.load_scenarios()
 
@@ -185,6 +188,7 @@ class ScenarioManager(ScenarioStorageMixin):
             )
 
         self.save_to_yaml()
+        sync_homography_to_world(self.world_graph, self.coordinate_mapper, camera_id, homo)
         return homo
 
     def get_homography(self, camera_id: str) -> GroundPlaneHomography:

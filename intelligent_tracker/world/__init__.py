@@ -1,5 +1,6 @@
 """Scoped WorldGraph subsystem for cameras, spatial nodes, live entities, and policies."""
 
+from intelligent_tracker.world.coordinates import CameraWorldPose, GlobalCoordinateMapper
 from intelligent_tracker.world.entity_bridge import WorldEntityBridge
 from intelligent_tracker.world.events import (
     EntityStateChangedEvent,
@@ -20,7 +21,9 @@ from intelligent_tracker.world.rules import WorldRuleEngine
 
 __all__ = [
     "CameraNode",
+    "CameraWorldPose",
     "EntityStateChangedEvent",
+    "GlobalCoordinateMapper",
     "NodeAddedEvent",
     "NodeRemovedEvent",
     "TripwireNode",

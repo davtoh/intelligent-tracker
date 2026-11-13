@@ -5,15 +5,17 @@ import time
 from typing import Any
 
 from intelligent_tracker.world._bridge_helpers import (
+    append_bounded_trajectory,
+    compute_global_track_xy,
     decorate_track_identity,
     detach_track_from_other_entities,
-    extract_global_xy,
     promote_session_node,
     remove_track_from_zones,
     scoped_session_id,
     scoped_zone_id,
 )
 from intelligent_tracker.world._lifecycle import list_entities_snapshot
+from intelligent_tracker.world.coordinates import GlobalCoordinateMapper
 from intelligent_tracker.world.graph import WorldGraph
 from intelligent_tracker.world.nodes import WorldEntity
 
@@ -30,11 +32,19 @@ class WorldEntityBridge:
         *,
         sync_interval: float = 0.5,
         stale_ttl: float = 30.0,
+        coordinate_mapper: GlobalCoordinateMapper | None = None,
+        max_trajectory_points: int = 120,
     ) -> None:
         self.world_graph = world_graph
         self.db = db
         self.sync_interval = max(0.0, float(sync_interval))
         self.stale_ttl = max(0.0, float(stale_ttl))
+        self.coordinate_mapper = (
+            coordinate_mapper
+            if coordinate_mapper is not None
+            else getattr(world_graph, "coordinate_mapper", None)
+        )
+        self.max_trajectory_points = max(1, int(max_trajectory_points))
         self._lock = threading.Lock()
         self._last_sync: dict[tuple[str, int], tuple[float, str, str]] = {}
 
@@ -135,9 +145,16 @@ class WorldEntityBridge:
         """Update common camera/position/zone fields, upsert WorldEntity, and cache throttle stamp."""
         tid = int(track.track_id)
         entity.camera_tracks[camera_id] = tid
-        xy = extract_global_xy(track)
+        mapper = self.coordinate_mapper or getattr(self.world_graph, "coordinate_mapper", None)
+        xy = compute_global_track_xy(
+            track,
+            camera_id=camera_id,
+            coordinate_mapper=mapper,
+            world_graph=self.world_graph,
+        )
         if xy is not None:
             entity.global_xy = xy
+            append_bounded_trajectory(entity, xy, now, max_points=self.max_trajectory_points)
         entity.last_seen = max(entity.last_seen, now)
 
         scoped_zone = scoped_zone_id(self.world_graph, camera_id, zone_id)
