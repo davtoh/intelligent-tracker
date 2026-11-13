@@ -155,6 +155,29 @@ class WorldEntity(WorldNode):
 
 
 @dataclass
+class TransitionEdgeNode(WorldNode):
+    """Directed cross-camera transition edge linking a source zone to a target zone."""
+
+    node_type: str = "transition"
+    link_id: str = ""
+    source_camera: str = ""
+    source_zone: str = ""
+    target_camera: str = ""
+    target_zone: str = ""
+    t_min: float = 2.0
+    t_max: float = 15.0
+    prior_boost: float = 0.35
+    bidirectional: bool = False
+    active: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.link_id and self.node_id:
+            self.link_id = self.node_id
+        elif not self.node_id and self.link_id:
+            self.node_id = self.link_id
+
+
+@dataclass
 class WorldPolicy:
     """Graph-wide operational policy propagated reactively without stream restarts."""
 

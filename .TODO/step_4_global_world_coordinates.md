@@ -90,15 +90,15 @@ Measured against live workspace baseline (`260` files, `48,150` lines, `94` API 
 ---
 
 ### Milestone 3: Directed `CrossCameraTopology` Edges in `WorldGraph` & Bayesian Transit Priors *(Deferred to Next Turn / Milestone)*
-- [ ] **intelligent_tracker/world/nodes.py**: Add `TransitionEdgeNode(WorldNode)` representing a directed cross-camera transition link (`link_id`, `source_camera`, `source_zone`, `target_camera`, `target_zone`, `t_min`, `t_max`, `prior_boost`, `bidirectional`, `active`).
-- [ ] **intelligent_tracker/world/transitions.py**: Implement `WorldTransitionRegistry` managing `TransitionEdgeNode` lifecycle in `WorldGraph` (registering directed camera-to-camera edges, cascading removal when a `CameraNode` is removed, and querying active transit priors with global `(X, Y)` kinematic speed plausibility) without adding methods to `WorldGraph` (`< 230` lines, `<= 10` methods).
-- [ ] **intelligent_tracker/topology.py**: Integrate optional `world_transitions: WorldTransitionRegistry | None = None` into `CrossCameraTopology` so `add_link`, `remove_link`, and `record_zone_exit` synchronize with `WorldGraph`, and add kinematic speed gating when global coordinates are present (`< 340` lines, `<= 11` methods).
-- [ ] **intelligent_tracker/scenarios.py** & **intelligent_tracker/scenario_storage.py**: Bind `ScenarioManager.topology` to `WorldTransitionRegistry(world_graph)` when `world_graph` is provided so loaded/saved topology links materialize as `TransitionEdgeNode`s in `WorldGraph`.
-- [ ] **tests/test_world_transitions.py**: Add unit tests verifying `TransitionEdgeNode` creation in `WorldGraph`, bidirectional edge resolution, cascading cleanup on camera deletion, and kinematic-aware Bayesian prior boosting.
+- [x] **intelligent_tracker/world/nodes.py**: Add `TransitionEdgeNode(WorldNode)` representing a directed cross-camera transition link (`link_id`, `source_camera`, `source_zone`, `target_camera`, `target_zone`, `t_min`, `t_max`, `prior_boost`, `bidirectional`, `active`).
+- [x] **intelligent_tracker/world/transitions.py**: Implement `WorldTransitionRegistry` managing `TransitionEdgeNode` lifecycle in `WorldGraph` (registering directed camera-to-camera edges, cascading removal when a `CameraNode` is removed, and querying active transit priors with global `(X, Y)` kinematic speed plausibility) without adding methods to `WorldGraph` (`< 230` lines, `<= 10` methods).
+- [x] **intelligent_tracker/topology.py**: Integrate optional `world_transitions: WorldTransitionRegistry | None = None` into `CrossCameraTopology` so `add_link`, `remove_link`, and `record_zone_exit` synchronize with `WorldGraph`, and add kinematic speed gating when global coordinates are present (`< 340` lines, `<= 11` methods).
+- [x] **intelligent_tracker/scenarios.py** & **intelligent_tracker/scenario_storage.py**: Bind `ScenarioManager.topology` to `WorldTransitionRegistry(world_graph)` when `world_graph` is provided so loaded/saved topology links materialize as `TransitionEdgeNode`s in `WorldGraph`.
+- [x] **tests/test_world_transitions.py**: Add unit tests verifying `TransitionEdgeNode` creation in `WorldGraph`, bidirectional edge resolution, cascading cleanup on camera deletion, and kinematic-aware Bayesian prior boosting.
 
 **Definition of Done (DoD)**:
-- [ ] `CrossCameraTopology` transitions are represented as first-class `TransitionEdgeNode`s in `WorldGraph` with Bayesian transit priors and clean cascading lifecycle.
-- [ ] `MPLBACKEND=Agg python -m unittest tests/test_world_transitions.py tests/test_scenarios.py tests/test_scenario_api.py` passes 100%.
+- [x] `CrossCameraTopology` transitions are represented as first-class `TransitionEdgeNode`s in `WorldGraph` with Bayesian transit priors and clean cascading lifecycle.
+- [x] `MPLBACKEND=Agg python -m unittest tests/test_world_transitions.py tests/test_scenarios.py tests/test_scenario_api.py` passes 100%.
 
 ---
 

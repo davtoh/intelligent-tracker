@@ -25,7 +25,7 @@ from intelligent_tracker.scenario_storage import (
     sync_zone_to_world,
 )
 from intelligent_tracker.topology import CrossCameraTopology
-from intelligent_tracker.world import GlobalCoordinateMapper, WorldGraph
+from intelligent_tracker.world import GlobalCoordinateMapper, WorldGraph, WorldTransitionRegistry
 from intelligent_tracker.world.coordinates import sync_homography_to_world
 
 logger = logging.getLogger("intelligent_tracker.scenarios")
@@ -50,9 +50,14 @@ class ScenarioManager(ScenarioStorageMixin):
     ):
         self.config_path = config_path
         self.db = db or TrackerDB(db_path)
-        self.topology = CrossCameraTopology()
         self.world_graph = world_graph
         self.coordinate_mapper = coordinate_mapper
+        self.world_transitions = (
+            WorldTransitionRegistry(world_graph, coordinate_mapper=coordinate_mapper)
+            if world_graph is not None
+            else None
+        )
+        self.topology = CrossCameraTopology(world_transitions=self.world_transitions)
         self.cameras: dict[str, dict[str, Any]] = {}
         self.load_scenarios()
 

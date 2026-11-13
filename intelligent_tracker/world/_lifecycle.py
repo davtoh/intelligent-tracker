@@ -11,6 +11,7 @@ from intelligent_tracker.world.events import (
 )
 from intelligent_tracker.world.nodes import (
     CameraNode,
+    TransitionEdgeNode,
     TripwireNode,
     WorldEntity,
     ZoneNode,
@@ -169,6 +170,31 @@ def detach_camera_children(
     return detached_ids, events
 
 
+def detach_camera_transitions(
+    transitions: dict[str, TransitionEdgeNode],
+    camera_id: str,
+) -> tuple[list[str], list[BaseEvent]]:
+    """Remove all TransitionEdgeNodes referencing camera_id as source or target under lock."""
+    detached_ids: list[str] = []
+    events: list[BaseEvent] = []
+    matching = [
+        tid for tid, edge in transitions.items()
+        if edge.source_camera == camera_id or edge.target_camera == camera_id
+    ]
+    for tid in matching:
+        transitions.pop(tid, None)
+        detached_ids.append(tid)
+        events.append(
+            NodeRemovedEvent(
+                camera_id=camera_id,
+                node_id=tid,
+                node_type="transition",
+                parent_id=camera_id,
+            )
+        )
+    return detached_ids, events
+
+
 def _remove_camera_child_node(
     cameras: dict[str, CameraNode],
     registry: dict[str, Any],
@@ -198,8 +224,9 @@ def remove_non_camera_node(
     entities: dict[str, WorldEntity],
     node_id: str,
     now: float,
+    transitions: dict[str, TransitionEdgeNode] | None = None,
 ) -> tuple[bool, list[BaseEvent]]:
-    """Remove a single zone, tripwire, or entity under lock and return removal events."""
+    """Remove a single zone, tripwire, entity, or transition edge under lock."""
     events: list[BaseEvent] = []
     if node_id in zones:
         zone, ev = _remove_camera_child_node(cameras, zones, "zone_ids", node_id, now)
@@ -211,6 +238,14 @@ def remove_non_camera_node(
         _, ev = _remove_camera_child_node(cameras, tripwires, "tripwire_ids", node_id, now)
         events.append(ev)
         return True, events
+
+    if transitions is not None and node_id in transitions:
+        edge = transitions.pop(node_id)
+        ev = NodeRemovedEvent(
+            camera_id=edge.source_camera or "world", node_id=node_id,
+            node_type="transition", parent_id=edge.source_camera or None,
+        )
+        return True, [ev]
 
     if node_id in entities:
         entities.pop(node_id)

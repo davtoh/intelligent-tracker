@@ -10,6 +10,7 @@ from intelligent_tracker.world._lifecycle import (
     build_entity_state_event,
     detach_camera_children,
     detach_camera_from_entities,
+    detach_camera_transitions,
     dispatch_events,
     register_camera_child,
     remove_non_camera_node,
@@ -21,6 +22,7 @@ from intelligent_tracker.world.events import (
 )
 from intelligent_tracker.world.nodes import (
     CameraNode,
+    TransitionEdgeNode,
     TripwireNode,
     WorldEntity,
     WorldNode,
@@ -45,6 +47,7 @@ class WorldGraph:
         self._zones: dict[str, ZoneNode] = {}
         self._tripwires: dict[str, TripwireNode] = {}
         self._entities: dict[str, WorldEntity] = {}
+        self._transitions: dict[str, TransitionEdgeNode] = {}
         self._policy: WorldPolicy = policy.clone() if policy is not None else WorldPolicy()
 
     def register_camera(self, camera: CameraNode) -> CameraNode:
@@ -148,7 +151,10 @@ class WorldGraph:
             detached_ids, child_events = detach_camera_children(
                 self._zones, self._tripwires, camera
             )
+            trans_ids, trans_events = detach_camera_transitions(self._transitions, camera_id)
+            detached_ids.extend(trans_ids)
             events.extend(child_events)
+            events.extend(trans_events)
             events.extend(detach_camera_from_entities(self._entities, camera_id, now))
             events.append(
                 NodeRemovedEvent(
@@ -169,7 +175,8 @@ class WorldGraph:
             is_camera = node_id in self._cameras
             if not is_camera:
                 removed, events = remove_non_camera_node(
-                    self._cameras, self._zones, self._tripwires, self._entities, node_id, time.time()
+                    self._cameras, self._zones, self._tripwires, self._entities, node_id, time.time(),
+                    transitions=self._transitions,
                 )
             else:
                 removed, events = False, []
@@ -187,6 +194,7 @@ class WorldGraph:
                 "zone": self._zones,
                 "tripwire": self._tripwires,
                 "entity": self._entities,
+                "transition": self._transitions,
             }
             if node_type is not None:
                 reg = registries.get(node_type)
@@ -255,6 +263,7 @@ class WorldGraph:
                 "zones": {zid: zone.to_dict() for zid, zone in self._zones.items()},
                 "tripwires": {tid: tw.to_dict() for tid, tw in self._tripwires.items()},
                 "entities": {eid: ent.to_dict() for eid, ent in self._entities.items()},
+                "transitions": {tid: tr.to_dict() for tid, tr in self._transitions.items()},
                 "policy": self._policy.to_dict(),
                 "counts": {
                     "cameras": len(self._cameras),

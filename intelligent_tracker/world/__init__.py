@@ -11,6 +11,7 @@ from intelligent_tracker.world.events import (
 from intelligent_tracker.world.graph import WorldGraph
 from intelligent_tracker.world.nodes import (
     CameraNode,
+    TransitionEdgeNode,
     TripwireNode,
     WorldEntity,
     WorldNode,
@@ -18,6 +19,7 @@ from intelligent_tracker.world.nodes import (
     ZoneNode,
 )
 from intelligent_tracker.world.rules import WorldRuleEngine
+from intelligent_tracker.world.transitions import WorldTransitionRegistry
 
 __all__ = [
     "CameraNode",
@@ -26,6 +28,7 @@ __all__ = [
     "GlobalCoordinateMapper",
     "NodeAddedEvent",
     "NodeRemovedEvent",
+    "TransitionEdgeNode",
     "TripwireNode",
     "WorldEntity",
     "WorldEntityBridge",
@@ -34,6 +37,7 @@ __all__ = [
     "WorldPolicy",
     "WorldPolicyUpdatedEvent",
     "WorldRuleEngine",
+    "WorldTransitionRegistry",
     "ZoneNode",
 ]
 
