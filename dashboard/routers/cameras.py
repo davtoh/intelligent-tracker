@@ -27,12 +27,11 @@ from dashboard.schemas import (
     CameraUpdateRequest,
     OverlayUpdateRequest,
 )
+from dashboard.services.camera_diagnostics import probe_camera_test_request
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.discovery import (
     CAMERA_PRESETS,
-    build_preset_rtsp_url,
     discover_all_cameras,
-    test_camera_connection,
 )
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.cameras")
@@ -123,55 +122,7 @@ async def test_camera_route(
     pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Test video source connectivity and return live preview snapshot."""
-    target_source = req.source
-    if req.preset and req.ip:
-        target_source = build_preset_rtsp_url(
-            preset=req.preset,
-            ip=req.ip,
-            port=req.port or 554,
-            username=req.username or "",
-            password=req.password or "",
-            channel=req.channel or 1,
-            stream=req.stream or "main",
-        )
-    if not target_source:
-        target_source = "synthetic"
-
-    if isinstance(target_source, str) and target_source.isdigit():
-        target_source = int(target_source)
-
-    # Check if target_source is already actively streaming in CameraPool
-    if pool and pool.streams:
-        for cam_id, stream_mgr in pool.streams.items():
-            if stream_mgr and stream_mgr.is_running:
-                cfg = pool.camera_configs.get(cam_id, {})
-                cfg_src = cfg.get("source")
-                if str(cfg_src).strip() == str(target_source).strip():
-                    jpeg_bytes = stream_mgr.get_latest_frame_jpeg()
-                    if jpeg_bytes:
-                        import base64
-                        snapshot_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
-                        telemetry = stream_mgr.get_latest_telemetry()
-                        w = telemetry.get("width") or 640
-                        h = telemetry.get("height") or 480
-                        fps = telemetry.get("fps") or 30.0
-                        return {
-                            "success": True,
-                            "source": str(target_source),
-                            "resolution": f"{w}x{h}",
-                            "width": w,
-                            "height": h,
-                            "fps": round(float(fps), 1),
-                            "backend": "Active StreamManager",
-                            "snapshot_base64": snapshot_b64,
-                            "resolved_source": str(target_source),
-                            "active_stream_id": cam_id,
-                            "note": f"Camera is already streaming live in channel '{cam_id}'",
-                        }
-
-    res = test_camera_connection(target_source)
-    res["resolved_source"] = str(target_source)
-    return res
+    return probe_camera_test_request(req, pool=pool)
 
 
 @router.post("/api/cameras/release")

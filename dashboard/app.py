@@ -102,10 +102,16 @@ from dashboard.services.shutdown_handler import (
 from dashboard.services.video_transcoder import VideoTranscodeService
 from dashboard.services.windows_resilience import apply_windows_iocp_patch
 from dashboard.stream_manager import StreamManager
+from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.lifecycle import StreamLifecycleManager
 from intelligent_tracker.scenarios import ScenarioManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
+
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(STATIC_DIR),
+    autoescape=jinja2.select_autoescape(["html", "xml"]),
+)
 
 # Apply Windows IOCP Proactor socket resilience for transient drops on startup
 apply_windows_iocp_patch()
@@ -134,6 +140,11 @@ async def lifespan(application: FastAPI):
     primary_sm = pool.primary_stream
     scen_mgr = ScenarioManager(world_graph=getattr(pool, "world_graph", None))
     db = primary_sm.db if primary_sm else None
+    owned_db: Optional[TrackerDB] = None
+    if db is None:
+        db_path = getattr(pool, "db_path", None)
+        owned_db = TrackerDB(db_path if isinstance(db_path, str) else "data/tracker.db")
+        db = owned_db
     lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
     bind_app_state(
         application,
@@ -156,6 +167,8 @@ async def lifespan(application: FastAPI):
         await async_shutdown_pool(pool)
     elif primary_sm:
         await asyncio.to_thread(primary_sm.stop)
+    if owned_db is not None:
+        owned_db.close()
     clear_app_state(application)
     stop_parent_watchdog()
 
@@ -205,8 +218,7 @@ async def serve_index():
     """Serve the modern single-page dashboard."""
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
-        env = jinja2.Environment(loader=jinja2.FileSystemLoader(STATIC_DIR))
-        return HTMLResponse(content=env.get_template("index.html").render())
+        return HTMLResponse(content=_jinja_env.get_template("index.html").render())
     return HTMLResponse("<h1>Intelligent Tracker Dashboard Initializing...</h1>")
 
 

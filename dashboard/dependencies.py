@@ -40,6 +40,8 @@ _camera_pool: Optional[CameraPool] = None
 _stream_manager: Optional[StreamManager] = None
 _scenario_manager: Optional[ScenarioManager] = None
 _lifecycle_manager: Optional[StreamLifecycleManager] = None
+_db: Optional[TrackerDB] = None
+_owned_fallback_db: Optional[TrackerDB] = None
 _shutdown_event: Optional[asyncio.Event] = None
 _is_shutting_down: bool = False
 
@@ -63,7 +65,7 @@ def bind_app_state(
     db: Optional[TrackerDB] = None,
 ) -> None:
     """Bind core runtime services to ``app.state`` and sync standalone fallbacks."""
-    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager
+    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db
     app.state.camera_pool = camera_pool
     app.state.stream_manager = stream_manager
     app.state.scenario_manager = scenario_manager
@@ -73,10 +75,18 @@ def bind_app_state(
     _stream_manager = stream_manager
     _scenario_manager = scenario_manager
     _lifecycle_manager = lifecycle_manager
+    _db = db
 
 
 def clear_app_state(app: FastAPI) -> None:
-    """Clear all runtime service references from ``app.state`` and module fallbacks."""
+    """Clear all runtime service references from ``app.state`` and close owned fallback DB."""
+    global _owned_fallback_db
+    if _owned_fallback_db is not None:
+        try:
+            _owned_fallback_db.close()
+        except Exception:
+            pass
+        _owned_fallback_db = None
     bind_app_state(app)
 
 
@@ -236,14 +246,25 @@ def get_active_stream_manager(
 
 
 def get_db(conn: HTTPConnection = None) -> TrackerDB:
-    """Retrieve TrackerDB instance from active stream, ``app.state``, or fallback."""
+    """Retrieve TrackerDB instance from active stream, ``app.state``, or managed fallback."""
+    global _owned_fallback_db
     mgr = get_active_stream_manager(conn=conn)
     if mgr and mgr.db and getattr(mgr.db, "_conn", None) is not None:
         return mgr.db
-    state_db = getattr(conn.app.state, "db", None) if conn is not None else None
+    state_db = _from_app_state(conn, "db", _db)
     if state_db is not None and getattr(state_db, "_conn", None) is not None:
         return state_db
-    return TrackerDB()
+    if _owned_fallback_db is None or getattr(_owned_fallback_db, "_conn", None) is None:
+        pool = get_camera_pool(conn)
+        db_path = (
+            getattr(pool, "db_path", None)
+            if pool is not None and isinstance(getattr(pool, "db_path", None), str)
+            else "data/tracker.db"
+        )
+        _owned_fallback_db = TrackerDB(db_path)
+    if conn is not None:
+        conn.app.state.db = _owned_fallback_db
+    return _owned_fallback_db
 
 
 def get_rsac_mgr(conn: HTTPConnection = None) -> RSACManager:

@@ -68,6 +68,7 @@
 - **Pre-Plan Evaluation Check**:
   - Inspect `intelligent_tracker/homography.py`, `intelligent_tracker/topology.py`, `intelligent_tracker/journey.py`, and `dashboard/routers/topology.py`.
 - **Target Scope**:
+  - **Mandatory Pre-Flight Split (`Split-Before-You-Grow`)**: Decompose `intelligent_tracker/scenarios.py` (496L) and `intelligent_tracker/journey.py` (432L) below 350 lines before adding Global World Coordinate methods.
   - Add `GlobalCoordinateMapper` inside `intelligent_tracker/world/coordinates.py` mapping camera pixel feet/centroids $\rightarrow$ global world $(X, Y)$ meters.
   - Represent `CrossCameraTopology` transitions as first-class directed edges in `WorldGraph` with Bayesian transit priors.
   - Unify multi-camera entity handoff, deduplication across overlapping camera FOVs, and tactical world minimap telemetry.
@@ -81,6 +82,7 @@
 - **Pre-Plan Evaluation Check**:
   - Inspect `intelligent_tracker/repositories/`, `intelligent_tracker/matching/adaptive_memory.py`, `intelligent_tracker/active_learning.py`, and `dashboard/routers/analytics.py`.
 - **Target Scope**:
+  - **Mandatory Pre-Flight Split (`Split-Before-You-Grow`)**: Decompose `intelligent_tracker/active_learning.py` (457L) below 350 lines before adding Long-Term Confidence Engine hooks.
   - Create `intelligent_tracker/memory/` (`confidence.py`, `fts_index.py`, `query_engine.py`, `providers.py`).
   - **Confidence Engine**: Track multi-modal evidence accumulation (face + body + temporal consistency + topology prior + human confirmations) vs. drift/ambiguity decay so presence confidence improves measurably over repeated sightings.
   - **Semantic Timeline & FTS Index**: Index sightings, zone crossings, RSAC breaches, and optional clip captions in SQLite FTS5.
