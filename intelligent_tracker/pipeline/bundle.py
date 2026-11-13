@@ -337,7 +337,7 @@ def build_world(
         enabled=True,
     ))
     _register_world_children(graph, config, analytics)
-    bridge = WorldEntityBridge(graph, db=db)
+    bridge = WorldEntityBridge(graph, db=db, coordinate_mapper=getattr(graph, "coordinate_mapper", None), handoff_coordinator=getattr(graph, "handoff_coordinator", None))
     if gallery_matcher is not None:
         gallery_matcher.camera_id = config.camera_id
         gallery_matcher.world_bridge = bridge

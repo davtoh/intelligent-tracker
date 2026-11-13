@@ -53,6 +53,7 @@ class MultiCameraHandoffCoordinator:
         self.max_trajectory_points = max(1, int(max_trajectory_points))
         self.max_transit_speed_mps = max(0.1, float(max_transit_speed_mps))
         self._lock = threading.RLock()
+        self._merge_lock = threading.Lock()
         self._embeddings: dict[str, np.ndarray] = {}
         self._departed: dict[str, WorldEntity] = {}
 
@@ -99,26 +100,27 @@ class MultiCameraHandoffCoordinator:
         """Merge concurrent WorldEntities across overlapping cameras within overlap_radius_m."""
         now = float(timestamp) if timestamp is not None else time.time()
         win = self.overlap_concurrency_s if concurrency_window is None else max(0.0, float(concurrency_window))
-        entities = sorted(list_entities_snapshot(self.world_graph), key=canonical_rank)
-        merged_away, merges = set(), []
-        for idx, primary in enumerate(entities):
-            if primary.world_entity_id in merged_away or primary.global_xy is None:
-                continue
-            for cand in entities[idx + 1 :]:
-                if cand.world_entity_id in merged_away:
+        with self._merge_lock:
+            entities = sorted(list_entities_snapshot(self.world_graph), key=canonical_rank)
+            merged_away, merges = set(), []
+            for idx, primary in enumerate(entities):
+                if primary.world_entity_id in merged_away or primary.global_xy is None:
                     continue
-                with self._lock:
-                    ok = can_merge_entities(
-                        primary, cand, win, self.overlap_radius_m, self.reid_similarity_threshold,
-                        self._embeddings.get(primary.world_entity_id), self._embeddings.get(cand.world_entity_id),
-                    )
-                    if ok and primary.world_entity_id not in self._embeddings and cand.world_entity_id in self._embeddings:
-                        self._embeddings[primary.world_entity_id] = self._embeddings.pop(cand.world_entity_id)
-                if ok:
-                    primary = merge_world_entities(self.world_graph, primary, cand, now, self.max_trajectory_points)
-                    merged_away.add(cand.world_entity_id)
-                    merges.append((primary.world_entity_id, cand.world_entity_id))
-        return merges
+                for cand in entities[idx + 1 :]:
+                    if cand.world_entity_id in merged_away:
+                        continue
+                    with self._lock:
+                        ok = can_merge_entities(
+                            primary, cand, win, self.overlap_radius_m, self.reid_similarity_threshold,
+                            self._embeddings.get(primary.world_entity_id), self._embeddings.get(cand.world_entity_id),
+                        )
+                        if ok and primary.world_entity_id not in self._embeddings and cand.world_entity_id in self._embeddings:
+                            self._embeddings[primary.world_entity_id] = self._embeddings.pop(cand.world_entity_id)
+                    if ok:
+                        primary = merge_world_entities(self.world_graph, primary, cand, now, self.max_trajectory_points)
+                        merged_away.add(cand.world_entity_id)
+                        merges.append((primary.world_entity_id, cand.world_entity_id))
+            return merges
 
     def handoff_track(
         self, camera_id: str, track: Any, *, zone_id: str = "", embedding: Any = None,
@@ -181,14 +183,20 @@ class MultiCameraHandoffCoordinator:
         cat = getattr(track, "entity_category", None) or getattr(track, "label", "") or ""
         for prior in query_priors(self.topology, self.transition_registry, camera_id, zone_id, cand_xy, now):
             with self._lock:
-                entity = resolve_entity_for_prior(self.world_graph, self._departed, prior, now)
-                cached_emb = self._embeddings.get(entity.world_entity_id) if entity is not None else None
+                departed_snap = dict(self._departed)
+                emb_snap = dict(self._embeddings)
+            entity = resolve_entity_for_prior(self.world_graph, departed_snap, prior, now)
             if entity is None or not categories_compatible(cat, entity.category):
                 continue
-            exit_xy = prior_attr(prior, "exit_global_xy") or entity.global_xy
+            cached_emb = emb_snap.get(entity.world_entity_id)
+            exit_xy = prior_attr(prior, "exit_global_xy")
+            if exit_xy is None:
+                exit_xy = entity.global_xy
             if not is_transit_kinematically_plausible(exit_xy, cand_xy, float(prior_attr(prior, "exit_time", now)), now, self.max_transit_speed_mps):
                 continue
-            sim = visual_similarity if visual_similarity is not None else cosine_similarity(emb, prior_attr(prior, "embedding") or cached_emb)
+            prior_emb = prior_attr(prior, "embedding")
+            target_emb = prior_emb if prior_emb is not None else cached_emb
+            sim = visual_similarity if visual_similarity is not None else cosine_similarity(emb, target_emb)
             boosted = min(1.0, (0.5 if sim is None else sim) + float(prior_attr(prior, "prior_boost", 0.0)))
             if sim is not None and boosted < self.reid_similarity_threshold:
                 continue

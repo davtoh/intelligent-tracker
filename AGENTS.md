@@ -31,7 +31,7 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
   ```bash
   python -m sphinx -W --keep-going documentation/ documentation/_build/html/
   ```
-- Maintain `milestone_plan.md` and `MIGRATION_LOG.md` with detailed records of code changes, architectural decisions, and verification results.
+- Maintain `CHANGELOG.md` (recording completed milestones via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`) with detailed records of code changes, architectural decisions, and verification results.
 - Never embed `file:///` URIs, machine-local absolute paths, OS-locked virtualenv binary paths, or hardcoded `localhost` URLs inside committed plans or documentation.
 
 ## 5. Frontend, CSS & Specificity Standards

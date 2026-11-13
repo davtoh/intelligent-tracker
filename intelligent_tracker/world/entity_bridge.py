@@ -33,6 +33,7 @@ class WorldEntityBridge:
         sync_interval: float = 0.5,
         stale_ttl: float = 30.0,
         coordinate_mapper: GlobalCoordinateMapper | None = None,
+        handoff_coordinator: Any = None,
         max_trajectory_points: int = 120,
     ) -> None:
         self.world_graph = world_graph
@@ -43,6 +44,11 @@ class WorldEntityBridge:
             coordinate_mapper
             if coordinate_mapper is not None
             else getattr(world_graph, "coordinate_mapper", None)
+        )
+        self.handoff_coordinator = (
+            handoff_coordinator
+            if handoff_coordinator is not None
+            else getattr(world_graph, "handoff_coordinator", None)
         )
         self.max_trajectory_points = max(1, int(max_trajectory_points))
         self._lock = threading.Lock()
@@ -183,6 +189,9 @@ class WorldEntityBridge:
             synced = self._sync_single_camera_track(camera_id, tid, trk, raw_zone, now, force)
             if synced is not None:
                 updated.append(synced)
+        handoff = getattr(self, "handoff_coordinator", None) or getattr(self.world_graph, "handoff_coordinator", None)
+        if updated and handoff is not None:
+            handoff.deduplicate_overlapping_entities(timestamp=now)
         return updated
 
     def _sync_single_camera_track(

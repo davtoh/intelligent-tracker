@@ -138,7 +138,14 @@ async def lifespan(application: FastAPI):
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     pool = CameraPool()
     primary_sm = pool.primary_stream
-    scen_mgr = ScenarioManager(world_graph=getattr(pool, "world_graph", None))
+    scen_mgr = ScenarioManager(
+        world_graph=getattr(pool, "world_graph", None),
+        coordinate_mapper=getattr(pool, "coordinate_mapper", None),
+    )
+    handoff = getattr(pool, "handoff_coordinator", None)
+    if handoff is not None:
+        handoff.topology = scen_mgr.topology
+        handoff.transition_registry = scen_mgr.world_transitions
     db = primary_sm.db if primary_sm else None
     owned_db: Optional[TrackerDB] = None
     if db is None:

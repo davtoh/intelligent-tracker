@@ -1,6 +1,7 @@
 """Step 4 Milestone 4 tests: multi-camera handoff, overlap deduplication, tactical minimap, and /api/topology/world-map."""
 
 import ast
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -11,10 +12,12 @@ from fastapi.testclient import TestClient
 import numpy as np
 
 from dashboard.app import app
+from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import bind_app_state, clear_app_state
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.homography import GroundPlaneHomography
 from intelligent_tracker.journey import TrajectoryJourneySearcher
+from intelligent_tracker.pipeline import PipelineConfig, PipelineEngine
 from intelligent_tracker.scenarios import ScenarioManager
 from intelligent_tracker.topology import SpatialTransitionLink
 from intelligent_tracker.tracker import Track
@@ -234,6 +237,63 @@ class TestMultiCameraHandoff(unittest.TestCase):
         synced = coordinator.sync_camera_tracks("cam_02", {4: t_ok}, zone_lookup={4: "entry"}, timestamp=505.0)
         self.assertEqual(synced[0].world_entity_id, we1.world_entity_id)
         self.assertEqual(synced[0].camera_tracks["cam_02"], 4)
+
+    def test_ndarray_prior_embedding_and_concurrent_handoff_safety(self) -> None:
+        graph = WorldGraph()
+        mapper = GlobalCoordinateMapper()
+        for cid, ox in (("cam_01", 0.0), ("cam_02", 10.0)):
+            mapper.register_camera(cid, _make_homography(cid), CameraWorldPose(cid, ox, 0.0, 0.0))
+        reg = WorldTransitionRegistry(graph, coordinate_mapper=mapper, max_transit_speed_mps=15.0)
+        reg.register_edge(TransitionEdgeNode(
+            link_id="e12", source_camera="cam_01", source_zone="exit",
+            target_camera="cam_02", target_zone="entry", t_min=0.5, t_max=10.0, prior_boost=0.35,
+        ))
+        coord = MultiCameraHandoffCoordinator(graph, coordinate_mapper=mapper, transition_registry=reg, max_transit_speed_mps=15.0)
+        t1 = Track(track_id=1, bbox=(80, 10, 20, 40), label="person", timestamp=100.0)
+        t1.session_id = 1
+        we1 = coord.handoff_track("cam_01", t1, zone_id="exit", embedding=np.array([1.0, 0.0, 0.0], dtype=np.float32), timestamp=100.0)
+        coord.record_zone_exit("cam_01", "exit", world_entity_id=we1.world_entity_id, embedding=np.array([1.0, 0.0, 0.0], dtype=np.float32), timestamp=100.0)
+        t2 = Track(track_id=2, bbox=(10, 10, 20, 40), label="person", timestamp=102.0)
+        t2.session_id = 2
+        we2 = coord.handoff_track("cam_02", t2, zone_id="entry", embedding=np.array([0.99, 0.05, 0.0], dtype=np.float32), visual_similarity=None, timestamp=102.0)
+        self.assertEqual(we2.world_entity_id, we1.world_entity_id)
+
+        def _worker(idx: int) -> str:
+            trk = Track(track_id=50 + idx, bbox=(40, 20, 20, 40), label="person", timestamp=103.0 + idx * 0.01)
+            trk.session_id = 50 + idx
+            ent = coord.handoff_track("cam_01" if idx % 2 == 0 else "cam_02", trk, embedding=[0.0, 1.0, 0.0], timestamp=103.0 + idx * 0.01)
+            coord.deduplicate_overlapping_entities(timestamp=103.5)
+            return ent.world_entity_id
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            ids = list(pool.map(_worker, range(8)))
+        self.assertEqual(len(ids), 8)
+
+    def test_custom_camera_homography_and_runtime_pool_wiring(self) -> None:
+        cfg_file = os.path.join(self.tmpdir.name, "cameras.json")
+        pool = CameraPool(config_file=cfg_file, db_path=os.path.join(self.tmpdir.name, "pool.db"), autostart=False)
+        self.addCleanup(pool.stop_all)
+        self.assertIsNotNone(pool.coordinate_mapper)
+        self.assertIs(pool.world_graph.coordinate_mapper, pool.coordinate_mapper)
+        self.assertIs(pool.world_graph.handoff_coordinator, pool.handoff_coordinator)
+
+        sm = ScenarioManager(config_path=self.yaml_path, db=self.db, world_graph=pool.world_graph, coordinate_mapper=pool.coordinate_mapper)
+        sm.save_homography("cam_lobby_east", [(0, 0), (100, 0), (100, 100), (0, 100)])
+        reloaded_db = TrackerDB(os.path.join(self.tmpdir.name, "handoff.db"))
+        self.addCleanup(reloaded_db.close)
+        sm_reloaded = ScenarioManager(config_path=os.path.join(self.tmpdir.name, "missing.yaml"), db=reloaded_db, world_graph=pool.world_graph)
+        self.assertTrue(sm_reloaded.get_homography("cam_lobby_east").is_calibrated)
+        self.assertIs(pool.handoff_coordinator.topology, sm_reloaded.topology)
+
+        bundle = PipelineEngine.build(PipelineConfig(camera_id="cam_lobby_east", source="dummy.mp4", db_path=os.path.join(self.tmpdir.name, "pipe.db")), world_graph=pool.world_graph)
+        self.addCleanup(bundle.db.close)
+        self.assertIs(bundle.world_bridge.coordinate_mapper, pool.coordinate_mapper)
+        self.assertIs(bundle.world_bridge.handoff_coordinator, pool.handoff_coordinator)
+        t_live = Track(track_id=7, bbox=(10, 10, 20, 40), label="person", timestamp=300.0)
+        t_live.session_id = 70
+        synced = bundle.world_bridge.sync_camera_tracks("cam_lobby_east", {7: t_live}, zone_lookup={7: "exit"}, timestamp=300.0)
+        self.assertEqual(len(synced), 1)
+        self.assertIsNotNone(pool.world_graph.get_node(synced[0].world_entity_id, node_type="entity"))
 
 
 if __name__ == "__main__":

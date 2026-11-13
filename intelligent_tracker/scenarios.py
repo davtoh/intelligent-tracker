@@ -51,13 +51,14 @@ class ScenarioManager(ScenarioStorageMixin):
         self.config_path = config_path
         self.db = db or TrackerDB(db_path)
         self.world_graph = world_graph
-        self.coordinate_mapper = coordinate_mapper
-        self.world_transitions = (
-            WorldTransitionRegistry(world_graph, coordinate_mapper=coordinate_mapper)
-            if world_graph is not None
-            else None
-        )
+        self.coordinate_mapper = coordinate_mapper or getattr(world_graph, "coordinate_mapper", None) or GlobalCoordinateMapper()
+        if world_graph is not None and getattr(world_graph, "coordinate_mapper", None) is None:
+            world_graph.coordinate_mapper = self.coordinate_mapper
+        self.world_transitions = WorldTransitionRegistry(world_graph, coordinate_mapper=self.coordinate_mapper) if world_graph is not None else None
         self.topology = CrossCameraTopology(world_transitions=self.world_transitions)
+        handoff = getattr(world_graph, "handoff_coordinator", None)
+        if handoff is not None:
+            handoff.topology, handoff.transition_registry = self.topology, self.world_transitions
         self.cameras: dict[str, dict[str, Any]] = {}
         self.load_scenarios()
 
@@ -215,6 +216,7 @@ class ScenarioManager(ScenarioStorageMixin):
             for tw in cam_entry["tripwires"].values():
                 mgr.analytics.add_tripwire(tw)
         mgr.topology = self.topology
+        sync_homography_to_world(self.world_graph, self.coordinate_mapper, cam_id, cam_entry["homography"])
         logger.info(
             "Applied scenario for '%s': %d zones, %d tripwires, calibrated=%s",
             cam_id,

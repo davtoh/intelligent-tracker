@@ -40,9 +40,13 @@ class WorldGraph:
         self,
         event_bus: Any = None,
         policy: WorldPolicy | None = None,
+        coordinate_mapper: Any = None,
+        handoff_coordinator: Any = None,
     ) -> None:
         self._lock = threading.RLock()
         self._event_bus = event_bus
+        self.coordinate_mapper = coordinate_mapper
+        self.handoff_coordinator = handoff_coordinator
         self._cameras: dict[str, CameraNode] = {}
         self._zones: dict[str, ZoneNode] = {}
         self._tripwires: dict[str, TripwireNode] = {}

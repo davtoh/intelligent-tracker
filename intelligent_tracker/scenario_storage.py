@@ -15,6 +15,7 @@ except ImportError:
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.homography import GroundPlaneHomography
+from intelligent_tracker.repositories.spatial_repo import list_homography_camera_ids
 from intelligent_tracker.topology import CrossCameraTopology, SpatialTransitionLink
 from intelligent_tracker.world import TripwireNode, WorldGraph, ZoneNode
 from intelligent_tracker.world.coordinates import sync_loaded_homographies_to_world
@@ -85,7 +86,8 @@ def _load_db_transitions_and_homographies(
     for tr in db.get_spatial_transitions():
         topology.add_link(SpatialTransitionLink.from_dict(tr))
         loaded = True
-    for cam_id in list(cameras.keys()) + ["cam_01", "cam_02"]:
+    cam_ids = list(dict.fromkeys(list(cameras.keys()) + list_homography_camera_ids(db)))
+    for cam_id in cam_ids:
         h_data = db.get_homography_calibration(cam_id)
         if h_data:
             ensure_camera_entry(cam_id)["homography"] = GroundPlaneHomography.from_dict(h_data)

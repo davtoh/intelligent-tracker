@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime
 
 from fastapi.testclient import TestClient
@@ -24,6 +25,10 @@ class TestScenarioApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.test_dir = tempfile.mkdtemp(prefix="tracker_scenario_api_test_")
+        cls.videos_dir = os.path.join(cls.test_dir, "videos")
+        os.makedirs(cls.videos_dir, exist_ok=True)
+        cls.videos_patcher = patch("dashboard.routers.topology.VIDEOS_DIR", cls.videos_dir)
+        cls.videos_patcher.start()
         cls.config_file = os.path.join(cls.test_dir, "cameras.json")
         cls.db_path = os.path.join(cls.test_dir, "tracker.db")
         cls.scenarios_yaml = os.path.join(cls.test_dir, "scenarios.yaml")
@@ -57,6 +62,8 @@ class TestScenarioApi(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         clear_app_state(app)
+        if getattr(cls, "videos_patcher", None) is not None:
+            cls.videos_patcher.stop()
         if cls.pool:
             cls.pool.stop_all()
         if hasattr(cls, "db") and cls.db:
@@ -209,6 +216,7 @@ class TestScenarioApi(unittest.TestCase):
         self.assertEqual(exp_data["status"], "success")
         self.assertIn("video_file", exp_data)
         self.assertTrue(exp_data["video_file"].endswith(".mp4"))
+        self.assertTrue(os.path.isfile(os.path.join(self.videos_dir, exp_data["video_file"])))
 
     def test_07_camera_overlays_endpoints(self):
         """Verify GET and POST /api/cameras/{id}/overlays."""

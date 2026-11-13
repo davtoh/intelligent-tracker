@@ -196,6 +196,9 @@ class FrameProcessor:
                 entity_id=ent_id,
                 timestamp=timestamp,
             )
+            handoff = getattr(self.world_bridge, "handoff_coordinator", None) if self.world_bridge else None
+            if handoff is not None:
+                handoff.record_zone_exit(camera_id, ev.get("zone_id") or "", entity_id=ent_id, track_id=tid, timestamp=timestamp)
 
     def _camera_id(self) -> str:
         """Resolve active camera identifier from analytics or config."""

@@ -18,7 +18,11 @@ from dashboard.services.camera_pool_queries import (
 )
 from dashboard.services.stream_pool_coordinator import StreamPoolCoordinator
 from dashboard.stream_manager import StreamManager
-from intelligent_tracker.world import WorldGraph
+from intelligent_tracker.world import (
+    GlobalCoordinateMapper,
+    MultiCameraHandoffCoordinator,
+    WorldGraph,
+)
 
 logger = logging.getLogger("intelligent_tracker.camera_pool")
 
@@ -43,7 +47,13 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         self._autostart = autostart
 
         self._lock = threading.RLock()
-        self.world_graph = WorldGraph()
+        self.coordinate_mapper = GlobalCoordinateMapper()
+        self.world_graph = WorldGraph(coordinate_mapper=self.coordinate_mapper)
+        self.handoff_coordinator = MultiCameraHandoffCoordinator(
+            self.world_graph,
+            coordinate_mapper=self.coordinate_mapper,
+        )
+        self.world_graph.handoff_coordinator = self.handoff_coordinator
         self._config_store = CameraConfigStore(config_file=config_file, lock=self._lock)
         self._coordinator = StreamPoolCoordinator(
             db_path=db_path,

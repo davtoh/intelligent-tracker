@@ -276,3 +276,25 @@ class SpatialMixin:
             finally:
                 cur.close()
 
+
+def list_homography_camera_ids(db: Any) -> List[str]:
+    """Return sorted distinct camera IDs that have stored homography calibrations."""
+    lock = getattr(db, "_lock", None)
+    conn = getattr(db, "_conn", None)
+    if conn is None:
+        return []
+    if lock is None:
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT DISTINCT camera_id FROM homography_calibrations ORDER BY camera_id ASC")
+            return [str(r[0]) for r in cur.fetchall() if r and r[0]]
+        finally:
+            cur.close()
+    with lock:
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT DISTINCT camera_id FROM homography_calibrations ORDER BY camera_id ASC")
+            return [str(r[0]) for r in cur.fetchall() if r and r[0]]
+        finally:
+            cur.close()
+
