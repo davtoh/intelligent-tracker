@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-14] feat: Step 3 Milestone 1: On-Demand ROI Recognition & Tag Commit Backend
+- **Type**: feat
+- **Summary**: Added RoiRecognitionService and /api/tag/recognize-roi + /api/tag/commit endpoints with isolated unit tests
+- **Files** (6):
+  - `.agents/rules/pipeline_and_db_invariants.md`
+  - `dashboard/app.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/routers/tagging.py`
+  - `dashboard/services/roi_recognition_service.py`
+  - `tests/test_step3_roi_recognition_api.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_roi_recognition_api.py
+
 ## [2026-11-14] feat: Step 2 M4: #videos Scrubber Overlay Parity & Budget Reduction
 - **Type**: feat
 - **Summary**: Delegated ScrubberOverlay, ScrubberOverlayRenderer, and OverlayLayers to UnifiedCanvasOverlay, added 6 feature toggle pills to OverlayLayerToolbar, and reduced scrubber_overlay.js (326L) and overlay_layers.js (338L) under 350L.
@@ -136,13 +148,3 @@
   - `intelligent_tracker/cli/runner.py`
   - ... (+4 more)
 - **Verification**: python -m unittest tests/test_cli_operator_parity.py tests/test_cli_runner.py tests/test_cli_ask.py tests/test_world_query_api.py tests/test_entrypoints.py tests/test_modernization.py tests/test_camera_recording.py
-
-## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
-- **Type**: refactor
-- **Summary**: Decomposed dashboard/static/index.html into 9 tab partials and 4 modal partials rendered via Jinja2 on GET /, and added Step 3 architecture budget verification tests.
-- **Files** (4):
-  - `dashboard/app.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/partials/`
-  - `tests/test_step3_architecture_budgets.py`
-- **Verification**: python -m unittest discover tests (471 passed)

@@ -62,6 +62,7 @@ from dashboard.routers import (
     scenarios_router,
     streaming_router,
     system_router,
+    tagging_router,
     topology_router,
     videos_router,
     world_router,
@@ -222,6 +223,7 @@ def create_app() -> FastAPI:
     application.include_router(scenarios_router)
     application.include_router(rsac_router)
     application.include_router(analytics_router)
+    application.include_router(tagging_router)
     application.include_router(videos_router)
     application.include_router(topology_router)
     application.include_router(world_router)
