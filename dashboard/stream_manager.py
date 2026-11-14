@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from dashboard.services.stream_subscribers import StreamSubscriberRegistry, StreamSubscriberMixin
 from dashboard.services.frame_overlay import FrameOverlayRenderer
 from dashboard.services.stream_media import StreamMediaMixin
+from dashboard.services.stream_recording import StreamRecordingController, StreamRecordingMixin
 from dashboard.services.stream_worker import StreamWorker
 from dashboard.services.pipeline_factory import StreamPipelineFactory, load_stream_config
 
@@ -37,6 +38,7 @@ def _default_telemetry(camera_id: str) -> Dict[str, Any]:
         "zones": [],
         "tripwires": [],
         "recent_alerts": [],
+        "recording": {"camera_id": camera_id, "is_recording": False, "status": "idle"},
     }
 
 
@@ -100,13 +102,16 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
         lease_ttl=3.0,
     )
     manager._overlay_renderer = FrameOverlayRenderer()
+    rec_cfg = manager.cfg.get("recording", {}) if isinstance(manager.cfg, dict) else {}
+    rec_dir = rec_cfg.get("output_dir") if isinstance(rec_cfg, dict) else None
+    manager._recording_controller = StreamRecordingController(manager.camera_id, output_dir=rec_dir)
     manager._subscribers = manager._subscriber_registry._subscribers
     manager._ws_subscribers = manager._subscriber_registry._ws_subscribers
     manager._subscriber_lock = manager._subscriber_registry._lock
     manager._worker = StreamWorker(manager)
 
 
-class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
+class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixin):
     """
     Manages live camera feeds, AI inference pipelines, MJPEG frame encoding,
     and real-time telemetry distribution for the web dashboard.
@@ -208,6 +213,9 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin):
         self.signal_stop()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=0.6)
+        recorder = getattr(self, "_recording_controller", None)
+        if recorder is not None:
+            recorder.finalize_if_active()
         with self._lock:
             if self.video_source:
                 self.video_source.release()

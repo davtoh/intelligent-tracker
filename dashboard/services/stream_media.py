@@ -61,7 +61,11 @@ class StreamMediaMixin:
     def get_latest_telemetry(self, camera_id: Optional[str] = None) -> Dict[str, Any]:
         """Retrieve a snapshot copy of the most recent telemetry state."""
         with self._lock:
-            return dict(self._latest_telemetry)
+            payload = dict(self._latest_telemetry)
+        recorder = getattr(self, "_recording_controller", None)
+        if recorder is not None:
+            payload["recording"] = recorder.status()
+        return payload
 
     def get_heatmap_jpeg(self) -> bytes:
         """Render accumulated spatial occupancy heatmap as JPEG."""

@@ -178,7 +178,10 @@ class StreamWorker:
         with self.manager._lock:
             self.manager._latest_raw_frame = step_res.frame.copy()
 
-        self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+        annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+        recorder = getattr(self.manager, "_recording_controller", None)
+        if recorder is not None and recorder.is_recording:
+            recorder.write_frame(step_res.frame, annotated)
 
         telemetry = self._build_telemetry(
             step_res.tracks,
@@ -195,7 +198,8 @@ class StreamWorker:
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:
         """Pause video capture if zero viewers are connected to conserve compute."""
-        if self.manager.subscriber_count <= 0 and frame_count > 0:
+        is_recording = getattr(self.manager, "is_recording", False)
+        if self.manager.subscriber_count <= 0 and not is_recording and frame_count > 0:
             if not self.manager._is_hibernating:
                 self.manager._is_hibernating = True
                 if hasattr(vs, "pause"):
@@ -252,7 +256,7 @@ class StreamWorker:
         frame: np.ndarray,
         tracks: dict[int, Any],
         measured_fps: float,
-    ) -> None:
+    ) -> np.ndarray:
         """Render floating overlays and compress annotated frame to JPEG."""
         annotated = self.manager._overlay_renderer.render(
             frame=frame,
@@ -270,6 +274,7 @@ class StreamWorker:
         if ret:
             with self.manager._lock:
                 self.manager._latest_jpeg = buf.tobytes()
+        return annotated
 
     def _build_telemetry(
         self,
@@ -280,6 +285,11 @@ class StreamWorker:
         frame_count: int,
     ) -> dict[str, Any]:
         """Construct comprehensive telemetry payload with ground plane projections."""
+        rec_status = (
+            self.manager.get_recording_status()
+            if hasattr(self.manager, "get_recording_status")
+            else {"is_recording": False}
+        )
         return {
             "camera_id": self.manager.camera_id,
             "status": "online",
@@ -293,4 +303,5 @@ class StreamWorker:
             "zones": _build_zones_data(self.manager.analytics),
             "tripwires": _build_tripwires_data(self.manager.analytics),
             "recent_alerts": _extract_recent_alerts(self.manager.event_bus),
+            "recording": rec_status,
         }

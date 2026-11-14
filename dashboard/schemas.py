@@ -266,3 +266,31 @@ class WorldQueryRequest(BaseModel):
     limit: int = Field(15, ge=1, le=200, description="Maximum number of timeline citations to return")
     include_world_snapshot: bool = Field(True, description="Include live WorldGraph snapshot context")
 
+
+class CameraRecordStartRequest(BaseModel):
+    filename: Optional[str] = Field(None, description="Optional target MP4 filename in data/videos/")
+    fps: Optional[float] = Field(None, description="Optional target recording framerate")
+    annotated: bool = Field(True, description="Record HUD-annotated frames (True) or raw frames (False)")
+    max_frames: Optional[int] = Field(None, description="Optional maximum frame count bound")
+    max_duration_s: Optional[float] = Field(None, description="Optional maximum recording duration in seconds")
+
+
+class CameraRecordStatusResponse(BaseModel):
+    camera_id: str
+    is_recording: bool
+    status: str
+    recording_id: Optional[str] = None
+    filename: Optional[str] = None
+    output_path: Optional[str] = None
+    codec: Optional[str] = None
+    fps: Optional[float] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    frames_written: int = 0
+    elapsed_s: float = 0.0
+    size_bytes: int = 0
+    annotated: bool = True
+    started_at: Optional[float] = None
+    stopped_at: Optional[float] = None
+
+

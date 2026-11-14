@@ -2,10 +2,7 @@
 
 from dataclasses import dataclass
 import logging
-import os
 from typing import Any
-
-import cv2
 
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.analytics import AnalyticsEngine
@@ -21,7 +18,7 @@ from intelligent_tracker.pipeline.config import PipelineConfig
 from intelligent_tracker.reid import ReIDExtractorFactory
 from intelligent_tracker.rsac import RSACManager
 from intelligent_tracker.tracker import TrackerFactory
-from intelligent_tracker.video import VideoSource
+from intelligent_tracker.video import PipelineVideoWriter, VideoSource
 from intelligent_tracker.world import (
     CameraNode,
     WorldEntityBridge,
@@ -300,14 +297,15 @@ def build_governance(
     return rsac_mgr, al_mgr, enr_mgr
 
 
-def build_writer(config: PipelineConfig) -> Any:
-    """Initialize optional cv2.VideoWriter when output_path is configured."""
+def build_writer(config: PipelineConfig) -> PipelineVideoWriter | None:
+    """Initialize optional PipelineVideoWriter when output_path is configured."""
     if not config.output_path:
         return None
-    os.makedirs(os.path.dirname(os.path.abspath(config.output_path)) or ".", exist_ok=True)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    res_w, res_h = config.resolution
-    return cv2.VideoWriter(config.output_path, fourcc, float(config.framerate), (res_w, res_h))
+    return PipelineVideoWriter(
+        config.output_path,
+        fps=float(config.framerate),
+        resolution=config.resolution,
+    )
 
 
 def build_world(

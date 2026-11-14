@@ -18,6 +18,7 @@ Exports the 8 domain APIRouters:
 from dashboard.routers.analytics import router as analytics_router
 from dashboard.routers.cameras import router as cameras_router
 from dashboard.routers.camera_diagnostics import router as camera_diagnostics_router
+from dashboard.routers.camera_recording import router as camera_recording_router
 from dashboard.routers.rsac import router as rsac_router
 from dashboard.routers.scenarios import router as scenarios_router
 from dashboard.routers.streaming import router as streaming_router
@@ -30,6 +31,7 @@ __all__ = [
     "analytics_router",
     "cameras_router",
     "camera_diagnostics_router",
+    "camera_recording_router",
     "rsac_router",
     "scenarios_router",
     "streaming_router",

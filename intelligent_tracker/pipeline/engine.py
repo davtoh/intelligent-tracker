@@ -1,5 +1,6 @@
 """Unified PipelineEngine orchestrating subsystem assembly for CLI and Dashboard."""
 
+import os
 from typing import Any
 
 from intelligent_tracker.pipeline.bundle import (
@@ -18,6 +19,7 @@ from intelligent_tracker.pipeline.bundle import (
     build_writer,
 )
 from intelligent_tracker.pipeline.config import PipelineConfig
+from intelligent_tracker.video import PipelineVideoWriter
 from intelligent_tracker.world import WorldGraph
 
 
@@ -79,6 +81,34 @@ class PipelineEngine:
             confidence_engine=bundle.confidence_engine,
         )
         bundle.writer = build_writer(config)
+
+    @classmethod
+    def create_writer(
+        cls,
+        output_path: str | os.PathLike[str] | PipelineConfig | None = None,
+        *,
+        config: PipelineConfig | None = None,
+        fps: float | None = None,
+        resolution: tuple[int, int] | None = None,
+        max_frames: int | None = None,
+        max_duration_s: float | None = None,
+    ) -> PipelineVideoWriter | None:
+        """Instantiate a shared PipelineVideoWriter from explicit options or PipelineConfig."""
+        if isinstance(output_path, PipelineConfig):
+            config = output_path
+            output_path = None
+        target_path = output_path if output_path is not None else (config.output_path if config else None)
+        if not target_path:
+            return None
+        target_fps = float(fps if fps is not None else (config.framerate if config else 20.0))
+        target_res = resolution if resolution is not None else (config.resolution if config else (640, 480))
+        return PipelineVideoWriter(
+            target_path,
+            fps=target_fps,
+            resolution=target_res,
+            max_frames=max_frames,
+            max_duration_s=max_duration_s,
+        )
 
     @classmethod
     def build(
