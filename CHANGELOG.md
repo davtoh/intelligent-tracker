@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-14] feat: Step 1 Milestone 2: CameraConfigStore Legacy Mock Healing & Telemetry Status
+- **Type**: feat
+- **Summary**: Added heal_non_synthetic_mock_cameras in CameraConfigStore, cleaned configs/cameras.json, and exposed detector_model/detector_status in StreamWorker telemetry.
+- **Files** (3):
+  - `dashboard/services/camera_config_store.py`
+  - `dashboard/services/stream_worker.py`
+  - `tests/test_step1_camera_config_healing.py`
+- **Verification**: python -m unittest discover -s tests -p test_step1_camera_config_healing.py
+
 ## [2026-11-14] feat: Step 1 M1: Pipeline Detector Guardrails & _detector_setup.py
 - **Type**: feat
 - **Summary**: Added is_synthetic_source, EmptyDetector live-source fallback, detector_status/detector_error on PipelineBundle, and StreamPipelineFactory live-vs-synthetic gating.
@@ -133,15 +142,3 @@
   - `dashboard/camera_pool.py`
   - `tests/test_capture_circuit_breaker.py`
 - **Verification**: Ran 409 tests in 50.7s: 100% passed
-
-## [2026-11-11] feat: Milestone 3: Layer-Isolated Scaling & Policy-Governed Scrubber Timeline Persistence
-- **Type**: feat
-- **Summary**: Removed primary-layer sourceResolution cross-contamination in ScrubberOverlay.render(), extracted ScrubberPlaybackState & ScrubberLibraryBridge to keep VideoScrubber modular (<390L), persisted per-stem playback timestamps across original/_h264 pairs & recordings honoring #scrubber-tab-policy, and verified 372/372 unit tests plus headless CDP.
-- **Files** (6):
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/scrubber_playback_state.js`
-  - `dashboard/static/js/scrubber_library_bridge.js`
-  - `dashboard/static/video_scrubber.js`
-  - `dashboard/static/index.html`
-  - `tests/test_scrubber_ux_fixes.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (372 passed); headless CDP audit passed (0 warnings, 3 concurrent layers, slider persistence across keep-paused/auto-resume/reset)

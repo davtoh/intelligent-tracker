@@ -51,11 +51,11 @@ python -m unittest discover -s tests -p "test_step1_pipeline_detector_guard.py"
 ---
 
 ### Milestone 2: `CameraConfigStore` Legacy Mock Healing, `cameras.json` Cleanup & Telemetry Status *(Deferred to Next Turn)*
-- [ ] **dashboard/services/camera_config_store.py**: Add `heal_non_synthetic_mock_cameras(configs: dict[str, dict[str, Any]]) -> bool` that upgrades any camera entry whose `source` and `type` are non-synthetic (`usb`, `rtsp`, `hikvision` with non-synthetic source, `video_file`) from `"detector": "mock"` to `"yolov8"`, and removes stale `docker_notice` synthetic duplicates.
-- [ ] **configs/cameras.json**: Update persisted non-synthetic camera entries (`vid_*`, `usb_*`) from `"detector": "mock"` to `"detector": "yolov8"` and keep `"synthetic_01"` (`type: "synthetic"`, `detector: "mock"`) as the single explicit simulation channel.
-- [ ] **dashboard/services/stream_worker.py**: Include `"detector_model"` and `"detector_status"` in `_build_telemetry()` so the frontend HUD can display whether detection is `active`, `simulation`, or `unavailable`.
-- [ ] **tests/test_step1_camera_config_healing.py**: Add isolated unit tests (using `tempfile.TemporaryDirectory`) verifying `heal_non_synthetic_mock_cameras()` across `video_file`, `usb`, `rtsp`, and `synthetic` entries and verifying telemetry `detector_status` fields.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/services/camera_config_store.py**: Add `heal_non_synthetic_mock_cameras(configs: dict[str, dict[str, Any]]) -> bool` that upgrades any camera entry whose `source` and `type` are non-synthetic (`usb`, `rtsp`, `hikvision` with non-synthetic source, `video_file`) from `"detector": "mock"` to `"yolov8"`, and removes stale `docker_notice` synthetic duplicates.
+- [x] **configs/cameras.json**: Update persisted non-synthetic camera entries (`vid_*`, `usb_*`) from `"detector": "mock"` to `"detector": "yolov8"` and keep `"synthetic_01"` (`type: "synthetic"`, `detector: "mock"`) as the single explicit simulation channel.
+- [x] **dashboard/services/stream_worker.py**: Include `"detector_model"` and `"detector_status"` in `_build_telemetry()` so the frontend HUD can display whether detection is `active`, `simulation`, or `unavailable`.
+- [x] **tests/test_step1_camera_config_healing.py**: Add isolated unit tests (using `tempfile.TemporaryDirectory`) verifying `heal_non_synthetic_mock_cameras()` across `video_file`, `usb`, `rtsp`, and `synthetic` entries and verifying telemetry `detector_status` fields.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash

@@ -14,7 +14,27 @@ import threading
 import time
 from typing import Any
 
+from intelligent_tracker.pipeline.config import is_synthetic_source
+
 logger = logging.getLogger("intelligent_tracker.camera_config_store")
+
+
+def heal_non_synthetic_mock_cameras(configs: dict[str, dict[str, Any]]) -> bool:
+    """Upgrade non-synthetic ``detector='mock'`` entries to ``'yolov8'`` and drop stale ``docker_notice``."""
+    changed = False
+    notice = configs.get("docker_notice")
+    if isinstance(notice, dict) and is_synthetic_source(notice.get("source"), notice.get("type")):
+        configs.pop("docker_notice", None)
+        changed = True
+
+    for entry in configs.values():
+        if not isinstance(entry, dict):
+            continue
+        det = str(entry.get("detector", "")).strip().lower()
+        if det == "mock" and not is_synthetic_source(entry.get("source"), entry.get("type")):
+            entry["detector"] = "yolov8"
+            changed = True
+    return changed
 
 
 def _seed_default_camera() -> dict[str, Any]:
@@ -85,8 +105,11 @@ class CameraConfigStore:
                 loaded = {"cam_01": _seed_default_camera()}
                 seeded = True
 
+            healed = heal_non_synthetic_mock_cameras(loaded)
             self.camera_configs.clear()
             self.camera_configs.update(loaded)
+            if healed and configs_loaded:
+                self.save_cameras()
             return self.camera_configs, seeded
 
     def save_cameras(self) -> None:

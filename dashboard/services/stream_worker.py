@@ -104,6 +104,27 @@ def _build_tripwires_data(analytics: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _resolve_detector_telemetry(manager: Any) -> tuple[str, str]:
+    """Resolve ``(detector_model, detector_status)`` from bundle or fallback attrs."""
+    bundle = getattr(manager, "_pipeline_bundle", None)
+    if bundle is not None:
+        cfg = getattr(bundle, "config", None)
+        model = str(getattr(cfg, "detector_model", "") or "").strip().lower()
+        status = str(getattr(bundle, "detector_status", "ready") or "ready")
+        return model or "unknown", status
+
+    cfg_dict = getattr(manager, "cfg", None) or {}
+    det_cfg = cfg_dict.get("detector", {}) if isinstance(cfg_dict, dict) else {}
+    model = str(det_cfg.get("model", "") or "").strip().lower()
+    detector = getattr(manager, "detector", None)
+    if detector is None:
+        return model or "unknown", "unavailable"
+    if not model:
+        model = getattr(detector, "name", None) or type(detector).__name__.lower()
+    status = "simulation" if model == "mock" else "ready"
+    return str(model), status
+
+
 class StreamWorker:
     """Collaborator executing continuous background video pipeline loop."""
 
@@ -290,9 +311,12 @@ class StreamWorker:
             if hasattr(self.manager, "get_recording_status")
             else {"is_recording": False}
         )
+        detector_model, detector_status = _resolve_detector_telemetry(self.manager)
         return {
             "camera_id": self.manager.camera_id,
             "status": "online",
+            "detector_model": detector_model,
+            "detector_status": detector_status,
             "timestamp": curr_t,
             "fps": round(measured_fps, 1),
             "resolution": f"{shape[1]}x{shape[0]}",
