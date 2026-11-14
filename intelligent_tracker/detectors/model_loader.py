@@ -182,25 +182,96 @@ def ensure_model(model_name: str, output_dir: str | None = None) -> str | dict[s
     return download_model(model_name, output_dir=output_dir, force=False)
 
 
-def check_status(output_dir: str | None = None) -> None:
-    """Check and display presence and integrity of all known models."""
-    target_dir = output_dir or DEFAULT_MODELS_DIR
+def _inspect_single_model(
+    model_key: str,
+    meta: dict[str, object],
+    target_dir: str,
+    verify: bool,
+) -> dict[str, object]:
+    """Inspect presence, size, and optional SHA-256 hash of a single registered model."""
+    filename = str(meta["filename"])
+    dest = os.path.join(target_dir, filename)
+    expected_sha = str(meta["sha256"])
+    exists = os.path.isfile(dest)
+    size_bytes = os.path.getsize(dest) if exists else 0
+    actual_sha: str | None = None
+    hash_match: bool | None = None
+    if not exists:
+        status = "missing"
+    elif verify:
+        actual_sha = compute_sha256(dest)
+        hash_match = actual_sha.lower() == expected_sha.lower()
+        status = "valid" if hash_match else "corrupt"
+    else:
+        status = "present"
+    return {
+        "name": model_key,
+        "filename": filename,
+        "path": dest,
+        "description": str(meta.get("description", "")),
+        "expected_size_bytes": int(meta.get("size_bytes", 0)),  # type: ignore[arg-type]
+        "expected_sha256": expected_sha,
+        "exists": exists,
+        "size_bytes": size_bytes,
+        "size_mb": round(size_bytes / (1024.0 * 1024.0), 2),
+        "sha256": actual_sha,
+        "hash_match": hash_match,
+        "status": status,
+    }
+
+
+def _print_models_status(target_dir: str, entries: list[dict[str, object]]) -> None:
+    """Print human-readable status summary for inspected ONNX models."""
     print("=" * 60)
     print(f"AI Model Weights Status ({target_dir})")
     print("=" * 60)
-    for model_key, meta in MODELS.items():
-        dest = os.path.join(target_dir, str(meta["filename"]))
-        if not os.path.isfile(dest):
-            print(f"  [-] {model_key:<12}: MISSING ({meta['filename']})")
+    for item in entries:
+        key = str(item["name"])
+        status = str(item["status"])
+        if status == "missing":
+            print(f"  [-] {key:<12}: MISSING ({item['filename']})")
+        elif status == "valid":
+            print(f"  [+] {key:<12}: VALID ({item['size_mb']:.2f} MB, SHA-256 OK)")
+        elif status == "corrupt":
+            exp = str(item["expected_sha256"])[:12]
+            got = str(item["sha256"] or "")[:12]
+            print(f"  [!] {key:<12}: CORRUPT (Hash mismatch: expected {exp}, got {got})")
         else:
-            size_mb = os.path.getsize(dest) / (1024.0 * 1024.0)
-            file_hash = compute_sha256(dest)
-            expected_sha = str(meta["sha256"])
-            if file_hash.lower() == expected_sha.lower():
-                print(f"  [+] {model_key:<12}: VALID ({size_mb:.2f} MB, SHA-256 OK)")
-            else:
-                print(
-                    f"  [!] {model_key:<12}: CORRUPT "
-                    f"(Hash mismatch: expected {expected_sha[:12]}, got {file_hash[:12]})"
-                )
+            print(f"  [*] {key:<12}: PRESENT ({item['size_mb']:.2f} MB, unverified)")
     print("=" * 60)
+
+
+def check_status(
+    output_dir: str | None = None,
+    *,
+    verify: bool = True,
+    quiet: bool = False,
+    model_name: str | None = None,
+) -> dict[str, object]:
+    """Check presence and optional SHA-256 integrity of registered models."""
+    target_dir = output_dir or DEFAULT_MODELS_DIR
+    if model_name is not None:
+        key = model_name.lower().strip()
+        if key not in MODELS:
+            raise ValueError(f"Unknown model '{model_name}'. Available: {list(MODELS.keys())}")
+        selected = [(key, MODELS[key])]
+    else:
+        selected = list(MODELS.items())
+
+    entries = [_inspect_single_model(k, meta, target_dir, verify) for k, meta in selected]
+    counts = {
+        "total": len(entries),
+        "valid": sum(1 for item in entries if item["status"] == "valid"),
+        "missing": sum(1 for item in entries if item["status"] == "missing"),
+        "corrupt": sum(1 for item in entries if item["status"] == "corrupt"),
+        "present": sum(1 for item in entries if item["status"] in ("valid", "present")),
+    }
+    if not quiet:
+        _print_models_status(target_dir, entries)
+    return {
+        "models_dir": target_dir,
+        "verified": verify,
+        "all_valid": counts["valid"] == len(entries) and len(entries) > 0,
+        "counts": counts,
+        "models": entries,
+    }

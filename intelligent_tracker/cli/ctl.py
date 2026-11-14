@@ -18,6 +18,11 @@ import urllib.parse
 import urllib.request
 
 from intelligent_tracker.cli.ask import add_ask_arguments, execute_ask_args
+from intelligent_tracker.cli.ctl_world import (
+    add_world_and_models_subparsers,
+    execute_models_args,
+    execute_world_args,
+)
 
 
 def resolve_dashboard_url(explicit_url: str | None = None) -> str:
@@ -241,6 +246,7 @@ def build_parser() -> argparse.ArgumentParser:
     ask_parser = subparsers.add_parser("ask", help="Query semantic timeline, confidence, and world state")
     add_ask_arguments(ask_parser, include_url=False)
     ask_parser.add_argument("--url", dest="ask_url", default=None, help="Override dashboard API URL")
+    add_world_and_models_subparsers(subparsers)
     return parser
 
 
@@ -251,6 +257,16 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.command == "ask":
         code = execute_ask_args(args, fallback_url=args.url)
+        if code != 0:
+            sys.exit(code)
+        return
+    if args.command == "world":
+        code = execute_world_args(args, fallback_url=args.url)
+        if code != 0:
+            sys.exit(code)
+        return
+    if args.command == "models":
+        code = execute_models_args(args, fallback_url=args.url)
         if code != 0:
             sys.exit(code)
         return

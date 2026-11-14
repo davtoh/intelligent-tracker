@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-14] feat: Step 6 Milestone 2: CLI Benchmarking, Model Verification & WorldGraph Parity
+- **Type**: feat
+- **Summary**: Added BenchmarkCollector (--benchmark/--benchmark-output/--check-models), GET/POST /api/system/models*, GET /api/world/snapshot|entities, and intelligent-tracker-ctl world|models subcommands.
+- **Files** (12):
+  - `.TODO/step_6_cli_dashboard_operator_parity.md`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/world.py`
+  - `intelligent_tracker/cli/__init__.py`
+  - `intelligent_tracker/cli/arguments.py`
+  - `intelligent_tracker/cli/ctl.py`
+  - `intelligent_tracker/cli/pipeline_builder.py`
+  - `intelligent_tracker/cli/runner.py`
+  - ... (+4 more)
+- **Verification**: python -m unittest tests/test_cli_operator_parity.py tests/test_cli_runner.py tests/test_cli_ask.py tests/test_world_query_api.py tests/test_entrypoints.py tests/test_modernization.py tests/test_camera_recording.py
+
 ## [2026-11-13] feat: Step 5 Milestone 4: World Query API, CLI ask Parity & Sphinx Docs
 - **Type**: feat
 - **Summary**: Added /api/world/query, /api/world/confidence/{entity_id}, /api/world/timeline FastAPI routes, get_world_query_engine DI, intelligent-tracker ask and intelligent-tracker-ctl ask CLI parity, Sphinx documentation, and API/CLI parity tests.
@@ -125,17 +140,3 @@
   - `dashboard/static/js/video_library.js`
   - ... (+5 more)
 - **Verification**: unittest discover tests (344 OK); Milestone 1 suites (22 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui audit OK
-
-## [2026-11-10] feat: Video Studio SOTA Analytics, Canvas Overlay & Stacked Persistence Architecture
-- **Type**: feat
-- **Summary**: Implemented disk-backed stacked report history (`data/reports/{video}_reports.json`) and per-frame detection streaming (`data/reports/{video}_{run_id}_detections.json`). Separated raw detected objects (`total_detections`) from enrolled gallery sightings (`identifications_count`). Added synchronized real-time canvas bounding box overlay (`#scrubber-overlay-canvas`) over Scrubber player. Hardened `.video-file-card` selection, history run switcher dropdown, and active job container isolation.
-- **Files** (8):
-  - `intelligent_tracker/batch.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/js/video_library.js`
-  - `dashboard/static/video_scrubber.js`
-  - `tests/test_video_jobs.py`
-- **Verification**: 337/337 tests pass (36.96s); 15/15 dedicated video jobs tests pass (1.09s); 0 warnings Sphinx HTML documentation build

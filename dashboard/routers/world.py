@@ -11,10 +11,18 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from dashboard.dependencies import get_db, get_world_query_engine
+from dashboard.camera_pool import CameraPool
+from dashboard.dependencies import (
+    get_camera_pool,
+    get_db,
+    get_stream_manager,
+    get_world_query_engine,
+)
 from dashboard.schemas import WorldQueryRequest
+from dashboard.stream_manager import StreamManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.memory import ConfidenceEngine, WorldQueryEngine
+from intelligent_tracker.world import WorldGraph
 
 router = APIRouter(prefix="/api/world", tags=["World Intelligence & Query"])
 
@@ -115,4 +123,55 @@ async def search_world_timeline(
         require_all=require_all,
     )
     return {"query": search_text, "count": len(events), "events": events}
+
+
+def _resolve_world_graph(
+    engine: Optional[WorldQueryEngine],
+    pool: Optional[CameraPool],
+    sm: Optional[StreamManager],
+) -> Optional[WorldGraph]:
+    """Resolve the active WorldGraph from WorldQueryEngine, CameraPool, or StreamManager."""
+    return (
+        getattr(engine, "world_graph", None)
+        or getattr(pool, "world_graph", None)
+        or getattr(sm, "world_graph", None)
+    )
+
+
+@router.get("/snapshot")
+async def get_world_snapshot(
+    engine: WorldQueryEngine = Depends(get_world_query_engine),
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+) -> dict[str, Any]:
+    """Return a JSON-serializable topology and entity snapshot of the active WorldGraph."""
+    graph = _resolve_world_graph(engine, pool, sm)
+    return graph.snapshot() if graph is not None else WorldGraph().snapshot()
+
+
+@router.get("/entities")
+async def list_world_entities(
+    camera_id: Optional[str] = Query(None, description="Filter entities active on camera ID"),
+    min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence threshold"),
+    engine: WorldQueryEngine = Depends(get_world_query_engine),
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+) -> dict[str, Any]:
+    """List live WorldEntity nodes from the active WorldGraph with optional filters."""
+    graph = _resolve_world_graph(engine, pool, sm)
+    snap = graph.snapshot() if graph is not None else WorldGraph().snapshot()
+    entities = list((snap.get("entities") or {}).values())
+    if camera_id:
+        entities = [
+            ent for ent in entities
+            if camera_id in (ent.get("camera_tracks") or {})
+            or camera_id in (ent.get("active_zones") or {})
+        ]
+    if min_confidence is not None:
+        entities = [
+            ent for ent in entities
+            if float(ent.get("confidence", 0.0)) >= float(min_confidence)
+        ]
+    entities.sort(key=lambda e: (-float(e.get("last_seen", 0.0)), str(e.get("world_entity_id", ""))))
+    return {"count": len(entities), "entities": entities}
 

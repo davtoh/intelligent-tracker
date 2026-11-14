@@ -223,3 +223,22 @@ async def get_system_lifecycle_events(
     """Retrieve historical stream lifecycle audit trail (START, HIBERNATE, RESUME, EVICT)."""
     return lm.get_lifecycle_history(camera_id=camera_id, limit=limit)
 
+
+@router.get("/api/system/models")
+async def get_system_models(verify: bool = Query(True)):
+    """Report registered ONNX model weights presence, sizes, and optional SHA-256 status."""
+    from intelligent_tracker.detectors.model_loader import check_status
+
+    return check_status(verify=verify, quiet=True)
+
+
+@router.post("/api/system/models/verify")
+async def verify_system_models(model_name: Optional[str] = Query(None)):
+    """Verify SHA-256 checksums across registered ONNX model weights."""
+    from intelligent_tracker.detectors.model_loader import check_status
+
+    try:
+        return check_status(model_name=model_name, verify=True, quiet=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+

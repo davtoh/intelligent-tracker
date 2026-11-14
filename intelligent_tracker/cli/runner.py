@@ -4,6 +4,7 @@ import sys
 import time
 from typing import Any
 
+from intelligent_tracker.cli.benchmark import BenchmarkCollector, format_benchmark_report
 from intelligent_tracker.cli.display import CliUiController
 from intelligent_tracker.cli.pipeline_builder import PipelineContext
 from intelligent_tracker.pipeline import (
@@ -76,6 +77,9 @@ class CliAppRunner:
         self.frame_count = 0
         self.start_time = time.time()
         self.measured_fps = 0.0
+        benchmark_enabled = bool(self.p.get("benchmark") or self.p.get("benchmark_output"))
+        self.benchmark = BenchmarkCollector() if benchmark_enabled else None
+        self.last_benchmark_report: dict[str, Any] | None = None
         self.ui = CliUiController(
             params=self.p,
             analytics=ctx.analytics,
@@ -107,11 +111,15 @@ class CliAppRunner:
             print("[WARN] Video source timeout or stream completed.")
             return False
 
+        t_step0 = time.perf_counter()
         step_res = self.processor.step(
             frame,
             timestamp=time.time(),
             target_size=(self.p["res_w"], self.p["res_h"]),
         )
+        step_ms = (time.perf_counter() - t_step0) * 1000.0
+        if self.benchmark is not None:
+            self.benchmark.record_step(step_ms, track_count=len(step_res.tracks))
         self.frame_count = step_res.frame_count
         self.measured_fps = step_res.fps
 
@@ -129,7 +137,8 @@ class CliAppRunner:
 
         self._log_events(step_res.analytics)
 
-        if self.p["headless"] and 0 < self.p["frames"] <= self.frame_count:
+        frames_limit = int(self.p.get("frames") or 0)
+        if frames_limit > 0 and self.frame_count >= frames_limit:
             return False
         return self.ui.process_key_event(annotated, step_res.frame)
 
@@ -183,13 +192,48 @@ class CliAppRunner:
         print(f"  Connection Stats : {self.ctx.video_source.get_metrics()}")
         print(f"  Zone Summary     : {summary['zones']}")
         print(f"  Tripwire Summary : {summary['tripwires']}")
+        if self.benchmark is not None:
+            meta = {
+                "detector": self.p.get("detector_name"),
+                "tracker": self.p.get("tracker_name"),
+                "source": str(self.p.get("source")),
+                "resolution": f"{self.p.get('res_w')}x{self.p.get('res_h')}",
+                "headless": bool(self.p.get("headless", False)),
+            }
+            out_path = self.p.get("benchmark_output")
+            report = (
+                self.benchmark.export_json(out_path, metadata=meta)
+                if out_path
+                else self.benchmark.summary(metadata=meta)
+            )
+            self.last_benchmark_report = report
+            print("-" * 65)
+            print(format_benchmark_report(report))
+            if out_path:
+                print(f"[INFO] Benchmark JSON written to {out_path}")
         print("=" * 65)
+
+
+def _launch_legacy_forms_gui(args: Any, cfg: dict[str, Any]) -> None:
+    """Resolve legacy Matplotlib GUI arguments and launch forms mode."""
+    from intelligent_tracker.cli.pipeline_builder import _resolve_resolution
+
+    video_cfg = cfg.get("video", {})
+    det_cfg = cfg.get("detector", {})
+    res_w, res_h = _resolve_resolution(args, video_cfg)
+    raw_source = args.source or video_cfg.get("source", "0")
+    source = "synthetic" if str(raw_source).lower() in ("synthetic", "mock") else raw_source
+    det_name = args.detector or det_cfg.get("model", "haar")
+    conf = args.conf if args.conf is not None else float(det_cfg.get("confidence", 0.25))
+    classes = args.classes if args.classes is not None else det_cfg.get("classes", None)
+    run_legacy_forms_gui(args, res_w, res_h, source, det_name, conf, classes)
 
 
 def run_cli(args: Any = None) -> None:
     """CLI entrypoint: parse args, build pipeline, and execute runner."""
     from intelligent_tracker.cli.arguments import load_config, parse_args
     from intelligent_tracker.cli.ask import run_ask_cli
+    from intelligent_tracker.cli.pipeline_builder import build_pipeline
 
     if args is None and len(sys.argv) > 1 and sys.argv[1] == "ask":
         code = run_ask_cli(sys.argv[2:])
@@ -205,24 +249,15 @@ def run_cli(args: Any = None) -> None:
         args = parse_args(list(args))
     if args is None:
         args = parse_args()
+    if getattr(args, "check_models", False):
+        from intelligent_tracker.detectors.model_loader import check_status
+
+        check_status()
+        return
     cfg = load_config(args.config)
-
     if not args.headless and args.gui == "forms":
-        video_cfg = cfg.get("video", {})
-        det_cfg = cfg.get("detector", {})
-        from intelligent_tracker.cli.pipeline_builder import _resolve_resolution
-
-        res_w, res_h = _resolve_resolution(args, video_cfg)
-        raw_source = args.source or video_cfg.get("source", "0")
-        source = "synthetic" if str(raw_source).lower() in ("synthetic", "mock") else raw_source
-        det_name = args.detector or det_cfg.get("model", "haar")
-        conf = args.conf if args.conf is not None else float(det_cfg.get("confidence", 0.25))
-        classes = args.classes if args.classes is not None else det_cfg.get("classes", None)
-        run_legacy_forms_gui(args, res_w, res_h, source, det_name, conf, classes)
+        _launch_legacy_forms_gui(args, cfg)
         return
 
-    from intelligent_tracker.cli.pipeline_builder import build_pipeline
-
     ctx = build_pipeline(args, cfg)
-    runner = CliAppRunner(ctx)
-    runner.run()
+    CliAppRunner(ctx).run()

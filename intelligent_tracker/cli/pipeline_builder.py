@@ -44,9 +44,25 @@ def _resolve_resolution(args: Any, video_cfg: dict[str, Any]) -> tuple[int, int]
     return (640, 480)
 
 
+def _resolve_frames_limit(args: Any) -> int:
+    """Resolve effective frame limit from explicit --frames or headless/benchmark defaults."""
+    raw_frames = getattr(args, "frames", None)
+    if raw_frames is not None:
+        return max(0, int(raw_frames))
+    if (
+        getattr(args, "headless", False)
+        or getattr(args, "benchmark", False)
+        or getattr(args, "benchmark_output", None)
+    ):
+        return 60
+    return 0
+
+
 def _config_to_params(config: PipelineConfig, args: Any, cfg: dict[str, Any]) -> dict[str, Any]:
     """Convert normalized PipelineConfig into the legacy CLI params dictionary."""
     res_w, res_h = config.resolution
+    benchmark_output = getattr(args, "benchmark_output", None)
+    benchmark_enabled = bool(getattr(args, "benchmark", False) or benchmark_output)
     return {
         "res_w": res_w,
         "res_h": res_h,
@@ -69,7 +85,9 @@ def _config_to_params(config: PipelineConfig, args: Any, cfg: dict[str, Any]) ->
         "output": getattr(args, "output", config.output_path),
         "headless": getattr(args, "headless", False),
         "gui": getattr(args, "gui", "opencv"),
-        "frames": getattr(args, "frames", 60),
+        "frames": _resolve_frames_limit(args),
+        "benchmark": benchmark_enabled,
+        "benchmark_output": benchmark_output,
         "config": getattr(args, "config", config.config_path),
         "governance": config.enable_governance,
     }

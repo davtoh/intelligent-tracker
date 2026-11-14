@@ -74,15 +74,15 @@ Static snapshot captured via `diagnose.py arch-map --path .` prior to Step 6 des
 ---
 
 ### Milestone 2: CLI Bounded Benchmarking (`--frames N` / `--benchmark`), Model Verification & `WorldGraph` Inspection Parity — *Deferred to Next Turn / Milestone*
-- [ ] **intelligent_tracker/cli/benchmark.py, intelligent_tracker/cli/arguments.py & intelligent_tracker/cli/runner.py**: Add `--benchmark`, `--benchmark-output <json_path>`, and `--check-models` flags; enforce `--frames N` cleanly when explicitly passed or in headless/benchmark mode; record per-frame step latency (`min_ms`, `mean_ms`, `p95_ms`, `max_ms`, `effective_fps`) in `BenchmarkCollector` (`< 160` lines) and emit structured summary / JSON report on shutdown.
-- [ ] **dashboard/routers/system.py**: Add `GET /api/system/models` and `POST /api/system/models/verify` (`< 25` lines added, keeping `system.py` $< 300$ lines) backed by `intelligent_tracker.detectors.model_loader.check_status()` and SHA-256 verification.
-- [ ] **dashboard/routers/world.py & dashboard/dependencies.py**: Add `GET /api/world/snapshot` and `GET /api/world/entities` (with optional `camera_id` and `min_confidence` query filters) to `dashboard/routers/world.py` (`< 200` lines), resolving the live `WorldGraph` from `WorldQueryEngine.world_graph` or `CameraPool.world_graph`.
-- [ ] **intelligent_tracker/cli/ctl_world.py & intelligent_tracker/cli/ctl.py**: Create `ctl_world.py` (`< 220` lines) implementing `world` (`summary`, `entities`, `snapshot`, `--json`, offline `--config`/`--db` or remote `--url`) and `models` (`status`, `--verify`, `--download`, `--json`, local offline or remote `--url`) subcommands, and wire them into `intelligent_tracker/cli/ctl.py` (`scripts/stream_ctl.py`).
-- [ ] **tests/test_cli_operator_parity.py**: Verify headless bounded benchmarking (`--frames 5 --benchmark --benchmark-output`), `--check-models`, `GET /api/system/models`, `GET /api/world/snapshot`, `GET /api/world/entities`, and `intelligent-tracker-ctl world` / `models` subcommands across local offline, remote HTTP mock, and error branches.
+- [x] **intelligent_tracker/cli/benchmark.py, intelligent_tracker/cli/arguments.py & intelligent_tracker/cli/runner.py**: Add `--benchmark`, `--benchmark-output <json_path>`, and `--check-models` flags; enforce `--frames N` cleanly when explicitly passed or in headless/benchmark mode; record per-frame step latency (`min_ms`, `mean_ms`, `p95_ms`, `max_ms`, `effective_fps`) in `BenchmarkCollector` (`< 160` lines) and emit structured summary / JSON report on shutdown.
+- [x] **dashboard/routers/system.py**: Add `GET /api/system/models` and `POST /api/system/models/verify` (`< 25` lines added, keeping `system.py` $< 300$ lines) backed by `intelligent_tracker.detectors.model_loader.check_status()` and SHA-256 verification.
+- [x] **dashboard/routers/world.py & dashboard/dependencies.py**: Add `GET /api/world/snapshot` and `GET /api/world/entities` (with optional `camera_id` and `min_confidence` query filters) to `dashboard/routers/world.py` (`< 200` lines), resolving the live `WorldGraph` from `WorldQueryEngine.world_graph` or `CameraPool.world_graph`.
+- [x] **intelligent_tracker/cli/ctl_world.py & intelligent_tracker/cli/ctl.py**: Create `ctl_world.py` (`< 220` lines) implementing `world` (`summary`, `entities`, `snapshot`, `--json`, offline `--config`/`--db` or remote `--url`) and `models` (`status`, `--verify`, `--download`, `--json`, local offline or remote `--url`) subcommands, and wire them into `intelligent_tracker/cli/ctl.py` (`scripts/stream_ctl.py`).
+- [x] **tests/test_cli_operator_parity.py**: Verify headless bounded benchmarking (`--frames 5 --benchmark --benchmark-output`), `--check-models`, `GET /api/system/models`, `GET /api/world/snapshot`, `GET /api/world/entities`, and `intelligent-tracker-ctl world` / `models` subcommands across local offline, remote HTTP mock, and error branches.
 
 **Definition of Done (DoD)**:
-- [ ] `intelligent-tracker` and `intelligent-tracker-ctl` (`scripts/stream_ctl.py`) expose full parity for bounded benchmarking, model verification status, and `WorldGraph` inspection.
-- [ ] `tests/test_cli_operator_parity.py` passes 100% with isolated temporary directories and `detector=mock`.
+- [x] `intelligent-tracker` and `intelligent-tracker-ctl` (`scripts/stream_ctl.py`) expose full parity for bounded benchmarking, model verification status, and `WorldGraph` inspection.
+- [x] `tests/test_cli_operator_parity.py` passes 100% with isolated temporary directories and `detector=mock`.
 
 ---
 

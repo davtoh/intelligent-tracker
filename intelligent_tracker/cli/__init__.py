@@ -16,6 +16,10 @@ from intelligent_tracker.cli.ask import (
     query_remote_world,
     run_ask_cli,
 )
+from intelligent_tracker.cli.benchmark import (
+    BenchmarkCollector,
+    format_benchmark_report,
+)
 from intelligent_tracker.cli.pipeline_builder import (
     PipelineContext,
     resolve_pipeline_params,
@@ -43,6 +47,8 @@ __all__ = [
     "query_remote_world",
     "run_ask_cli",
     "PipelineContext",
+    "BenchmarkCollector",
+    "format_benchmark_report",
     "resolve_pipeline_params",
     "build_pipeline",
     "CliUiController",
