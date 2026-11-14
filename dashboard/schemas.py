@@ -292,5 +292,6 @@ class CameraRecordStatusResponse(BaseModel):
     annotated: bool = True
     started_at: Optional[float] = None
     stopped_at: Optional[float] = None
+    report_run_id: Optional[str] = None
 
 

@@ -79,9 +79,9 @@ python -m unittest discover -s tests -p "test_step4_live_recording_handoff.py"
 
 ---
 
-### Milestone 4: End-to-End Backup/Restore Survival, Full Regression Suite & Step 4 Sign-Off *(Deferred to Next Turn)*
-- [ ] **tests/test_step4_e2e_video_ssot.py**: Add end-to-end integration tests verifying: (1) live camera recording -> stop -> immediate `GET /api/videos/{filename}/reports` & `GET /api/videos/{filename}/detections` availability for "Open in Video Studio" with zero batch job run, (2) single-file SQLite `TrackerDB` backup/restore preserving all video analysis runs and detection streams without loose JSON files, and (3) non-mocked fallback branch coverage.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+### Milestone 4: End-to-End Backup/Restore Survival, Full Regression Suite & Step 4 Sign-Off
+- [x] **tests/test_step4_e2e_video_ssot.py**: Add end-to-end integration tests verifying: (1) live camera recording -> stop -> immediate `GET /api/videos/{filename}/reports` & `GET /api/videos/{filename}/detections` availability for "Open in Video Studio" with zero batch job run, (2) single-file SQLite `TrackerDB` backup/restore preserving all video analysis runs and detection streams without loose JSON files, and (3) non-mocked fallback branch coverage.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 4 Verification Command**:
 ```bash

@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-11-14] feat: Step 4 Milestone 4: E2E Video SSOT, Backup/Restore & Live Handoff Sign-Off
+- **Type**: feat
+- **Summary**: Added E2E integration tests for live-record-to-Studio handoff, single-file SQLite TrackerDB backup/restore, and non-mocked fallback branches; exposed report_run_id in CameraRecordStatusResponse; verified 628/628 tests green.
+- **Files** (2):
+  - `dashboard/schemas.py`
+  - `tests/test_step4_e2e_video_ssot.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-14] feat: Step 4 M3: Live-Record FrameStepResult Handoff & Export UI
 - **Type**: feat
 - **Summary**: Buffered time-indexed tracks in StreamRecordingController for instant live_capture TrackerDB persistence on stop(), wired step_res and db_getter in StreamWorker/StreamManager, and added Export JSON button and Live Capture badge to video_batch_reports.js.
@@ -134,11 +142,3 @@
   - `dashboard/static/js/camera_ai_config.js`
   - `tests/test_step1_demo_mode_ui.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-14] refactor: Step 1 Milestone 3: EntityTaggerService Decomposition & Deterministic Re-ID
-- **Type**: refactor
-- **Summary**: Decomposed EntityTaggerService.tag_entity into <=35L helpers, replaced blind center-50% crop with ValueError guard, and replaced random Re-ID fallback with deterministic color descriptor.
-- **Files** (2):
-  - `dashboard/services/entity_tagger.py`
-  - `tests/test_step1_entity_tagger_refactor.py`
-- **Verification**: python -m unittest discover -s tests -p test_step1_entity_tagger_refactor.py

@@ -49,16 +49,16 @@
 ---
 
 ## Step 4: 100% SQLite `TrackerDB` Video Run SSOT, JSON Auto-Migration & Instant Live-Record Metadata Handoff
-- **Child Plan**: `.TODO/step_4_trackerdb_video_ssot_and_live_handoff.md`
-- [ ] **Goal**: Make SQLite `TrackerDB` the 100% Primary Single Source of Truth for all video analysis runs and time-indexed frame detection streams (with automatic migration of legacy `data/reports/*.json` files and 1-click portable JSON export), and automatically save live `FrameStepResult` detections during `#live` MP4 recording so "Open in Video Studio" has instant overlays with zero re-indexing wait.
-- [ ] **Pre-Plan Evaluation Check**:
-  - [ ] Run `diagnose.py audit --path intelligent_tracker/repositories/schema_manager.py dashboard/services/video_report_store.py dashboard/services/stream_recording.py dashboard/routers/video_jobs.py`.
-- [ ] **Target Scope**:
-  - [ ] Create `intelligent_tracker/repositories/video_run_repo.py` (`VideoRunRepositoryMixin`, `< 250L`, `<= 10` methods) and add `video_runs` table + `sightings`/`events` `video_filename` and `media_offset_sec` columns in `schema_manager.py`.
-  - [ ] Refactor `dashboard/services/video_report_store.py` (splitting the 61L `save_report_run` into `<= 30L` helpers) to read/write through `TrackerDB`, transparently auto-migrating any legacy `data/reports/*.json` files on first access and exposing `GET /api/videos/{filename}/reports/{run_id}/export` for portable JSON downloads.
-  - [ ] Upgrade `StreamRecordingController` (`dashboard/services/stream_recording.py`) and `StreamWorker` (`dashboard/services/stream_worker.py`) to record time-indexed `FrameStepResult` track/detection metadata alongside MP4 frames and commit a `live_capture` run to `TrackerDB` when recording stops.
-- [ ] **Definition of Done**:
-  - [ ] Stopping a live MP4 recording and clicking "Open in Video Studio" immediately renders the recorded detection/track layers on the video scrubber without running a batch job; all runs live in `TrackerDB` and survive single-file DB backup/restore.
+- [x] **Child Plan**: `.TODO/step_4_trackerdb_video_ssot_and_live_handoff.md`
+- [x] **Goal**: Make SQLite `TrackerDB` the 100% Primary Single Source of Truth for all video analysis runs and time-indexed frame detection streams (with automatic migration of legacy `data/reports/*.json` files and 1-click portable JSON export), and automatically save live `FrameStepResult` detections during `#live` MP4 recording so "Open in Video Studio" has instant overlays with zero re-indexing wait.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py audit --path intelligent_tracker/repositories/schema_manager.py dashboard/services/video_report_store.py dashboard/services/stream_recording.py dashboard/routers/video_jobs.py`.
+- [x] **Target Scope**:
+  - [x] Create `intelligent_tracker/repositories/video_run_repo.py` (`VideoRunRepositoryMixin`, `< 250L`, `<= 10` methods) and add `video_runs` table + `sightings`/`events` `video_filename` and `media_offset_sec` columns in `schema_manager.py`.
+  - [x] Refactor `dashboard/services/video_report_store.py` (splitting the 61L `save_report_run` into `<= 30L` helpers) to read/write through `TrackerDB`, transparently auto-migrating any legacy `data/reports/*.json` files on first access and exposing `GET /api/videos/{filename}/reports/{run_id}/export` for portable JSON downloads.
+  - [x] Upgrade `StreamRecordingController` (`dashboard/services/stream_recording.py`) and `StreamWorker` (`dashboard/services/stream_worker.py`) to record time-indexed `FrameStepResult` track/detection metadata alongside MP4 frames and commit a `live_capture` run to `TrackerDB` when recording stops.
+- [x] **Definition of Done**:
+  - [x] Stopping a live MP4 recording and clicking "Open in Video Studio" immediately renders the recorded detection/track layers on the video scrubber without running a batch job; all runs live in `TrackerDB` and survive single-file DB backup/restore.
 
 ---
 
