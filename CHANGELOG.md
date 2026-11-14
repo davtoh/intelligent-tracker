@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-14] feat: Step 1 M1: Pipeline Detector Guardrails & _detector_setup.py
+- **Type**: feat
+- **Summary**: Added is_synthetic_source, EmptyDetector live-source fallback, detector_status/detector_error on PipelineBundle, and StreamPipelineFactory live-vs-synthetic gating.
+- **Files** (8):
+  - `.TODO/live_video_studio_master_roadmap.md`
+  - `.TODO/step_1_production_detection_and_demo_isolation.md`
+  - `dashboard/services/pipeline_factory.py`
+  - `intelligent_tracker/pipeline/bundle.py`
+  - `intelligent_tracker/pipeline/config.py`
+  - `intelligent_tracker/pipeline/engine.py`
+  - `intelligent_tracker/pipeline/_detector_setup.py`
+  - `tests/test_step1_pipeline_detector_guard.py`
+- **Verification**: python -m unittest discover -s tests -p test_step1_pipeline_detector_guard.py
+
 ## [2026-11-14] feat: Dashboard Live MP4 Recording UI
 - **Type**: feat
 - **Summary**: Added dedicated Jinja2 partial, responsive CSS without !important, CameraRecording JS controller with per-camera mismatch guards and Video Studio handoff, multi-grid tile recording actions, and Node vm mock-DOM + live CDP layout verification.
@@ -131,13 +145,3 @@
   - `dashboard/static/index.html`
   - `tests/test_scrubber_ux_fixes.py`
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests (372 passed); headless CDP audit passed (0 warnings, 3 concurrent layers, slider persistence across keep-paused/auto-resume/reset)
-
-## [2026-11-11] test: Video Studio Automated Verification & Multi-Layer JS Runtime Suite
-- **Type**: test
-- **Summary**: Added Node VM runtime tests for 2688x1520 vs 1920x1086 resolution-aware overlay scaling, reactive parent/_h264 cache invalidation, concurrent multi-layer compositing, and paired H.264 UI switching; split progressive stream and unified report store tests under modularity budgets and synced documentation/vms.rst.
-- **Files** (4):
-  - `documentation/vms.rst`
-  - `tests/test_video_pairing_and_layers.py`
-  - `tests/test_progressive_stream.py`
-  - `tests/test_video_report_store.py`
-- **Verification**: python -m unittest discover tests (352 passed); python -m sphinx -W --keep-going documentation/ documentation/_build/html/ (0 warnings)

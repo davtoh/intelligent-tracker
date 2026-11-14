@@ -21,6 +21,7 @@ from intelligent_tracker.pipeline import (
     PipelineEngine,
     load_pipeline_config,
 )
+from intelligent_tracker.pipeline.config import is_synthetic_source
 from intelligent_tracker.pipeline.bundle import (
     build_analytics,
     build_database,
@@ -78,12 +79,13 @@ class StreamPipelineFactory:
     ) -> StreamPipelineBundle:
         """Instantiate and wire complete computer vision pipeline via PipelineEngine."""
         data = dict(cfg or {})
+        raw_source = source_override if source_override is not None else data.get("video", {}).get("source")
         config = PipelineConfig.from_dict(
             data,
             camera_id=camera_id,
             db_path=db_path,
             source_override=source_override,
-            detector_fallback_mock=True,
+            detector_fallback_mock=is_synthetic_source(raw_source, data.get("type")),
             enable_governance=True,
             enable_event_bus_fallback=True,
         )

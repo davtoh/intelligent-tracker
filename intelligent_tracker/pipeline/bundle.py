@@ -7,12 +7,12 @@ from typing import Any
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.analytics import AnalyticsEngine
 from intelligent_tracker.database import TrackerDB
-from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.events import EventBus, setup_event_pipeline
 from intelligent_tracker.geometry import Tripwire, ZoneROI
 from intelligent_tracker.matcher import GalleryMatcher
 from intelligent_tracker.memory import ConfidenceEngine, EventFTSIndex
+from intelligent_tracker.pipeline._detector_setup import build_detector_with_status
 from intelligent_tracker.pipeline._world_setup import register_world_children
 from intelligent_tracker.pipeline.config import PipelineConfig
 from intelligent_tracker.reid import ReIDExtractorFactory
@@ -47,6 +47,8 @@ class PipelineBundle:
     db: TrackerDB | None = None
     video_source: VideoSource | None = None
     detector: Any = None
+    detector_status: str = "ready"
+    detector_error: str | None = None
     tracker: Any = None
     analytics: AnalyticsEngine | None = None
     reid_extractor: Any = None
@@ -120,29 +122,9 @@ def build_detector(
     *,
     raise_on_error: bool | None = None,
 ) -> Any:
-    """Instantiate detector backend with optional MockDetector fallback."""
-    should_raise = (not config.detector_fallback_mock) if raise_on_error is None else raise_on_error
-    det_name = config.detector_model
-    det_kwargs: dict[str, Any] = {}
-    if det_name in ("yolov8", "yolov8n", "yolo11", "yolo11n", "onnx"):
-        det_kwargs["conf_threshold"] = config.detector_confidence
-        if config.detector_classes:
-            det_kwargs["classes"] = config.detector_classes
-    elif det_name in ("mock", "mockdetector"):
-        det_kwargs["confidence"] = config.detector_confidence
-
-    try:
-        return DetectorFactory.create(det_name, **det_kwargs)
-    except KeyError as exc:
-        if should_raise:
-            raise ValueError(str(exc)) from exc
-        logger.warning("Preferred detector '%s' failed (%s), falling back to mock", det_name, exc)
-        return DetectorFactory.create("mock")
-    except Exception as exc:
-        if should_raise:
-            raise
-        logger.warning("Preferred detector '%s' failed (%s), falling back to mock", det_name, exc)
-        return DetectorFactory.create("mock")
+    """Instantiate detector backend with optional MockDetector/EmptyDetector fallback."""
+    detector, _, _ = build_detector_with_status(config, raise_on_error=raise_on_error)
+    return detector
 
 
 def build_tracker(config: PipelineConfig) -> Any:

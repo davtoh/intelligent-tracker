@@ -75,6 +75,17 @@ def load_pipeline_config(path: str | os.PathLike[str] | None) -> dict[str, Any]:
         return {}
 
 
+def is_synthetic_source(source: Any, cam_type: str | None = None) -> bool:
+    """Return True when source or camera type represents a synthetic/demo stream."""
+    if cam_type is not None and str(cam_type).strip().lower() in ("synthetic", "mock", "demo"):
+        return True
+    if source is None:
+        return True
+    if isinstance(source, str) and source.strip().lower() in ("", "synthetic", "mock", "demo"):
+        return True
+    return False
+
+
 def _resolve_source(raw_source: Any) -> Any:
     """Resolve synthetic/mock alias or delegate to camera source resolver."""
     if raw_source is None:
@@ -131,7 +142,7 @@ def _resolve_reid_and_db(
     reid_raw = reid_cfg.get("model")
     if reid_raw is None and probe_db_reid:
         reid_raw = _probe_db_reid_model(resolved_db or "data/tracker.db")
-    if reid_raw is None and "model" not in reid_cfg:
+    if reid_raw is None and (resolved_db is not None or "model" not in reid_cfg):
         reid_raw = "color"
     reid_model = _normalize_reid_name(reid_raw)
     if resolved_db is None and reid_model is not None:
