@@ -25,13 +25,7 @@
   let jobEventsBound = false;
 
   function getPalettes() {
-    return window.ScrubberOverlayRenderer?.PALETTES || window.ScrubberOverlay?.PALETTES || [
-      { id: 'cyan', name: 'Cyan', stroke: '#06b6d4', fill: 'rgba(6, 182, 212, 0.16)', labelBg: 'rgba(8, 145, 178, 0.92)', text: '#ffffff' },
-      { id: 'amber', name: 'Amber', stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.16)', labelBg: 'rgba(180, 83, 9, 0.92)', text: '#ffffff' },
-      { id: 'purple', name: 'Purple', stroke: '#a855f7', fill: 'rgba(168, 85, 247, 0.16)', labelBg: 'rgba(126, 34, 206, 0.92)', text: '#ffffff' },
-      { id: 'emerald', name: 'Emerald', stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.16)', labelBg: 'rgba(4, 120, 87, 0.92)', text: '#ffffff' },
-      { id: 'rose', name: 'Rose', stroke: '#f43f5e', fill: 'rgba(244, 63, 94, 0.16)', labelBg: 'rgba(190, 18, 60, 0.92)', text: '#ffffff' },
-    ];
+    return window.UnifiedCanvasOverlay?.PALETTES || window.ScrubberOverlayRenderer?.PALETTES || window.ScrubberOverlay?.PALETTES || [];
   }
 
   function getBaseStem(filename) {
@@ -80,18 +74,11 @@
     const detector = cfg.detector || 'yolov8';
     const conf = cfg.confidence !== undefined ? Number(cfg.confidence).toFixed(2) : '0.40';
     const stride = cfg.sample_rate || cfg.sampleRate || 1;
-    const classesText = Array.isArray(cfg.classes) && cfg.classes.length > 0
-      ? cfg.classes.join(', ')
-      : `${detector} (all)`;
+    const classesText = Array.isArray(cfg.classes) && cfg.classes.length > 0 ? cfg.classes.join(', ') : `${detector} (all)`;
     return {
-      runId: String(run.run_id),
-      runNum,
-      shortLabel: `R${runNum}`,
-      classesText,
+      runId: String(run.run_id), runNum, shortLabel: `R${runNum}`, classesText, palette, run,
       label: `👁️ Run #${runNum}: ${classesText} (${palette.name})`,
       title: `Run #${runNum} · Classes: ${classesText} · Model: ${detector} · Conf ≥ ${conf} · Stride 1:${stride} (${palette.name})`,
-      palette,
-      run,
     };
   }
 
@@ -102,9 +89,7 @@
     const chronological = [];
     for (let idx = total - 1; idx >= 0; idx -= 1) {
       const run = runs[idx];
-      if (!run || !run.run_id) continue;
-      const runNum = total - idx;
-      chronological.push(formatRunDescriptor(run, runNum, palettes[(runNum - 1) % palettes.length]));
+      if (run?.run_id) chronological.push(formatRunDescriptor(run, total - idx, palettes[(total - idx - 1) % palettes.length]));
     }
     return chronological;
   }
@@ -182,8 +167,10 @@
       descriptors: layerDescriptors,
       activeRunIds,
       hasLiveJob: Boolean(activeJob && activeJob.job_type === 'analytics'),
+      featureVisibility: window.ScrubberOverlay?.getFeatureVisibility?.() || null,
       onToggle: toggleLayer,
       onSetAll: setAllLayers,
+      onToggleFeature: (key, enabled) => window.ScrubberOverlay?.setFeatureVisibility?.(key, enabled),
     });
   }
 
@@ -337,26 +324,15 @@
     });
   }
 
-  function init() {
-    bindJobEvents();
-  }
+  function init() { bindJobEvents(); }
 
   window.OverlayLayers = {
-    init,
-    syncRuns,
-    ensureLoaded,
-    toggleLayer,
-    setAllLayers,
-    activateRun,
-    getNextPalette,
+    init, syncRuns, ensureLoaded, toggleLayer, setAllLayers, activateRun, getNextPalette,
     getActiveRunIds: () => Array.from(activeRunIds),
     getLayerDescriptors: () => layerDescriptors.slice(),
-    PALETTES: getPalettes(),
+    get PALETTES() { return getPalettes(); },
   };
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();

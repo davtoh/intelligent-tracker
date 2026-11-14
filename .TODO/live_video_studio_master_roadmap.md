@@ -21,16 +21,16 @@
 ---
 
 ## Step 2: Unified 100% Client-Side `<canvas>` Overlay Engine (`#live` & `#videos` Parity)
-- **Child Plan**: `.TODO/step_2_unified_client_canvas_overlay.md`
-- [ ] **Goal**: Replace the forked server-side OpenCV pixel burn-in (`frame_overlay.py`) and basic video scrubber canvas (`scrubber_overlay_renderer.js`) with one shared 100% Client-Side HTML5 `<canvas>` Overlay Engine across both `#live` and `#videos`.
-- [ ] **Pre-Plan Evaluation Check**:
-  - [ ] Run `diagnose.py audit --path dashboard/static/js/interactive_canvas.js dashboard/static/js/scrubber_overlay_renderer.js dashboard/static/js/scrubber_overlay.js dashboard/routers/streaming.py`.
-- [ ] **Target Scope**:
-  - [ ] Create `dashboard/static/js/unified_canvas_overlay.js` (`< 280L`, functions `<= 35L`) rendering `BBoxes`, `Track IDs`, `Dwell Timers`, `Velocity Vectors`, `Zones`, `Tripwires`, and translucent `Heatmap` compositing at native `devicePixelRatio` over both `<img id="live-stream-img">` and `<video id="scrubber-video-player">`.
-  - [ ] Add `?annotated=false|true` support to `/stream/{camera_id}` (`dashboard/routers/streaming.py`) so `#live`'s primary viewport streams clean un-burned video frames (preventing bounding-box pixel pollution during freeze-frame crops) while retaining `?annotated=true` for lightweight `2x2`/`3x3` multi-grid tiles and external alert snapshots.
-  - [ ] Refactor `interactive_canvas.js` and `scrubber_overlay_renderer.js` to delegate to `UnifiedCanvasOverlay` and unify the overlay layer toggle bar across `#live` and `#videos`.
-- [ ] **Definition of Done**:
-  - [ ] Both `#live` and `#videos` render identical vector overlays (`BBoxes`, `Track IDs`, `Dwell`, `Velocity`, `Zones`, `Tripwires`, `Heatmap`) via `UnifiedCanvasOverlay` with zero server-side burn-in on the primary stream and `0px` layout overflow.
+- [x] **Child Plan**: `.TODO/step_2_unified_client_canvas_overlay.md`
+- [x] **Goal**: Replace the forked server-side OpenCV pixel burn-in (`frame_overlay.py`) and basic video scrubber canvas (`scrubber_overlay_renderer.js`) with one shared 100% Client-Side HTML5 `<canvas>` Overlay Engine across both `#live` and `#videos`.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py audit --path dashboard/static/js/interactive_canvas.js dashboard/static/js/scrubber_overlay_renderer.js dashboard/static/js/scrubber_overlay.js dashboard/routers/streaming.py`.
+- [x] **Target Scope**:
+  - [x] Create `dashboard/static/js/unified_canvas_overlay.js` (`< 280L`, functions `<= 35L`) rendering `BBoxes`, `Track IDs`, `Dwell Timers`, `Velocity Vectors`, `Zones`, `Tripwires`, and translucent `Heatmap` compositing at native `devicePixelRatio` over both `<img id="live-stream-img">` and `<video id="scrubber-video-player">`.
+  - [x] Add `?annotated=false|true` support to `/stream/{camera_id}` (`dashboard/routers/streaming.py`) so `#live`'s primary viewport streams clean un-burned video frames (preventing bounding-box pixel pollution during freeze-frame crops) while retaining `?annotated=true` for lightweight `2x2`/`3x3` multi-grid tiles and external alert snapshots.
+  - [x] Refactor `interactive_canvas.js` and `scrubber_overlay_renderer.js` to delegate to `UnifiedCanvasOverlay` and unify the overlay layer toggle bar across `#live` and `#videos`.
+- [x] **Definition of Done**:
+  - [x] Both `#live` and `#videos` render identical vector overlays (`BBoxes`, `Track IDs`, `Dwell`, `Velocity`, `Zones`, `Tripwires`, `Heatmap`) via `UnifiedCanvasOverlay` with zero server-side burn-in on the primary stream and `0px` layout overflow.
 
 ---
 

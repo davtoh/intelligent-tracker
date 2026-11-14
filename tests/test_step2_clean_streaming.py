@@ -107,7 +107,14 @@ class TestStreamingRouterQueryFlag(unittest.TestCase):
                 chunks.append(chunk)
             return chunks
 
-        with patch("dashboard.routers.streaming.is_shutting_down", return_value=False):
+        fake_evt = MagicMock()
+        fake_evt.is_set.return_value = False
+        async def _never_set():
+            await asyncio.sleep(1.0)
+        fake_evt.wait = _never_set
+
+        with patch("dashboard.routers.streaming.is_shutting_down", return_value=False), \
+             patch("dashboard.routers.streaming.get_shutdown_event", return_value=fake_evt):
             chunks = asyncio.run(_collect())
 
         mgr.get_latest_frame_jpeg.assert_called_with(annotated=False)

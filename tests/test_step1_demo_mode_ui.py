@@ -175,7 +175,7 @@ class TestStep1DemoModeUI(unittest.TestCase):
         out = self._run_vm(["js/camera_ai_config.js", "camera_manager.js"], _JS_INITIAL_FOCUS)
         state = out["stateAfterNoCam01"]
         self.assertEqual(state["activeCam"], "vid_01")
-        self.assertEqual(state["streamSrc"], "/stream/vid_01")
+        self.assertEqual(state["streamSrc"], "/stream/vid_01?annotated=false")
         self.assertEqual(state["streamTitle"], "Camera Feed: LOBBY CLIP (vid_01)")
         self.assertEqual(state["selectVal"], "vid_01")
         self.assertIn("vid_01", state["switchedCams"])

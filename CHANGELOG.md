@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-14] feat: Step 2 M4: #videos Scrubber Overlay Parity & Budget Reduction
+- **Type**: feat
+- **Summary**: Delegated ScrubberOverlay, ScrubberOverlayRenderer, and OverlayLayers to UnifiedCanvasOverlay, added 6 feature toggle pills to OverlayLayerToolbar, and reduced scrubber_overlay.js (326L) and overlay_layers.js (338L) under 350L.
+- **Files** (8):
+  - `dashboard/static/css/scrubber_overlays.css`
+  - `dashboard/static/js/overlay_layer_toolbar.js`
+  - `dashboard/static/js/overlay_layers.js`
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `dashboard/static/js/scrubber_overlay_renderer.js`
+  - `tests/test_step1_demo_mode_ui.py`
+  - `tests/test_step2_clean_streaming.py`
+  - `tests/test_step2_video_scrubber_parity.py`
+- **Verification**: python -m unittest discover tests (590 passed)
+
 ## [2026-11-14] feat: Step 2 Milestone 3: #live Client-Side Vector Overlay Delegation
 - **Type**: feat
 - **Summary**: Wired #live primary stream to ?annotated=false (preserving multi-grid ?annotated=true) and delegated InteractiveCanvas to UnifiedCanvasOverlay HiDPI vector rendering.
@@ -122,21 +136,6 @@
   - `intelligent_tracker/cli/runner.py`
   - ... (+4 more)
 - **Verification**: python -m unittest tests/test_cli_operator_parity.py tests/test_cli_runner.py tests/test_cli_ask.py tests/test_world_query_api.py tests/test_entrypoints.py tests/test_modernization.py tests/test_camera_recording.py
-
-## [2026-11-13] feat: Step 5 Milestone 4: World Query API, CLI ask Parity & Sphinx Docs
-- **Type**: feat
-- **Summary**: Added /api/world/query, /api/world/confidence/{entity_id}, /api/world/timeline FastAPI routes, get_world_query_engine DI, intelligent-tracker ask and intelligent-tracker-ctl ask CLI parity, Sphinx documentation, and API/CLI parity tests.
-- **Files** (14):
-  - `dashboard/routers/world.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/dependencies.py`
-  - `dashboard/schemas.py`
-  - `dashboard/app.py`
-  - `intelligent_tracker/cli/ask.py`
-  - `intelligent_tracker/cli/runner.py`
-  - `intelligent_tracker/cli/ctl.py`
-  - ... (+6 more)
-- **Verification**: 522/522 unittest pass + Sphinx -W clean + arch-map compliant
 
 ## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
 - **Type**: refactor
