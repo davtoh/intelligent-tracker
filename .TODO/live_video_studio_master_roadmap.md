@@ -35,16 +35,16 @@
 ---
 
 ## Step 3: Interactive Click-to-Tag & Freehand Draw-to-Tag with On-Demand AI Recognition
-- **Child Plan**: `.TODO/step_3_interactive_roi_tagging_and_recognition.md`
-- [ ] **Goal**: Enable operators to either click an existing tracked bounding box OR manually drag-draw a freehand ROI box on any live (`#live`) or paused recorded (`#videos`) frame, run on-demand AI recognition + Re-ID matching on that crop, preview the recognized object, and enroll/tag it into `TrackerDB`.
-- [ ] **Pre-Plan Evaluation Check**:
-  - [ ] Run `diagnose.py audit --path dashboard/routers/rsac.py dashboard/routers/analytics.py dashboard/static/js/interactive_canvas.js`.
-- [ ] **Target Scope**:
-  - [ ] Create `dashboard/routers/tagging.py` (`< 200L`, route handlers `<= 25L`) with `POST /api/tag/recognize-roi` (accepts `camera_id` or `video_filename` + `timestamp_sec` + `bbox` or `crop_base64`, runs detector classification + `GalleryMatcher` similarity search on the crop, returns predicted class, confidence, top identity candidates, and base64 crop thumbnail) and `POST /api/tag/commit`.
-  - [ ] Create `dashboard/static/js/roi_draw_tagger.js` (`< 260L`) supporting pointer drag-to-draw ROI selection and track click selection on both `#interactive-canvas` (`#live`) and `#scrubber-overlay-canvas` (`#videos`).
-  - [ ] Upgrade the Tag/Enrollment Modal to display the live cropped image preview, AI-recognized category/class badge, and 1-click identity confirmation or new entity creation.
-- [ ] **Definition of Done**:
-  - [ ] Operators can click-to-tag or drag-draw a box on both `#live` and `#videos`, receive instant AI class/identity recognition on the selected region, and persist the entity signature into `TrackerDB` with immediate gallery reload.
+- [x] **Child Plan**: `.TODO/step_3_interactive_roi_tagging_and_recognition.md`
+- [x] **Goal**: Enable operators to either click an existing tracked bounding box OR manually drag-draw a freehand ROI box on any live (`#live`) or paused recorded (`#videos`) frame, run on-demand AI recognition + Re-ID matching on that crop, preview the recognized object, and enroll/tag it into `TrackerDB`.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py audit --path dashboard/routers/rsac.py dashboard/routers/analytics.py dashboard/static/js/interactive_canvas.js`.
+- [x] **Target Scope**:
+  - [x] Create `dashboard/routers/tagging.py` (`< 200L`, route handlers `<= 25L`) with `POST /api/tag/recognize-roi` (accepts `camera_id` or `video_filename` + `timestamp_sec` + `bbox` or `crop_base64`, runs detector classification + `GalleryMatcher` similarity search on the crop, returns predicted class, confidence, top identity candidates, and base64 crop thumbnail) and `POST /api/tag/commit`.
+  - [x] Create `dashboard/static/js/roi_draw_tagger.js` (`< 260L`) supporting pointer drag-to-draw ROI selection and track click selection on both `#interactive-canvas` (`#live`) and `#scrubber-overlay-canvas` (`#videos`).
+  - [x] Upgrade the Tag/Enrollment Modal to display the live cropped image preview, AI-recognized category/class badge, and 1-click identity confirmation or new entity creation.
+- [x] **Definition of Done**:
+  - [x] Operators can click-to-tag or drag-draw a box on both `#live` and `#videos`, receive instant AI class/identity recognition on the selected region, and persist the entity signature into `TrackerDB` with immediate gallery reload.
 
 ---
 
