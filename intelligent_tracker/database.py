@@ -16,13 +16,13 @@ Provides:
 - Occurrence analytics and summary export (JSON, CSV).
 """
 
-import os
 import sqlite3
 import threading
 import logging
-from typing import Optional
 
 from intelligent_tracker.repositories import (
+    SQLiteConnectionCoordinator,
+    get_connection_coordinator,
     SchemaMixin,
     EntityMixin,
     SignatureMixin,
@@ -33,6 +33,7 @@ from intelligent_tracker.repositories import (
     RsacMixin,
     WhitelistMixin,
     TelemetryMixin,
+    MemoryMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class TrackerDB(
     RsacMixin,
     WhitelistMixin,
     TelemetryMixin,
+    MemoryMixin,
 ):
     """
     Thread-safe SQLite database manager for entities, Re-ID signatures, and sightings.
@@ -66,54 +68,47 @@ class TrackerDB(
     - ``TelemetryMixin``: Hardware resource usage samples and stream lifecycle events.
     """
 
-    def __init__(self, db_path: str = "data/tracker.db"):
+    def __init__(
+        self,
+        db_path: str = "data/tracker.db",
+        coordinator: SQLiteConnectionCoordinator | None = None,
+    ):
         """
         Initialize TrackerDB.
 
         :param db_path: Path to SQLite database file, or ':memory:' for in-memory DB.
+        :param coordinator: Optional connection/lock coordinator (defaults to global registry).
         """
         self.db_path = db_path
-        self._lock = threading.RLock()
+        self._coordinator = coordinator or get_connection_coordinator()
+        self._lock: threading.RLock = self._coordinator.get_path_lock(db_path)
+        self._conn: sqlite3.Connection | None = None
+        self._closed = False
 
-        if db_path != ":memory:":
-            db_dir = os.path.dirname(os.path.abspath(db_path))
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
-
-        # Initialize connection
-        self._conn = sqlite3.connect(
-            self.db_path,
-            check_same_thread=False,
-            timeout=30.0,
-        )
-        self._conn.row_factory = sqlite3.Row
-
-        # Configure connection for concurrency and integrity
         with self._lock:
-            cursor = self._conn.cursor()
+            self._conn, self._lock = self._coordinator.open_connection(
+                self.db_path, lock=self._lock
+            )
             try:
-                cursor.execute("PRAGMA foreign_keys = ON;")
-                if self.db_path != ":memory:":
-                    cursor.execute("PRAGMA journal_mode = WAL;")
-                cursor.execute("PRAGMA busy_timeout = 5000;")
-            finally:
-                cursor.close()
-
-            self._init_schema()
+                self._init_schema()
+            except Exception:
+                self.close()
+                raise
 
     def close(self) -> None:
-        """Close SQLite database connection."""
-        with self._lock:
-            if hasattr(self, "_conn") and self._conn is not None:
-                try:
-                    self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
-                except Exception:
-                    pass
-                try:
-                    self._conn.close()
-                except Exception:
-                    pass
+        """Close SQLite database connection idempotently."""
+        lock = getattr(self, "_lock", None)
+        if lock is None:
+            return
+        with lock:
+            if getattr(self, "_closed", False) or getattr(self, "_conn", None) is None:
+                self._closed = True
                 self._conn = None
+                return
+            conn = self._conn
+            self._conn = None
+            self._closed = True
+            self._coordinator.close_connection(self.db_path, conn, lock)
 
     def __enter__(self):
         return self

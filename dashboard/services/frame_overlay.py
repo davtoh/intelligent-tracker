@@ -8,7 +8,7 @@ velocity vectors, zone polygons, and BEV minimap overlays onto video frames.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 import cv2
 import numpy as np
 
@@ -112,7 +112,7 @@ class FrameOverlayRenderer:
 
             # Track Label & Dwell Timer
             if overlays.get("track_ids", True):
-                name_disp = trk.entity_name or trk.identity_label or f"#{tid}"
+                name_disp = getattr(trk, "entity_name", None) or getattr(trk, "identity_label", None) or f"#{tid}"
                 dwell_str = f" [{trk.dwell_time:.1f}s]" if overlays.get("dwell_timers", True) else ""
                 hud_text = f"{name_disp} ({trk.confidence:.2f}){dwell_str}"
                 cv2.putText(annotated, hud_text, (bx, max(15, by - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)

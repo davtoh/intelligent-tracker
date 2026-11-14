@@ -1,18 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Intelligent Tracker - Dashboard Dependencies & Bidirectional Proxy Bridge.
+Intelligent Tracker - Dashboard FastAPI Dependencies & App State Providers.
 
-Provides typed dependency providers and proxy accessors for CameraPool,
-StreamManager, ScenarioManager, and StreamLifecycleManager.
-Supports runtime synchronization and monkeypatching compatibility for test fixtures.
+Resolves CameraPool, StreamManager, ScenarioManager, StreamLifecycleManager,
+TrackerDB, and vision managers from FastAPI ``app.state`` (supporting
+``app.dependency_overrides``) with standalone module fallbacks for non-request
+background and signal-handler callers.
 """
 
 import asyncio
 import logging
 import os
-import sys
-from typing import Optional
+from typing import Any, Optional
+
+from fastapi import FastAPI
+from fastapi.requests import HTTPConnection
 
 from dashboard.camera_pool import CameraPool
 from dashboard.stream_manager import StreamManager
@@ -20,12 +23,12 @@ from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.lifecycle import StreamLifecycleManager
+from intelligent_tracker.memory import ConfidenceEngine, GeminiSemanticProvider, WorldQueryEngine
 from intelligent_tracker.rsac import RSACManager
 from intelligent_tracker.scenarios import ScenarioManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard.dependencies")
 
-# File and directory paths
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 VIDEOS_DIR = os.path.join("data", "videos")
 CROPS_DIR = os.path.join("data", "crops")
@@ -34,13 +37,66 @@ os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(VIDEOS_DIR, exist_ok=True)
 os.makedirs(CROPS_DIR, exist_ok=True)
 
-# Internal module singletons
 _camera_pool: Optional[CameraPool] = None
 _stream_manager: Optional[StreamManager] = None
 _scenario_manager: Optional[ScenarioManager] = None
 _lifecycle_manager: Optional[StreamLifecycleManager] = None
+_db: Optional[TrackerDB] = None
+_confidence_engine: Optional[ConfidenceEngine] = None
+_world_query_engine: Optional[WorldQueryEngine] = None
+_owned_fallback_db: Optional[TrackerDB] = None
 _shutdown_event: Optional[asyncio.Event] = None
 _is_shutting_down: bool = False
+
+
+def _from_app_state(conn: Optional[HTTPConnection], attr: str, fallback: Any) -> Any:
+    """Resolve an attribute from ``conn.app.state`` before falling back to module state."""
+    if conn is not None:
+        val = getattr(conn.app.state, attr, None)
+        if val is not None:
+            return val
+    return fallback
+
+
+def bind_app_state(
+    app: FastAPI,
+    *,
+    camera_pool: Optional[CameraPool] = None,
+    stream_manager: Optional[StreamManager] = None,
+    scenario_manager: Optional[ScenarioManager] = None,
+    lifecycle_manager: Optional[StreamLifecycleManager] = None,
+    db: Optional[TrackerDB] = None,
+    confidence_engine: Optional[ConfidenceEngine] = None,
+    world_query_engine: Optional[WorldQueryEngine] = None,
+) -> None:
+    """Bind core runtime services to ``app.state`` and sync standalone fallbacks."""
+    global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db, _confidence_engine, _world_query_engine
+    app.state.camera_pool = camera_pool
+    app.state.stream_manager = stream_manager
+    app.state.scenario_manager = scenario_manager
+    app.state.lifecycle_manager = lifecycle_manager
+    app.state.db = db
+    app.state.confidence_engine = confidence_engine
+    app.state.world_query_engine = world_query_engine
+    _camera_pool = camera_pool
+    _stream_manager = stream_manager
+    _scenario_manager = scenario_manager
+    _lifecycle_manager = lifecycle_manager
+    _db = db
+    _confidence_engine = confidence_engine
+    _world_query_engine = world_query_engine
+
+
+def clear_app_state(app: FastAPI) -> None:
+    """Clear all runtime service references from ``app.state`` and close owned fallback DB."""
+    global _owned_fallback_db
+    if _owned_fallback_db is not None:
+        try:
+            _owned_fallback_db.close()
+        except Exception:
+            pass
+        _owned_fallback_db = None
+    bind_app_state(app)
 
 
 def get_shutdown_event() -> asyncio.Event:
@@ -64,214 +120,218 @@ def get_shutdown_event() -> asyncio.Event:
 
 
 def is_shutting_down() -> bool:
-    """Return True if the dashboard service is currently in process of shutting down."""
+    """Return True if the dashboard service is currently shutting down."""
     return _is_shutting_down
 
 
 def set_shutting_down(shutting_down: bool = True) -> None:
     """Signal all active video streaming generators and WebSocket channels to disconnect."""
-    global _is_shutting_down, _shutdown_event
+    global _is_shutting_down
     _is_shutting_down = shutting_down
     if _shutdown_event is not None:
         try:
             loop = getattr(_shutdown_event, "_loop", None)
             if loop and loop.is_running():
-                if shutting_down:
-                    loop.call_soon_threadsafe(_shutdown_event.set)
-                else:
-                    loop.call_soon_threadsafe(_shutdown_event.clear)
+                cb = _shutdown_event.set if shutting_down else _shutdown_event.clear
+                loop.call_soon_threadsafe(cb)
+            elif shutting_down:
+                _shutdown_event.set()
             else:
-                if shutting_down:
-                    _shutdown_event.set()
-                else:
-                    _shutdown_event.clear()
+                _shutdown_event.clear()
         except Exception:
             pass
 
 
-def get_camera_pool() -> Optional[CameraPool]:
-    """Resolve CameraPool, prioritizing app module overrides for test isolation."""
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod and getattr(app_mod, "camera_pool", None) is not None:
-            return app_mod.camera_pool
-    except Exception:
-        pass
-    return _camera_pool
+def get_camera_pool(conn: HTTPConnection = None) -> Optional[CameraPool]:
+    """Resolve active CameraPool from ``app.state`` or standalone fallback."""
+    return _from_app_state(conn, "camera_pool", _camera_pool)
 
 
-def set_camera_pool(pool: Optional[CameraPool]) -> None:
-    """Set active CameraPool and synchronize with app module globals."""
+def set_camera_pool(pool: Optional[CameraPool], app: Optional[FastAPI] = None) -> None:
+    """Set active CameraPool fallback and optionally bind ``app.state``."""
     global _camera_pool
     _camera_pool = pool
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod:
-            app_mod.camera_pool = pool
-    except Exception:
-        pass
+    if app is not None:
+        app.state.camera_pool = pool
 
 
-def get_stream_manager() -> Optional[StreamManager]:
-    """Resolve StreamManager, checking app module override first."""
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod and getattr(app_mod, "stream_manager", None) is not None:
-            return app_mod.stream_manager
-    except Exception:
-        pass
-    return _stream_manager
+def get_stream_manager(conn: HTTPConnection = None) -> Optional[StreamManager]:
+    """Resolve active StreamManager from ``app.state`` or standalone fallback."""
+    return _from_app_state(conn, "stream_manager", _stream_manager)
 
 
-def set_stream_manager(mgr: Optional[StreamManager]) -> None:
-    """Set active StreamManager and synchronize with app module globals."""
+def set_stream_manager(mgr: Optional[StreamManager], app: Optional[FastAPI] = None) -> None:
+    """Set active StreamManager fallback and optionally bind ``app.state``."""
     global _stream_manager
     _stream_manager = mgr
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod:
-            app_mod.stream_manager = mgr
-    except Exception:
-        pass
+    if app is not None:
+        app.state.stream_manager = mgr
 
 
-def get_scenario_manager() -> Optional[ScenarioManager]:
-    """Resolve ScenarioManager, checking app module override first."""
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod and getattr(app_mod, "scenario_manager", None) is not None:
-            return app_mod.scenario_manager
-    except Exception:
-        pass
-    return _scenario_manager
+def get_scenario_manager(conn: HTTPConnection = None) -> Optional[ScenarioManager]:
+    """Resolve ScenarioManager from ``app.state`` or standalone fallback."""
+    return _from_app_state(conn, "scenario_manager", _scenario_manager)
 
 
-def set_scenario_manager(mgr: Optional[ScenarioManager]) -> None:
-    """Set active ScenarioManager and synchronize with app module globals."""
+def set_scenario_manager(mgr: Optional[ScenarioManager], app: Optional[FastAPI] = None) -> None:
+    """Set active ScenarioManager fallback and optionally bind ``app.state``."""
     global _scenario_manager
     _scenario_manager = mgr
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod:
-            app_mod.scenario_manager = mgr
-    except Exception:
-        pass
+    if app is not None:
+        app.state.scenario_manager = mgr
 
 
-def get_scenario_mgr() -> ScenarioManager:
+def get_scenario_mgr(conn: HTTPConnection = None) -> ScenarioManager:
     """Ensure and return active ScenarioManager singleton."""
-    mgr = get_scenario_manager()
+    global _scenario_manager
+    mgr = get_scenario_manager(conn)
     if mgr is None:
         mgr = ScenarioManager()
-        set_scenario_manager(mgr)
+        _scenario_manager = mgr
+        if conn is not None:
+            conn.app.state.scenario_manager = mgr
     return mgr
 
 
-def get_lifecycle_manager() -> StreamLifecycleManager:
+def get_lifecycle_manager(conn: HTTPConnection = None) -> StreamLifecycleManager:
     """Ensure and return active StreamLifecycleManager instance."""
     global _lifecycle_manager
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod and getattr(app_mod, "lifecycle_manager", None) is not None:
-            return app_mod.lifecycle_manager
-    except Exception:
-        pass
-
-    if _lifecycle_manager is None:
-        sm = get_stream_manager()
-        pool = get_camera_pool()
-        db = sm.db if sm else None
-        _lifecycle_manager = StreamLifecycleManager(
-            db=db, camera_pool=pool, autostart_sampler=False
+    lm = _from_app_state(conn, "lifecycle_manager", _lifecycle_manager)
+    pool = get_camera_pool(conn)
+    if lm is None:
+        sm = get_stream_manager(conn)
+        lm = StreamLifecycleManager(
+            db=sm.db if sm else None,
+            camera_pool=pool,
+            autostart_sampler=False,
         )
+        _lifecycle_manager = lm
+        if conn is not None:
+            conn.app.state.lifecycle_manager = lm
 
-    pool = get_camera_pool()
-    if pool and _lifecycle_manager.camera_pool is None:
-        _lifecycle_manager.set_camera_pool(pool)
-
-    return _lifecycle_manager
+    if pool and lm.camera_pool is None:
+        lm.set_camera_pool(pool)
+    return lm
 
 
-def set_lifecycle_manager(lm: Optional[StreamLifecycleManager]) -> None:
-    """Set active StreamLifecycleManager and synchronize with app module."""
+def set_lifecycle_manager(
+    lm: Optional[StreamLifecycleManager],
+    app: Optional[FastAPI] = None,
+) -> None:
+    """Set active StreamLifecycleManager fallback and optionally bind ``app.state``."""
     global _lifecycle_manager
     _lifecycle_manager = lm
-    try:
-        app_mod = sys.modules.get("dashboard.app")
-        if app_mod:
-            app_mod.lifecycle_manager = lm
-    except Exception:
-        pass
+    if app is not None:
+        app.state.lifecycle_manager = lm
 
 
-def get_active_stream_manager(camera_id: Optional[str] = None) -> Optional[StreamManager]:
+def resolve_stream_manager(
+    camera_id: Optional[str] = None, pool: Optional[CameraPool] = None, sm: Optional[StreamManager] = None,
+) -> Optional[StreamManager]:
+    """Resolve active StreamManager for ``camera_id`` from supplied pool/stream."""
+    if pool is not None:
+        get_stream = getattr(pool, "get_stream", None)
+        if callable(get_stream):
+            mgr = get_stream(camera_id)
+            if mgr:
+                return mgr
+    if sm and (not camera_id or getattr(sm, "camera_id", None) == camera_id):
+        return sm
+    return getattr(pool, "primary_stream", None) if pool is not None else sm
+
+
+def get_active_stream_manager(camera_id: Optional[str] = None, conn: HTTPConnection = None) -> Optional[StreamManager]:
     """Resolve active StreamManager for a camera ID or default primary channel."""
-    pool = get_camera_pool()
-    sm = get_stream_manager()
-    if pool:
-        mgr = pool.get_stream(camera_id)
-        if mgr:
-            return mgr
-    if sm:
-        if not camera_id or sm.camera_id == camera_id:
-            return sm
-    if pool:
-        return pool.primary_stream
-    return sm
+    return resolve_stream_manager(camera_id=camera_id, pool=get_camera_pool(conn), sm=get_stream_manager(conn))
 
 
-def get_db() -> TrackerDB:
-    """Retrieve TrackerDB instance from active stream or create fallback."""
-    mgr = get_active_stream_manager()
-    if mgr and mgr.db:
+def _db_open(db: Any) -> bool:
+    """Return True when ``db`` holds an active SQLite connection."""
+    return db is not None and getattr(db, "_conn", None) is not None
+
+
+def get_db(conn: HTTPConnection = None) -> TrackerDB:
+    """Retrieve TrackerDB instance from active stream, ``app.state``, or managed fallback."""
+    global _owned_fallback_db
+    state_db = _from_app_state(conn, "db", _db)
+    if state_db is not _owned_fallback_db and _db_open(state_db):
+        return state_db
+    mgr = get_active_stream_manager(conn=conn)
+    if mgr and _db_open(getattr(mgr, "db", None)):
         return mgr.db
-    return TrackerDB()
+    if _db_open(state_db):
+        return state_db
+    if not _db_open(_owned_fallback_db):
+        pool = get_camera_pool(conn)
+        pool_db = getattr(pool, "db_path", None) if pool is not None else None
+        _owned_fallback_db = TrackerDB(pool_db if isinstance(pool_db, str) else "data/tracker.db")
+    if conn is not None:
+        conn.app.state.db = _owned_fallback_db
+    return _owned_fallback_db
 
 
-def get_rsac_mgr() -> RSACManager:
+def get_rsac_mgr(conn: HTTPConnection = None) -> RSACManager:
     """Retrieve RSACManager from camera pool, stream, or initialize new."""
-    pool = get_camera_pool()
+    pool = get_camera_pool(conn)
     if pool and pool.rsac_manager:
         return pool.rsac_manager
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=conn)
     if mgr and mgr.rsac_manager:
         return mgr.rsac_manager
-    return RSACManager(db=get_db())
+    return RSACManager(db=get_db(conn))
 
 
-def get_active_learning_mgr() -> ActiveLearningManager:
+def get_active_learning_mgr(conn: HTTPConnection = None) -> ActiveLearningManager:
     """Retrieve ActiveLearningManager from camera pool, stream, or initialize."""
-    pool = get_camera_pool()
+    pool = get_camera_pool(conn)
     if pool and pool.active_learning:
         return pool.active_learning
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=conn)
     if mgr and mgr.active_learning:
         return mgr.active_learning
-    return ActiveLearningManager(db=get_db())
+    return ActiveLearningManager(db=get_db(conn))
 
 
-def get_enrollment_mgr() -> UniversalEnrollmentManager:
+def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManager:
     """Retrieve UniversalEnrollmentManager from camera pool, stream, or initialize."""
-    pool = get_camera_pool()
+    pool = get_camera_pool(conn)
     if pool and pool.enrollment_manager:
         return pool.enrollment_manager
-    mgr = get_active_stream_manager()
+    mgr = get_active_stream_manager(conn=conn)
     if mgr and mgr.enrollment_manager:
         return mgr.enrollment_manager
-    return UniversalEnrollmentManager(db=get_db())
+    return UniversalEnrollmentManager(db=get_db(conn))
 
 
-def reload_all_galleries() -> None:
+def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:
+    """Resolve WorldQueryEngine from ``app.state`` or build from active DB and WorldGraph."""
+    state_engine = _from_app_state(conn, "world_query_engine", _world_query_engine)
+    if state_engine is not None:
+        return state_engine
+    db = get_db(conn)
+    pool, mgr, scen_mgr = get_camera_pool(conn), get_active_stream_manager(conn=conn), get_scenario_manager(conn)
+    conf_engine = (
+        _from_app_state(conn, "confidence_engine", _confidence_engine)
+        or getattr(pool, "confidence_engine", None)
+        or getattr(mgr, "confidence_engine", None)
+        or ConfidenceEngine(db=db)
+    )
+    world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None) or getattr(mgr, "world_graph", None)
+    provider = GeminiSemanticProvider() if os.getenv("WORLD_QUERY_PROVIDER", "").strip().lower() == "gemini" else None
+    return WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
+
+
+def reload_all_galleries(conn: HTTPConnection = None) -> None:
     """Reload visual Re-ID matchers and RSAC categories across all active streams."""
-    pool = get_camera_pool()
+    pool = get_camera_pool(conn)
     if pool:
         pool.reload_all_galleries()
-    else:
-        mgr = get_active_stream_manager()
-        if mgr and mgr.gallery_matcher:
-            mgr.gallery_matcher.reload_gallery()
-        if mgr and mgr.rsac_manager:
-            mgr.rsac_manager.reload()
+        return
+    mgr = get_active_stream_manager(conn=conn)
+    if mgr and mgr.gallery_matcher:
+        mgr.gallery_matcher.reload_gallery()
+    if mgr and mgr.rsac_manager:
+        mgr.rsac_manager.reload()
 
 
 # Legacy aliases preserving backwards compatibility
@@ -281,4 +341,3 @@ _get_active_learning_mgr = get_active_learning_mgr
 _get_enrollment_mgr = get_enrollment_mgr
 _get_scenario_mgr = get_scenario_mgr
 _reload_all_galleries = reload_all_galleries
-

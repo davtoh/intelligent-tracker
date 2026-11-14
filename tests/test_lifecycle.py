@@ -16,7 +16,7 @@ from intelligent_tracker.lifecycle import StreamLifecycleManager
 from dashboard.stream_manager import StreamManager
 from dashboard.camera_pool import CameraPool
 from dashboard.app import app
-import dashboard.app as dashboard_module
+from dashboard.dependencies import bind_app_state, clear_app_state
 
 
 class TestLifecycleManager(unittest.TestCase):
@@ -137,12 +137,18 @@ class TestLifecycleAPI(unittest.TestCase):
             camera_pool=cls.pool,
             autostart_sampler=False,
         )
-        dashboard_module.camera_pool = cls.pool
-        dashboard_module.lifecycle_manager = cls.lm
+        bind_app_state(
+            app,
+            camera_pool=cls.pool,
+            stream_manager=cls.pool.primary_stream,
+            lifecycle_manager=cls.lm,
+            db=cls.db,
+        )
         cls.client = TestClient(app)
 
     @classmethod
     def tearDownClass(cls):
+        clear_app_state(app)
         cls.lm.stop_sampler()
         cls.pool.stop_all()
         cls.db.close()

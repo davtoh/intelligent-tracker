@@ -31,7 +31,7 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
   ```bash
   python -m sphinx -W --keep-going documentation/ documentation/_build/html/
   ```
-- Maintain `milestone_plan.md` and `MIGRATION_LOG.md` with detailed records of code changes, architectural decisions, and verification results.
+- Maintain `CHANGELOG.md` (recording completed milestones via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`) with detailed records of code changes, architectural decisions, and verification results.
 - Never embed `file:///` URIs, machine-local absolute paths, OS-locked virtualenv binary paths, or hardcoded `localhost` URLs inside committed plans or documentation.
 
 ## 5. Frontend, CSS & Specificity Standards
@@ -54,19 +54,9 @@ All new code and refactors must adhere to the 10 Core Coding Principles (**SRP, 
 | **Route / Endpoint** | 5 – 15 lines | **15 lines** | **25 lines** | Keep handlers thin: parse request, invoke a service, and return response. |
 
 ## 7. Monolith Freeze & Strangler-Fig Architecture Map
-The following legacy files currently exceed the 500-line hard ceiling and are under an active **Monolith Freeze**:
-- `dashboard/static/styles.css` (2,902 lines)
-- `intelligent_tracker/database.py` (2,107 lines, `TrackerDB` has 68 methods)
-- `dashboard/app.py` (1,951 lines)
-- `intelligent_tracker/geometry.py` (1,816 lines)
-- `intelligent_tracker/detectors.py` (1,653 lines)
-- `intelligent_tracker/core.py` (1,537 lines)
-- `intelligent_tracker/events.py` (1,377 lines)
-- `dashboard/static/app.js` (1,263 lines)
-- `dashboard/static/studio.js` (994 lines)
-- `dashboard/stream_manager.py` (880 lines, `StreamManager` has 25 methods)
-- `dashboard/static/review_and_rsac.js` (813 lines)
-- `intelligent_tracker/tracker.py` (781 lines)
+Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `detectors.py`, `core.py`, `events.py`, `stream_manager.py`, `tracker.py`) have been decomposed into packages (`repositories/`, `routers/`, `services/`, `events/`, `tracker/`, `detectors/`, `geometry/`). The remaining files currently at or above budget are under an active **Monolith Freeze**:
+- **Hard Ceiling (>= 500 lines)**: `dashboard/static/index.html` (1,688 lines), `intelligent_tracker/analytics.py` (667 lines), `intelligent_tracker/high_objects.py` (518 lines), `intelligent_tracker/periferials.py` (510 lines)
+- **Soft Warning / Heavy Classes (350–499 lines or > 12 methods)**: `dashboard/camera_pool.py` (497 lines, `CameraPool` 19 methods), `dashboard/static/js/video_jobs.js` (493 lines), `intelligent_tracker/batch.py` (486 lines), `dashboard/static/js/video_library.js` (471 lines), `intelligent_tracker/active_learning.py` (457 lines, 13 methods), `intelligent_tracker/interactive.py` (453 lines), `intelligent_tracker/scenarios.py` (438 lines, 12 methods), `intelligent_tracker/journey.py` (432 lines), `intelligent_tracker/matching/gallery.py` (423 lines), `intelligent_tracker/rsac.py` (412 lines, 14 methods), `dashboard/static/app.js` (355 lines)
 
 ### Mandatory Placement for New Features ("Split-Before-You-Grow")
 1. **New Web Routes & API Endpoints**: Do **NOT** add new endpoints directly into `dashboard/app.py`. Place new route handlers in `dashboard/routers/<domain>.py` (using FastAPI `APIRouter`) and business logic in `dashboard/services/<domain>_service.py`, then mount the router in `dashboard/app.py`.
@@ -108,3 +98,8 @@ The following legacy files currently exceed the 500-line hard ceiling and are un
   - In `dashboard/static/js/video_batch.js` and `dashboard/static/js/video_library.js`, all async job listeners (`job-started`, `job-update`, `job-finished`) must check `currentBatchFilename === job.filename` before updating DOM containers or buttons.
 - **Transcode Player Auto-Switch**:
   - When `_h264.mp4` conversion finishes and `currentViewedFilename` matches the original file, automatically switch `videoPlayer.src` to the new web-compatible file.
+
+## 11. Target World Architecture & Master Planning Contract
+- **Authoritative Blueprint**: All new modules, refactors, and feature plans MUST follow the layered architecture, folder ownership (`intelligent_tracker/pipeline/`, `intelligent_tracker/world/`, `intelligent_tracker/memory/`), and ADRs in `docs/architecture/IDEAL_WORLD_ARCHITECTURE.md`.
+- **Master Roadmap Sequencing**: Execute and plan major architectural changes one step at a time following `.TODO/world_architecture_master_roadmap.md` (Steps 1–6). Never bypass `intelligent_tracker/` to put business or CV pipeline logic inside `dashboard/` or `cli/`, and never let `intelligent_tracker/` import `dashboard/` or `scripts/`.
+- **Pre-Plan Static Architecture Check**: Before evaluating or drafting any Step plan, run the unified architecture mapper (`diagnose.py arch-map --path .`) to verify current modularity budgets, route/CLI parity, coupling, and unused imports.

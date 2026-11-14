@@ -13,14 +13,13 @@ import logging
 from typing import Optional
 
 import cv2
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
-    get_active_stream_manager,
     get_camera_pool,
     get_stream_manager,
-    set_camera_pool,
+    resolve_stream_manager,
 )
 from dashboard.schemas import (
     CameraAddRequest,
@@ -28,11 +27,11 @@ from dashboard.schemas import (
     CameraUpdateRequest,
     OverlayUpdateRequest,
 )
+from dashboard.services.camera_diagnostics import probe_camera_test_request
+from dashboard.stream_manager import StreamManager
 from intelligent_tracker.discovery import (
     CAMERA_PRESETS,
-    build_preset_rtsp_url,
     discover_all_cameras,
-    test_camera_connection,
 )
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.cameras")
@@ -42,13 +41,15 @@ router = APIRouter(tags=["Cameras & VMS"])
 
 @router.get("/cameras")
 @router.get("/api/cameras")
-async def list_cameras():
+async def list_cameras(
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+):
     """List configured and active video streams."""
-    pool = get_camera_pool()
     if pool and pool.camera_configs:
         return pool.list_cameras()
 
-    mgr = get_active_stream_manager()
+    mgr = resolve_stream_manager(None, pool=pool, sm=sm)
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
@@ -75,12 +76,13 @@ async def list_cameras():
 
 
 @router.post("/api/cameras")
-async def add_camera(req: CameraAddRequest):
+async def add_camera(
+    req: CameraAddRequest,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Dynamically register a new camera stream in the CameraPool."""
-    pool = get_camera_pool()
     if not pool:
-        pool = CameraPool()
-        set_camera_pool(pool)
+        raise HTTPException(status_code=503, detail="Camera pool not initialized")
 
     pool.add_camera(
         camera_id=req.id,
@@ -115,58 +117,12 @@ async def discover_cameras_route(
 
 
 @router.post("/api/cameras/test")
-async def test_camera_route(req: CameraTestRequest):
+async def test_camera_route(
+    req: CameraTestRequest,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Test video source connectivity and return live preview snapshot."""
-    target_source = req.source
-    if req.preset and req.ip:
-        target_source = build_preset_rtsp_url(
-            preset=req.preset,
-            ip=req.ip,
-            port=req.port or 554,
-            username=req.username or "",
-            password=req.password or "",
-            channel=req.channel or 1,
-            stream=req.stream or "main",
-        )
-    if not target_source:
-        target_source = "synthetic"
-
-    if isinstance(target_source, str) and target_source.isdigit():
-        target_source = int(target_source)
-
-    # Check if target_source is already actively streaming in CameraPool
-    pool = get_camera_pool()
-    if pool and pool.streams:
-        for cam_id, stream_mgr in pool.streams.items():
-            if stream_mgr and stream_mgr.is_running:
-                cfg = pool.camera_configs.get(cam_id, {})
-                cfg_src = cfg.get("source")
-                if str(cfg_src).strip() == str(target_source).strip():
-                    jpeg_bytes = stream_mgr.get_latest_frame_jpeg()
-                    if jpeg_bytes:
-                        import base64
-                        snapshot_b64 = base64.b64encode(jpeg_bytes).decode("ascii")
-                        telemetry = stream_mgr.get_latest_telemetry()
-                        w = telemetry.get("width") or 640
-                        h = telemetry.get("height") or 480
-                        fps = telemetry.get("fps") or 30.0
-                        return {
-                            "success": True,
-                            "source": str(target_source),
-                            "resolution": f"{w}x{h}",
-                            "width": w,
-                            "height": h,
-                            "fps": round(float(fps), 1),
-                            "backend": "Active StreamManager",
-                            "snapshot_base64": snapshot_b64,
-                            "resolved_source": str(target_source),
-                            "active_stream_id": cam_id,
-                            "note": f"Camera is already streaming live in channel '{cam_id}'",
-                        }
-
-    res = test_camera_connection(target_source)
-    res["resolved_source"] = str(target_source)
-    return res
+    return probe_camera_test_request(req, pool=pool)
 
 
 @router.post("/api/cameras/release")
@@ -190,9 +146,11 @@ async def get_presets_route():
 
 
 @router.get("/api/cameras/{camera_id}")
-async def get_camera_info(camera_id: str):
+async def get_camera_info(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Retrieve configuration and health diagnostics for a specific camera channel."""
-    pool = get_camera_pool()
     if not pool or camera_id not in pool.camera_configs:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
@@ -207,13 +165,15 @@ async def get_camera_info(camera_id: str):
 
 
 @router.get("/api/cameras/{camera_id}/telemetry")
-async def get_camera_telemetry_snapshot(camera_id: str):
+async def get_camera_telemetry_snapshot(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+):
     """
     Retrieve real-time telemetry snapshot (bounding boxes, tracking states, zones, tripwires)
     for central Enterprise Cloud Hub canvas overlay proxying.
     """
-    pool = get_camera_pool()
-    sm = get_stream_manager()
     mgr = None
 
     if pool:
@@ -246,9 +206,12 @@ async def get_camera_telemetry_snapshot(camera_id: str):
 
 
 @router.put("/api/cameras/{camera_id}")
-async def update_camera(camera_id: str, req: CameraUpdateRequest):
+async def update_camera(
+    camera_id: str,
+    req: CameraUpdateRequest,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Update camera configuration dynamically without restarting server."""
-    pool = get_camera_pool()
     if not pool or camera_id not in pool.camera_configs:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
@@ -270,9 +233,11 @@ async def update_camera(camera_id: str, req: CameraUpdateRequest):
 
 
 @router.delete("/api/cameras/{camera_id}")
-async def delete_camera(camera_id: str):
+async def delete_camera(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Stop stream and delete camera from pool and persistent configuration."""
-    pool = get_camera_pool()
     if not pool or camera_id not in pool.camera_configs:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
@@ -281,9 +246,12 @@ async def delete_camera(camera_id: str):
 
 
 @router.post("/api/cameras/{camera_id}/toggle")
-async def toggle_camera_stream(camera_id: str, enabled: Optional[bool] = None):
+async def toggle_camera_stream(
+    camera_id: str,
+    enabled: Optional[bool] = None,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Pause or resume processing for a specific camera channel."""
-    pool = get_camera_pool()
     if not pool or camera_id not in pool.camera_configs:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
@@ -292,18 +260,27 @@ async def toggle_camera_stream(camera_id: str, enabled: Optional[bool] = None):
 
 
 @router.get("/api/cameras/{camera_id}/overlays")
-async def get_camera_overlays(camera_id: str):
+async def get_camera_overlays(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+):
     """Retrieve overlay visibility flags for a camera stream."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = resolve_stream_manager(camera_id, pool=pool, sm=sm)
     if not mgr:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
     return mgr.get_overlays()
 
 
 @router.post("/api/cameras/{camera_id}/overlays")
-async def update_camera_overlays(camera_id: str, req: OverlayUpdateRequest):
+async def update_camera_overlays(
+    camera_id: str,
+    req: OverlayUpdateRequest,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+):
     """Dynamically toggle bounding boxes, track IDs, dwell, velocity, zones, tripwires, heatmap, or BEV minimap."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = resolve_stream_manager(camera_id, pool=pool, sm=sm)
     if not mgr:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
@@ -313,9 +290,13 @@ async def update_camera_overlays(camera_id: str, req: OverlayUpdateRequest):
 
 
 @router.get("/api/cameras/{camera_id}/freeze_frame")
-async def get_freeze_frame(camera_id: str):
+async def get_freeze_frame(
+    camera_id: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+    sm: Optional[StreamManager] = Depends(get_stream_manager),
+):
     """Retrieve raw un-annotated video frame for interactive bbox selection & enrollment."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = resolve_stream_manager(camera_id, pool=pool, sm=sm)
     if not mgr:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 

@@ -1,7 +1,6 @@
 """Mixins decomposing spatial queries, kinematics, and visual rendering for Object."""
 
 from collections import deque
-from typing import Optional
 import cv2
 import numpy as np
 from intelligent_tracker.array_utils import norm_range

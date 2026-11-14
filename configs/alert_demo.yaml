@@ -60,6 +60,7 @@ alerting:
       timeout: 3.0
       max_retries: 2
       include_snapshot: true
+      mock: true
       event_types: ["intrusion_alert", "restricted_entity_alert", "occupancy_threshold"]
 
   telegram:
@@ -78,6 +79,7 @@ alerting:
     client_id: "intelligent_tracker_demo"
     qos: 1
     retain_occupancy: true
+    mock: true
     retain_sightings: true
     mock: true
 

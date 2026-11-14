@@ -1,0 +1,226 @@
+  <!-- Modal 3: Camera Management & Auto-Discovery -->
+  <div class="modal-backdrop" id="modal-camera-manager" style="display: none;">
+    <div class="modal-card glass-panel modal-lg">
+      <div class="modal-header">
+        <h3>📹 Multi-Camera VMS & Device Auto-Discovery</h3>
+        <button class="modal-close-btn" id="modal-cam-close">&times;</button>
+      </div>
+      <div class="modal-body-scroll">
+        <div class="modal-body-grid">
+          <!-- Left: Active Cameras & Auto-Discovery Scanner -->
+          <div class="modal-left-col">
+            <div class="section-subhead">
+              <h4>Active Camera Channels</h4>
+              <span class="badge">Hot-Swappable</span>
+            </div>
+            <div class="table-responsive" style="max-height: 220px;">
+              <table class="data-table">
+                <thead>
+                  <tr><th>ID</th><th>Name</th><th>Source</th><th>Status</th><th>Toggle</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="active-cameras-table-body">
+                  <tr>
+                    <td colspan="6" class="text-center">Loading cameras...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="section-subhead" style="margin-top: 16px;">
+              <h4>Hardware & LAN Auto-Discovery</h4>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-xs btn-outline" id="btn-scan-devices">🔍 Scan for Devices</button>
+                <button class="btn btn-xs btn-outline" id="btn-release-cameras" title="Release locked camera handles and reset DirectShow driver">🔓 Release Blocked</button>
+              </div>
+            </div>
+            <div class="discovered-devices-list" id="discovered-devices-list">
+              <div class="empty-state">Click "Scan for Devices" to probe USB and ONVIF LAN cameras.</div>
+            </div>
+          </div>
+
+          <!-- Right: Add / Configure Camera Form & Connection Tester -->
+          <div class="modal-right-col">
+            <div class="section-subhead">
+              <h4>Add / Configure Camera</h4>
+            </div>
+            <form id="camera-config-form">
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cam-id-input">Camera ID *</label>
+                  <input type="text" id="cam-id-input" class="form-input" placeholder="e.g. cam_02" required />
+                </div>
+                <div class="form-group col-6">
+                  <label for="cam-name-input">Display Label *</label>
+                  <input type="text" id="cam-name-input" class="form-input" placeholder="e.g. Warehouse North" required />
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cam-preset-select">Vendor RTSP Preset Builder</label>
+                <select id="cam-preset-select" class="form-input">
+                  <option value="hikvision">Hikvision NVR / IP Camera</option>
+                  <option value="tapo">TP-Link Tapo (C200 / C310 / C500)</option>
+                  <option value="ezviz">EZVIZ Security Camera</option>
+                  <option value="dahua">Dahua / Imou IP Camera</option>
+                  <option value="generic">Generic RTSP / NVR Stream</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-8">
+                  <label for="cam-ip-input">Camera IP / Hostname</label>
+                  <input type="text" id="cam-ip-input" class="form-input" placeholder="192.168.1.100" />
+                </div>
+                <div class="form-group col-4">
+                  <label for="cam-port-input">Port</label>
+                  <input type="number" id="cam-port-input" class="form-input" value="554" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cam-user-input">Username</label>
+                  <input type="text" id="cam-user-input" class="form-input" placeholder="admin" />
+                </div>
+                <div class="form-group col-6">
+                  <label for="cam-pass-input">Password / Code</label>
+                  <input type="password" id="cam-pass-input" class="form-input" placeholder="Password" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cam-channel-input">Channel</label>
+                  <input type="number" id="cam-channel-input" class="form-input" value="1" min="1" max="64" />
+                </div>
+                <div class="form-group col-6">
+                  <label for="cam-stream-select">Stream Type</label>
+                  <select id="cam-stream-select" class="form-input">
+                    <option value="main">Main Stream (High Def)</option>
+                    <option value="sub">Sub Stream (Low Latency)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cam-source-input">Resolved Stream URI / Device Source *</label>
+                <div class="quick-source-row">
+                  <input type="text" id="cam-source-input" class="form-input" placeholder="rtsp://... or 0 for USB" required />
+                  <button type="button" class="btn btn-quick-source" id="btn-quick-real-cam" title="Auto-detect and use first working physical webcam ('real')">📷 Real Cam</button>
+                </div>
+              </div>
+
+              <!-- AI Detector & Tracking Intelligence -->
+              <div class="ai-config-section">
+                <div class="ai-config-header">
+                  <h4 class="ai-config-title">
+                    🧠 AI Detector & Tracking Intelligence
+                  </h4>
+                  <span class="ai-config-badge">Hardware Accelerated</span>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group col-6">
+                    <label for="cam-detector-select">Detector Model</label>
+                    <select id="cam-detector-select" class="form-input">
+                      <option value="yolov8" selected>YOLOv8 (High Accuracy)</option>
+                      <option value="yolo11">YOLO11 (SOTA Real-time)</option>
+                      <option value="haar">Haar Cascade (Ultra Fast)</option>
+                      <option value="face_yunet">YuNet (Face Detection)</option>
+                      <option value="movementdetector">Movement (Frame Diff)</option>
+                      <option value="mock">Synthetic Mock (Testing)</option>
+                    </select>
+                  </div>
+                  <div class="form-group col-6">
+                    <label for="cam-tracker-select">Tracking Engine</label>
+                    <select id="cam-tracker-select" class="form-input">
+                      <option value="centroid" selected>Centroid (Fast Distance)</option>
+                      <option value="sort">SORT (Kalman + Hungarian)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label for="cam-conf-range" style="margin-bottom: 0;">Detection Confidence Threshold</label>
+                    <span id="cam-conf-display" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-color, #38bdf8); font-family: monospace;">0.40</span>
+                  </div>
+                  <div class="slider-container">
+                    <input type="range" id="cam-conf-range" class="slider-range-input" min="0.05" max="1.00" step="0.05" value="0.40" />
+                    <input type="number" id="cam-conf-input" class="form-input slider-number-input" min="0.05" max="1.00" step="0.01" value="0.40" />
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="cam-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+                  <input type="text" id="cam-classes-input" class="form-input" placeholder="e.g. person, car" />
+                  <div class="class-presets-bar">
+                    <button type="button" class="btn-tag-preset" data-classes="person">👤 Person</button>
+                    <button type="button" class="btn-tag-preset" data-classes="car, motorcycle, bus, truck, bicycle">🚗
+                      Vehicles</button>
+                    <button type="button" class="btn-tag-preset" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
+                    <button type="button" class="btn-tag-preset" data-classes="">🌐 All Classes</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Live Snapshot Connection Preview Box -->
+              <div class="connection-test-box glass-panel">
+                <div class="test-box-header">
+                  <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test
+                    Connection</button>
+                  <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify
+                    source.</span>
+                </div>
+                <img id="test-preview-img" src="" alt="Test Snapshot" style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="modal-cam-cancel" onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
+        <button type="submit" form="camera-config-form" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to
+          VMS</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Camera Channel Diagnostics & Traceback Inspector -->
+  <div class="modal-backdrop" id="modal-camera-diagnostics" style="display: none;">
+    <div class="modal-card glass-panel modal-lg">
+      <div class="modal-header">
+        <h3 id="diag-modal-title">🛠️ Camera Diagnostics & Health Inspector</h3>
+        <button class="modal-close-btn" id="modal-diag-close">&times;</button>
+      </div>
+      <div class="modal-body-scroll">
+        <div class="diag-info-grid">
+          <div class="diag-stat-card"><span class="diag-stat-label">Operational Status</span><span class="diag-stat-value" id="diag-stat-status">Checking...</span></div>
+          <div class="diag-stat-card"><span class="diag-stat-label">Error Code</span><span class="diag-stat-value" id="diag-stat-code">OK</span></div>
+          <div class="diag-stat-card"><span class="diag-stat-label">Configured Source</span><span class="diag-stat-value" id="diag-stat-source">-</span></div>
+          <div class="diag-stat-card"><span class="diag-stat-label">Hardware Signature</span><span class="diag-stat-value" id="diag-stat-device">-</span></div>
+          <div class="diag-stat-card"><span class="diag-stat-label">Consecutive Failures</span><span class="diag-stat-value" id="diag-stat-failures">0</span></div>
+        </div>
+
+        <div class="diag-advice-panel">
+          <div class="diag-advice-title">
+            <span>💡 Suggested Remediation:</span>
+          </div>
+          <div class="diag-advice-body" id="diag-advice-body">
+            Checking status...
+          </div>
+        </div>
+
+        <div class="section-subhead">
+          <h4>Diagnostic Output & Traceback</h4>
+        </div>
+        <div class="diag-traceback-box" id="diag-traceback-box">Loading diagnostic details...</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline" id="modal-diag-cancel">Close</button>
+        <button type="button" class="btn btn-outline" id="diag-btn-probe-channel">⚡ Probe Hardware</button>
+        <button type="button" class="btn btn-outline" id="diag-btn-release-lock" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">🔓 Release Device Lock</button>
+        <button type="button" class="btn btn-primary" id="diag-btn-edit-manager">✏️ Edit in Camera Manager</button>
+      </div>
+    </div>
+  </div>

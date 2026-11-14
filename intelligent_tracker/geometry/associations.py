@@ -1,7 +1,7 @@
 """Graph completeness and association solver for polygonal connection matching."""
 
 from collections import OrderedDict
-from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Set, Tuple
 
 import numpy as np
 

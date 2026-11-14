@@ -1,6 +1,6 @@
 """Core Detector base class, lifecycle queries, and frame processing pipelines."""
 
-from typing import Any, Optional
+from typing import Optional
 import cv2
 import numpy as np
 

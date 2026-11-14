@@ -5,7 +5,7 @@
 import logging
 from typing import Any
 
-from dashboard.dependencies import get_active_stream_manager
+from dashboard.dependencies import get_db
 from dashboard.schemas import VideoAnalyzeRequest
 from dashboard.services.progressive_stream_store import (
     append_progressive_chunk,
@@ -54,8 +54,7 @@ def parse_analyze_options(
 
 
 def _resolve_db() -> TrackerDB:
-    mgr = get_active_stream_manager()
-    return mgr.db if (mgr and mgr.db) else TrackerDB("data/tracker.db")
+    return get_db()
 
 
 def create_video_indexer(db: TrackerDB, opts: dict[str, Any]) -> VideoIndexer:

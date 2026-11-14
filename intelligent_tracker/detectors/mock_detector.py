@@ -1,7 +1,6 @@
 """Mock detector for headless testing, CI simulation, and deterministic verification."""
 
 from typing import Optional
-import numpy as np
 
 from intelligent_tracker.core import TailItem
 from intelligent_tracker.detectors.base import Detection, DetectorFactory

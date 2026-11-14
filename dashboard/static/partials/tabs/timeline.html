@@ -1,0 +1,40 @@
+    <!-- TAB 3: SIGHTING TIMELINE PLAYER -->
+    <section class="tab-pane" id="tab-timeline" role="tabpanel">
+      <div class="timeline-wrapper">
+        <!-- Timeline Filter Bar -->
+        <div class="glass-panel toolbar-panel">
+          <div class="filter-row">
+            <div class="filter-item">
+              <label for="timeline-entity-select">Entity:</label>
+              <select id="timeline-entity-select">
+                <option value="">All Entities</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label for="timeline-zone-select">Zone:</label>
+              <select id="timeline-zone-select">
+                <option value="">All Zones</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <label for="timeline-limit-select">Limit:</label>
+              <select id="timeline-limit-select">
+                <option value="25">25 records</option>
+                <option value="50" selected>50 records</option>
+                <option value="100">100 records</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" id="btn-filter-sightings">
+              🔍 Search Sightings
+            </button>
+          </div>
+        </div>
+
+        <!-- Chronological Timeline Stream -->
+        <div class="timeline-stream-container">
+          <div class="timeline-stream" id="sightings-timeline-list">
+            <div class="empty-state">Select filters to search sighting audit trail.</div>
+          </div>
+        </div>
+      </div>
+    </section>

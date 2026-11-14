@@ -18,18 +18,18 @@ System Architecture
                                                                     |
                                                                     v
     +-------------------+      +-------------------+      +-------------------+
-    | Web Dashboard     | <--- | Event Bus &       | <--- | Spatial Analytics |
-    | (FastAPI, Canvas, |      | Alert Rule Engine |      | (Zones, Tripwires,|
-    | MJPEG, WebSocket) |      | (MQTT/Telegram)   |      | Dwell, Heatmaps)  |
+    | Web Dashboard &   | <--- | Event Bus &       | <--- | PipelineEngine &  |
+    | Operator CLI      |      | WorldGraph /      |      | Spatial Analytics |
+    | (FastAPI, ctl)    |      | Alert Rule Engine |      | (Zones, Tripwires)|
     +-------------------+      +-------------------+      +-------------------+
               ^                          ^                          ^
               |                          |                          |
               +--------------------------+--------------------------+
                                          |
                                +-------------------+
-                               | Person / Vehicle  |
-                               | Re-Identification |
-                               | (OSNet / SQLite)  |
+                               | Semantic Memory & |
+                               | Re-ID (OSNet /    |
+                               | FTS5 / SQLite)    |
                                +-------------------+
 
 Documentation Contents
@@ -44,6 +44,7 @@ Documentation Contents
    analytics
    reid
    events
+   memory_and_world_query
 
 .. toctree::
    :maxdepth: 2

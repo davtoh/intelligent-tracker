@@ -11,14 +11,13 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     VIDEOS_DIR,
     get_camera_pool,
-    set_camera_pool,
 )
 from dashboard.routers.video_jobs import router as video_jobs_router
 from dashboard.schemas import VideoAddAsCameraRequest
@@ -149,6 +148,7 @@ async def add_video_as_camera(
     confidence: Optional[float] = Query(0.40, ge=0.01, le=1.0, description="Confidence threshold"),
     classes: Optional[str] = Query(None, description="Comma-separated class filter (e.g. person,car)"),
     req: Optional[VideoAddAsCameraRequest] = None,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Dynamically register an uploaded video file as an active camera stream."""
     safe_name = os.path.basename(filename)
@@ -171,10 +171,8 @@ async def add_video_as_camera(
     else:
         target_classes = None
 
-    pool = get_camera_pool()
     if not pool:
-        pool = CameraPool()
-        set_camera_pool(pool)
+        raise HTTPException(status_code=503, detail="Camera pool not initialized")
 
     pool.add_camera(
         camera_id=cam_id,

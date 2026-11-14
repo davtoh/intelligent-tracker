@@ -12,7 +12,7 @@ import logging
 from typing import Optional
 
 import cv2
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from dashboard.dependencies import get_active_stream_manager, get_scenario_mgr
@@ -21,7 +21,7 @@ from dashboard.schemas import (
     TripwireCreateRequest,
     ZoneCreateRequest,
 )
-from intelligent_tracker.scenarios import GroundPlaneHomography
+from intelligent_tracker.scenarios import GroundPlaneHomography, ScenarioManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.scenarios")
 
@@ -29,9 +29,9 @@ router = APIRouter(tags=["Scenarios & Spatial Awareness"])
 
 
 @router.get("/zones")
-async def list_zones(camera_id: Optional[str] = None):
+async def list_zones(request: Request, camera_id: Optional[str] = None):
     """List configured zones and their real-time occupancy counts."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if not mgr or not mgr.analytics:
         return []
     zones = []
@@ -85,9 +85,8 @@ def _format_camera_scenario(c_data: dict) -> dict:
 
 
 @router.get("/api/scenarios")
-async def get_all_scenarios():
+async def get_all_scenarios(sm: ScenarioManager = Depends(get_scenario_mgr)):
     """Retrieve full scenario configuration across all cameras (zones, tripwires, homography, transitions)."""
-    sm = get_scenario_mgr()
     return {
         "version": "1.0",
         "cameras": {
@@ -103,9 +102,11 @@ async def get_all_scenarios():
 
 
 @router.get("/api/scenarios/{camera_id}")
-async def get_camera_scenario(camera_id: str):
+async def get_camera_scenario(
+    camera_id: str,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Retrieve scenario details for a specific camera channel."""
-    sm = get_scenario_mgr()
     c_data = sm._ensure_camera_entry(camera_id)
     return {
         "camera_id": camera_id,
@@ -114,9 +115,12 @@ async def get_camera_scenario(camera_id: str):
 
 
 @router.post("/api/scenarios/zones")
-async def create_or_update_zone(req: ZoneCreateRequest):
+async def create_or_update_zone(
+    req: ZoneCreateRequest,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Create or update a polygonal zone for a camera, persisting to YAML & SQLite."""
-    sm = get_scenario_mgr()
     color_tuple = (
         tuple(req.color) if req.color and len(req.color) >= 3 else (0, 200, 100)
     )
@@ -130,7 +134,7 @@ async def create_or_update_zone(req: ZoneCreateRequest):
         color=color_tuple,
     )
 
-    mgr = get_active_stream_manager(req.camera_id)
+    mgr = get_active_stream_manager(req.camera_id, conn=request)
     if mgr and mgr.analytics:
         mgr.analytics.add_zone(zone)
 
@@ -149,12 +153,16 @@ async def create_or_update_zone(req: ZoneCreateRequest):
 
 
 @router.delete("/api/scenarios/zones/{camera_id}/{zone_name}")
-async def delete_zone_route(camera_id: str, zone_name: str):
+async def delete_zone_route(
+    camera_id: str,
+    zone_name: str,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Delete a zone from a camera, updating memory, YAML, and SQLite."""
-    sm = get_scenario_mgr()
     deleted = sm.delete_zone(camera_id, zone_name)
 
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if mgr and mgr.analytics and zone_name in mgr.analytics.zones:
         del mgr.analytics.zones[zone_name]
 
@@ -162,9 +170,12 @@ async def delete_zone_route(camera_id: str, zone_name: str):
 
 
 @router.post("/api/scenarios/tripwires")
-async def create_or_update_tripwire(req: TripwireCreateRequest):
+async def create_or_update_tripwire(
+    req: TripwireCreateRequest,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Create or update a directional tripwire line for a camera."""
-    sm = get_scenario_mgr()
     color_tuple = (
         tuple(req.color) if req.color and len(req.color) >= 3 else (0, 255, 255)
     )
@@ -176,7 +187,7 @@ async def create_or_update_tripwire(req: TripwireCreateRequest):
         color=color_tuple,
     )
 
-    mgr = get_active_stream_manager(req.camera_id)
+    mgr = get_active_stream_manager(req.camera_id, conn=request)
     if mgr and mgr.analytics:
         mgr.analytics.add_tripwire(tw)
 
@@ -193,12 +204,16 @@ async def create_or_update_tripwire(req: TripwireCreateRequest):
 
 
 @router.delete("/api/scenarios/tripwires/{camera_id}/{tripwire_name}")
-async def delete_tripwire_route(camera_id: str, tripwire_name: str):
+async def delete_tripwire_route(
+    camera_id: str,
+    tripwire_name: str,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Delete a tripwire line from a camera."""
-    sm = get_scenario_mgr()
     deleted = sm.delete_tripwire(camera_id, tripwire_name)
 
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if mgr and mgr.analytics and tripwire_name in mgr.analytics.tripwires:
         del mgr.analytics.tripwires[tripwire_name]
 
@@ -206,9 +221,12 @@ async def delete_tripwire_route(camera_id: str, tripwire_name: str):
 
 
 @router.post("/api/scenarios/homography")
-async def save_homography_route(req: HomographyCalibrationRequest):
+async def save_homography_route(
+    req: HomographyCalibrationRequest,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Calibrate 4-point perspective ground plane homography matrix for camera."""
-    sm = get_scenario_mgr()
     try:
         homo = sm.save_homography(
             camera_id=req.camera_id,
@@ -218,7 +236,7 @@ async def save_homography_route(req: HomographyCalibrationRequest):
             metric_height=req.metric_height or 10.0,
         )
 
-        mgr = get_active_stream_manager(req.camera_id)
+        mgr = get_active_stream_manager(req.camera_id, conn=request)
         if mgr:
             mgr.homography = homo
 
@@ -229,24 +247,29 @@ async def save_homography_route(req: HomographyCalibrationRequest):
 
 
 @router.get("/api/scenarios/homography/{camera_id}")
-async def get_homography_route(camera_id: str):
+async def get_homography_route(
+    camera_id: str,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Get ground plane homography calibration profile for a camera."""
-    sm = get_scenario_mgr()
     homo = sm.get_homography(camera_id)
     return homo.to_dict()
 
 
 @router.delete("/api/scenarios/homography/{camera_id}")
-async def delete_homography_route(camera_id: str):
+async def delete_homography_route(
+    camera_id: str,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Reset homography calibration for a camera channel."""
-    sm = get_scenario_mgr()
     c_entry = sm._ensure_camera_entry(camera_id)
     c_entry["homography"] = GroundPlaneHomography(camera_id=camera_id)
     if sm.db:
         sm.db.delete_homography_calibration(camera_id)
     sm.save_to_yaml()
 
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if mgr:
         mgr.homography = c_entry["homography"]
 
@@ -254,14 +277,17 @@ async def delete_homography_route(camera_id: str):
 
 
 @router.get("/api/scenarios/bev/{camera_id}")
-async def get_bev_minimap_image(camera_id: str):
+async def get_bev_minimap_image(
+    camera_id: str,
+    request: Request,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Retrieve live 2D Bird's-Eye-View (BEV) top-down minimap image."""
-    mgr = get_active_stream_manager(camera_id)
+    mgr = get_active_stream_manager(camera_id, conn=request)
     if mgr:
         jpeg_bytes = mgr.get_bev_minimap_jpeg()
         return StreamingResponse(io.BytesIO(jpeg_bytes), media_type="image/jpeg")
 
-    sm = get_scenario_mgr()
     homo = sm.get_homography(camera_id)
     c_entry = sm._ensure_camera_entry(camera_id)
     bev_img = homo.render_bev_minimap({}, zones=c_entry["zones"])

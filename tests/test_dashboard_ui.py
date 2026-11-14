@@ -12,7 +12,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
-import dashboard.app as app_module
+from dashboard.dependencies import bind_app_state, clear_app_state
 from intelligent_tracker.database import TrackerDB
 from dashboard.camera_pool import CameraPool
 
@@ -32,12 +32,13 @@ class TestDashboardUI(unittest.TestCase):
             db_path=cls.db_path,
             autostart=False,
         )
-        app_module.camera_pool = cls.pool
-        app_module.stream_manager = cls.pool.primary_stream
+        bind_app_state(app, camera_pool=cls.pool, stream_manager=cls.pool.primary_stream, db=cls.db)
+        # app.state bound above
         cls.client = TestClient(app)
 
     @classmethod
     def tearDownClass(cls):
+        clear_app_state(app)
         cls.pool.stop_all()
         cls.db.close()
         import shutil

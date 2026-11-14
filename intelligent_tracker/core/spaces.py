@@ -1,4 +1,12 @@
-"""Spatial tree, coordinate spaces, and hierarchical parenting."""
+"""Spatial tree, coordinate spaces, and hierarchical parenting.
+
+.. deprecated::
+    Legacy compatibility boundary for ``MetaSpace``, ``Space``, and
+    ``deco_name``. New production code must use the instance-scoped,
+    ``RLock``-protected :class:`intelligent_tracker.world.WorldGraph` instead
+    of the global ``Space._space_entities`` weakref registry. Kept intact until
+    legacy core tests and ``run_legacy_forms_gui`` are retired.
+"""
 
 from abc import ABCMeta
 from functools import wraps

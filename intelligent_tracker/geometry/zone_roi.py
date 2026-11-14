@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -133,6 +133,29 @@ class ZoneROI:
                     active_items[int(tid)] = (centroid, bbox)
         return active_items
 
+    def _append_zone_event(
+        self,
+        event_type: str,
+        tid: int,
+        now: float,
+        dwell_time: float,
+        centroid: Optional[Tuple[float, float]],
+        bbox: Optional[Tuple[int, int, int, int]],
+        events: List[ZoneEvent],
+    ) -> None:
+        """Record a ZoneEvent onto both the current frame batch and history log."""
+        event = ZoneEvent(
+            zone_id=self.name,
+            track_id=tid,
+            event_type=event_type,
+            timestamp=now,
+            dwell_time=dwell_time,
+            centroid=centroid,
+            bbox=bbox,
+        )
+        events.append(event)
+        self.event_history.append(event)
+
     def _handle_occupant_update(self, tid, centroid, bbox, now, events):
         if tid not in self.current_occupants:
             self.current_occupants[tid] = {
@@ -143,37 +166,17 @@ class ZoneROI:
                 "bbox": bbox,
             }
             self.total_entries += 1
-            event = ZoneEvent(
-                zone_id=self.name,
-                track_id=tid,
-                event_type="enter",
-                timestamp=now,
-                dwell_time=0.0,
-                centroid=centroid,
-                bbox=bbox,
-            )
-            events.append(event)
-            self.event_history.append(event)
-        else:
-            occ = self.current_occupants[tid]
-            occ["last_seen"] = now
-            occ["centroid"] = centroid
-            occ["bbox"] = bbox
-            dwell_dur = now - occ["entry_time"]
+            self._append_zone_event("enter", tid, now, 0.0, centroid, bbox, events)
+            return
 
-            if dwell_dur >= self.dwell_threshold and not occ["dwell_emitted"]:
-                occ["dwell_emitted"] = True
-                event = ZoneEvent(
-                    zone_id=self.name,
-                    track_id=tid,
-                    event_type="dwell",
-                    timestamp=now,
-                    dwell_time=dwell_dur,
-                    centroid=centroid,
-                    bbox=bbox,
-                )
-                events.append(event)
-                self.event_history.append(event)
+        occ = self.current_occupants[tid]
+        occ["last_seen"] = now
+        occ["centroid"] = centroid
+        occ["bbox"] = bbox
+        dwell_dur = now - occ["entry_time"]
+        if dwell_dur >= self.dwell_threshold and not occ["dwell_emitted"]:
+            occ["dwell_emitted"] = True
+            self._append_zone_event("dwell", tid, now, dwell_dur, centroid, bbox, events)
 
     def _handle_departed_occupants(self, present_tids, now, events):
         departed_tids = [tid for tid in self.current_occupants if tid not in present_tids]
@@ -181,17 +184,9 @@ class ZoneROI:
             occ = self.current_occupants.pop(tid)
             dwell_dur = max(0.0, now - occ["entry_time"])
             self.total_exits += 1
-            event = ZoneEvent(
-                zone_id=self.name,
-                track_id=tid,
-                event_type="exit",
-                timestamp=now,
-                dwell_time=dwell_dur,
-                centroid=occ.get("centroid"),
-                bbox=occ.get("bbox"),
+            self._append_zone_event(
+                "exit", tid, now, dwell_dur, occ.get("centroid"), occ.get("bbox"), events
             )
-            events.append(event)
-            self.event_history.append(event)
 
     def draw(self, frame: np.ndarray, alpha=0.25, color=None, show_label=True) -> np.ndarray:
         """Draw translucent polygon overlay and occupancy badge onto frame."""

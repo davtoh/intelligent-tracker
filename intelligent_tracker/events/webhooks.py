@@ -6,7 +6,6 @@ import hmac
 import json
 import logging
 import threading
-import time
 from typing import Any, Dict, List, Optional, Union
 
 try:
@@ -16,10 +15,8 @@ except ImportError:
 
 try:
     import urllib.request as urllib_request
-    import urllib.error as urllib_error
 except ImportError:
     urllib_request = None
-    urllib_error = None
 
 from intelligent_tracker.events.types import BaseEvent
 
@@ -47,6 +44,7 @@ class WebhookDispatcher:
         headers: Optional[Dict[str, str]] = None,
         custom_headers: Optional[Dict[str, str]] = None,
         stop_event: Optional[threading.Event] = None,
+        mock: bool = False,
     ):
         self.url = str(url)
         self.auth_header = auth_header
@@ -58,6 +56,7 @@ class WebhookDispatcher:
         self.event_types = set(event_types) if event_types else None
         self.custom_headers = dict(headers or custom_headers or {})
         self.stop_event = stop_event or threading.Event()
+        self.mock = bool(mock)
 
         # Telemetry metrics
         self.sent_count = 0
@@ -133,6 +132,12 @@ class WebhookDispatcher:
 
         if self.event_types and event.event_type not in self.event_types:
             return False
+
+        if self.mock:
+            self.sent_count += 1
+            self.last_status_code = 200
+            self.history.append({"event_id": event.event_id, "status": 200, "mock": True})
+            return True
 
         payload = self.build_payload(event)
         json_data = json.dumps(payload).encode("utf-8")

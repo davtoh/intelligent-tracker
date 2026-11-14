@@ -2,10 +2,6 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# import built-in modules
-import sys
-from time import sleep
-
 # import third party modules
 import os
 import matplotlib as _matplotlib

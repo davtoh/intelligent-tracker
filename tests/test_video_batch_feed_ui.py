@@ -22,9 +22,8 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
-import dashboard.app as app_module
 from dashboard.camera_pool import CameraPool
-from dashboard.dependencies import VIDEOS_DIR
+from dashboard.dependencies import VIDEOS_DIR, bind_app_state, clear_app_state
 from intelligent_tracker.database import TrackerDB
 
 
@@ -42,8 +41,12 @@ class TestVideoBatchFeedUI(unittest.TestCase):
             db_path=cls.db_path,
             autostart=False,
         )
-        app_module.camera_pool = cls.pool
-        app_module.stream_manager = cls.pool.primary_stream
+        bind_app_state(
+            app,
+            camera_pool=cls.pool,
+            stream_manager=cls.pool.primary_stream,
+            db=cls.db,
+        )
 
         cls.client = TestClient(app)
 
@@ -62,6 +65,7 @@ class TestVideoBatchFeedUI(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        clear_app_state(app)
         if cls.pool:
             cls.pool.stop_all()
         if cls.db:

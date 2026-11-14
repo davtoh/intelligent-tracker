@@ -1,0 +1,30 @@
+    <!-- TAB 4: ANALYTICS & HEATMAP -->
+    <section class="tab-pane" id="tab-analytics" role="tabpanel">
+      <div class="analytics-grid">
+        <!-- Entry / Exit Chart -->
+        <div class="glass-panel chart-card">
+          <div class="card-header">
+            <h3>Entry & Exit Traffic Flows</h3>
+            <span class="panel-badge">Real-time series</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="trafficChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Spatial Heatmap Viewer -->
+        <div class="glass-panel heatmap-card">
+          <div class="card-header">
+            <h3>Cumulative Spatial Density Heatmap</h3>
+            <div class="heatmap-actions">
+              <button class="btn btn-sm btn-outline" id="btn-refresh-heatmap">🔄 Refresh Heatmap</button>
+              <a class="btn btn-sm btn-secondary" id="btn-download-heatmap" href="/analytics/heatmap" target="_blank">📥
+                Export High-Res</a>
+            </div>
+          </div>
+          <div class="heatmap-viewport">
+            <img id="static-heatmap-img" src="/analytics/heatmap" alt="Accumulated Density Heatmap" />
+          </div>
+        </div>
+      </div>
+    </section>

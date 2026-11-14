@@ -12,11 +12,13 @@ import os
 import time
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     VIDEOS_DIR,
-    get_active_stream_manager,
+    get_camera_pool,
+    get_db,
     get_scenario_mgr,
 )
 from dashboard.schemas import JourneyExportRequest, SpatialTransitionRequest
@@ -25,7 +27,9 @@ from intelligent_tracker.journey import (
     JourneyVideoExporter,
     TrajectoryJourneySearcher,
 )
+from intelligent_tracker.scenarios import ScenarioManager
 from intelligent_tracker.topology import SpatialTransitionLink
+from intelligent_tracker.world import WorldGraph, WorldTacticalMinimap
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.topology")
 
@@ -33,9 +37,8 @@ router = APIRouter(tags=["Topology & Journey"])
 
 
 @router.get("/api/topology/transitions")
-async def list_spatial_transitions():
+async def list_spatial_transitions(sm: ScenarioManager = Depends(get_scenario_mgr)):
     """List registered cross-camera spatial transition links."""
-    sm = get_scenario_mgr()
     return [
         l.to_dict()
         for l in sm.topology.list_links()
@@ -44,9 +47,11 @@ async def list_spatial_transitions():
 
 
 @router.post("/api/topology/transitions")
-async def create_spatial_transition(req: SpatialTransitionRequest):
+async def create_spatial_transition(
+    req: SpatialTransitionRequest,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Define a predictive spatial transition link between camera zones."""
-    sm = get_scenario_mgr()
     link_id = (
         req.link_id
         or f"link_{req.source_camera}_{req.source_zone}_to_{req.target_camera}_{req.target_zone}".replace(
@@ -84,9 +89,11 @@ async def create_spatial_transition(req: SpatialTransitionRequest):
 
 
 @router.delete("/api/topology/transitions/{link_id}")
-async def delete_spatial_transition(link_id: str):
+async def delete_spatial_transition(
+    link_id: str,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """Delete a spatial transition link by ID."""
-    sm = get_scenario_mgr()
     deleted = sm.topology.remove_link(link_id)
     if sm.db:
         db_del = sm.db.delete_spatial_transition(link_id)
@@ -97,9 +104,11 @@ async def delete_spatial_transition(link_id: str):
 
 
 @router.get("/api/topology/priors")
-async def list_active_priors(camera_id: Optional[str] = None):
+async def list_active_priors(
+    camera_id: Optional[str] = None,
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+):
     """List currently active predictive spatial priors within valid transit windows."""
-    sm = get_scenario_mgr()
     now = time.time()
     priors = sm.topology.active_priors
     out = []
@@ -110,6 +119,17 @@ async def list_active_priors(camera_id: Optional[str] = None):
     return out
 
 
+@router.get("/api/topology/world-map")
+async def get_topology_world_map(
+    sm: ScenarioManager = Depends(get_scenario_mgr),
+    pool: CameraPool | None = Depends(get_camera_pool),
+):
+    """Return unified global world minimap telemetry across cameras, zones, edges, and entities."""
+    world_graph = sm.world_graph or (getattr(pool, "world_graph", None) if pool else None) or WorldGraph()
+    minimap = WorldTacticalMinimap(world_graph, coordinate_mapper=sm.coordinate_mapper)
+    return minimap.build_world_minimap_telemetry()
+
+
 @router.get("/api/journey/search")
 async def search_trajectory_journey(
     entity_id: Optional[int] = None,
@@ -117,10 +137,9 @@ async def search_trajectory_journey(
     track_id: Optional[int] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
+    db: TrackerDB = Depends(get_db),
 ):
     """Reconstruct an entity's complete chronological trajectory across multiple cameras."""
-    mgr = get_active_stream_manager()
-    db = mgr.db if (mgr and mgr.db) else TrackerDB()
     searcher = TrajectoryJourneySearcher(db)
     journey = searcher.search_journey(
         entity_id=entity_id,
@@ -133,10 +152,11 @@ async def search_trajectory_journey(
 
 
 @router.post("/api/journey/export")
-async def export_journey_video_route(req: JourneyExportRequest):
+async def export_journey_video_route(
+    req: JourneyExportRequest,
+    db: TrackerDB = Depends(get_db),
+):
     """Slices and concatenates cross-camera video segments into a downloadable MP4 journey file."""
-    mgr = get_active_stream_manager()
-    db = mgr.db if (mgr and mgr.db) else TrackerDB()
     searcher = TrajectoryJourneySearcher(db)
     journey = searcher.search_journey(
         entity_id=req.entity_id,

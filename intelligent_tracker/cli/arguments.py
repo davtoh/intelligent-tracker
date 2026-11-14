@@ -132,8 +132,28 @@ def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--frames",
         type=int,
-        default=60,
-        help="Maximum frames to process in headless mode before exiting (0 = run indefinitely)",
+        default=None,
+        help="Maximum frames to process before exiting (defaults to 60 in headless/benchmark mode; 0 = run indefinitely)",
+    )
+    parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        help="Collect per-frame step latency metrics (min/mean/p95/max ms, effective FPS) and print report",
+    )
+    parser.add_argument(
+        "--benchmark-output",
+        default=None,
+        help="Optional path to export benchmark latency/FPS report as JSON",
+    )
+    parser.add_argument(
+        "--check-models",
+        action="store_true",
+        help="Verify registered ONNX model weights presence and SHA-256 integrity, then exit",
+    )
+    parser.add_argument(
+        "--governance",
+        action="store_true",
+        help="Enable RSAC, active learning, and universal enrollment governance subsystems",
     )
 
 

@@ -13,12 +13,14 @@ from intelligent_tracker.video.devices import (
 )
 from intelligent_tracker.video.source import VideoSource
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
+from intelligent_tracker.video.writers import PipelineVideoWriter
 
 __all__ = [
     "CaptureReadGuard",
     "CircuitState",
     "VideoSource",
     "SyntheticFrameGenerator",
+    "PipelineVideoWriter",
     "is_physical_camera",
     "find_physical_cameras",
     "find_first_real_camera",

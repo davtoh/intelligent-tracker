@@ -3,31 +3,35 @@
 """
 Intelligent Tracker - Dynamic Multi-Stream Orchestrator (CameraPool).
 
-Orchestrates concurrent StreamManager instances across multiple camera channels.
-Enables hot-add, edit, toggle, and removal of camera feeds dynamically
-at runtime without requiring server restarts.
-Handles automatic boot restoration and state persistence via `configs/cameras.json`.
+Thin public facade coordinating CameraConfigStore, StreamPoolCoordinator,
+and shared WorldGraph across multi-camera channels.
 """
 
-import os
-import sys
-import time
-import json
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Any
 
+from dashboard.services.camera_config_store import CameraConfigStore
+from dashboard.services.camera_pool_queries import (
+    CameraPoolQueryMixin,
+    CameraPoolStateMixin,
+)
+from dashboard.services.stream_pool_coordinator import StreamPoolCoordinator
 from dashboard.stream_manager import StreamManager
+from intelligent_tracker.world import (
+    GlobalCoordinateMapper,
+    MultiCameraHandoffCoordinator,
+    WorldGraph,
+)
 
 logger = logging.getLogger("intelligent_tracker.camera_pool")
 
 
-class CameraPool:
+class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
     """
-    Thread-safe multi-camera stream pool manager.
-    Coordinates active StreamManager instances, camera configurations,
-    hot-reloading, and persistent state storage.
+    Thread-safe multi-camera stream pool facade.
+    Delegates configuration persistence to CameraConfigStore and stream
+    lifecycle transitions to StreamPoolCoordinator while preserving public contracts.
     """
 
     def __init__(
@@ -36,164 +40,41 @@ class CameraPool:
         db_path: str = "data/tracker.db",
         base_config_path: str = "configs/alert_demo.yaml",
         autostart: bool = True,
-    ):
+    ) -> None:
         self.config_file = config_file
         self.db_path = db_path
         self.base_config_path = base_config_path
         self._autostart = autostart
 
         self._lock = threading.RLock()
-        self.camera_configs: Dict[str, Dict[str, Any]] = {}
-        self.streams: Dict[str, StreamManager] = {}
+        self.coordinate_mapper = GlobalCoordinateMapper()
+        self.world_graph = WorldGraph(coordinate_mapper=self.coordinate_mapper)
+        self.handoff_coordinator = MultiCameraHandoffCoordinator(
+            self.world_graph,
+            coordinate_mapper=self.coordinate_mapper,
+        )
+        self.world_graph.handoff_coordinator = self.handoff_coordinator
+        self._config_store = CameraConfigStore(config_file=config_file, lock=self._lock)
+        self._coordinator = StreamPoolCoordinator(
+            db_path=db_path,
+            base_config_path=base_config_path,
+            world_graph=self.world_graph,
+            lock=self._lock,
+        )
 
         # Auto-restore configured cameras
         self.load_cameras()
 
-    @property
-    def primary_stream(self) -> Optional[StreamManager]:
-        """
-        Returns the primary or first active StreamManager.
-        Maintains 100% backward compatibility for single-camera endpoints.
-        """
-        with self._lock:
-            if "cam_01" in self.streams and self.streams["cam_01"].is_running:
-                return self.streams["cam_01"]
-            for mgr in self.streams.values():
-                if mgr.is_running:
-                    return mgr
-            # Return any existing stream manager even if stopped
-            if self.streams:
-                return next(iter(self.streams.values()))
-            return None
+    def load_cameras(self) -> None:
+        """Load saved camera configurations and instantiate enabled streams."""
+        configs, seeded = self._config_store.load_cameras()
+        if seeded:
+            self.save_cameras()
+        self._coordinator.restore_enabled_streams(configs, autostart=self._autostart)
 
-    @property
-    def rsac_manager(self) -> Optional[Any]:
-        """Returns the primary stream's RSACManager."""
-        sm = self.primary_stream
-        return sm.rsac_manager if sm else None
-
-    @property
-    def active_learning(self) -> Optional[Any]:
-        """Returns the primary stream's ActiveLearningManager."""
-        sm = self.primary_stream
-        return sm.active_learning if sm else None
-
-    @property
-    def enrollment_manager(self) -> Optional[Any]:
-        """Returns the primary stream's UniversalEnrollmentManager."""
-        sm = self.primary_stream
-        return sm.enrollment_manager if sm else None
-
-    def reload_all_galleries(self):
-        """Reload Re-ID galleries and RSAC policies across all active streams."""
-        with self._lock:
-            for sm in self.streams.values():
-                if sm.gallery_matcher:
-                    sm.gallery_matcher.reload_gallery()
-                if sm.rsac_manager:
-                    sm.rsac_manager.reload()
-
-    def load_cameras(self):
-        """
-        Loads saved camera configurations from `configs/cameras.json`.
-        If missing or empty, seeds default primary camera configuration.
-        """
-        with self._lock:
-            configs_loaded = False
-            if os.path.exists(self.config_file):
-                try:
-                    with open(self.config_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        if isinstance(data, list):
-                            self.camera_configs = {c["id"]: c for c in data if "id" in c}
-                            configs_loaded = True
-                        elif isinstance(data, dict):
-                            self.camera_configs = data
-                            configs_loaded = True
-                except Exception as e:
-                    logger.warning("Failed to load %s: %s", self.config_file, e)
-
-            if not configs_loaded or not self.camera_configs:
-                # Seed default primary camera
-                default_cam = {
-                    "id": "cam_01",
-                    "name": "Main Entrance (Synthetic)",
-                    "source": "synthetic",
-                    "type": "synthetic",
-                    "enabled": True,
-                    "detector": "mock",
-                    "tracker": "centroid",
-                }
-                self.camera_configs = {"cam_01": default_cam}
-                self.save_cameras()
-
-            # Instantiate StreamManagers for enabled cameras
-            for cam_id, cfg in list(self.camera_configs.items()):
-                if cfg.get("enabled", True):
-                    self._create_and_register_stream(cam_id, cfg, start=self._autostart)
-
-    def save_cameras(self):
-        """Persists current camera configurations to JSON file."""
-        with self._lock:
-            os.makedirs(os.path.dirname(self.config_file) or ".", exist_ok=True)
-            try:
-                with open(self.config_file, "w", encoding="utf-8") as f:
-                    json.dump(list(self.camera_configs.values()), f, indent=2)
-            except Exception as e:
-                logger.error("Failed to save camera configuration to %s: %s", self.config_file, e)
-
-    def _create_and_register_stream(
-        self,
-        camera_id: str,
-        cfg: Dict[str, Any],
-        start: bool = True,
-    ) -> StreamManager:
-        """Internal helper to instantiate and start a StreamManager."""
-        raw_source = cfg.get("source", "synthetic")
-        device_name = cfg.get("device_name") or cfg.get("details", {}).get("device_name")
-        name = cfg.get("name", f"Camera {camera_id.upper()}")
-
-        from intelligent_tracker.camera_resolver import CameraPathResolver
-        from dashboard.services.camera_diagnostics import CameraHealthManager
-
-        resolved_source, meta = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
-        is_source_error = meta.get("status") == "error"
-
-        custom_cfg = {}
-        det_dict = {}
-        if cfg.get("detector"):
-            det_dict["model"] = cfg["detector"]
-        if cfg.get("confidence") is not None:
-            det_dict["confidence"] = cfg["confidence"]
-        if cfg.get("classes") is not None:
-            det_dict["classes"] = cfg["classes"]
-        if det_dict:
-            custom_cfg["detector"] = det_dict
-
-        if cfg.get("tracker"):
-            custom_cfg["tracker"] = {"type": cfg["tracker"]}
-
-        mgr = StreamManager(
-            config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
-            name=name, source_override=resolved_source, custom_cfg=custom_cfg if custom_cfg else None,
-        )
-
-        self.streams[camera_id] = mgr
-        if is_source_error:
-            CameraHealthManager().set_error(
-                camera_id,
-                f"Source not found: {raw_source}",
-                error_code=meta.get("error_code", "FILE_NOT_FOUND"),
-                attempted_paths=meta.get("attempted_paths"),
-            )
-            logger.warning("Camera stream [%s] '%s' registered offline: source not found (%s)", camera_id, name, raw_source)
-        elif start:
-            # Stagger physical hardware acquisitions to prevent DirectShow MSMF lockups on Windows
-            if isinstance(resolved_source, int) or (isinstance(resolved_source, str) and resolved_source.isdigit()):
-                threading.Event().wait(0.15)
-            mgr.start()
-            logger.info("Started camera stream [%s] '%s' (%s -> %s)", camera_id, name, raw_source, resolved_source)
-        return mgr
+    def save_cameras(self) -> None:
+        """Persist current camera configurations to JSON file."""
+        self._config_store.save_cameras()
 
     def add_camera(
         self,
@@ -201,297 +82,102 @@ class CameraPool:
         name: str,
         source: Any,
         cam_type: str = "rtsp",
-        detector: Optional[str] = None,
-        tracker: Optional[str] = None,
-        confidence: Optional[float] = None,
-        classes: Optional[List[str]] = None,
+        detector: str | None = None,
+        tracker: str | None = None,
+        confidence: float | None = None,
+        classes: list[str] | None = None,
         enabled: bool = True,
         autostart: bool = True,
-        details: Optional[Dict[str, Any]] = None,
-        device_name: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        device_name: str | None = None,
     ) -> StreamManager:
-        """
-        Hot-adds a new camera feed dynamically without server restarts.
-
-        Args:
-            camera_id: Unique camera channel identifier (e.g. 'cam_02').
-            name: Friendly human-readable label.
-            source: Source string (RTSP URL, video file path, or USB index).
-            cam_type: 'rtsp', 'usb', 'video_file', 'synthetic'.
-            detector: Model detector override ('yolov8', 'mock', etc.).
-            tracker: Tracker algorithm override ('sort', 'centroid').
-            confidence: Optional detection confidence threshold.
-            classes: Optional target class filter list.
-            enabled: Whether stream is active immediately.
-            autostart: Whether to start worker thread immediately.
-            details: Optional extra metadata (ip, port, vendor, etc.).
-            device_name: Optional persistent device friendly name for hardware matching.
-
-        Returns:
-            The created StreamManager instance.
-        """
-        old_mgr = None
+        """Hot-add a new camera feed dynamically without server restarts."""
         with self._lock:
-            # If camera already exists, pop old manager to stop outside lock
-            if camera_id in self.streams:
-                old_mgr = self.streams.pop(camera_id, None)
-
-            resolved_device_name = device_name or (details.get("device_name") if details else None)
-            det_default = "mock" if (str(cam_type).lower() in ("synthetic", "mock") or str(source).lower() in ("synthetic", "mock")) else "yolov8"
-
-            cam_entry = {
-                "id": camera_id, "name": name, "source": source, "type": cam_type,
-                "enabled": enabled, "detector": detector or det_default, "tracker": tracker or "centroid",
-                "confidence": float(confidence) if confidence is not None else 0.40,
-                "classes": classes, "details": details or {}, "device_name": resolved_device_name,
-                "created_at": time.time(),
-            }
-
-            self.camera_configs[camera_id] = cam_entry
+            cam_entry = self._config_store.build_and_store_entry(
+                camera_id=camera_id,
+                name=name,
+                source=source,
+                cam_type=cam_type,
+                detector=detector,
+                tracker=tracker,
+                confidence=confidence,
+                classes=classes,
+                enabled=enabled,
+                details=details,
+                device_name=device_name,
+            )
             self.save_cameras()
-
-            if enabled:
-                mgr = self._create_and_register_stream(camera_id, cam_entry, start=False)
-            else:
-                mgr = StreamManager(
-                    config_path=self.base_config_path, db_path=self.db_path,
-                    camera_id=camera_id, name=name, source_override=source,
-                )
-                self.streams[camera_id] = mgr
-
-        if old_mgr:
-            try:
-                old_mgr.stop()
-            except Exception as e:
-                logger.debug("Error stopping old manager in add_camera: %s", e)
-
-        if enabled and autostart and mgr:
-            raw_source = cam_entry.get("source", "")
-            if isinstance(raw_source, int) or (isinstance(raw_source, str) and str(raw_source).isdigit()):
-                threading.Event().wait(0.15)
-            mgr.start()
-            logger.info("Started camera stream [%s] '%s' (%s)", camera_id, name, raw_source)
-
-        return mgr
+        return self._coordinator.register_camera_stream(
+            camera_id=camera_id,
+            cam_entry=cam_entry,
+            enabled=enabled,
+            autostart=autostart,
+        )
 
     def update_camera(
         self,
         camera_id: str,
-        name: Optional[str] = None,
-        source: Optional[Any] = None,
-        cam_type: Optional[str] = None,
-        enabled: Optional[bool] = None,
-        detector: Optional[str] = None,
-        tracker: Optional[str] = None,
-        confidence: Optional[float] = None,
-        classes: Optional[List[str]] = None,
-        device_name: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        name: str | None = None,
+        source: Any | None = None,
+        cam_type: str | None = None,
+        enabled: bool | None = None,
+        detector: str | None = None,
+        tracker: str | None = None,
+        confidence: float | None = None,
+        classes: list[str] | None = None,
+        device_name: str | None = None,
+        details: dict[str, Any] | None = None,
     ) -> bool:
-        """
-        Updates an existing camera configuration dynamically.
-        Restarts the background worker if source, pipeline, or enabled status changed.
-        """
+        """Update an existing camera configuration and hot-reload its stream if needed."""
         with self._lock:
-            if camera_id not in self.camera_configs:
-                return False
-
-            cfg = self.camera_configs[camera_id]
-            source_changed = (source is not None and source != cfg.get("source"))
-            enabled_changed = (enabled is not None and enabled != cfg.get("enabled"))
-            device_name_changed = (device_name is not None and device_name != cfg.get("device_name"))
-            pipeline_changed = (
-                (detector is not None and detector != cfg.get("detector"))
-                or (tracker is not None and tracker != cfg.get("tracker"))
-                or (confidence is not None and confidence != cfg.get("confidence"))
-                or (classes is not None and classes != cfg.get("classes"))
+            found, needs_restart, cfg = self._config_store.update_entry(
+                camera_id,
+                name=name,
+                source=source,
+                cam_type=cam_type,
+                enabled=enabled,
+                detector=detector,
+                tracker=tracker,
+                confidence=confidence,
+                classes=classes,
+                device_name=device_name,
+                details=details,
             )
-
-            if name is not None:
-                cfg["name"] = name
-            if source is not None:
-                cfg["source"] = source
-            if cam_type is not None:
-                cfg["type"] = cam_type
-            if enabled is not None:
-                cfg["enabled"] = enabled
-            if detector is not None:
-                cfg["detector"] = detector
-            if tracker is not None:
-                cfg["tracker"] = tracker
-            if confidence is not None:
-                cfg["confidence"] = float(confidence)
-            if classes is not None:
-                cfg["classes"] = classes
-            if device_name is not None:
-                cfg["device_name"] = device_name
-            if details is not None:
-                cfg["details"] = details
-
+            if not found or cfg is None:
+                return False
             self.save_cameras()
 
-            # Hot reload stream if necessary
-            old_mgr = None
-            if source_changed or enabled_changed or device_name_changed or pipeline_changed:
-                if camera_id in self.streams:
-                    old_mgr = self.streams.pop(camera_id)
-
-                if cfg.get("enabled", True):
-                    self._create_and_register_stream(camera_id, cfg, start=False)
-
-        if old_mgr:
-            try:
-                old_mgr.stop()
-            except Exception as e:
-                logger.debug("Error stopping old manager in update_camera: %s", e)
-
-        if (source_changed or enabled_changed or device_name_changed or pipeline_changed) and cfg.get("enabled", True):
-            with self._lock:
-                new_mgr = self.streams.get(camera_id)
-            if new_mgr and not new_mgr.is_running:
-                raw_source = cfg.get("source", "")
-                if isinstance(raw_source, int) or (isinstance(raw_source, str) and str(raw_source).isdigit()):
-                    threading.Event().wait(0.15)
-                new_mgr.start()
-
+        if needs_restart:
+            self._coordinator.restart_stream(camera_id, cfg)
         return True
 
     def remove_camera(self, camera_id: str) -> bool:
-        """
-        Stops and removes a camera stream dynamically from the pool.
-        Never holds self._lock across blocking worker teardown.
-        """
+        """Stop and remove a camera stream dynamically from the pool."""
         with self._lock:
-            mgr = self.streams.pop(camera_id, None)
-            removed_cfg = self.camera_configs.pop(camera_id, None)
+            removed_cfg = self._config_store.remove_entry(camera_id)
             self.save_cameras()
-
-        if mgr:
-            try:
-                mgr.stop()
-            except Exception as e:
-                logger.debug("Error stopping manager in remove_camera: %s", e)
-
+        self._coordinator.remove_stream(camera_id)
         logger.info("Removed camera [%s] from pool", camera_id)
         return removed_cfg is not None
 
-    def toggle_camera(self, camera_id: str, enabled: Optional[bool] = None) -> bool:
-        """Enables or pauses a camera stream in the pool."""
+    def toggle_camera(self, camera_id: str, enabled: bool | None = None) -> bool:
+        """Enable or pause a camera stream in the pool."""
         with self._lock:
             if camera_id not in self.camera_configs:
                 return False
-
             current_enabled = self.camera_configs[camera_id].get("enabled", True)
             new_state = (not current_enabled) if enabled is None else bool(enabled)
-            self.update_camera(camera_id, enabled=new_state)
-            return new_state
+        self.update_camera(camera_id, enabled=new_state)
+        return new_state
 
-    def get_stream(self, camera_id: Optional[str] = None) -> Optional[StreamManager]:
-        """
-        Retrieves StreamManager for given camera ID.
-        If camera_id is None, empty, or 'default', returns primary_stream.
-        """
-        with self._lock:
-            if not camera_id or camera_id in ("default", "primary"):
-                return self.primary_stream
-            return self.streams.get(camera_id)
+    def start_all(self) -> None:
+        """Start all enabled camera streams."""
+        self._coordinator.start_all(self.camera_configs)
 
-    def get_latest_frame_jpeg(self, camera_id: Optional[str] = None) -> Optional[bytes]:
-        """Gets latest encoded JPEG frame bytes for camera."""
-        mgr = self.get_stream(camera_id)
-        if mgr:
-            return mgr.get_latest_frame_jpeg()
-        return None
-
-    def list_cameras(self) -> List[Dict[str, Any]]:
-        """
-        Returns real-time status and telemetry for all configured cameras.
-        """
-        result = []
-        with self._lock:
-            for cam_id, cfg in self.camera_configs.items():
-                mgr = self.streams.get(cam_id)
-                telemetry = mgr.get_latest_telemetry() if mgr else {}
-                is_running = mgr.is_running if mgr else False
-
-                res_str = "640x480"
-                is_synth = False
-                if mgr and mgr.video_source:
-                    res_str = f"{mgr.video_source.width}x{mgr.video_source.height}"
-                    is_synth = mgr.video_source.is_synthetic
-
-                from dashboard.services.camera_diagnostics import CameraHealthManager
-                health = CameraHealthManager().get_health(cam_id)
-                health_status = "paused" if not cfg.get("enabled", True) else (
-                    health.status if health.status != "unknown" else ("online" if is_running else "offline")
-                )
-                if is_running and health.status == "error":
-                    health_status = "error"
-
-                result.append({
-                    "id": cam_id, "name": cfg.get("name", f"Camera {cam_id}"),
-                    "source": str(cfg.get("source", "synthetic")),
-                    "type": cfg.get("type", "synthetic" if is_synth else "rtsp"),
-                    "detector": cfg.get("detector", "yolov8"), "tracker": cfg.get("tracker", "centroid"),
-                    "confidence": cfg.get("confidence", 0.40), "classes": cfg.get("classes"),
-                    "enabled": cfg.get("enabled", True), "status": health_status,
-                    "error_code": health.error_code if health.error_code != "OK" else None,
-                    "error_message": health.last_error, "suggested_action": health.suggested_action,
-                    "device_name": cfg.get("device_name") or (cfg.get("details") or {}).get("device_name"),
-                    "fps": round(telemetry.get("fps", 0.0), 1), "resolution": res_str,
-                    "active_tracks_count": len(telemetry.get("active_tracks", [])),
-                    "source_type": "synthetic" if is_synth else "physical",
-                })
-        return result
-
-    def start_all(self):
-        """Starts all enabled camera streams."""
-        with self._lock:
-            for cam_id, cfg in self.camera_configs.items():
-                if cfg.get("enabled", True):
-                    mgr = self.streams.get(cam_id)
-                    if not mgr:
-                        self._create_and_register_stream(cam_id, cfg, start=True)
-                    elif not mgr.is_running:
-                        mgr.start()
-
-    def signal_stop_all(self):
+    def signal_stop_all(self) -> None:
         """Immediately broadcast stop signal to all active streams without blocking."""
-        with self._lock:
-            for mgr in self.streams.values():
-                if hasattr(mgr, "signal_stop"):
-                    try:
-                        mgr.signal_stop()
-                    except Exception as e:
-                        logger.debug("Error signaling stop on manager: %s", e)
+        self._coordinator.signal_stop_all()
 
-    def stop_all(self, parallel: bool = True):
-        """Stops all active camera streams concurrently in parallel.
-
-        Adheres strictly to concurrency rules: never holds self._lock across
-        blocking thread joins or ThreadPoolExecutor teardowns.
-        """
-        # Pass 1: Broadcast immediate stop signal and snapshot managers under lock
-        with self._lock:
-            self.signal_stop_all()
-            mgrs = list(self.streams.values())
-            self.streams.clear()
-
-        # Pass 2: Concurrent or sequential teardown OUTSIDE lock
-        def _stop_stream(m):
-            try:
-                m.stop()
-            except Exception as e:
-                logger.debug("Error stopping manager: %s", e)
-
-        if parallel and mgrs:
-            with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
-                futures = [executor.submit(_stop_stream, m) for m in mgrs]
-                for f in as_completed(futures):
-                    try:
-                        f.result()
-                    except Exception:
-                        pass
-        else:
-            for m in mgrs:
-                _stop_stream(m)
+    def stop_all(self, parallel: bool = True) -> None:
+        """Stop all active camera streams concurrently in parallel."""
+        self._coordinator.stop_all(parallel=parallel)

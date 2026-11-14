@@ -1,5 +1,100 @@
 # Changelog
 
+## [2026-11-14] docs: Step 6 Milestone 3: Sphinx Docs Sync, Dead Import Cleanup & Packaging Polish
+- **Type**: docs
+- **Summary**: Updated Sphinx docs for pipeline/world/memory/cli/recording/models APIs, synced README.rst and pyproject.toml readme field, removed 28 unused imports across 21 modules while preserving availability probes, and verified 541/541 tests + Sphinx -W build.
+- **Files** (31):
+  - `README.rst`
+  - `dashboard/routers/videos.py`
+  - `dashboard/services/frame_overlay.py`
+  - `dashboard/services/shutdown_handler.py`
+  - `documentation/dashboard.rst`
+  - `documentation/deployment.rst`
+  - `documentation/index.rst`
+  - `documentation/intelligent_tracker.rst`
+  - ... (+23 more)
+- **Verification**: python -m unittest discover tests && python -m sphinx -a -W --keep-going documentation/ documentation/_build/html/
+
+## [2026-11-14] feat: Step 6 Milestone 2: CLI Benchmarking, Model Verification & WorldGraph Parity
+- **Type**: feat
+- **Summary**: Added BenchmarkCollector (--benchmark/--benchmark-output/--check-models), GET/POST /api/system/models*, GET /api/world/snapshot|entities, and intelligent-tracker-ctl world|models subcommands.
+- **Files** (12):
+  - `.TODO/step_6_cli_dashboard_operator_parity.md`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/world.py`
+  - `intelligent_tracker/cli/__init__.py`
+  - `intelligent_tracker/cli/arguments.py`
+  - `intelligent_tracker/cli/ctl.py`
+  - `intelligent_tracker/cli/pipeline_builder.py`
+  - `intelligent_tracker/cli/runner.py`
+  - ... (+4 more)
+- **Verification**: python -m unittest tests/test_cli_operator_parity.py tests/test_cli_runner.py tests/test_cli_ask.py tests/test_world_query_api.py tests/test_entrypoints.py tests/test_modernization.py tests/test_camera_recording.py
+
+## [2026-11-13] feat: Step 5 Milestone 4: World Query API, CLI ask Parity & Sphinx Docs
+- **Type**: feat
+- **Summary**: Added /api/world/query, /api/world/confidence/{entity_id}, /api/world/timeline FastAPI routes, get_world_query_engine DI, intelligent-tracker ask and intelligent-tracker-ctl ask CLI parity, Sphinx documentation, and API/CLI parity tests.
+- **Files** (14):
+  - `dashboard/routers/world.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/dependencies.py`
+  - `dashboard/schemas.py`
+  - `dashboard/app.py`
+  - `intelligent_tracker/cli/ask.py`
+  - `intelligent_tracker/cli/runner.py`
+  - `intelligent_tracker/cli/ctl.py`
+  - ... (+6 more)
+- **Verification**: 522/522 unittest pass + Sphinx -W clean + arch-map compliant
+
+## [2026-11-13] feat: Step 4 Milestone 4: Multi-Camera Handoff, FOV Deduplication & Tactical World Minimap
+- **Type**: feat
+- **Summary**: Implemented MultiCameraHandoffCoordinator, WorldTacticalMinimap, GET /api/topology/world-map, and golden two-camera handoff tests.
+- **Files** (7):
+  - `intelligent_tracker/world/handoff.py`
+  - `intelligent_tracker/world/_handoff_helpers.py`
+  - `intelligent_tracker/world/minimap.py`
+  - `intelligent_tracker/world/_minimap_render.py`
+  - `intelligent_tracker/world/__init__.py`
+  - `dashboard/routers/topology.py`
+  - `tests/test_multi_camera_handoff.py`
+- **Verification**: 495/495 unittest pass + Sphinx -W clean + arch-map compliant
+
+## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
+- **Type**: refactor
+- **Summary**: Decomposed dashboard/static/index.html into 9 tab partials and 4 modal partials rendered via Jinja2 on GET /, and added Step 3 architecture budget verification tests.
+- **Files** (4):
+  - `dashboard/app.py`
+  - `dashboard/static/index.html`
+  - `dashboard/static/partials/`
+  - `tests/test_step3_architecture_budgets.py`
+- **Verification**: python -m unittest discover tests (471 passed)
+
+## [2026-11-13] feat: Step 2 Milestone 4: Dead Import Cleanup, Legacy Compatibility & Final Sign-Off
+- **Type**: feat
+- **Summary**: Removed dead high_objects/unused imports from scenarios.py and topology.py, added optional WorldGraph sync hooks in ScenarioManager, documented legacy compatibility boundaries in spaces.py and high_objects.py, guarded closed DB fallback in video_analytics_service.py, and verified all 450 unit/integration tests and Sphinx docs build.
+- **Files** (8):
+  - `dashboard/app.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `intelligent_tracker/core/spaces.py`
+  - `intelligent_tracker/high_objects.py`
+  - `intelligent_tracker/scenarios.py`
+  - `intelligent_tracker/topology.py`
+  - `tests/test_scenario_api.py`
+  - `tests/test_world_legacy_compat.py`
+- **Verification**: python -m unittest discover tests
+
+## [2026-11-13] feat: Step 1 Milestone 4: pyproject.toml & Package Entrypoints
+- **Type**: feat
+- **Summary**: Extracted intelligent_tracker/cli/ctl.py and dashboard/server.py from scripts/, converted scripts/stream_ctl.py and scripts/run_dashboard.py to thin wrappers, added PEP 621 pyproject.toml with console_scripts, and added tests/test_entrypoints.py.
+- **Files** (7):
+  - `intelligent_tracker/cli/ctl.py`
+  - `scripts/stream_ctl.py`
+  - `dashboard/server.py`
+  - `scripts/run_dashboard.py`
+  - `pyproject.toml`
+  - `tests/test_entrypoints.py`
+  - `tests/test_pipeline_config.py`
+- **Verification**: 427/427 unit tests passed (unittest discover tests); arch-map verified zero new modularity warnings
+
 ## [2026-11-12] feat: CaptureReadGuard Concurrency & COM Hardening
 - **Type**: feat
 - **Summary**: Hardened VideoSource and CameraPool against Windows COM DirectShow deadlocks and race conditions. Initialized COM on reader and safe driver unbind worker threads, removed unguarded reads during video looping, and made CameraPool remove_camera and update_camera lock-free during stream teardown.
@@ -45,100 +140,3 @@
   - `documentation/vms.rst`
   - `tests/test_video_pairing_and_layers.py`
 - **Verification**: unittest discover tests (348 OK); Milestone 2 suites (26 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui live browser audit OK
-
-## [2026-11-11] feat: Video Pairing, Idempotent Transcode & Resolution-Aware Overlay (M1)
-- **Type**: feat
-- **Summary**: Added H.264 pair detection in /api/videos, idempotent /transcode with force flag, unified _h264/base report and detection storage, container PTS + source_resolution propagation in BatchAnalyzer and VideoReportStore, Switch/Re-convert library and codec notice UI controls, and letterbox/pillarbox-compensated source_resolution overlay scaling.
-- **Files** (13):
-  - `intelligent_tracker/batch.py`
-  - `dashboard/services/video_transcoder.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/routers/videos.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/video_jobs.js`
-  - `dashboard/static/js/video_library.js`
-  - ... (+5 more)
-- **Verification**: unittest discover tests (344 OK); Milestone 1 suites (22 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui audit OK
-
-## [2026-11-10] feat: Video Studio SOTA Analytics, Canvas Overlay & Stacked Persistence Architecture
-- **Type**: feat
-- **Summary**: Implemented disk-backed stacked report history (`data/reports/{video}_reports.json`) and per-frame detection streaming (`data/reports/{video}_{run_id}_detections.json`). Separated raw detected objects (`total_detections`) from enrolled gallery sightings (`identifications_count`). Added synchronized real-time canvas bounding box overlay (`#scrubber-overlay-canvas`) over Scrubber player. Hardened `.video-file-card` selection, history run switcher dropdown, and active job container isolation.
-- **Files** (8):
-  - `intelligent_tracker/batch.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/js/video_library.js`
-  - `dashboard/static/video_scrubber.js`
-  - `tests/test_video_jobs.py`
-- **Verification**: 337/337 tests pass (36.96s); 15/15 dedicated video jobs tests pass (1.09s); 0 warnings Sphinx HTML documentation build
-
-## [2026-11-10] feat: Video Job Concurrency, Progress Engine & Interactive Cancellation (Milestone 17)
-- **Type**: feat
-- **Summary**: Implemented thread-safe VideoJobManager coordinator with BoundedSemaphore(2), per-video mutual exclusion, joinable cancellation, and job polling. Decoupled async job router into video_jobs.py. Added VideoJobClient frontend coordinator with animated progress bars, background task pills, and interactive 409 conflict modal. Added 12 unit and integration tests.
-- **Files** (13):
-  - `dashboard/routers/videos.py`
-  - `dashboard/schemas.py`
-  - `dashboard/services/video_jobs_service.py`
-  - `dashboard/services/video_transcoder.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/js/video_jobs.js`
-  - `dashboard/static/js/video_library.js`
-  - ... (+5 more)
-- **Verification**: 334/334 tests pass (37.2s); 12/12 dedicated video jobs tests pass (0.89s); 0 warnings Sphinx docs build
-
-## [2026-11-09] feat: System Capabilities API & Camera AI Configuration Modal (Milestone 2)
-- **Type**: feat
-- **Summary**: Implemented dynamic AI capabilities discovery endpoint (`/api/system/capabilities`) exposing detectors, trackers, Re-ID extractors, and COCO classes. Extended the VMS camera modal with an AI Detector & Tracking Intelligence section, bidirectional confidence slider/numeric inputs, class filter presets, and quick physical webcam presets. Normalized SortTracker and CentroidTracker kwargs (`max_age` / `max_disappeared`).
-- **Files** (8):
-  - `dashboard/routers/system.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/services/pipeline_factory.py`
-  - `intelligent_tracker/tracker/sort.py`
-  - `dashboard/static/css/camera_ai_config.css`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/camera_manager.js`
-  - `dashboard/static/index.html`
-  - `tests/test_camera_detector_config.py`
-- **Verification**: 317/317 tests pass (36.71s); 0 warnings Sphinx HTML build.
-
-## [2026-11-09] feat: Dynamic Detector & Pipeline Configuration (Milestone 1)
-- **Type**: feat
-- **Summary**: Implemented dynamic Edge AI detector selection, confidence thresholds, and class filtering contracts across Pydantic schemas, CameraPool orchestrator, StreamPipelineFactory, and VideoRouter. Fixed broken VideoIndexer offline batch occurrence analytics import and parameterized feed promotion.
-- **Files** (7):
-  - `dashboard/schemas.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/routers/cameras.py`
-  - `dashboard/routers/videos.py`
-  - `dashboard/services/pipeline_factory.py`
-  - `intelligent_tracker/batch.py`
-  - `tests/test_camera_detector_config.py`
-- **Verification**: 315/315 tests pass (36.01s); Sphinx HTML build succeeds with 0 warnings.
-
-## [2026-11-06] feat: Universal Runtime Trace Recorder & Dashboard Boot Resilience
-- **Type**: feat
-- **Summary**: Integrated global trace_recorder engine into system-diagnostics and wired FastAPI exception middleware. Fixed uvicorn reload directory watcher bounds, camera pool offline state handling, and spawned process PYTHONPATH propagation on Windows.
-- **Files** (4):
-  - `dashboard/app.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/services/diagnostic_bridge.py`
-  - `scripts/run_dashboard.py`
-- **Verification**: 308 tests passed in intelligent_tracker (36.99s); 116 tests passed in system-diagnostics (3.64s)
-
-## [2026-11-05] fix: Thread Safety, 12-Factor Env and Defensive Logging Fixes
-- **Type**: fix
-- **Summary**: Implemented interruptible Event.wait in WebhookDispatcher, MqttPublisher, and LifecycleManager; parameterized MQTT_BROKER; replaced JS empty catch blocks with console.debug
-- **Files** (9):
-  - `MIGRATION_LOG.md`
-  - `dashboard/static/js/telemetry.js`
-  - `dashboard/static/js/text_truncation_manager.js`
-  - `dashboard/static/video_scrubber.js`
-  - `intelligent_tracker/events/mqtt.py`
-  - `intelligent_tracker/events/webhooks.py`
-  - `intelligent_tracker/lifecycle.py`
-  - `tests/test_events_dispatchers.py`
-  - ... (+1 more)
-- **Verification**: diagnose.py tests (308 passed, 0 regressions)

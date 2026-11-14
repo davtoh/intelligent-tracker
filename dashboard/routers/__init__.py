@@ -12,27 +12,32 @@ Exports the 8 domain APIRouters:
 - analytics: Heatmap, entities, sightings, and event alerts
 - videos: Video file management, uploads, transcoding, and scrubber serving
 - topology: Spatial transitions and multi-camera trajectory journey search
+- world: World intelligence Q&A, entity confidence, and FTS5 timeline search
 """
 
 from dashboard.routers.analytics import router as analytics_router
 from dashboard.routers.cameras import router as cameras_router
 from dashboard.routers.camera_diagnostics import router as camera_diagnostics_router
+from dashboard.routers.camera_recording import router as camera_recording_router
 from dashboard.routers.rsac import router as rsac_router
 from dashboard.routers.scenarios import router as scenarios_router
 from dashboard.routers.streaming import router as streaming_router
 from dashboard.routers.system import router as system_router
 from dashboard.routers.topology import router as topology_router
 from dashboard.routers.videos import router as videos_router
+from dashboard.routers.world import router as world_router
 
 __all__ = [
     "analytics_router",
     "cameras_router",
     "camera_diagnostics_router",
+    "camera_recording_router",
     "rsac_router",
     "scenarios_router",
     "streaming_router",
     "system_router",
     "topology_router",
     "videos_router",
+    "world_router",
 ]
 

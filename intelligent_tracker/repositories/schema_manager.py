@@ -8,6 +8,8 @@ for the Intelligent Tracker persistence subsystem.
 import sqlite3
 import logging
 
+from intelligent_tracker.repositories.memory_schema import apply_memory_schema_migrations
+
 logger = logging.getLogger(__name__)
 
 
@@ -277,6 +279,7 @@ class SchemaMixin:
             cursor.execute("ALTER TABLE descriptor_versions ADD COLUMN is_anchor INTEGER DEFAULT 0;")
         except sqlite3.OperationalError:
             pass
+        apply_memory_schema_migrations(cursor)
 
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""

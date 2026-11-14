@@ -23,7 +23,7 @@ import shutil
 import sqlite3
 import logging
 import argparse
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, Optional, Any
 
 logger = logging.getLogger("intelligent_tracker.backup")
 

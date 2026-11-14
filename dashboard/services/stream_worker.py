@@ -1,25 +1,30 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-Intelligent Tracker - Stream Worker Service.
-Executes the continuous frame ingestion, computer vision inference,
-spatial analytics, Re-ID matching, and telemetry distribution loop.
+"""Intelligent Tracker - Stream Worker Service.
+
+Executes the continuous frame ingestion, FrameProcessor vision stepping,
+overlay encoding, and telemetry distribution loop.
 """
 
+from dataclasses import asdict
+import logging
 import os
 import time
-import logging
-from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
+
 import cv2
 import numpy as np
 
 from dashboard.services.camera_diagnostics import CameraHealthManager
+from intelligent_tracker.pipeline import (
+    FrameProcessor,
+    FrameStepResult,
+    PipelineBundle,
+    PipelineConfig,
+)
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
 
 
-def _diagnose_source_error(vs: Any) -> Tuple[str, str]:
+def _diagnose_source_error(vs: Any) -> tuple[str, str]:
     """Diagnose source failure root cause for health manager reporting."""
     if getattr(vs, "is_file", False) and not os.path.exists(str(vs.source)):
         return "FILE_NOT_FOUND", f"Video file not found: {vs.source}"
@@ -30,29 +35,9 @@ def _diagnose_source_error(vs: Any) -> Tuple[str, str]:
     return "NO_FRAMES_DECODED", "No video frames could be decoded from source"
 
 
-def _resize_frame_if_needed(frame: np.ndarray, max_dim: int = 1280) -> np.ndarray:
-    """Clamp oversized video frames to protect browser rendering and bandwidth."""
-    h, w = frame.shape[:2]
-    if w > max_dim or h > max_dim:
-        scale = max_dim / float(max(w, h))
-        return cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-    return frame
-
-
-def _measure_fps(curr_t: float, last_t: float, fps_samples: List[float]) -> Tuple[float, float]:
-    """Compute rolling FPS average from frame timestamps."""
-    dt = curr_t - last_t
-    if dt > 0:
-        fps_samples.append(1.0 / dt)
-        if len(fps_samples) > 30:
-            fps_samples.pop(0)
-    measured_fps = float(np.mean(fps_samples)) if fps_samples else 30.0
-    return measured_fps, curr_t
-
-
-def _extract_recent_alerts(event_bus: Optional[Any]) -> List[Dict[str, Any]]:
+def _extract_recent_alerts(event_bus: Any) -> list[dict[str, Any]]:
     """Extract serialized dictionary list from event bus."""
-    alerts = []
+    alerts: list[dict[str, Any]] = []
     if event_bus:
         for ev in event_bus.get_recent_events(limit=8):
             if hasattr(ev, "to_dict"):
@@ -64,9 +49,9 @@ def _extract_recent_alerts(event_bus: Optional[Any]) -> List[Dict[str, Any]]:
     return alerts
 
 
-def _extract_track_telemetry(tracks: Dict[int, Any], homography: Any) -> List[Dict[str, Any]]:
+def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[dict[str, Any]]:
     """Map active vision tracks into telemetry dictionaries with homography coordinates."""
-    telemetry_tracks = []
+    telemetry_tracks: list[dict[str, Any]] = []
     for tid, trk in tracks.items():
         gx, gy = homography.track_to_ground(trk.bbox)
         telemetry_tracks.append({
@@ -78,7 +63,7 @@ def _extract_track_telemetry(tracks: Dict[int, Any], homography: Any) -> List[Di
             "label": trk.label,
             "confidence": round(float(trk.confidence), 2),
             "dwell_time": round(float(trk.dwell_time), 1),
-            "entity_name": trk.entity_name,
+            "entity_name": getattr(trk, "entity_name", getattr(trk, "identity_label", None)),
             "category": getattr(trk, "category", "person"),
             "is_cluttered": bool(getattr(trk, "is_cluttered", False)),
             "clutter_partner_id": getattr(trk, "clutter_partner_id", None),
@@ -87,7 +72,7 @@ def _extract_track_telemetry(tracks: Dict[int, Any], homography: Any) -> List[Di
     return telemetry_tracks
 
 
-def _build_zones_data(analytics: Optional[Any]) -> List[Dict[str, Any]]:
+def _build_zones_data(analytics: Any) -> list[dict[str, Any]]:
     """Serialize zones from analytics engine."""
     if not analytics:
         return []
@@ -104,7 +89,7 @@ def _build_zones_data(analytics: Optional[Any]) -> List[Dict[str, Any]]:
     ]
 
 
-def _build_tripwires_data(analytics: Optional[Any]) -> List[Dict[str, Any]]:
+def _build_tripwires_data(analytics: Any) -> list[dict[str, Any]]:
     """Serialize tripwires from analytics engine."""
     if not analytics:
         return []
@@ -124,20 +109,55 @@ class StreamWorker:
 
     def __init__(self, manager: Any) -> None:
         self.manager = manager
+        self._processor: FrameProcessor | None = None
+
+    def _get_processor(self) -> FrameProcessor:
+        """Lazily build and synchronize the canonical FrameProcessor."""
+        if self._processor is None:
+            bundle = getattr(self.manager, "_pipeline_bundle", None)
+            if bundle is None:
+                bundle = PipelineBundle(
+                    config=PipelineConfig(camera_id=getattr(self.manager, "camera_id", "default")),
+                    db=getattr(self.manager, "db", None),
+                    video_source=getattr(self.manager, "video_source", None),
+                    detector=getattr(self.manager, "detector", None),
+                    tracker=getattr(self.manager, "tracker", None),
+                    analytics=getattr(self.manager, "analytics", None),
+                    reid_extractor=getattr(self.manager, "reid_extractor", None),
+                    gallery_matcher=getattr(self.manager, "gallery_matcher", None),
+                    rsac_manager=getattr(self.manager, "rsac_manager", None),
+                    active_learning=getattr(self.manager, "active_learning", None),
+                    enrollment_manager=getattr(self.manager, "enrollment_manager", None),
+                    event_bus=getattr(self.manager, "event_bus", None),
+                    event_pipeline=getattr(self.manager, "event_pipeline", None),
+                    world_graph=getattr(self.manager, "world_graph", None),
+                    world_bridge=getattr(self.manager, "world_bridge", None),
+                    world_rule_engine=getattr(self.manager, "world_rule_engine", None),
+                    confidence_engine=getattr(self.manager, "confidence_engine", None),
+                )
+            self._processor = FrameProcessor(bundle, topology=getattr(self.manager, "topology", None))
+
+        self._processor.topology = getattr(self.manager, "topology", None)
+        bundle = self._processor.bundle
+        bundle.detector = getattr(self.manager, "detector", bundle.detector)
+        bundle.tracker = getattr(self.manager, "tracker", bundle.tracker)
+        bundle.analytics = getattr(self.manager, "analytics", bundle.analytics)
+        bundle.gallery_matcher = getattr(self.manager, "gallery_matcher", bundle.gallery_matcher)
+        bundle.event_bus = getattr(self.manager, "event_bus", bundle.event_bus)
+        bundle.world_bridge = getattr(self.manager, "world_bridge", bundle.world_bridge)
+        return self._processor
 
     def run(self) -> None:
-        """Continuous pipeline loop executing detection, tracking, analytics, and frame drawing."""
+        """Continuous pipeline loop executing FrameProcessor, overlays, and telemetry."""
         if not self.manager.video_source:
             return
 
-        frame_count = 0
+        processor = self._get_processor()
         consecutive_empty = 0
-        fps_samples: List[float] = []
-        last_t = time.time()
 
         with self.manager.video_source as vs:
             while self.manager._running and not self.manager._stop_event.is_set():
-                if self._handle_hibernation(vs, frame_count):
+                if self._handle_hibernation(vs, processor.frame_count):
                     continue
 
                 ret, frame = vs.read(timeout=1.0)
@@ -146,31 +166,30 @@ class StreamWorker:
                     if should_skip:
                         continue
 
-                frame_count += 1
                 consecutive_empty = 0
-                frame = _resize_frame_if_needed(frame)
-                curr_t = time.time()
-                measured_fps, last_t = _measure_fps(curr_t, last_t, fps_samples)
-                if frame_count % 30 == 1:
-                    CameraHealthManager().set_online(self.manager.camera_id, fps=measured_fps)
+                step_res = processor.step(frame, timestamp=time.time(), max_dim=1280)
+                if step_res.frame_count % 30 == 1:
+                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
 
-                self._process_single_frame(frame, curr_t, measured_fps, frame_count)
+                self._process_single_frame(step_res)
 
-    def _process_single_frame(
-        self,
-        frame: np.ndarray,
-        curr_t: float,
-        measured_fps: float,
-        frame_count: int,
-    ) -> None:
-        """Process one frame through detection, tracking, overlays, and telemetry."""
+    def _process_single_frame(self, step_res: FrameStepResult) -> None:
+        """Store raw frame, encode overlays, and broadcast telemetry for a stepped frame."""
         with self.manager._lock:
-            self.manager._latest_raw_frame = frame.copy()
+            self.manager._latest_raw_frame = step_res.frame.copy()
 
-        tracks = self._process_vision_pipeline(frame, curr_t)
-        self._encode_annotated_frame(frame, tracks, measured_fps)
+        annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+        recorder = getattr(self.manager, "_recording_controller", None)
+        if recorder is not None and recorder.is_recording:
+            recorder.write_frame(step_res.frame, annotated)
 
-        telemetry = self._build_telemetry(tracks, curr_t, measured_fps, frame.shape, frame_count)
+        telemetry = self._build_telemetry(
+            step_res.tracks,
+            step_res.timestamp,
+            step_res.fps,
+            step_res.frame.shape,
+            step_res.frame_count,
+        )
         with self.manager._lock:
             self.manager._latest_telemetry = telemetry
 
@@ -179,7 +198,8 @@ class StreamWorker:
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:
         """Pause video capture if zero viewers are connected to conserve compute."""
-        if self.manager.subscriber_count <= 0 and frame_count > 0:
+        is_recording = getattr(self.manager, "is_recording", False)
+        if self.manager.subscriber_count <= 0 and not is_recording and frame_count > 0:
             if not self.manager._is_hibernating:
                 self.manager._is_hibernating = True
                 if hasattr(vs, "pause"):
@@ -200,7 +220,7 @@ class StreamWorker:
                     self.manager._latest_telemetry["status"] = "online"
         return False
 
-    def _handle_empty_frame(self, vs: Any, consecutive_empty: int) -> Tuple[int, bool]:
+    def _handle_empty_frame(self, vs: Any, consecutive_empty: int) -> tuple[int, bool]:
         """Handle missing frames, report diagnostics errors, and generate placeholders."""
         consecutive_empty += 1
         if consecutive_empty >= 4:
@@ -211,7 +231,10 @@ class StreamWorker:
                     self.manager._latest_telemetry and self.manager._latest_telemetry.get("status") != "error"
                 ):
                     self.manager._latest_jpeg = CameraHealthManager().create_error_placeholder_jpeg(
-                        self.manager.camera_id, name=self.manager.name, width=self.manager.width, height=self.manager.height
+                        self.manager.camera_id,
+                        name=self.manager.name,
+                        width=self.manager.width,
+                        height=self.manager.height,
                     )
                 if self.manager._latest_telemetry:
                     self.manager._latest_telemetry["status"] = "error"
@@ -224,76 +247,16 @@ class StreamWorker:
         self.manager._stop_event.wait(timeout=0.04)
         return consecutive_empty, True
 
-    def _process_vision_pipeline(self, frame: np.ndarray, curr_t: float) -> Dict[int, Any]:
-        """Execute detection, tracking, spatial analytics, and Re-ID matching."""
-        detections = []
-        if self.manager.detector:
-            try:
-                detections = self.manager.detector.detect(frame)
-            except Exception as e:
-                logger.debug("Detector error: %s", e)
+    def _process_vision_pipeline(self, frame: np.ndarray, curr_t: float) -> dict[int, Any]:
+        """Delegate single-frame CV stepping to canonical FrameProcessor."""
+        return self._get_processor().step(frame, timestamp=curr_t, max_dim=1280).tracks
 
-        tracks = {}
-        if self.manager.tracker:
-            try:
-                tracks = self.manager.tracker.update(detections, frame=frame)
-            except Exception as e:
-                logger.debug("Tracker error: %s", e)
-
-        if self.manager.analytics:
-            try:
-                analytics_res = self.manager.analytics.update(tracks, timestamp=curr_t, current_frame=frame)
-                self._handle_zone_exits(analytics_res, tracks, curr_t)
-            except Exception as e:
-                logger.warning("Analytics error: %s", e, exc_info=True)
-
-        self._process_reid(tracks, frame)
-        return tracks
-
-    def _handle_zone_exits(
+    def _encode_annotated_frame(
         self,
-        analytics_res: Optional[Dict[str, Any]],
-        tracks: Dict[int, Any],
-        curr_t: float,
-    ) -> None:
-        """Trigger cross-camera topology predictive priors on zone exit events."""
-        if not (self.manager.topology and analytics_res and "new_events" in analytics_res):
-            return
-        for ev_d in analytics_res.get("new_events", []):
-            action = ev_d.get("action") or ev_d.get("event_type")
-            if action in ("exit", "zone_exit"):
-                z_name = ev_d.get("zone_id")
-                tid = ev_d.get("track_id")
-                t_obj = tracks.get(tid)
-                ent_id = getattr(t_obj, "entity_id", None) if t_obj else None
-                ent_name = (
-                    getattr(t_obj, "entity_name", getattr(t_obj, "identity_label", f"Track #{tid}"))
-                    if t_obj
-                    else f"Track #{tid}"
-                )
-                self.manager.topology.record_zone_exit(
-                    camera_id=self.manager.camera_id,
-                    zone_name=z_name,
-                    entity_name=ent_name,
-                    entity_id=ent_id,
-                    timestamp=curr_t,
-                )
-
-    def _process_reid(self, tracks: Dict[int, Any], frame: np.ndarray) -> None:
-        """Perform Re-ID gallery matching with cross-camera topology priors."""
-        if not (self.manager.gallery_matcher and tracks):
-            return
-        try:
-            if self.manager.topology and self.manager.gallery_matcher.topology is None:
-                self.manager.gallery_matcher.topology = self.manager.topology
-            identified = self.manager.gallery_matcher.match_tracks(tracks, frame)
-            for ev in identified:
-                if self.manager.event_bus:
-                    self.manager.event_bus.publish(ev)
-        except Exception as e:
-            logger.debug("Re-ID matching error: %s", e)
-
-    def _encode_annotated_frame(self, frame: np.ndarray, tracks: Dict[int, Any], measured_fps: float) -> None:
+        frame: np.ndarray,
+        tracks: dict[int, Any],
+        measured_fps: float,
+    ) -> np.ndarray:
         """Render floating overlays and compress annotated frame to JPEG."""
         annotated = self.manager._overlay_renderer.render(
             frame=frame,
@@ -311,16 +274,22 @@ class StreamWorker:
         if ret:
             with self.manager._lock:
                 self.manager._latest_jpeg = buf.tobytes()
+        return annotated
 
     def _build_telemetry(
         self,
-        tracks: Dict[int, Any],
+        tracks: dict[int, Any],
         curr_t: float,
         measured_fps: float,
-        shape: Tuple[int, ...],
+        shape: tuple[int, ...],
         frame_count: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Construct comprehensive telemetry payload with ground plane projections."""
+        rec_status = (
+            self.manager.get_recording_status()
+            if hasattr(self.manager, "get_recording_status")
+            else {"is_recording": False}
+        )
         return {
             "camera_id": self.manager.camera_id,
             "status": "online",
@@ -334,4 +303,5 @@ class StreamWorker:
             "zones": _build_zones_data(self.manager.analytics),
             "tripwires": _build_tripwires_data(self.manager.analytics),
             "recent_alerts": _extract_recent_alerts(self.manager.event_bus),
+            "recording": rec_status,
         }

@@ -51,6 +51,7 @@ class Track:
         self.state = "tentative"
         self.velocity = (0.0, 0.0)
         self.identity_label: Optional[str] = None
+        self.entity_name: Optional[str] = None
         self.session_id: Optional[int] = None
         self.exit_point: Optional[Tuple[float, float]] = None
         self.exit_time: Optional[float] = None
@@ -150,6 +151,7 @@ class Track:
             "state": self.state,
             "is_predicting": self.state == "predicting",
             "identity_label": self.identity_label,
+            "entity_name": self.entity_name,
             "session_id": self.session_id,
             "velocity": (round(self.velocity[0], 1), round(self.velocity[1], 1)),
         }

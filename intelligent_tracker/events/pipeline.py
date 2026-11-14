@@ -44,6 +44,7 @@ def setup_event_pipeline(
                 include_snapshot=wh.get("include_snapshot", True),
                 event_types=wh.get("event_types"),
                 headers=wh.get("headers"),
+                mock=wh.get("mock", False),
             )
             bus.subscribe(dispatcher.send)
             dispatchers["webhooks"].append(dispatcher)

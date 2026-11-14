@@ -8,13 +8,14 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime
 
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
-import dashboard.app as app_module
 from dashboard.camera_pool import CameraPool
+from dashboard.dependencies import bind_app_state, clear_app_state
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.scenarios import ScenarioManager
 
@@ -24,6 +25,10 @@ class TestScenarioApi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.test_dir = tempfile.mkdtemp(prefix="tracker_scenario_api_test_")
+        cls.videos_dir = os.path.join(cls.test_dir, "videos")
+        os.makedirs(cls.videos_dir, exist_ok=True)
+        cls.videos_patcher = patch("dashboard.routers.topology.VIDEOS_DIR", cls.videos_dir)
+        cls.videos_patcher.start()
         cls.config_file = os.path.join(cls.test_dir, "cameras.json")
         cls.db_path = os.path.join(cls.test_dir, "tracker.db")
         cls.scenarios_yaml = os.path.join(cls.test_dir, "scenarios.yaml")
@@ -38,20 +43,27 @@ class TestScenarioApi(unittest.TestCase):
             db_path=cls.db_path,
             autostart=False,
         )
-        app_module.camera_pool = cls.pool
-        app_module.stream_manager = cls.pool.primary_stream
 
         # Set up ScenarioManager in app
         cls.scenario_mgr = ScenarioManager(
             config_path=cls.scenarios_yaml,
             db=cls.db,
         )
-        app_module.scenario_manager = cls.scenario_mgr
+        bind_app_state(
+            app,
+            camera_pool=cls.pool,
+            stream_manager=cls.pool.primary_stream,
+            scenario_manager=cls.scenario_mgr,
+            db=cls.db,
+        )
 
         cls.client = TestClient(app)
 
     @classmethod
     def tearDownClass(cls):
+        clear_app_state(app)
+        if getattr(cls, "videos_patcher", None) is not None:
+            cls.videos_patcher.stop()
         if cls.pool:
             cls.pool.stop_all()
         if hasattr(cls, "db") and cls.db:
@@ -204,6 +216,7 @@ class TestScenarioApi(unittest.TestCase):
         self.assertEqual(exp_data["status"], "success")
         self.assertIn("video_file", exp_data)
         self.assertTrue(exp_data["video_file"].endswith(".mp4"))
+        self.assertTrue(os.path.isfile(os.path.join(self.videos_dir, exp_data["video_file"])))
 
     def test_07_camera_overlays_endpoints(self):
         """Verify GET and POST /api/cameras/{id}/overlays."""

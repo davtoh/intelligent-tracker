@@ -124,6 +124,76 @@ class AnalyticsMixin:
 
     query_sightings = get_sightings
 
+    def query_sighting_counts(
+        self, entity_ids: list[int] | None = None
+    ) -> dict[int, int]:
+        """Return sighting counts keyed by entity_id using a single GROUP BY query."""
+        if entity_ids is not None and len(entity_ids) == 0:
+            return {}
+
+        with self._lock:
+            cursor = self._conn.cursor()
+            try:
+                if entity_ids is None:
+                    cursor.execute(
+                        """
+                        SELECT entity_id, COUNT(*) AS sighting_count
+                        FROM sightings
+                        WHERE entity_id IS NOT NULL
+                        GROUP BY entity_id
+                        """
+                    )
+                else:
+                    placeholders = ",".join("?" for _ in entity_ids)
+                    cursor.execute(
+                        f"""
+                        SELECT entity_id, COUNT(*) AS sighting_count
+                        FROM sightings
+                        WHERE entity_id IN ({placeholders})
+                        GROUP BY entity_id
+                        """,
+                        tuple(entity_ids),
+                    )
+                return {int(row["entity_id"]): int(row["sighting_count"]) for row in cursor.fetchall()}
+            finally:
+                cursor.close()
+
+    @staticmethod
+    def _group_sighting_counts(cursor: Any, column: str) -> dict[str, int]:
+        """Return grouped sighting counts for a non-empty column value."""
+        if column not in {"source", "zone_id"}:
+            raise ValueError(f"Unsupported grouping column: {column}")
+        cursor.execute(
+            f"SELECT {column}, COUNT(*) AS count FROM sightings "
+            f"WHERE {column} != '' GROUP BY {column} ORDER BY count DESC"
+        )
+        return {row[column]: int(row["count"]) for row in cursor.fetchall()}
+
+    def get_analytics_summary(self) -> dict[str, Any]:
+        """Return aggregate entity, signature, and sighting breakdown statistics."""
+        with self._lock:
+            cursor = self._conn.cursor()
+            try:
+                total_entities = int(cursor.execute("SELECT COUNT(*) FROM entities").fetchone()[0])
+                total_signatures = int(
+                    cursor.execute("SELECT COUNT(*) FROM entity_signatures").fetchone()[0]
+                )
+                total_sightings = int(cursor.execute("SELECT COUNT(*) FROM sightings").fetchone()[0])
+                by_source = self._group_sighting_counts(cursor, "source")
+                by_zone = self._group_sighting_counts(cursor, "zone_id")
+                by_entity = self.query_sighting_counts()
+            finally:
+                cursor.close()
+
+        return {
+            "total_entities": total_entities,
+            "total_signatures": total_signatures,
+            "total_sightings": total_sightings,
+            "sightings_by_entity": by_entity,
+            "sightings_by_source": by_source,
+            "sightings_by_zone": by_zone,
+        }
+
     def get_entity_analytics(self, entity_id: int) -> Dict[str, Any]:
         """
         Compute occurrence frequency, dwell timeline, and zone journey for an entity.

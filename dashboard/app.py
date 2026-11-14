@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+import jinja2
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
@@ -36,6 +37,8 @@ from dashboard.dependencies import (
     _get_rsac_mgr,
     _get_scenario_mgr,
     _reload_all_galleries,
+    bind_app_state,
+    clear_app_state,
     get_active_learning_mgr,
     get_active_stream_manager,
     get_camera_pool,
@@ -43,26 +46,24 @@ from dashboard.dependencies import (
     get_enrollment_mgr,
     get_lifecycle_manager,
     get_rsac_mgr,
-    get_scenario_manager,
     get_scenario_mgr,
     get_stream_manager,
+    get_world_query_engine,
     reload_all_galleries,
-    set_camera_pool,
-    set_lifecycle_manager,
-    set_scenario_manager,
     set_shutting_down,
-    set_stream_manager,
 )
 from dashboard.routers import (
     analytics_router,
     cameras_router,
     camera_diagnostics_router,
+    camera_recording_router,
     rsac_router,
     scenarios_router,
     streaming_router,
     system_router,
     topology_router,
     videos_router,
+    world_router,
 )
 from dashboard.schemas import (
     CameraAddRequest,
@@ -85,6 +86,7 @@ from dashboard.schemas import (
     SpatialTransitionRequest,
     TagRequest,
     TripwireCreateRequest,
+    WorldQueryRequest,
     ZoneCreateRequest,
 )
 from dashboard.services.diagnostic_bridge import (
@@ -104,10 +106,16 @@ from dashboard.services.shutdown_handler import (
 from dashboard.services.video_transcoder import VideoTranscodeService
 from dashboard.services.windows_resilience import apply_windows_iocp_patch
 from dashboard.stream_manager import StreamManager
+from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.lifecycle import StreamLifecycleManager
 from intelligent_tracker.scenarios import ScenarioManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
+
+_jinja_env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(STATIC_DIR),
+    autoescape=jinja2.select_autoescape(["html", "xml"]),
+)
 
 # Apply Windows IOCP Proactor socket resilience for transient drops on startup
 apply_windows_iocp_patch()
@@ -125,40 +133,59 @@ lifecycle_manager: Optional[StreamLifecycleManager] = None
 _probe_video_file = VideoTranscodeService.probe_video
 
 
+def _init_runtime_services(application: FastAPI):
+    """Initialize CameraPool, ScenarioManager, TrackerDB, and StreamLifecycleManager."""
+    pool = CameraPool()
+    primary_sm = pool.primary_stream
+    scen_mgr = ScenarioManager(
+        world_graph=getattr(pool, "world_graph", None),
+        coordinate_mapper=getattr(pool, "coordinate_mapper", None),
+    )
+    handoff = getattr(pool, "handoff_coordinator", None)
+    if handoff is not None:
+        handoff.topology = scen_mgr.topology
+        handoff.transition_registry = scen_mgr.world_transitions
+    db = primary_sm.db if primary_sm else None
+    owned_db: Optional[TrackerDB] = None
+    if db is None:
+        db_path = getattr(pool, "db_path", None)
+        owned_db = TrackerDB(db_path if isinstance(db_path, str) else "data/tracker.db")
+        db = owned_db
+    lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
+    bind_app_state(
+        application,
+        camera_pool=pool,
+        stream_manager=primary_sm,
+        scenario_manager=scen_mgr,
+        lifecycle_manager=lifecycle_mgr,
+        db=db,
+    )
+    for sm in pool.streams.values():
+        scen_mgr.apply_to_stream_manager(sm)
+    return pool, primary_sm, lifecycle_mgr, owned_db
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(application: FastAPI):
     """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
-    global stream_manager, camera_pool, scenario_manager, lifecycle_manager
     install_shutdown_handlers()
     set_parent_death_signal()
     start_parent_watchdog()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
-    camera_pool = CameraPool()
-    set_camera_pool(camera_pool)
-    stream_manager = camera_pool.primary_stream
-    set_stream_manager(stream_manager)
-    scenario_manager = ScenarioManager()
-    set_scenario_manager(scenario_manager)
-    db = stream_manager.db if stream_manager else None
-    lifecycle_manager = StreamLifecycleManager(db=db, camera_pool=camera_pool)
-    set_lifecycle_manager(lifecycle_manager)
-
-    # Apply loaded scenarios to active streams
-    if camera_pool:
-        for sm in camera_pool.streams.values():
-            scenario_manager.apply_to_stream_manager(sm)
-    elif stream_manager:
-        scenario_manager.apply_to_stream_manager(stream_manager)
+    pool, primary_sm, lifecycle_mgr, owned_db = _init_runtime_services(application)
 
     yield
     logger.info("Shutting down Intelligent Tracker CameraPool...")
     set_shutting_down(True)
-    if lifecycle_manager:
-        lifecycle_manager.stop_sampler()
-    if camera_pool:
-        await async_shutdown_pool(camera_pool)
-    elif stream_manager:
-        await asyncio.to_thread(stream_manager.stop)
+    if lifecycle_mgr:
+        lifecycle_mgr.stop_sampler()
+    if pool:
+        await async_shutdown_pool(pool)
+    elif primary_sm:
+        await asyncio.to_thread(primary_sm.stop)
+    if owned_db is not None:
+        owned_db.close()
+    clear_app_state(application)
     stop_parent_watchdog()
 
 
@@ -189,12 +216,14 @@ def create_app() -> FastAPI:
     application.include_router(system_router)
     application.include_router(cameras_router)
     application.include_router(camera_diagnostics_router)
+    application.include_router(camera_recording_router)
     application.include_router(streaming_router)
     application.include_router(scenarios_router)
     application.include_router(rsac_router)
     application.include_router(analytics_router)
     application.include_router(videos_router)
     application.include_router(topology_router)
+    application.include_router(world_router)
 
     return application
 
@@ -207,8 +236,7 @@ async def serve_index():
     """Serve the modern single-page dashboard."""
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+        return HTMLResponse(content=_jinja_env.get_template("index.html").render())
     return HTMLResponse("<h1>Intelligent Tracker Dashboard Initializing...</h1>")
 
 
@@ -228,6 +256,7 @@ __all__ = [
     "get_rsac_mgr",
     "get_active_learning_mgr",
     "get_enrollment_mgr",
+    "get_world_query_engine",
     "reload_all_galleries",
     "_get_db",
     "_get_rsac_mgr",
@@ -260,4 +289,5 @@ __all__ = [
     "EntityCreateRequest",
     "EntityUpdateRequest",
     "TagRequest",
+    "WorldQueryRequest",
 ]

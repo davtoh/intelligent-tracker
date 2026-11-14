@@ -1,0 +1,87 @@
+    <!-- TAB: VIDEO STUDIO & PLAYBACK SCRUBBER -->
+    <section class="tab-pane" id="tab-videos" role="tabpanel">
+      <div class="scrubber-grid">
+        <div class="glass-panel video-player-card">
+          <div class="card-header">
+            <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto;">
+              <h3 id="scrubber-loaded-title" class="text-truncate" title="Video Playback Scrubber">📼 Video Playback
+                Scrubber</h3>
+              <span id="scrubber-header-job-badge" class="badge-running-job" style="display: none;"></span>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-sm btn-primary" id="btn-video-add-camera" disabled>➕ Add as Active Camera
+                Feed</button>
+              <button class="btn btn-sm btn-outline" id="btn-video-analyze" disabled>⚡ Run Batch Analytics</button>
+            </div>
+          </div>
+
+          <!-- Prominent Active Video Job Banner (Milestone 17) -->
+          <div id="scrubber-active-job-banner" style="display: none; margin-bottom: 12px;"></div>
+
+          <div class="scrubber-viewport">
+            <video id="scrubber-video-player" playsinline></video>
+            <canvas id="scrubber-overlay-canvas"></canvas>
+          </div>
+
+          <!-- Interactive Playback Scrubber Toolbar -->
+          <div class="scrubber-toolbar glass-panel">
+            <div class="scrubber-timeline-row">
+              <input type="range" id="scrubber-timeline-slider" min="0" max="100" value="0" step="0.1" />
+              <span id="scrubber-time-display" class="time-display">0:00 / 0:00 (Frame #0)</span>
+            </div>
+            <div id="scrubber-overlay-layers" class="scrubber-overlay-layers" role="toolbar" focusgroup="toolbar wrap"
+              aria-label="Overlay detection layers" aria-controls="scrubber-overlay-canvas" hidden></div>
+            <p id="scrubber-overlay-layers-status" class="scrubber-sr-only" role="status" aria-live="polite"></p>
+            <div class="scrubber-controls-row">
+              <div class="scrubber-buttons-left">
+                <button class="btn btn-sm btn-outline" id="scrubber-btn-prev" title="Step Back 1 Frame">&lt; -1
+                  Frame</button>
+                <button class="btn btn-sm btn-primary" id="scrubber-btn-play">▶ Play</button>
+                <button class="btn btn-sm btn-outline" id="scrubber-btn-next" title="Step Forward 1 Frame">&gt; +1
+                  Frame</button>
+              </div>
+              <div class="scrubber-speed-group">
+                <span class="speed-label">Speed:</span>
+                <button class="btn btn-xs btn-outline speed-btn active" id="speed-btn-1x">1x</button>
+                <button class="btn btn-xs btn-outline speed-btn" id="speed-btn-2x">2x</button>
+                <button class="btn btn-xs btn-outline speed-btn" id="speed-btn-4x">4x</button>
+                <button class="btn btn-xs btn-outline speed-btn" id="speed-btn-8x">8x</button>
+              </div>
+              <div class="scrubber-tab-policy-group">
+                <label for="scrubber-tab-policy" class="policy-label">⚡ Tab Switch:</label>
+                <select id="scrubber-tab-policy" class="form-select-sm"
+                  title="Choose player behavior when navigating away from Video Studio">
+                  <option value="auto-resume">Auto-Pause & Resume</option>
+                  <option value="keep-paused">Pause & Hold</option>
+                  <option value="reset">Pause & Reset</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Occurrence Indexing Report Container -->
+          <div id="video-batch-report-container" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- Video Upload & Recordings List Sidebar -->
+        <aside class="sidebar-column">
+          <div class="glass-panel video-upload-panel">
+            <div class="panel-header">
+              <h3>Upload Recording</h3>
+            </div>
+            <input type="file" id="video-file-upload-input" accept=".mp4,.avi,.mkv,.mov" style="display: none;" />
+            <button class="btn btn-primary btn-block" id="btn-upload-video">📤 Upload Video File</button>
+            <div id="video-upload-status" class="upload-status-hint">Supports MP4, AVI, MKV up to 4K</div>
+          </div>
+
+          <div class="glass-panel video-library-panel">
+            <div class="panel-header">
+              <h3>Stored Recordings</h3>
+            </div>
+            <div class="video-recordings-list" id="video-recordings-list">
+              <div class="empty-state">Loading video library...</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
