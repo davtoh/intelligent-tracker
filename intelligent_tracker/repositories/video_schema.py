@@ -2,8 +2,8 @@
 
 Defines the ``video_runs`` table (Single Source of Truth for batch indexing
 and live-recording analytics runs) and idempotent column migrations adding
-``video_filename`` and ``media_offset_sec`` to ``sightings`` and
-``world_timeline_events``.
+``video_filename`` and ``media_offset_sec`` to ``sightings``,
+``world_timeline_events``, and ``review_queue``.
 """
 
 import os
@@ -79,6 +79,8 @@ _MEDIA_COLUMN_MIGRATIONS = (
     ("sightings", "media_offset_sec", "REAL DEFAULT 0.0"),
     ("world_timeline_events", "video_filename", "TEXT DEFAULT ''"),
     ("world_timeline_events", "media_offset_sec", "REAL DEFAULT 0.0"),
+    ("review_queue", "video_filename", "TEXT DEFAULT ''"),
+    ("review_queue", "media_offset_sec", "REAL DEFAULT 0.0"),
 )
 
 

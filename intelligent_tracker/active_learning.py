@@ -60,6 +60,15 @@ class ActiveLearningManager:
         )
         self._last_queued = self._triage._last_queued
 
+    @property
+    def video_filename(self) -> str:
+        """Return optional offline video filename attached to triage items."""
+        return self._triage.video_filename
+
+    @video_filename.setter
+    def video_filename(self, value: str) -> None:
+        self._triage.video_filename = str(value or "").strip()
+
     def consider_candidate(
         self,
         track: Any,
@@ -70,6 +79,8 @@ class ActiveLearningManager:
         suggested_category: str = "",
         camera_id: str = "cam_01",
         timestamp: float | None = None,
+        video_filename: str = "",
+        media_offset_sec: float | None = None,
     ) -> int | None:
         """Evaluate track detection in [min_confidence, max_confidence) and queue."""
         return self._triage.consider_candidate(
@@ -81,6 +92,8 @@ class ActiveLearningManager:
             suggested_category=suggested_category,
             camera_id=camera_id,
             timestamp=timestamp,
+            video_filename=video_filename,
+            media_offset_sec=media_offset_sec,
         )
 
     def maybe_queue_candidate(

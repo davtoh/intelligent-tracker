@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-14] feat: Step 5 M1: FrameProcessor Batch Unification & Media Offset Persistence
+- **Type**: feat
+- **Summary**: Decomposed batch.py via batch_reporting.py and FrameProcessor.step(), added review_queue media offset columns, and persisted video_filename/media_offset_sec across sightings and active learning.
+- **Files** (11):
+  - `.TODO/step_5_closed_loop_video_ecosystem.md`
+  - `.agents/rules/pipeline_and_db_invariants.md`
+  - `intelligent_tracker/active_learning.py`
+  - `intelligent_tracker/active_learning_triage.py`
+  - `intelligent_tracker/batch.py`
+  - `intelligent_tracker/matching/_gallery_signals.py`
+  - `intelligent_tracker/repositories/analytics_repo.py`
+  - `intelligent_tracker/repositories/learning_repo.py`
+  - ... (+3 more)
+- **Verification**: python -m unittest discover -s tests -p test_step5_batch_frame_processor.py
+
 ## [2026-11-14] feat: Step 4 Milestone 4: E2E Video SSOT, Backup/Restore & Live Handoff Sign-Off
 - **Type**: feat
 - **Summary**: Added E2E integration tests for live-record-to-Studio handoff, single-file SQLite TrackerDB backup/restore, and non-mocked fallback branches; exposed report_run_id in CameraRecordStatusResponse; verified 628/628 tests green.
@@ -131,14 +146,3 @@
   - `dashboard/stream_manager.py`
   - `tests/test_step2_clean_streaming.py`
 - **Verification**: python -m unittest discover -s tests -p test_step2_clean_streaming.py
-
-## [2026-11-14] feat: Step 1 Milestone 4: Frontend Demo Simulation Gating & Initial Camera Focus Sync
-- **Type**: feat
-- **Summary**: Gate Synthetic Mock detector as Demo Simulation Only in camera_ai_config.js, auto-sync initial focusedCameraId/activeCameraId when cam_01 is absent, compact camera_config_store.py under 180L, and complete Step 1 verification.
-- **Files** (5):
-  - `.agents/rules/pipeline_and_db_invariants.md`
-  - `dashboard/services/camera_config_store.py`
-  - `dashboard/static/camera_manager.js`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `tests/test_step1_demo_mode_ui.py`
-- **Verification**: python -m unittest discover tests

@@ -22,18 +22,16 @@ class LearningMixin:
         suggested_category: str = "",
         similarity: float = 0.0,
         status: str = "pending",
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
         **kwargs,
     ) -> int:
         """Add an ambiguous detection to the active learning review queue."""
-        if "similarity_score" in kwargs:
-            similarity = kwargs["similarity_score"]
-        if "matched_entity_id" in kwargs and suggested_entity_id is None:
-            suggested_entity_id = kwargs["matched_entity_id"]
-        if "matched_entity_name" in kwargs and not suggested_name:
-            suggested_name = kwargs["matched_entity_name"]
-        if "matched_category" in kwargs and not suggested_category:
-            suggested_category = kwargs["matched_category"]
-
+        similarity = kwargs.get("similarity_score", similarity)
+        if suggested_entity_id is None:
+            suggested_entity_id = kwargs.get("matched_entity_id")
+        suggested_name = suggested_name or kwargs.get("matched_entity_name", "")
+        suggested_category = suggested_category or kwargs.get("matched_category", "")
         now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
         with self._lock:
             cur = self._conn.cursor()
@@ -42,19 +40,14 @@ class LearningMixin:
                     """
                     INSERT INTO review_queue (
                         camera_id, track_id, crop_path, timestamp, suggested_entity_id,
-                        suggested_name, suggested_category, similarity, status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        suggested_name, suggested_category, similarity, status,
+                        video_filename, media_offset_sec
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        camera_id,
-                        track_id,
-                        crop_path.strip(),
-                        now,
-                        suggested_entity_id,
-                        suggested_name.strip(),
-                        suggested_category.strip(),
-                        float(similarity),
-                        status.strip(),
+                        camera_id, track_id, crop_path.strip(), now, suggested_entity_id,
+                        suggested_name.strip(), suggested_category.strip(), float(similarity),
+                        status.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
                     ),
                 )
                 self._conn.commit()

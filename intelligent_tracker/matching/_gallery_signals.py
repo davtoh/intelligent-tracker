@@ -105,6 +105,19 @@ def apply_track_confidence_signals(
     track.reid_ambiguity = compute_reid_ambiguity(similarities, best_idx, gallery_entity_ids)
 
 
+def _resolve_media_fields(
+    matcher: Any, video_filename: str, media_offset_sec: float | None, timestamp: float
+) -> tuple[str, float]:
+    """Resolve video_filename and media_offset_sec for offline or live sightings."""
+    resolved_video = str(video_filename or getattr(matcher, "video_filename", "") or "").strip()
+    resolved_offset = (
+        float(media_offset_sec)
+        if media_offset_sec is not None
+        else (float(timestamp) if resolved_video else 0.0)
+    )
+    return resolved_video, resolved_offset
+
+
 def emit_periodic_sighting(
     matcher: Any,
     *,
@@ -116,6 +129,8 @@ def emit_periodic_sighting(
     source: str,
     zone_id: str,
     timestamp: float,
+    video_filename: str = "",
+    media_offset_sec: float | None = None,
 ) -> bool:
     """Log debounced sightings to TrackerDB and index them into EventFTSIndex when wired."""
     if matcher.db is None:
@@ -125,9 +140,11 @@ def emit_periodic_sighting(
     if last_log is not None and (timestamp - last_log < matcher.sighting_interval) and (timestamp >= last_log):
         return False
 
+    resolved_video, resolved_offset = _resolve_media_fields(matcher, video_filename, media_offset_sec, timestamp)
     matcher.db.add_sighting(
         entity_id=entity_id, track_id=tid, source=source,
         timestamp=timestamp, zone_id=zone_id, bbox=track.bbox, confidence=confidence,
+        video_filename=resolved_video, media_offset_sec=resolved_offset,
     )
     matcher._last_sighting_time[tid] = timestamp
     fts_index = getattr(matcher, "fts_index", None)
