@@ -65,12 +65,12 @@ python -m unittest discover -s tests -p "test_step4_report_ssot_and_export.py"
 
 ---
 
-### Milestone 3: Instant Live-Record `FrameStepResult` Metadata Handoff & Video Studio Export UI *(Deferred to Next Turn)*
-- [ ] **dashboard/services/stream_recording.py**: Upgrade `StreamRecordingController` (`< 290L`, methods `<= 35L`) to accept optional `step_res` in `write_frame`, buffer time-indexed track/detection snapshots (`frame`, `time`, `source_resolution`, `tracks`, `detections`, entity sighting tallies) during recording, and automatically commit a `run_type="live_capture"` video run to `TrackerDB` via `save_report_run` when `stop()` finalizes the MP4.
-- [ ] **dashboard/services/stream_worker.py**: Pass `step_res=step_res` to `recorder.write_frame(step_res.frame, annotated, step_res=step_res)` inside `_process_single_frame` and pass `db_getter` / `manager.db` into `StreamRecordingController` in `dashboard/services/stream_manager.py` while keeping `stream_worker.py` `< 345L`.
-- [ ] **dashboard/static/js/video_batch_reports.js**: Add the `📥 Export JSON` download button (`#btn-export-report-run`) to `buildHistorySwitcherHtml` pointing to `/api/videos/{filename}/reports/{run_id}/export` and display a `🔴 Live Capture` badge for `run_type === 'live_capture'` runs while keeping `video_batch_reports.js` `<= 345L` (`< 350L`).
-- [ ] **tests/test_step4_live_recording_handoff.py**: Add unit tests verifying that recording live frames with `FrameStepResult` tracks/detections and calling `stop()` immediately persists a `live_capture` run and detection stream in `TrackerDB`, and that `video_batch_reports.js` renders `#btn-export-report-run` and passes `diagnose.py audit`.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+### Milestone 3: Instant Live-Record `FrameStepResult` Metadata Handoff & Video Studio Export UI
+- [x] **dashboard/services/stream_recording.py**: Upgrade `StreamRecordingController` (`< 290L`, methods `<= 35L`) to accept optional `step_res` in `write_frame`, buffer time-indexed track/detection snapshots (`frame`, `time`, `source_resolution`, `tracks`, `detections`, entity sighting tallies) during recording, and automatically commit a `run_type="live_capture"` video run to `TrackerDB` via `save_report_run` when `stop()` finalizes the MP4.
+- [x] **dashboard/services/stream_worker.py**: Pass `step_res=step_res` to `recorder.write_frame(step_res.frame, annotated, step_res=step_res)` inside `_process_single_frame` and pass `db_getter` / `manager.db` into `StreamRecordingController` in `dashboard/services/stream_manager.py` while keeping `stream_worker.py` `< 345L`.
+- [x] **dashboard/static/js/video_batch_reports.js**: Add the `📥 Export JSON` download button (`#btn-export-report-run`) to `buildHistorySwitcherHtml` pointing to `/api/videos/{filename}/reports/{run_id}/export` and display a `🔴 Live Capture` badge for `run_type === 'live_capture'` runs while keeping `video_batch_reports.js` `<= 345L` (`< 350L`).
+- [x] **tests/test_step4_live_recording_handoff.py**: Add unit tests verifying that recording live frames with `FrameStepResult` tracks/detections and calling `stop()` immediately persists a `live_capture` run and detection stream in `TrackerDB`, and that `video_batch_reports.js` renders `#btn-export-report-run` and passes `diagnose.py audit`.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 3 Verification Command**:
 ```bash

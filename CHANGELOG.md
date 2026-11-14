@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-11-14] feat: Step 4 M3: Live-Record FrameStepResult Handoff & Export UI
+- **Type**: feat
+- **Summary**: Buffered time-indexed tracks in StreamRecordingController for instant live_capture TrackerDB persistence on stop(), wired step_res and db_getter in StreamWorker/StreamManager, and added Export JSON button and Live Capture badge to video_batch_reports.js.
+- **Files** (5):
+  - `dashboard/services/stream_recording.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/static/js/video_batch_reports.js`
+  - `dashboard/stream_manager.py`
+  - `tests/test_step4_live_recording_handoff.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_*.py
+
 ## [2026-11-14] feat: Step 4 M2: TrackerDB Video Report SSOT & Export API
 - **Type**: feat
 - **Summary**: Refactored video_report_store.py to persist runs and detection streams in TrackerDB with transparent legacy JSON auto-migration (video_report_migration.py) and added GET /api/videos/{filename}/reports/{run_id}/export.
@@ -131,12 +142,3 @@
   - `dashboard/services/entity_tagger.py`
   - `tests/test_step1_entity_tagger_refactor.py`
 - **Verification**: python -m unittest discover -s tests -p test_step1_entity_tagger_refactor.py
-
-## [2026-11-14] feat: Step 1 Milestone 2: CameraConfigStore Legacy Mock Healing & Telemetry Status
-- **Type**: feat
-- **Summary**: Added heal_non_synthetic_mock_cameras in CameraConfigStore, cleaned configs/cameras.json, and exposed detector_model/detector_status in StreamWorker telemetry.
-- **Files** (3):
-  - `dashboard/services/camera_config_store.py`
-  - `dashboard/services/stream_worker.py`
-  - `tests/test_step1_camera_config_healing.py`
-- **Verification**: python -m unittest discover -s tests -p test_step1_camera_config_healing.py

@@ -203,7 +203,7 @@ class StreamWorker:
         annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
         recorder = getattr(self.manager, "_recording_controller", None)
         if recorder is not None and recorder.is_recording:
-            recorder.write_frame(step_res.frame, annotated)
+            recorder.write_frame(step_res.frame, annotated, step_res=step_res)
 
         telemetry = self._build_telemetry(
             step_res.tracks,

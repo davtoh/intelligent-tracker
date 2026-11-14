@@ -1,16 +1,19 @@
 """Live dashboard stream MP4 recording controller and StreamManager mixin."""
 
 from datetime import datetime
+import logging
 import os
 import re
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 import uuid
 
 import numpy as np
 
 from intelligent_tracker.video import PipelineVideoWriter
+
+logger = logging.getLogger("intelligent_tracker.stream_recording")
 
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _VALID_EXTS = (".mp4", ".avi", ".mkv", ".mov")
@@ -53,15 +56,24 @@ def _idle_status(camera_id: str) -> dict[str, Any]:
 class StreamRecordingController:
     """Thread-safe controller managing per-camera MP4 recording via PipelineVideoWriter."""
 
-    def __init__(self, camera_id: str, output_dir: str | None = None, writer_factory: Any = None) -> None:
+    def __init__(
+        self,
+        camera_id: str,
+        output_dir: str | None = None,
+        writer_factory: Any = None,
+        db_getter: Callable[[], Any] | None = None,
+    ) -> None:
         self.camera_id = camera_id
         self._explicit_output_dir = output_dir is not None
         self.output_dir = output_dir or _resolve_default_videos_dir()
         self._writer_factory = writer_factory or PipelineVideoWriter
+        self._db_getter = db_getter
         self._lock = threading.RLock()
         self._writer: PipelineVideoWriter | None = None
         self._active_meta: dict[str, Any] | None = None
         self._last_meta: dict[str, Any] | None = None
+        self._recorded_frames: list[dict[str, Any]] = []
+        self._live_stats: dict[str, Any] = {}
 
     @property
     def is_recording(self) -> bool:
@@ -90,29 +102,106 @@ class StreamRecordingController:
             self._active_meta = {
                 "recording_id": uuid.uuid4().hex[:12], "camera_id": self.camera_id,
                 "filename": safe_name, "output_path": out_path,
-                "annotated": bool(annotated), "status": "recording",
+                "fps": float(fps), "annotated": bool(annotated), "status": "recording",
                 "started_at": time.time(), "stopped_at": None,
+            }
+            self._recorded_frames = []
+            self._live_stats = {
+                "frames_processed": 0, "total_detections": 0, "total_sightings": 0,
+                "entity_ids": set(), "start_ts": None,
             }
             return self.status()
 
-    def write_frame(self, raw_frame: np.ndarray, annotated_frame: np.ndarray | None = None) -> bool:
+    def write_frame(
+        self,
+        raw_frame: np.ndarray,
+        annotated_frame: np.ndarray | None = None,
+        step_res: Any = None,
+    ) -> bool:
         """Write raw or annotated frame to active recording and auto-finalize on limit."""
         with self._lock:
             if self._writer is None or self._active_meta is None:
                 return False
             use_ann = self._active_meta.get("annotated", True) and annotated_frame is not None
             written = self._writer.write(annotated_frame if use_ann else raw_frame)
+            if written and step_res is not None:
+                self._capture_step_snapshot(step_res, raw_frame)
             if not self._writer.is_open:
                 self._finalize_locked(status="completed")
             return written
 
+    def _capture_step_snapshot(self, step_res: Any, raw_frame: np.ndarray) -> None:
+        """Buffer time-indexed tracks and sighting tallies for instant Video Studio handoff."""
+        ts = float(getattr(step_res, "timestamp", 0.0) or 0.0)
+        if self._live_stats.get("start_ts") is None:
+            self._live_stats["start_ts"] = ts
+        fps = float((self._active_meta or {}).get("fps") or 20.0)
+        frame_idx = int(self._live_stats.get("frames_processed", 0))
+        rel_time = round(max(0.0, ts - self._live_stats["start_ts"]), 3) if ts > 0 else round(frame_idx / max(1.0, fps), 3)
+        frame_obj = getattr(step_res, "frame", None)
+        h, w = (frame_obj.shape[:2] if frame_obj is not None and hasattr(frame_obj, "shape") else raw_frame.shape[:2])
+        tracks_raw = getattr(step_res, "tracks", None) or {}
+        track_objs = tracks_raw.values() if isinstance(tracks_raw, dict) else tracks_raw
+        active_tracks = [t.to_dict() if hasattr(t, "to_dict") else dict(t) for t in track_objs if hasattr(t, "to_dict") or isinstance(t, dict)]
+        detections_raw = getattr(step_res, "detections", None) or []
+        self._live_stats["frames_processed"] = frame_idx + 1
+        self._live_stats["total_detections"] += len(detections_raw) if detections_raw else len(active_tracks)
+        for ev in (getattr(step_res, "identifications", None) or []):
+            eid = getattr(ev, "entity_id", None) if not isinstance(ev, dict) else ev.get("entity_id")
+            if eid is not None:
+                self._live_stats["entity_ids"].add(eid)
+                self._live_stats["total_sightings"] += 1
+        for tr in active_tracks:
+            if tr.get("entity_id") is not None:
+                self._live_stats["entity_ids"].add(tr["entity_id"])
+        if active_tracks:
+            self._recorded_frames.append({"time": rel_time, "frame": frame_idx, "source_resolution": [int(w), int(h)], "tracks": active_tracks})
+
+    def _persist_live_capture_run(
+        self, meta: dict[str, Any], frames: list[dict[str, Any]], stats: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Persist buffered live-capture track stream as a TrackerDB video run."""
+        db = self._db_getter() if callable(self._db_getter) else None
+        if db is None or not meta.get("filename") or not stats.get("frames_processed"):
+            return None
+        w = meta.get("width") or (frames[0]["source_resolution"][0] if frames else 640)
+        h = meta.get("height") or (frames[0]["source_resolution"][1] if frames else 480)
+        fps = float(meta.get("fps") or 20.0)
+        report = {
+            "frames_processed": int(stats.get("frames_processed", 0)),
+            "total_detections": int(stats.get("total_detections", 0)),
+            "total_sightings": int(stats.get("total_sightings", 0)),
+            "unique_entities_identified": len(stats.get("entity_ids") or ()),
+            "source_resolution": [int(w), int(h)],
+            "source_fps": fps,
+            "camera_id": self.camera_id,
+        }
+        config = {"detector": "live_pipeline", "sample_rate": 1, "confidence": 0.4, "camera_id": self.camera_id}
+        try:
+            from dashboard.services.video_report_store import save_report_run
+
+            return save_report_run(
+                filename=meta["filename"], report=report, config=config, frame_detections=frames,
+                source_resolution=[int(w), int(h)], source_fps=fps, db=db, run_type="live_capture",
+            )
+        except Exception as exc:
+            logger.warning("Failed to persist live_capture run for '%s': %s", meta.get("filename"), exc)
+            return None
+
     def _finalize_locked(self, status: str) -> dict[str, Any]:
         """Release active writer and persist final metadata snapshot under lock."""
         meta = dict(self._active_meta or _idle_status(self.camera_id))
+        recorded_frames = list(self._recorded_frames)
+        stats = dict(self._live_stats)
+        self._recorded_frames = []
+        self._live_stats = {}
         if self._writer is not None:
             self._writer.release()
             meta.update(self._writer.snapshot())
         meta.update({"status": status, "is_recording": False, "stopped_at": time.time()})
+        run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
+        if run_rec and run_rec.get("run_id"):
+            meta["report_run_id"] = run_rec["run_id"]
         self._writer = None
         self._active_meta = None
         self._last_meta = meta

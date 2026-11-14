@@ -13,34 +13,14 @@
 
   function escapeHtml(str) {
     if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function getBaseRecordingName(filename) {
-    return filename ? String(filename).trim().replace(/_h264(\.[^.]+)$/i, '$1') : '';
-  }
-
-  function getBaseStem(filename) {
-    return getBaseRecordingName(filename).replace(/\.[^.]+$/, '');
-  }
-
-  function notifyToast(message, type = 'info') {
-    if (typeof window.showToast === 'function') {
-      window.showToast(message, type);
-    }
-  }
-
-  function setCurrentFilename(filename) {
-    currentReportFilename = filename ? String(filename).trim() : null;
-  }
-
-  function getCurrentFilename() {
-    return currentReportFilename;
-  }
+  function getBaseRecordingName(filename) { return filename ? String(filename).trim().replace(/_h264(\.[^.]+)$/i, '$1') : ''; }
+  function getBaseStem(filename) { return getBaseRecordingName(filename).replace(/\.[^.]+$/, ''); }
+  function notifyToast(message, type = 'info') { if (typeof window.showToast === 'function') window.showToast(message, type); }
+  function setCurrentFilename(filename) { currentReportFilename = filename ? String(filename).trim() : null; }
+  function getCurrentFilename() { return currentReportFilename; }
 
   function invalidateCachedReports(filename) {
     if (!filename) return;
@@ -79,35 +59,33 @@
       sampleRate: cfg.sample_rate || cfg.sampleRate || 1,
       confidence: cfg.confidence !== undefined ? cfg.confidence : 0.40,
       classes: cfg.classes || null,
+      runType: run?.run_type || 'batch',
     };
   }
 
   function buildHistorySwitcherHtml(filename, runs, activeRunId) {
     if (!Array.isArray(runs) || runs.length === 0) return '';
     const totalRuns = runs.length;
-    const selectedId = activeRunId && runs.some(r => r.run_id === activeRunId)
-      ? activeRunId
-      : runs[0].run_id;
-
+    const selectedId = activeRunId && runs.some(r => r.run_id === activeRunId) ? activeRunId : runs[0].run_id;
     const optionsHtml = runs.map((r, idx) => {
       const runNum = totalRuns - idx;
       const rCfg = r.config || {};
       const rDet = rCfg.detector || 'yolov8';
       const rConf = rCfg.confidence !== undefined ? Number(rCfg.confidence).toFixed(2) : '0.40';
       const rStride = rCfg.sample_rate || rCfg.sampleRate || 1;
+      const livePrefix = r.run_type === 'live_capture' ? '🔴 Live Capture ' : '';
       const tag = idx === 0 ? ' (Latest)' : (r.generated_at ? ` (${r.generated_at})` : '');
-      const label = `Run #${runNum} [${rDet} conf=${rConf}${rStride > 1 ? ` s=${rStride}` : ''}]${tag}`;
-      const isSelected = r.run_id === selectedId;
-      return `<option value="${escapeHtml(r.run_id)}" ${isSelected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+      const label = `Run #${runNum} ${livePrefix}[${rDet} conf=${rConf}${rStride > 1 ? ` s=${rStride}` : ''}]${tag}`;
+      return `<option value="${escapeHtml(r.run_id)}" ${r.run_id === selectedId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
     }).join('');
+    const exportHref = `/api/videos/${encodeURIComponent(filename)}/reports/${encodeURIComponent(selectedId)}/export`;
 
     return `
       <div class="batch-history-switcher">
         <label for="batch-report-run-select" class="batch-history-label">History:</label>
-        <select id="batch-report-run-select" class="form-select batch-history-select">
-          ${optionsHtml}
-        </select>
+        <select id="batch-report-run-select" class="form-select batch-history-select">${optionsHtml}</select>
         <div class="batch-report-actions">
+          <a id="btn-export-report-run" class="btn btn-xs btn-outline" href="${exportHref}" download title="Export selected report run as portable JSON">📥 Export JSON</a>
           <button type="button" id="btn-delete-report-run" class="btn btn-xs btn-outline btn-danger-outline" data-filename="${escapeHtml(filename)}" data-run-id="${escapeHtml(selectedId)}" title="Delete selected report run">🗑️ Delete Run</button>
           <button type="button" id="btn-clear-report-runs" class="btn btn-xs btn-outline btn-danger-outline" data-filename="${escapeHtml(filename)}" title="Clear all report runs for this recording">🧹 Clear All</button>
         </div>
@@ -120,6 +98,7 @@
     const stride = meta.sampleRate || meta.sample_rate || 1;
     const conf = meta.confidence !== undefined ? meta.confidence : 0.40;
     const classes = meta.classes && meta.classes.length ? meta.classes.join(', ') : 'All Classes';
+    const liveBadge = meta.runType === 'live_capture' ? '<span class="batch-meta-pill live-capture-badge">🔴 Live Capture</span>' : '';
     const historyHtml = buildHistorySwitcherHtml(filename, runs, activeRunId);
 
     return `
@@ -129,6 +108,7 @@
           ${historyHtml}
         </div>
         <div class="batch-report-meta">
+          ${liveBadge}
           <span class="batch-meta-pill accent">🧠 Model: ${escapeHtml(detector)}</span>
           <span class="batch-meta-pill cyan">⏱️ Stride: 1:${stride}</span>
           <span class="batch-meta-pill">🎯 Conf ≥ ${Number(conf).toFixed(2)}</span>
