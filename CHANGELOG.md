@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-14] feat: Step 4 M2: TrackerDB Video Report SSOT & Export API
+- **Type**: feat
+- **Summary**: Refactored video_report_store.py to persist runs and detection streams in TrackerDB with transparent legacy JSON auto-migration (video_report_migration.py) and added GET /api/videos/{filename}/reports/{run_id}/export.
+- **Files** (4):
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/services/video_report_store.py`
+  - `dashboard/services/video_report_migration.py`
+  - `tests/test_step4_report_ssot_and_export.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_report_ssot_and_export.py
+
 ## [2026-11-14] feat: Step 4 M1: TrackerDB Video Run Schema & VideoRunRepositoryMixin
 - **Type**: feat
 - **Summary**: Added video_runs table, media offset migrations on sightings/world_timeline_events, VideoRunRepositoryMixin, and compacted schema_manager.py below 240L
@@ -130,17 +140,3 @@
   - `dashboard/services/stream_worker.py`
   - `tests/test_step1_camera_config_healing.py`
 - **Verification**: python -m unittest discover -s tests -p test_step1_camera_config_healing.py
-
-## [2026-11-14] feat: Step 1 M1: Pipeline Detector Guardrails & _detector_setup.py
-- **Type**: feat
-- **Summary**: Added is_synthetic_source, EmptyDetector live-source fallback, detector_status/detector_error on PipelineBundle, and StreamPipelineFactory live-vs-synthetic gating.
-- **Files** (8):
-  - `.TODO/live_video_studio_master_roadmap.md`
-  - `.TODO/step_1_production_detection_and_demo_isolation.md`
-  - `dashboard/services/pipeline_factory.py`
-  - `intelligent_tracker/pipeline/bundle.py`
-  - `intelligent_tracker/pipeline/config.py`
-  - `intelligent_tracker/pipeline/engine.py`
-  - `intelligent_tracker/pipeline/_detector_setup.py`
-  - `tests/test_step1_pipeline_detector_guard.py`
-- **Verification**: python -m unittest discover -s tests -p test_step1_pipeline_detector_guard.py

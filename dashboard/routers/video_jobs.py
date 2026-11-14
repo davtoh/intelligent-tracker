@@ -22,6 +22,7 @@ from dashboard.services.video_jobs_service import get_video_job_manager
 from dashboard.services.video_report_store import (
     clear_report_runs,
     delete_report_run,
+    export_report_run_bundle,
     get_detection_stream,
     is_same_recording_alias,
     list_report_runs,
@@ -31,6 +32,102 @@ from dashboard.services.video_transcoder import VideoTranscodeService
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.video_jobs")
 
 router = APIRouter(tags=["Video Jobs & Analytics"])
+
+
+def _submit_async_transcode(
+    job_mgr, safe_name: str, path: str, output_path: str, output_filename: str, target_resolution: Optional[str]
+) -> JSONResponse:
+    """Queue an asynchronous H.264 transcode job and return a 202 response."""
+    def _runner(_job, stop_event, progress_cb):
+        VideoTranscodeService.transcode_to_h264_async(
+            input_path=path,
+            output_path=output_path,
+            target_resolution=target_resolution,
+            progress_callback=progress_cb,
+            stop_event=stop_event,
+        )
+        st = os.stat(output_path)
+        return {
+            "original_filename": safe_name,
+            "output_filename": output_filename,
+            "video_url": f"/videos/{output_filename}",
+            "size_mb": round(st.st_size / (1024 * 1024), 2),
+        }
+
+    job = job_mgr.submit_job(
+        job_type="transcode",
+        filename=safe_name,
+        runner_fn=_runner,
+        initial_metrics={"output_filename": output_filename},
+    )
+    return JSONResponse(
+        status_code=202,
+        content={
+            "status": "accepted",
+            "job_id": job.job_id,
+            "job": job.to_dict(),
+            "output_filename": output_filename,
+            "video_url": f"/videos/{output_filename}",
+        },
+    )
+
+
+def _run_sync_transcode(
+    safe_name: str, path: str, output_path: str, output_filename: str, target_resolution: Optional[str]
+) -> dict:
+    """Execute a synchronous H.264 transcode and return completion metadata."""
+    try:
+        VideoTranscodeService.transcode_to_h264(
+            input_path=path,
+            output_path=output_path,
+            target_resolution=target_resolution,
+            timeout=300.0,
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Transcoding timed out on large file.")
+    except Exception as e:
+        logger.error("Transcode failed for %s: %s", safe_name, e)
+        raise HTTPException(status_code=500, detail=str(e))
+    stat = os.stat(output_path)
+    return {
+        "status": "success",
+        "original_filename": safe_name,
+        "output_filename": output_filename,
+        "video_url": f"/videos/{output_filename}",
+        "size_mb": round(stat.st_size / (1024 * 1024), 2),
+    }
+
+
+def _transcode_conflict_or_cached(
+    job_mgr, safe_name: str, output_filename: str, output_path: str, force: bool
+) -> Optional[JSONResponse]:
+    """Return 409 conflict or 200 cached response if transcode does not need to run."""
+    active_job = job_mgr.get_active_job_for_file(safe_name)
+    if active_job is not None:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "conflict",
+                "message": f"A {active_job.job_type} job is already active for video '{safe_name}'.",
+                "active_job": active_job.to_dict(),
+            },
+        )
+    if not force and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+        stat = os.stat(output_path)
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "already_exists": True,
+                "original_filename": safe_name,
+                "output_filename": output_filename,
+                "video_url": f"/videos/{output_filename}",
+                "size_bytes": stat.st_size,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            },
+        )
+    return None
+
 
 @router.post("/api/videos/{filename}/transcode")
 async def transcode_video(
@@ -46,93 +143,14 @@ async def transcode_video(
         raise HTTPException(status_code=404, detail="Video file not found")
 
     pair = VideoTranscodeService.get_h264_pair_info(path)
-    output_filename = pair["output_filename"]
-    output_path = pair["output_path"]
-
+    output_filename, output_path = pair["output_filename"], pair["output_path"]
     job_mgr = get_video_job_manager()
-    active_job = job_mgr.get_active_job_for_file(safe_name)
-    if active_job is not None:
-        return JSONResponse(
-            status_code=409,
-            content={
-                "error": "conflict",
-                "message": f"A {active_job.job_type} job is already active for video '{safe_name}'.",
-                "active_job": active_job.to_dict(),
-            },
-        )
-
-    if not force and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
-        stat = os.stat(output_path)
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": "success",
-                "already_exists": True,
-                "original_filename": safe_name,
-                "output_filename": output_filename,
-                "video_url": f"/videos/{output_filename}",
-                "size_bytes": stat.st_size,
-                "size_mb": round(stat.st_size / (1024 * 1024), 2),
-            },
-        )
-
+    early_resp = _transcode_conflict_or_cached(job_mgr, safe_name, output_filename, output_path, force)
+    if early_resp is not None:
+        return early_resp
     if async_mode:
-        def _runner(job, stop_event, progress_cb):
-            VideoTranscodeService.transcode_to_h264_async(
-                input_path=path,
-                output_path=output_path,
-                target_resolution=target_resolution,
-                progress_callback=progress_cb,
-                stop_event=stop_event,
-            )
-            st = os.stat(output_path)
-            return {
-                "original_filename": safe_name,
-                "output_filename": output_filename,
-                "video_url": f"/videos/{output_filename}",
-                "size_mb": round(st.st_size / (1024 * 1024), 2),
-            }
-
-        job = job_mgr.submit_job(
-            job_type="transcode",
-            filename=safe_name,
-            runner_fn=_runner,
-            initial_metrics={"output_filename": output_filename},
-        )
-        return JSONResponse(
-            status_code=202,
-            content={
-                "status": "accepted",
-                "job_id": job.job_id,
-                "job": job.to_dict(),
-                "output_filename": output_filename,
-                "video_url": f"/videos/{output_filename}",
-            },
-        )
-
-    try:
-        VideoTranscodeService.transcode_to_h264(
-            input_path=path,
-            output_path=output_path,
-            target_resolution=target_resolution,
-            timeout=300.0,
-        )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(
-            status_code=504, detail="Transcoding timed out on large file."
-        )
-    except Exception as e:
-        logger.error("Transcode failed for %s: %s", safe_name, e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    stat = os.stat(output_path)
-    return {
-        "status": "success",
-        "original_filename": safe_name,
-        "output_filename": output_filename,
-        "video_url": f"/videos/{output_filename}",
-        "size_mb": round(stat.st_size / (1024 * 1024), 2),
-    }
+        return _submit_async_transcode(job_mgr, safe_name, path, output_path, output_filename, target_resolution)
+    return _run_sync_transcode(safe_name, path, output_path, output_filename, target_resolution)
 
 
 @router.get("/api/videos/jobs/{job_id}")
@@ -264,6 +282,25 @@ async def get_latest_video_detections(filename: str):
     if stream is None:
         raise HTTPException(status_code=404, detail=f"No detections found for video '{safe_name}'")
     return stream
+
+
+@router.get("/api/videos/{filename}/reports/{run_id}/export")
+async def export_video_report_run(filename: str, run_id: str):
+    """Export a portable JSON bundle (run envelope + frame detections) for download."""
+    safe_name = os.path.basename(filename)
+    safe_run_id = os.path.basename(run_id)
+    bundle = export_report_run_bundle(safe_name, safe_run_id)
+    if bundle is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Report run '{safe_run_id}' not found for '{safe_name}'",
+        )
+    stem = os.path.splitext(safe_name)[0]
+    export_name = f"{stem}_{safe_run_id}_report.json"
+    return JSONResponse(
+        content=bundle,
+        headers={"Content-Disposition": f'attachment; filename="{export_name}"'},
+    )
 
 
 

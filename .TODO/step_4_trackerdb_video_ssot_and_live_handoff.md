@@ -52,11 +52,11 @@ python -m unittest discover -s tests -p "test_step4_video_run_repo.py"
 
 ---
 
-### Milestone 2: `video_report_store.py` SQLite SSOT Refactor, Legacy JSON Auto-Migration & Portable JSON Export API *(Deferred to Next Turn)*
-- [ ] **dashboard/services/video_report_store.py**: Refactor `save_report_run` (splitting the 61L function into `<= 30L` helpers), `list_report_runs`, `get_detection_stream`, `delete_report_run`, and `clear_report_runs` to use `TrackerDB` as the primary SSOT, transparently auto-migrating any legacy `*_reports.json` / `*_detections.json` files in `REPORTS_DIR` into `TrackerDB` on access and adding `export_report_run_bundle(filename, run_id, db=None)` while keeping `video_report_store.py` `< 340L` and all functions `<= 40L`.
-- [ ] **dashboard/routers/video_jobs.py**: Add `GET /api/videos/{filename}/reports/{run_id}/export` returning a downloadable JSON attachment (`Content-Disposition: attachment`) with the run envelope + `frame_detections`, and extract `transcode_video`'s inner worker helper so `video_jobs.py` passes `diagnose.py audit` (`< 300L`, all functions `<= 40L`).
-- [ ] **tests/test_step4_report_ssot_and_export.py**: Add unit and FastAPI `TestClient` tests (with `tempfile.TemporaryDirectory()` isolation) verifying 100% SQLite `TrackerDB` storage, automatic migration of legacy `data/reports/*.json` files on first read, `GET /api/videos/{filename}/reports/{run_id}/export` portable JSON download, and backward compatibility with `tests/test_video_report_store.py` and `tests/test_video_report_deletion.py`.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+### Milestone 2: `video_report_store.py` SQLite SSOT Refactor, Legacy JSON Auto-Migration & Portable JSON Export API
+- [x] **dashboard/services/video_report_store.py**: Refactor `save_report_run` (splitting the 61L function into `<= 30L` helpers), `list_report_runs`, `get_detection_stream`, `delete_report_run`, and `clear_report_runs` to use `TrackerDB` as the primary SSOT, transparently auto-migrating any legacy `*_reports.json` / `*_detections.json` files in `REPORTS_DIR` into `TrackerDB` on access and adding `export_report_run_bundle(filename, run_id, db=None)` while keeping `video_report_store.py` `< 340L` and all functions `<= 40L`.
+- [x] **dashboard/routers/video_jobs.py**: Add `GET /api/videos/{filename}/reports/{run_id}/export` returning a downloadable JSON attachment (`Content-Disposition: attachment`) with the run envelope + `frame_detections`, and extract `transcode_video`'s inner worker helper so `video_jobs.py` passes `diagnose.py audit` (`< 300L`, all functions `<= 40L`).
+- [x] **tests/test_step4_report_ssot_and_export.py**: Add unit and FastAPI `TestClient` tests (with `tempfile.TemporaryDirectory()` isolation) verifying 100% SQLite `TrackerDB` storage, automatic migration of legacy `data/reports/*.json` files on first read, `GET /api/videos/{filename}/reports/{run_id}/export` portable JSON download, and backward compatibility with `tests/test_video_report_store.py` and `tests/test_video_report_deletion.py`.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash
