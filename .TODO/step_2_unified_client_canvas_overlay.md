@@ -53,10 +53,10 @@ python -m unittest discover -s tests -p "test_step2_clean_streaming.py"
 ---
 
 ### Milestone 2: Shared `UnifiedCanvasOverlay` Engine (`dashboard/static/js/unified_canvas_overlay.js`) *(Deferred to Next Turn)*
-- [ ] **dashboard/static/js/unified_canvas_overlay.js**: Create the shared 100% client-side HTML5 `<canvas>` overlay engine (`< 280L`, all functions `<= 35L`) exposing `window.UnifiedCanvasOverlay` with `PALETTES`, `DEFAULT_VISIBILITY`, `computeContainBox()`, `syncCanvasDpr()`, `resolveScaleFactors()`, `drawTrackBox()`, `drawVelocityVector()`, `drawZones()`, `drawTripwires()`, `drawHeatmapLayer()`, and `renderScene()` at native `window.devicePixelRatio`.
-- [ ] **dashboard/static/index.html**: Load `<script src="/static/js/unified_canvas_overlay.js"></script>` immediately before `interactive_canvas.js` so both `#live` and `#videos` modules consume `window.UnifiedCanvasOverlay`.
-- [ ] **tests/test_step2_unified_canvas_engine.py**: Add unit/VM tests verifying `computeContainBox` (pillarbox and letterbox branches), `syncCanvasDpr` HiDPI transform scaling, and `renderScene` canvas drawing primitives (`bboxes`, `track_ids`, `dwell_timers`, `velocity`, `zones`, `tripwires`, `heatmap`), plus `diagnose.py audit` `< 280L` / `<= 40L` function compliance.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/static/js/unified_canvas_overlay.js**: Create the shared 100% client-side HTML5 `<canvas>` overlay engine (`< 280L`, all functions `<= 35L`) exposing `window.UnifiedCanvasOverlay` with `PALETTES`, `DEFAULT_VISIBILITY`, `computeContainBox()`, `syncCanvasDpr()`, `resolveScaleFactors()`, `drawTrackBox()`, `drawVelocityVector()`, `drawZones()`, `drawTripwires()`, `drawHeatmapLayer()`, and `renderScene()` at native `window.devicePixelRatio`.
+- [x] **dashboard/static/index.html**: Load `<script src="/static/js/unified_canvas_overlay.js"></script>` immediately before `interactive_canvas.js` so both `#live` and `#videos` modules consume `window.UnifiedCanvasOverlay`.
+- [x] **tests/test_step2_unified_canvas_engine.py**: Add unit/VM tests verifying `computeContainBox` (pillarbox and letterbox branches), `syncCanvasDpr` HiDPI transform scaling, and `renderScene` canvas drawing primitives (`bboxes`, `track_ids`, `dwell_timers`, `velocity`, `zones`, `tripwires`, `heatmap`), plus `diagnose.py audit` `< 280L` / `<= 40L` function compliance.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash

@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-14] feat: Step 2 Milestone 2: Shared UnifiedCanvasOverlay Engine
+- **Type**: feat
+- **Summary**: Added 225L HiDPI client-side <canvas> overlay engine (window.UnifiedCanvasOverlay) with contain geometry, DPR scaling, tracks, velocity vectors, zones, tripwires, and heatmap rendering, loaded before interactive_canvas.js.
+- **Files** (3):
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/unified_canvas_overlay.js`
+  - `tests/test_step2_unified_canvas_engine.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_unified_canvas_engine.py
+
 ## [2026-11-14] feat: Step 2 Milestone 1: Clean Un-Burned MJPEG Streaming & streaming.py Budget Fix
 - **Type**: feat
 - **Summary**: Added _encode_raw_frame, annotated=True|False in get_latest_frame_jpeg and /stream/{camera_id}, and extracted _stream_frame_generator.
