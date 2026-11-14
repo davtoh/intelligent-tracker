@@ -254,6 +254,14 @@ class TestWorldQueryEngineAndProviders(unittest.TestCase):
             self.assertEqual(res.provider, "local_deterministic")
             self.assertIn("GEMINI_API_KEY", res.fallback_reason or "")
 
+        empty_resp = MagicMock()
+        empty_resp.raise_for_status.return_value = None
+        empty_resp.json.return_value = {"candidates": []}
+        with patch("intelligent_tracker.memory.providers.requests.post", return_value=empty_resp):
+            gemini_empty = GeminiSemanticProvider(api_key="test-key", model="gemini-2.5-flash")
+            with self.assertRaises(RuntimeError):
+                gemini_empty.synthesize("Where is Alice?", {})
+
         fake_resp = MagicMock()
         fake_resp.raise_for_status.return_value = None
         fake_resp.json.return_value = {

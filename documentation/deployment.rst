@@ -167,7 +167,7 @@ Intelligent Tracker exposes three packaged console entrypoints (defined in ``pyp
 
 - ``intelligent-tracker`` (``python main.py``): Run live/headless CV tracking, bounded latency benchmarks, model integrity checks, and ``ask`` semantic queries.
 - ``intelligent-tracker-server`` (``python scripts/run_dashboard.py``): Start the FastAPI web dashboard and multi-camera VMS.
-- ``intelligent-tracker-ctl`` (``python scripts/stream_ctl.py``): Control running dashboard streams (``list``, ``stats``, ``evict``, ``prune``, ``history``, ``metrics``) and inspect ``ask``, ``world``, and ``models`` in remote (``--url`` / ``TRACKER_DASHBOARD_URL`` / ``APP_URL``) or offline mode.
+- ``intelligent-tracker-ctl`` (``python scripts/stream_ctl.py``): Control running dashboard streams (``list``, ``stats``, ``evict``, ``prune``, ``history``, ``metrics``, ``record start|stop|status``) and inspect ``ask``, ``world``, and ``models`` in remote (``--url`` / ``TRACKER_DASHBOARD_URL`` / ``APP_URL``) or offline mode.
 
 Live Camera Recording, WorldGraph & Model Verification APIs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -236,3 +236,7 @@ Operator Scenario Combinations Matrix
      - Running dashboard API
      - ``--url "$APP_URL"``
      - ``intelligent-tracker-ctl --url "$APP_URL" list``
+   * - Live Camera MP4 Recording
+     - Running dashboard API
+     - ``record start|stop|status``
+     - ``intelligent-tracker-ctl --url "$APP_URL" record start cam_01 --fps 20 --max-duration 30``

@@ -138,6 +138,14 @@ Camera Management & Discovery
      - ``/api/cameras/{id}/record/status``
      - Retrieve current or last finalized MP4 recording status and byte/frame counters.
 
+Operator CLI Parity (``intelligent-tracker-ctl record``):
+
+.. code-block:: bash
+
+   intelligent-tracker-ctl --url "$APP_URL" record start cam_01 --fps 20 --max-duration 30
+   intelligent-tracker-ctl --url "$APP_URL" record status cam_01 --json
+   intelligent-tracker-ctl --url "$APP_URL" record stop cam_01
+
 Video Studio & Scrubber Endpoints
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

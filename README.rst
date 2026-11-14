@@ -261,6 +261,11 @@ The ``intelligent-tracker-ctl`` utility (``scripts/stream_ctl.py``) and FastAPI 
     python scripts/stream_ctl.py --url "$APP_URL" stats
     python scripts/stream_ctl.py --url "$APP_URL" prune
 
+    # Start, inspect, and stop live camera MP4 recording via dashboard REST API
+    python scripts/stream_ctl.py --url "$APP_URL" record start cam_01 --fps 20 --max-duration 30
+    python scripts/stream_ctl.py --url "$APP_URL" record status cam_01 --json
+    python scripts/stream_ctl.py --url "$APP_URL" record stop cam_01
+
     # Verify ONNX model weights locally or via running dashboard (/api/system/models/verify)
     python scripts/stream_ctl.py models --verify
     python scripts/stream_ctl.py models status --json --url "$APP_URL"
@@ -307,6 +312,8 @@ Scenario Combinations Matrix
 | **WorldGraph Snapshot (CLI)**       | -          | -          | -                 | -                   | ``world snapshot --json``                       | Offline / Remote    | ``python scripts/stream_ctl.py world snapshot --json``                                             |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Semantic World Q&A (CLI)**        | -          | -          | -                 | -                   | ``--db data/tracker.db``                        | Offline / Remote    | ``python main.py ask "Where was Alice?" --db data/tracker.db``                                     |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Live Camera MP4 Record (CLI)**    | -          | -          | ``cam_01``        | -                   | ``record start|stop|status``                    | Remote Dashboard    | ``python scripts/stream_ctl.py --url "$APP_URL" record start cam_01 --fps 20 --max-duration 30``   |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **YOLOv8 Edge AI Benchmark**        | ``yolov8`` | ``centroid``| ``synthetic``    | ``configs/demo.yaml``| ``--detector yolov8 --headless --frames 60``     | Headless (60f)      | ``python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 60``              |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+

@@ -101,40 +101,51 @@ class TestMultiInstanceDatabaseConcurrency(unittest.TestCase):
         self.db_path = os.path.join(self.temp_dir.name, "stress.db")
         self.coordinator = SQLiteConnectionCoordinator()
 
+    def _concurrency_worker(
+        self,
+        worker_idx: int,
+        items_per_worker: int,
+        barrier: threading.Barrier,
+        errors: list[Exception],
+        errors_lock: threading.Lock,
+    ) -> None:
+        db: TrackerDB | None = None
+        try:
+            barrier.wait(timeout=10.0)
+            db = TrackerDB(self.db_path, coordinator=self.coordinator)
+            for item_idx in range(items_per_worker):
+                name = f"Worker{worker_idx}-Entity{item_idx}"
+                eid = db.add_entity(name=name, category="person")
+                db.update_entity(eid, notes=f"updated-{worker_idx}-{item_idx}")
+                db.add_sighting(
+                    entity_id=eid,
+                    track_id=worker_idx * 100 + item_idx,
+                    source=f"cam_{worker_idx}",
+                    zone_id="lobby",
+                )
+                counts = db.query_sighting_counts([eid])
+                if counts.get(eid) != 1:
+                    raise AssertionError(f"Expected count 1 for {eid}, got {counts}")
+        except Exception as exc:
+            with errors_lock:
+                errors.append(exc)
+        finally:
+            if db is not None:
+                db.close()
+
     def test_four_concurrent_trackerdb_instances_zero_lock_errors(self):
         """Four simultaneous TrackerDB instances write/read without database is locked."""
-        num_workers = 4
-        items_per_worker = 15
+        num_workers, items_per_worker = 4, 15
         barrier = threading.Barrier(num_workers)
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
         errors_lock = threading.Lock()
-
-        def worker(worker_idx: int) -> None:
-            db: TrackerDB | None = None
-            try:
-                barrier.wait(timeout=10.0)
-                db = TrackerDB(self.db_path, coordinator=self.coordinator)
-                for item_idx in range(items_per_worker):
-                    name = f"Worker{worker_idx}-Entity{item_idx}"
-                    eid = db.add_entity(name=name, category="person")
-                    db.update_entity(eid, notes=f"updated-{worker_idx}-{item_idx}")
-                    db.add_sighting(
-                        entity_id=eid,
-                        track_id=worker_idx * 100 + item_idx,
-                        source=f"cam_{worker_idx}",
-                        zone_id="lobby",
-                    )
-                    counts = db.query_sighting_counts([eid])
-                    if counts.get(eid) != 1:
-                        raise AssertionError(f"Expected count 1 for {eid}, got {counts}")
-            except BaseException as exc:
-                with errors_lock:
-                    errors.append(exc)
-            finally:
-                if db is not None:
-                    db.close()
-
-        threads = [threading.Thread(target=worker, args=(idx,)) for idx in range(num_workers)]
+        threads = [
+            threading.Thread(
+                target=self._concurrency_worker,
+                args=(idx, items_per_worker, barrier, errors, errors_lock),
+            )
+            for idx in range(num_workers)
+        ]
         for thread in threads:
             thread.start()
         for thread in threads:

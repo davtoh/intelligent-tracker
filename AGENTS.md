@@ -55,8 +55,8 @@ All new code and refactors must adhere to the 10 Core Coding Principles (**SRP, 
 
 ## 7. Monolith Freeze & Strangler-Fig Architecture Map
 Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `detectors.py`, `core.py`, `events.py`, `stream_manager.py`, `tracker.py`) have been decomposed into packages (`repositories/`, `routers/`, `services/`, `events/`, `tracker/`, `detectors/`, `geometry/`). The remaining files currently at or above budget are under an active **Monolith Freeze**:
-- **Hard Ceiling (>= 500 lines)**: `dashboard/static/index.html` (1,688 lines), `intelligent_tracker/analytics.py` (667 lines), `intelligent_tracker/high_objects.py` (518 lines), `intelligent_tracker/periferials.py` (510 lines)
-- **Soft Warning / Heavy Classes (350–499 lines or > 12 methods)**: `dashboard/camera_pool.py` (497 lines, `CameraPool` 19 methods), `dashboard/static/js/video_jobs.js` (493 lines), `intelligent_tracker/batch.py` (486 lines), `dashboard/static/js/video_library.js` (471 lines), `intelligent_tracker/active_learning.py` (457 lines, 13 methods), `intelligent_tracker/interactive.py` (453 lines), `intelligent_tracker/scenarios.py` (438 lines, 12 methods), `intelligent_tracker/journey.py` (432 lines), `intelligent_tracker/matching/gallery.py` (423 lines), `intelligent_tracker/rsac.py` (412 lines, 14 methods), `dashboard/static/app.js` (355 lines)
+- **Hard Ceiling (>= 500 lines)**: `intelligent_tracker/high_objects.py` (523 lines; `Scene` 25 methods)
+- **Soft Warning / Heavy Classes (350–499 lines or > 12 methods)**: `dashboard/static/js/video_jobs.js` (493 lines), `intelligent_tracker/batch.py` (485 lines), `dashboard/static/js/video_library.js` (471 lines), `intelligent_tracker/interactive.py` (451 lines), `scripts/cdp_inspect.py` (436 lines), `intelligent_tracker/matching/gallery.py` (425 lines), `intelligent_tracker/rsac.py` (412 lines, `RSACManager` 14 methods), `dashboard/static/video_scrubber.js` (388 lines), `dashboard/static/js/scrubber_overlay.js` (372 lines), `dashboard/static/camera_manager.js` (366 lines), `dashboard/static/js/overlay_layers.js` (362 lines), `dashboard/static/app.js` (355 lines); heavy classes <= 350L: `TailItem` (20 methods), `Group` (19), `EventFigure` (19), `CaptureReadGuard` (16), `CameraDeviceHandler` (15), `GroupMutationMixin` (15), `FrameProcessor` (14)
 
 ### Mandatory Placement for New Features ("Split-Before-You-Grow")
 1. **New Web Routes & API Endpoints**: Do **NOT** add new endpoints directly into `dashboard/app.py`. Place new route handlers in `dashboard/routers/<domain>.py` (using FastAPI `APIRouter`) and business logic in `dashboard/services/<domain>_service.py`, then mount the router in `dashboard/app.py`.
@@ -71,6 +71,7 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   1. *Pass 1 (Broadcast)*: Signal all child tasks/threads to stop simultaneously (`signal_stop()`).
   2. *Pass 2 (Parallel Join)*: Join/await workers concurrently (`ThreadPoolExecutor` or `asyncio.gather`) with bounded timeouts. Multi-worker teardown must scale in $O(1)$ time: $\max(t_1, \dots, t_N)$ rather than $\sum t_i$.
 - **Zero Orphaned Workers**: Every component that spawns threads or asyncio background tasks (`EventBus`, `StreamManager`, `VideoSource`, `TelemetrySampler`) must provide a paired `stop()` method, and parent lifecycles must explicitly invoke it.
+- **Deterministic SQLite & EventBus Teardown**: `StreamManager.stop()` and `PipelineBundle.close()` must close owned `TrackerDB` handles and stop both primary and fallback `EventBus` instances (which must call `.start()` on creation) to prevent Windows SQLite file locks.
 - **Async Event Loop Protection**: Never execute heavy synchronous hardware driver unbinds or process joins directly on the main asyncio event loop. Offload them via `asyncio.to_thread()`.
 - **Fail-Safe Watchdog**: Mission-critical server processes must include a background watchdog timer during shutdown to prevent deadlocks from uncooperative C/C++ kernel drivers.
 
@@ -78,6 +79,9 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
 - **Exhaustive Branch Testing (`if/elif/else`)**:
   - Tests must never cover only the "happy path" `if` condition. When introducing branching logic with fallback dependencies, conditional coordinators, or error branches, add explicit unit tests exercising every `elif` and `else` branch.
   - Specifically test fallback configurations (e.g., primary pool absent $\rightarrow$ single-stream fallback branch executed).
+- **Global Test Fixture & Import Hygiene**:
+  - Reset global FastAPI `app_module` test overrides in `tearDownClass` and guard `_conn is not None` in DB resolvers so closed test DBs cannot leak across `unittest discover` order.
+  - Preserve `try/except ImportError` optional-dependency availability probes (`zlib`, `scipy`, `picamera`) when cleaning `arch-map` unused-import alerts, and keep `.. automodule::` directives in one canonical `.rst` file so `sphinx -W` stays warning-free.
 - **Pre-Commit Static Symbol Verification (AST Check)**:
   - Whenever code is added or modified, verify that all symbols, modules, and type references are explicitly imported at the top of the file.
   - In environments without active linter daemons, run a fast AST compile check before marking tasks complete:
