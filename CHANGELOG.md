@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-14] feat: Step 3 Milestone 3: ROI Tag Modal Preview, AI Auto-Select & Scrubber Wiring
+- **Type**: feat
+- **Summary**: Upgraded #modal-tag-entity with live ROI crop preview, AI class badge, and 1-click Re-ID candidate chips; wired InteractiveCanvas and ScrubberOverlay to RoiDrawTagger.openWithRecognition() and POST /api/tag/commit with gallery refresh.
+- **Files** (6):
+  - `dashboard/static/css/scrubber.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/interactive_canvas.js`
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `dashboard/static/partials/modals/entity_modals.html`
+  - `tests/test_step3_tag_modal_integration.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_*.py
+
 ## [2026-11-14] feat: Step 3 Milestone 2: Unified RoiDrawTagger Canvas Controller
 - **Type**: feat
 - **Summary**: Added dashboard/static/js/roi_draw_tagger.js (233L) for pointer click-to-tag (<6px) and freehand drag-to-draw (>=6px) ROI selection mapped via UnifiedCanvasOverlay.computeContainBox, registered in index.html, and verified with 6 Node VM unit tests.
@@ -127,18 +139,3 @@
   - `dashboard/static/css/camera_recording.css`
   - ... (+3 more)
 - **Verification**: python -m unittest discover tests (550 passed) & diagnose.py audit (PASS)
-
-## [2026-11-14] docs: Step 6 Milestone 3: Sphinx Docs Sync, Dead Import Cleanup & Packaging Polish
-- **Type**: docs
-- **Summary**: Updated Sphinx docs for pipeline/world/memory/cli/recording/models APIs, synced README.rst and pyproject.toml readme field, removed 28 unused imports across 21 modules while preserving availability probes, and verified 541/541 tests + Sphinx -W build.
-- **Files** (31):
-  - `README.rst`
-  - `dashboard/routers/videos.py`
-  - `dashboard/services/frame_overlay.py`
-  - `dashboard/services/shutdown_handler.py`
-  - `documentation/dashboard.rst`
-  - `documentation/deployment.rst`
-  - `documentation/index.rst`
-  - `documentation/intelligent_tracker.rst`
-  - ... (+23 more)
-- **Verification**: python -m unittest discover tests && python -m sphinx -a -W --keep-going documentation/ documentation/_build/html/

@@ -60,10 +60,35 @@
     return last;
   }
 
+  function getTracksAtCurrentTime() {
+    const layer = getPrimaryLayer();
+    const rec = layer && videoPlayer ? getRenderer()?.findClosestDetections(layer.frameDetections, videoPlayer.currentTime || 0) : null;
+    return rec?.tracks || [];
+  }
+
+  function bindRoiTagger() {
+    if (!overlayCanvas || !window.RoiDrawTagger?.attach) return;
+    overlayCanvas.style.pointerEvents = 'auto';
+    overlayCanvas.style.cursor = 'crosshair';
+    window.RoiDrawTagger.attach({
+      canvas: overlayCanvas, mediaEl: videoPlayer, containerEl: overlayCanvas.parentElement,
+      getTracks: getTracksAtCurrentTime,
+      getSourceContext: () => ({
+        sourceType: 'video', videoFilename: currentFilename || '',
+        timestampSec: videoPlayer?.currentTime || 0,
+        sourceWidth: videoPlayer?.videoWidth || 0, sourceHeight: videoPlayer?.videoHeight || 0,
+      }),
+      onRenderOverlay: render,
+      onTrackClick: ({ track, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, bbox: track.bbox }),
+      onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),
+    });
+  }
+
   function init() {
     videoPlayer = document.getElementById('scrubber-video-player');
     overlayCanvas = document.getElementById('scrubber-overlay-canvas');
     if (overlayCanvas) overlayCtx = overlayCanvas.getContext('2d');
+    bindRoiTagger();
     if (!eventsBound) {
       eventsBound = true;
       window.addEventListener('resize', () => render());
@@ -287,20 +312,13 @@
     if (animFrameId) return;
     function loop() {
       render();
-      if (videoPlayer && !videoPlayer.paused) {
-        animFrameId = requestAnimationFrame(loop);
-      } else {
-        animFrameId = null;
-      }
+      animFrameId = (videoPlayer && !videoPlayer.paused) ? requestAnimationFrame(loop) : null;
     }
     animFrameId = requestAnimationFrame(loop);
   }
 
   function stopLoop() {
-    if (animFrameId) {
-      cancelAnimationFrame(animFrameId);
-      animFrameId = null;
-    }
+    if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
     render();
   }
 
@@ -309,11 +327,9 @@
     hasLayer: (runId) => activeLayers.has(String(runId)),
     getActiveLayers: () => activeLayers,
     getActiveLayerIds: () => Array.from(activeLayers.keys()),
-    fetchProgressiveStream, render, clear, startLoop, stopLoop,
-    setFeatureVisibility, getFeatureVisibility,
+    fetchProgressiveStream, render, clear, startLoop, stopLoop, setFeatureVisibility, getFeatureVisibility,
     computeVideoRenderBox: (vR, vpR, vw, vh) => getRenderer()?.computeVideoRenderBox(vR, vpR, vw, vh),
-    resolveScaleFactors: (rW, rH, rec, vw, vh, fb) =>
-      getRenderer()?.resolveScaleFactors(rW, rH, rec, vw, vh, fb ?? getPrimaryLayer()?.sourceResolution ?? null),
+    resolveScaleFactors: (rW, rH, rec, vw, vh, fb) => getRenderer()?.resolveScaleFactors(rW, rH, rec, vw, vh, fb ?? getPrimaryLayer()?.sourceResolution ?? null),
     get PALETTES() { return getPalettes(); },
     getCurrentDetections: () => getPrimaryLayer()?.frameDetections || [],
     getCurrentRunId: () => getPrimaryLayer()?.runId || null,
