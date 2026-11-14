@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.request
 
 from intelligent_tracker.cli.ask import add_ask_arguments, execute_ask_args
+from intelligent_tracker.cli.ctl_record import add_record_subparser, execute_record_args
 from intelligent_tracker.cli.ctl_world import (
     add_world_and_models_subparsers,
     execute_models_args,
@@ -247,7 +248,33 @@ def build_parser() -> argparse.ArgumentParser:
     add_ask_arguments(ask_parser, include_url=False)
     ask_parser.add_argument("--url", dest="ask_url", default=None, help="Override dashboard API URL")
     add_world_and_models_subparsers(subparsers)
+    add_record_subparser(subparsers)
     return parser
+
+
+_LOCAL_OR_HYBRID_HANDLERS = {
+    "ask": execute_ask_args,
+    "world": execute_world_args,
+    "models": execute_models_args,
+    "record": execute_record_args,
+}
+
+
+def _dispatch_remote_command(app_url: str, args: argparse.Namespace) -> None:
+    """Route legacy dashboard-backed subcommands against resolved URL."""
+    cmd = args.command or "list"
+    if cmd == "list":
+        cmd_list(app_url)
+    elif cmd == "stats":
+        cmd_stats(app_url)
+    elif cmd == "evict":
+        cmd_evict(app_url, args.camera_id)
+    elif cmd == "prune":
+        cmd_prune(app_url)
+    elif cmd == "history":
+        cmd_history(app_url, args.camera_id, args.limit)
+    elif cmd == "metrics":
+        cmd_metrics(app_url, args.limit)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -255,18 +282,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "ask":
-        code = execute_ask_args(args, fallback_url=args.url)
-        if code != 0:
-            sys.exit(code)
-        return
-    if args.command == "world":
-        code = execute_world_args(args, fallback_url=args.url)
-        if code != 0:
-            sys.exit(code)
-        return
-    if args.command == "models":
-        code = execute_models_args(args, fallback_url=args.url)
+    handler = _LOCAL_OR_HYBRID_HANDLERS.get(args.command)
+    if handler is not None:
+        code = handler(args, fallback_url=args.url)
         if code != 0:
             sys.exit(code)
         return
@@ -276,19 +294,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         print(f"[ERROR] {exc}")
         sys.exit(2)
-
-    if args.command == "list" or not args.command:
-        cmd_list(app_url)
-    elif args.command == "stats":
-        cmd_stats(app_url)
-    elif args.command == "evict":
-        cmd_evict(app_url, args.camera_id)
-    elif args.command == "prune":
-        cmd_prune(app_url)
-    elif args.command == "history":
-        cmd_history(app_url, args.camera_id, args.limit)
-    elif args.command == "metrics":
-        cmd_metrics(app_url, args.limit)
+    _dispatch_remote_command(app_url, args)
 
 
 if __name__ == "__main__":

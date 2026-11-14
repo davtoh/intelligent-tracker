@@ -94,6 +94,15 @@ class TestCliRunnerIntegration(unittest.TestCase):
         ])
         run_cli(args)
 
+    def test_resolve_pipeline_params_skips_hardware_probe_by_default(self) -> None:
+        """Dry CLI parameter resolution must not probe physical camera hardware."""
+        from unittest.mock import patch
+
+        with patch("intelligent_tracker.pipeline.config.resolve_camera_source") as mock_probe:
+            params = resolve_pipeline_params(parse_args([]), {})
+        mock_probe.assert_not_called()
+        self.assertEqual(params["source"], "0")
+
 
 if __name__ == "__main__":
     unittest.main()

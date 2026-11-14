@@ -226,51 +226,45 @@ def set_lifecycle_manager(
 
 
 def resolve_stream_manager(
-    camera_id: Optional[str] = None,
-    pool: Optional[CameraPool] = None,
-    sm: Optional[StreamManager] = None,
+    camera_id: Optional[str] = None, pool: Optional[CameraPool] = None, sm: Optional[StreamManager] = None,
 ) -> Optional[StreamManager]:
     """Resolve active StreamManager for ``camera_id`` from supplied pool/stream."""
-    if pool:
-        mgr = pool.get_stream(camera_id)
-        if mgr:
-            return mgr
-    if sm and (not camera_id or sm.camera_id == camera_id):
+    if pool is not None:
+        get_stream = getattr(pool, "get_stream", None)
+        if callable(get_stream):
+            mgr = get_stream(camera_id)
+            if mgr:
+                return mgr
+    if sm and (not camera_id or getattr(sm, "camera_id", None) == camera_id):
         return sm
-    if pool:
-        return pool.primary_stream
-    return sm
+    return getattr(pool, "primary_stream", None) if pool is not None else sm
 
 
-def get_active_stream_manager(
-    camera_id: Optional[str] = None,
-    conn: HTTPConnection = None,
-) -> Optional[StreamManager]:
+def get_active_stream_manager(camera_id: Optional[str] = None, conn: HTTPConnection = None) -> Optional[StreamManager]:
     """Resolve active StreamManager for a camera ID or default primary channel."""
-    return resolve_stream_manager(
-        camera_id=camera_id,
-        pool=get_camera_pool(conn),
-        sm=get_stream_manager(conn),
-    )
+    return resolve_stream_manager(camera_id=camera_id, pool=get_camera_pool(conn), sm=get_stream_manager(conn))
+
+
+def _db_open(db: Any) -> bool:
+    """Return True when ``db`` holds an active SQLite connection."""
+    return db is not None and getattr(db, "_conn", None) is not None
 
 
 def get_db(conn: HTTPConnection = None) -> TrackerDB:
     """Retrieve TrackerDB instance from active stream, ``app.state``, or managed fallback."""
     global _owned_fallback_db
-    mgr = get_active_stream_manager(conn=conn)
-    if mgr and mgr.db and getattr(mgr.db, "_conn", None) is not None:
-        return mgr.db
     state_db = _from_app_state(conn, "db", _db)
-    if state_db is not None and getattr(state_db, "_conn", None) is not None:
+    if state_db is not _owned_fallback_db and _db_open(state_db):
         return state_db
-    if _owned_fallback_db is None or getattr(_owned_fallback_db, "_conn", None) is None:
+    mgr = get_active_stream_manager(conn=conn)
+    if mgr and _db_open(getattr(mgr, "db", None)):
+        return mgr.db
+    if _db_open(state_db):
+        return state_db
+    if not _db_open(_owned_fallback_db):
         pool = get_camera_pool(conn)
-        db_path = (
-            getattr(pool, "db_path", None)
-            if pool is not None and isinstance(getattr(pool, "db_path", None), str)
-            else "data/tracker.db"
-        )
-        _owned_fallback_db = TrackerDB(db_path)
+        pool_db = getattr(pool, "db_path", None) if pool is not None else None
+        _owned_fallback_db = TrackerDB(pool_db if isinstance(pool_db, str) else "data/tracker.db")
     if conn is not None:
         conn.app.state.db = _owned_fallback_db
     return _owned_fallback_db

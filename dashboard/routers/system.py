@@ -12,7 +12,7 @@ import os
 import shutil
 import tempfile
 import time
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -125,11 +125,9 @@ async def get_system_processes(
     return lm.get_diagnostics()
 
 
-@router.get("/api/system/capabilities")
-async def get_system_capabilities():
-    """Expose available detectors, trackers, Re-ID extractors, target classes, and presets."""
+def _discover_registered_backends() -> Dict[str, Any]:
+    """Query Detector, Tracker, and ReID registries with safe fallback defaults."""
     from intelligent_tracker.detectors import DetectorFactory
-    from intelligent_tracker.detectors.coco_classes import COCO_CLASSES
     from intelligent_tracker.reid import ReIDExtractorFactory
     from intelligent_tracker.tracker import TrackerFactory
 
@@ -138,31 +136,35 @@ async def get_system_capabilities():
     except Exception as e:
         logger.warning("Failed to fetch available detectors: %s", e)
         detectors = ["yolov8", "mock"]
-
     try:
         trackers = TrackerFactory.available_trackers()
     except Exception as e:
         logger.warning("Failed to fetch available trackers: %s", e)
         trackers = ["centroid", "sort"]
-
     try:
         reid_extractors = list(getattr(ReIDExtractorFactory, "_registry", {}).keys())
     except Exception as e:
         logger.warning("Failed to fetch available reid extractors: %s", e)
         reid_extractors = ["color", "hsv", "onnx", "mock"]
-
-    primary_detectors = [
+    primary = [
         d for d in ["yolov8", "yolo11", "haar", "face_yunet", "movementdetector", "color", "mock"]
         if d in detectors
     ]
-    if not primary_detectors:
-        primary_detectors = detectors[:6]
-
     return {
         "detectors": detectors,
-        "primary_detectors": primary_detectors,
+        "primary_detectors": primary or detectors[:6],
         "trackers": trackers,
         "reid_extractors": reid_extractors,
+    }
+
+
+@router.get("/api/system/capabilities")
+async def get_system_capabilities():
+    """Expose available detectors, trackers, Re-ID extractors, target classes, and presets."""
+    from intelligent_tracker.detectors.coco_classes import COCO_CLASSES
+
+    return {
+        **_discover_registered_backends(),
         "coco_classes": COCO_CLASSES,
         "default_classes": [
             "person", "car", "bicycle", "motorcycle", "bus", "truck", "dog", "cat"

@@ -93,9 +93,9 @@ def _config_to_params(config: PipelineConfig, args: Any, cfg: dict[str, Any]) ->
     }
 
 
-def resolve_pipeline_params(args: Any, cfg: dict[str, Any]) -> dict[str, Any]:
+def resolve_pipeline_params(args: Any, cfg: dict[str, Any], *, resolve_source: bool = False) -> dict[str, Any]:
     """Resolve CLI options against config file defaults via PipelineConfig SSOT."""
-    config = PipelineConfig.from_cli_args(args, cfg)
+    config = PipelineConfig.from_cli_args(args, cfg, resolve_source=resolve_source)
     return _config_to_params(config, args, cfg)
 
 

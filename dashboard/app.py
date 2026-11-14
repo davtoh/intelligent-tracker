@@ -133,13 +133,8 @@ lifecycle_manager: Optional[StreamLifecycleManager] = None
 _probe_video_file = VideoTranscodeService.probe_video
 
 
-@asynccontextmanager
-async def lifespan(application: FastAPI):
-    """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
-    install_shutdown_handlers()
-    set_parent_death_signal()
-    start_parent_watchdog()
-    logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
+def _init_runtime_services(application: FastAPI):
+    """Initialize CameraPool, ScenarioManager, TrackerDB, and StreamLifecycleManager."""
     pool = CameraPool()
     primary_sm = pool.primary_stream
     scen_mgr = ScenarioManager(
@@ -165,9 +160,19 @@ async def lifespan(application: FastAPI):
         lifecycle_manager=lifecycle_mgr,
         db=db,
     )
-
     for sm in pool.streams.values():
         scen_mgr.apply_to_stream_manager(sm)
+    return pool, primary_sm, lifecycle_mgr, owned_db
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Lifespan context manager starting and stopping the CameraPool, ScenarioManager and pipelines."""
+    install_shutdown_handlers()
+    set_parent_death_signal()
+    start_parent_watchdog()
+    logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
+    pool, primary_sm, lifecycle_mgr, owned_db = _init_runtime_services(application)
 
     yield
     logger.info("Shutting down Intelligent Tracker CameraPool...")

@@ -246,6 +246,8 @@ class TestWorldQueryEngineAndProviders(unittest.TestCase):
             os.environ.pop("GEMINI_API_KEY", None)
             gemini = GeminiSemanticProvider()
             self.assertFalse(gemini.is_configured)
+            with self.assertRaises(RuntimeError):
+                gemini.synthesize("Where is Alice?", {})
             self.engine.set_provider(gemini)
             res = self.engine.ask("Where is Alice?", now=self.now)
             self.assertTrue(res.fallback_used)

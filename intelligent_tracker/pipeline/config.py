@@ -123,6 +123,79 @@ def _normalize_reid_name(raw_name: Any) -> str | None:
     return text
 
 
+def _resolve_reid_and_db(
+    reid_cfg: dict[str, Any], db_path: str | None, db_cfg: dict[str, Any], probe_db_reid: bool,
+) -> tuple[str | None, str | None]:
+    """Resolve normalized Re-ID model and database path from config blocks."""
+    resolved_db = db_path if db_path is not None else db_cfg.get("path")
+    reid_raw = reid_cfg.get("model")
+    if reid_raw is None and probe_db_reid:
+        reid_raw = _probe_db_reid_model(resolved_db or "data/tracker.db")
+    if reid_raw is None and "model" not in reid_cfg:
+        reid_raw = "color"
+    reid_model = _normalize_reid_name(reid_raw)
+    if resolved_db is None and reid_model is not None:
+        resolved_db = "data/tracker.db"
+    return reid_model, resolved_db
+
+
+def _extract_runtime_kwargs(data: dict[str, Any], raw_source: Any, default_detector: str, enable_memory_indexing: bool, resolve_source: bool) -> dict[str, Any]:
+    """Normalize video, detector, tracker, and analytics sections into PipelineConfig kwargs."""
+    video_cfg, det_cfg, trk_cfg = data.get("video", {}), data.get("detector", {}), data.get("tracker", {})
+    ana_cfg, vis_cfg, mem_cfg = data.get("analytics", {}), data.get("visualization", {}), data.get("memory", {})
+    hm_cfg = ana_cfg.get("heatmap", {})
+    source = _resolve_source(raw_source) if resolve_source else ("synthetic" if raw_source is None else raw_source)
+    tracker_type = str(trk_cfg.get("type", "centroid")).strip().lower()
+    decay_val = hm_cfg.get("decay", 0.998)
+    return {
+        "source": source,
+        "resolution": parse_resolution(video_cfg.get("resolution")),
+        "framerate": int(video_cfg.get("framerate", 30)),
+        "buffer_size": int(video_cfg.get("buffer_size", 1)),
+        "auto_reconnect": bool(video_cfg.get("auto_reconnect", True)),
+        "reconnect_delay": float(video_cfg.get("reconnect_delay", 1.0)),
+        "loop_video": _is_video_file(source) or bool(video_cfg.get("loop", False)),
+        "detector_model": str(det_cfg.get("model", default_detector)).strip().lower(),
+        "detector_confidence": float(det_cfg.get("confidence", 0.25)),
+        "detector_classes": parse_classes(det_cfg.get("classes")),
+        "tracker_type": tracker_type,
+        "max_disappeared": int(trk_cfg.get("max_disappeared", trk_cfg.get("max_age", 30))),
+        "min_hits": int(trk_cfg.get("min_hits", 2)),
+        "iou_threshold": float(trk_cfg.get("iou_threshold", 0.3 if tracker_type == "sort" else 0.2)),
+        "enable_memory_indexing": bool(mem_cfg.get("indexing", enable_memory_indexing)),
+        "heatmap_enabled": bool(hm_cfg.get("enabled", True)),
+        "heatmap_decay": float(decay_val) if decay_val is not None else None,
+        "show_heatmap": bool(vis_cfg.get("draw_heatmap", False)),
+        "tripwires": list(ana_cfg.get("tripwires", [])),
+        "zones": list(ana_cfg.get("zones", [])),
+    }
+
+
+def _apply_cli_overrides(base: "PipelineConfig", args: Any) -> "PipelineConfig":
+    """Apply explicit CLI Namespace flags onto a baseline PipelineConfig."""
+    if getattr(args, "resolution", None):
+        base.resolution = parse_resolution(args.resolution, default=base.resolution)
+    if getattr(args, "framerate", None):
+        base.framerate = int(args.framerate)
+    if getattr(args, "detector", None):
+        base.detector_model = str(args.detector).strip().lower()
+    if getattr(args, "conf", None) is not None:
+        base.detector_confidence = float(args.conf)
+    if getattr(args, "classes", None) is not None:
+        base.detector_classes = parse_classes(args.classes)
+    if getattr(args, "tracker", None):
+        base.tracker_type = str(args.tracker).strip().lower()
+    if getattr(args, "reid", None) is not None:
+        base.reid_model = _normalize_reid_name(args.reid)
+    if getattr(args, "reid_thresh", None) is not None:
+        base.reid_threshold = float(args.reid_thresh)
+    if getattr(args, "heatmap", False):
+        base.show_heatmap = True
+    if getattr(args, "output", None):
+        base.output_path = args.output
+    return base
+
+
 @dataclass
 class PipelineConfig:
     """Normalized configuration for assembling a unified CV pipeline."""
@@ -160,122 +233,42 @@ class PipelineConfig:
 
     @classmethod
     def from_dict(
-        cls,
-        cfg: dict[str, Any] | None = None,
-        *,
-        camera_id: str = "default",
-        db_path: str | None = None,
-        source_override: Any = None,
-        detector_fallback_mock: bool = True,
-        enable_governance: bool = True,
-        enable_event_bus_fallback: bool = True,
-        enable_memory_indexing: bool = True,
-        default_source: str = "synthetic",
-        default_detector: str = "mock",
-        probe_db_reid: bool = False,
-        config_path: str | None = None,
+        cls, cfg: dict[str, Any] | None = None, *, camera_id: str = "default", db_path: str | None = None,
+        source_override: Any = None, detector_fallback_mock: bool = True, enable_governance: bool = True,
+        enable_event_bus_fallback: bool = True, enable_memory_indexing: bool = True,
+        default_source: str = "synthetic", default_detector: str = "mock",
+        probe_db_reid: bool = False, config_path: str | None = None, resolve_source: bool = True,
     ) -> "PipelineConfig":
         """Build a normalized PipelineConfig from a nested config dictionary."""
         data = dict(cfg or {})
-        video_cfg = data.get("video", {})
-        det_cfg = data.get("detector", {})
-        trk_cfg = data.get("tracker", {})
-        reid_cfg = data.get("reid", {})
-        db_cfg = data.get("database", {})
-        ana_cfg = data.get("analytics", {})
-        vis_cfg = data.get("visualization", {})
-        mem_cfg = data.get("memory", {})
-        hm_cfg = ana_cfg.get("heatmap", {})
-
-        raw_source = source_override if source_override is not None else video_cfg.get("source", default_source)
-        source = _resolve_source(raw_source)
-        tracker_type = str(trk_cfg.get("type", "centroid")).strip().lower()
-        default_iou = 0.3 if tracker_type == "sort" else 0.2
-        resolved_db = db_path if db_path is not None else db_cfg.get("path")
-
-        reid_raw = reid_cfg.get("model")
-        if reid_raw is None and probe_db_reid:
-            reid_raw = _probe_db_reid_model(resolved_db or "data/tracker.db")
-        if reid_raw is None and "model" not in reid_cfg:
-            reid_raw = "color"
-        reid_model = _normalize_reid_name(reid_raw)
-        if resolved_db is None and reid_model is not None:
-            resolved_db = "data/tracker.db"
-
-        decay_val = hm_cfg.get("decay", 0.998)
+        raw_source = source_override if source_override is not None else data.get("video", {}).get("source", default_source)
+        runtime_kwargs = _extract_runtime_kwargs(data, raw_source, default_detector, enable_memory_indexing, resolve_source)
+        reid_model, resolved_db = _resolve_reid_and_db(data.get("reid", {}), db_path, data.get("database", {}), probe_db_reid)
         return cls(
             camera_id=camera_id,
-            source=source,
-            resolution=parse_resolution(video_cfg.get("resolution")),
-            framerate=int(video_cfg.get("framerate", 30)),
-            buffer_size=int(video_cfg.get("buffer_size", 1)),
-            auto_reconnect=bool(video_cfg.get("auto_reconnect", True)),
-            reconnect_delay=float(video_cfg.get("reconnect_delay", 1.0)),
-            loop_video=_is_video_file(source) or bool(video_cfg.get("loop", False)),
-            detector_model=str(det_cfg.get("model", default_detector)).strip().lower(),
-            detector_confidence=float(det_cfg.get("confidence", 0.25)),
-            detector_classes=parse_classes(det_cfg.get("classes")),
             detector_fallback_mock=detector_fallback_mock,
-            tracker_type=tracker_type,
-            max_disappeared=int(trk_cfg.get("max_disappeared", trk_cfg.get("max_age", 30))),
-            min_hits=int(trk_cfg.get("min_hits", 2)),
-            iou_threshold=float(trk_cfg.get("iou_threshold", default_iou)),
             reid_model=reid_model,
-            reid_threshold=float(reid_cfg.get("threshold", 0.65)),
+            reid_threshold=float(data.get("reid", {}).get("threshold", 0.65)),
             db_path=resolved_db,
             enable_governance=enable_governance,
             enable_event_bus_fallback=enable_event_bus_fallback,
-            enable_memory_indexing=bool(mem_cfg.get("indexing", enable_memory_indexing)),
-            heatmap_enabled=bool(hm_cfg.get("enabled", True)),
-            heatmap_decay=float(decay_val) if decay_val is not None else None,
-            show_heatmap=bool(vis_cfg.get("draw_heatmap", False)),
-            tripwires=list(ana_cfg.get("tripwires", [])),
-            zones=list(ana_cfg.get("zones", [])),
             raw_config=data,
             config_path=config_path,
+            **runtime_kwargs,
         )
 
     @classmethod
     def from_cli_args(
-        cls,
-        args: Any,
-        cfg: dict[str, Any] | None = None,
+        cls, args: Any, cfg: dict[str, Any] | None = None, *, resolve_source: bool = True,
     ) -> "PipelineConfig":
         """Build PipelineConfig by layering CLI Namespace overrides onto a config dict."""
         data = dict(cfg or {})
-        gov_cfg = data.get("governance", {})
-        gov_enabled = bool(getattr(args, "governance", False) or gov_cfg.get("enabled", False))
+        gov_enabled = bool(getattr(args, "governance", False) or data.get("governance", {}).get("enabled", False))
         base = cls.from_dict(
-            data,
-            db_path=getattr(args, "db", None),
-            source_override=getattr(args, "source", None),
-            detector_fallback_mock=False,
-            enable_governance=gov_enabled,
-            enable_event_bus_fallback=False,
-            default_source="0",
-            default_detector="haar",
-            probe_db_reid=True,
-            config_path=getattr(args, "config", None),
+            data, db_path=getattr(args, "db", None), source_override=getattr(args, "source", None),
+            detector_fallback_mock=False, enable_governance=gov_enabled, enable_event_bus_fallback=False,
+            default_source="0", default_detector="haar", probe_db_reid=True,
+            config_path=getattr(args, "config", None), resolve_source=resolve_source,
         )
-        if getattr(args, "resolution", None):
-            base.resolution = parse_resolution(args.resolution, default=base.resolution)
-        if getattr(args, "framerate", None):
-            base.framerate = int(args.framerate)
-        if getattr(args, "detector", None):
-            base.detector_model = str(args.detector).strip().lower()
-        if getattr(args, "conf", None) is not None:
-            base.detector_confidence = float(args.conf)
-        if getattr(args, "classes", None) is not None:
-            base.detector_classes = parse_classes(args.classes)
-        if getattr(args, "tracker", None):
-            base.tracker_type = str(args.tracker).strip().lower()
-        if getattr(args, "reid", None) is not None:
-            base.reid_model = _normalize_reid_name(args.reid)
-        if getattr(args, "reid_thresh", None) is not None:
-            base.reid_threshold = float(args.reid_thresh)
-        if getattr(args, "heatmap", False):
-            base.show_heatmap = True
-        if getattr(args, "output", None):
-            base.output_path = args.output
-        return base
+        return _apply_cli_overrides(base, args)
 

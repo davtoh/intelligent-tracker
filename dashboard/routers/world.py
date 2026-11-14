@@ -9,12 +9,13 @@ and ``TrackerDB`` FTS5 timeline search.
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     get_camera_pool,
     get_db,
+    get_scenario_manager,
     get_stream_manager,
     get_world_query_engine,
 )
@@ -126,39 +127,45 @@ async def search_world_timeline(
 
 
 def _resolve_world_graph(
-    engine: Optional[WorldQueryEngine],
+    request: Request,
     pool: Optional[CameraPool],
     sm: Optional[StreamManager],
+    scen_mgr: Optional[Any],
 ) -> Optional[WorldGraph]:
-    """Resolve the active WorldGraph from WorldQueryEngine, CameraPool, or StreamManager."""
+    """Resolve the active WorldGraph without instantiating a fallback TrackerDB."""
+    override = request.app.dependency_overrides.get(get_world_query_engine)
+    state_engine = override() if override is not None else getattr(request.app.state, "world_query_engine", None)
     return (
-        getattr(engine, "world_graph", None)
+        getattr(state_engine, "world_graph", None)
         or getattr(pool, "world_graph", None)
         or getattr(sm, "world_graph", None)
+        or getattr(scen_mgr, "world_graph", None)
     )
 
 
 @router.get("/snapshot")
 async def get_world_snapshot(
-    engine: WorldQueryEngine = Depends(get_world_query_engine),
+    request: Request,
     pool: Optional[CameraPool] = Depends(get_camera_pool),
     sm: Optional[StreamManager] = Depends(get_stream_manager),
+    scen_mgr: Optional[Any] = Depends(get_scenario_manager),
 ) -> dict[str, Any]:
     """Return a JSON-serializable topology and entity snapshot of the active WorldGraph."""
-    graph = _resolve_world_graph(engine, pool, sm)
+    graph = _resolve_world_graph(request, pool, sm, scen_mgr)
     return graph.snapshot() if graph is not None else WorldGraph().snapshot()
 
 
 @router.get("/entities")
 async def list_world_entities(
+    request: Request,
     camera_id: Optional[str] = Query(None, description="Filter entities active on camera ID"),
     min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence threshold"),
-    engine: WorldQueryEngine = Depends(get_world_query_engine),
     pool: Optional[CameraPool] = Depends(get_camera_pool),
     sm: Optional[StreamManager] = Depends(get_stream_manager),
+    scen_mgr: Optional[Any] = Depends(get_scenario_manager),
 ) -> dict[str, Any]:
     """List live WorldEntity nodes from the active WorldGraph with optional filters."""
-    graph = _resolve_world_graph(engine, pool, sm)
+    graph = _resolve_world_graph(request, pool, sm, scen_mgr)
     snap = graph.snapshot() if graph is not None else WorldGraph().snapshot()
     entities = list((snap.get("entities") or {}).values())
     if camera_id:
