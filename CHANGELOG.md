@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-14] feat: Step 2 Milestone 1: Clean Un-Burned MJPEG Streaming & streaming.py Budget Fix
+- **Type**: feat
+- **Summary**: Added _encode_raw_frame, annotated=True|False in get_latest_frame_jpeg and /stream/{camera_id}, and extracted _stream_frame_generator.
+- **Files** (8):
+  - `.TODO/step_2_unified_client_canvas_overlay.md`
+  - `.agents/rules/pipeline_and_db_invariants.md`
+  - `dashboard/routers/streaming.py`
+  - `dashboard/services/camera_pool_queries.py`
+  - `dashboard/services/stream_media.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/stream_manager.py`
+  - `tests/test_step2_clean_streaming.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_clean_streaming.py
+
 ## [2026-11-14] feat: Step 1 Milestone 4: Frontend Demo Simulation Gating & Initial Camera Focus Sync
 - **Type**: feat
 - **Summary**: Gate Synthetic Mock detector as Demo Simulation Only in camera_ai_config.js, auto-sync initial focusedCameraId/activeCameraId when cam_01 is absent, compact camera_config_store.py under 180L, and complete Step 1 verification.
@@ -124,17 +138,3 @@
   - `dashboard/static/partials/`
   - `tests/test_step3_architecture_budgets.py`
 - **Verification**: python -m unittest discover tests (471 passed)
-
-## [2026-11-13] feat: Step 2 Milestone 4: Dead Import Cleanup, Legacy Compatibility & Final Sign-Off
-- **Type**: feat
-- **Summary**: Removed dead high_objects/unused imports from scenarios.py and topology.py, added optional WorldGraph sync hooks in ScenarioManager, documented legacy compatibility boundaries in spaces.py and high_objects.py, guarded closed DB fallback in video_analytics_service.py, and verified all 450 unit/integration tests and Sphinx docs build.
-- **Files** (8):
-  - `dashboard/app.py`
-  - `dashboard/services/video_analytics_service.py`
-  - `intelligent_tracker/core/spaces.py`
-  - `intelligent_tracker/high_objects.py`
-  - `intelligent_tracker/scenarios.py`
-  - `intelligent_tracker/topology.py`
-  - `tests/test_scenario_api.py`
-  - `tests/test_world_legacy_compat.py`
-- **Verification**: python -m unittest discover tests

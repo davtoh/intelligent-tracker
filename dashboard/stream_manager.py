@@ -90,6 +90,7 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
     manager._running = False
     manager._stop_event = threading.Event()
     manager._latest_jpeg = None
+    manager._latest_raw_jpeg = None
     manager._latest_raw_frame = None
     manager._latest_telemetry = _default_telemetry(manager.camera_id)
     manager.draw_heatmap = False

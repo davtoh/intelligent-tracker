@@ -199,6 +199,7 @@ class StreamWorker:
         with self.manager._lock:
             self.manager._latest_raw_frame = step_res.frame.copy()
 
+        self._encode_raw_frame(step_res.frame)
         annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
         recorder = getattr(self.manager, "_recording_controller", None)
         if recorder is not None and recorder.is_recording:
@@ -271,6 +272,13 @@ class StreamWorker:
     def _process_vision_pipeline(self, frame: np.ndarray, curr_t: float) -> dict[int, Any]:
         """Delegate single-frame CV stepping to canonical FrameProcessor."""
         return self._get_processor().step(frame, timestamp=curr_t, max_dim=1280).tracks
+
+    def _encode_raw_frame(self, frame: np.ndarray) -> None:
+        """Compress clean un-annotated frame to JPEG for client-side canvas viewports."""
+        ret, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if ret:
+            with self.manager._lock:
+                self.manager._latest_raw_jpeg = buf.tobytes()
 
     def _encode_annotated_frame(
         self,
