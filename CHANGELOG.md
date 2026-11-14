@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-14] feat: Step 4 M1: TrackerDB Video Run Schema & VideoRunRepositoryMixin
+- **Type**: feat
+- **Summary**: Added video_runs table, media offset migrations on sightings/world_timeline_events, VideoRunRepositoryMixin, and compacted schema_manager.py below 240L
+- **Files** (7):
+  - `.TODO/step_4_trackerdb_video_ssot_and_live_handoff.md`
+  - `intelligent_tracker/database.py`
+  - `intelligent_tracker/repositories/__init__.py`
+  - `intelligent_tracker/repositories/schema_manager.py`
+  - `intelligent_tracker/repositories/video_run_repo.py`
+  - `intelligent_tracker/repositories/video_schema.py`
+  - `tests/test_step4_video_run_repo.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_video_run_repo.py
+
 ## [2026-11-14] test: Step 3 Milestone 4: End-to-End ROI Tagging Verification & Sign-Off
 - **Type**: test
 - **Summary**: Added E2E ROI tagging integration tests covering live camera, recorded video timestamp seek, gallery reload, and single-stream/detector fallback branches; verified 610/610 repository tests pass.
@@ -131,18 +144,3 @@
   - `intelligent_tracker/pipeline/_detector_setup.py`
   - `tests/test_step1_pipeline_detector_guard.py`
 - **Verification**: python -m unittest discover -s tests -p test_step1_pipeline_detector_guard.py
-
-## [2026-11-14] feat: Dashboard Live MP4 Recording UI
-- **Type**: feat
-- **Summary**: Added dedicated Jinja2 partial, responsive CSS without !important, CameraRecording JS controller with per-camera mismatch guards and Video Studio handoff, multi-grid tile recording actions, and Node vm mock-DOM + live CDP layout verification.
-- **Files** (11):
-  - `dashboard/app.py`
-  - `dashboard/dependencies.py`
-  - `dashboard/services/camera_pool_queries.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/camera_grid.js`
-  - `dashboard/static/js/telemetry.js`
-  - `dashboard/static/partials/tabs/live.html`
-  - `dashboard/static/css/camera_recording.css`
-  - ... (+3 more)
-- **Verification**: python -m unittest discover tests (550 passed) & diagnose.py audit (PASS)
