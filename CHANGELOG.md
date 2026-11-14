@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-11-14] feat: Step 1 Milestone 4: Frontend Demo Simulation Gating & Initial Camera Focus Sync
+- **Type**: feat
+- **Summary**: Gate Synthetic Mock detector as Demo Simulation Only in camera_ai_config.js, auto-sync initial focusedCameraId/activeCameraId when cam_01 is absent, compact camera_config_store.py under 180L, and complete Step 1 verification.
+- **Files** (5):
+  - `.agents/rules/pipeline_and_db_invariants.md`
+  - `dashboard/services/camera_config_store.py`
+  - `dashboard/static/camera_manager.js`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `tests/test_step1_demo_mode_ui.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-14] refactor: Step 1 Milestone 3: EntityTaggerService Decomposition & Deterministic Re-ID
 - **Type**: refactor
 - **Summary**: Decomposed EntityTaggerService.tag_entity into <=35L helpers, replaced blind center-50% crop with ValueError guard, and replaced random Re-ID fallback with deterministic color descriptor.
@@ -127,16 +138,3 @@
   - `tests/test_scenario_api.py`
   - `tests/test_world_legacy_compat.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-13] feat: Step 1 Milestone 4: pyproject.toml & Package Entrypoints
-- **Type**: feat
-- **Summary**: Extracted intelligent_tracker/cli/ctl.py and dashboard/server.py from scripts/, converted scripts/stream_ctl.py and scripts/run_dashboard.py to thin wrappers, added PEP 621 pyproject.toml with console_scripts, and added tests/test_entrypoints.py.
-- **Files** (7):
-  - `intelligent_tracker/cli/ctl.py`
-  - `scripts/stream_ctl.py`
-  - `dashboard/server.py`
-  - `scripts/run_dashboard.py`
-  - `pyproject.toml`
-  - `tests/test_entrypoints.py`
-  - `tests/test_pipeline_config.py`
-- **Verification**: 427/427 unit tests passed (unittest discover tests); arch-map verified zero new modularity warnings

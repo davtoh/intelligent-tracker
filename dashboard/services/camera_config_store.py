@@ -39,30 +39,13 @@ def heal_non_synthetic_mock_cameras(configs: dict[str, dict[str, Any]]) -> bool:
 
 def _seed_default_camera() -> dict[str, Any]:
     """Build the initial default primary camera entry, honoring STREAM_SOURCE."""
-    env_source = os.environ.get("STREAM_SOURCE", "").strip()
-    if not env_source:
-        return {
-            "id": "cam_01",
-            "name": "Main Entrance (Synthetic)",
-            "source": "synthetic",
-            "type": "synthetic",
-            "enabled": True,
-            "detector": "mock",
-            "tracker": "centroid",
-        }
-
-    is_synth = env_source.lower() in ("synthetic", "mock")
-    if is_synth:
-        cam_type = "synthetic"
-    elif env_source.isdigit():
-        cam_type = "usb"
-    else:
-        cam_type = "rtsp"
-
+    source = os.environ.get("STREAM_SOURCE", "").strip() or "synthetic"
+    is_synth = source.lower() in ("synthetic", "mock")
+    cam_type = "synthetic" if is_synth else ("usb" if source.isdigit() else "rtsp")
     return {
         "id": "cam_01",
         "name": "Main Entrance (Synthetic)" if is_synth else "Main Entrance",
-        "source": env_source,
+        "source": source,
         "type": cam_type,
         "enabled": True,
         "detector": "mock" if is_synth else "yolov8",
@@ -73,11 +56,7 @@ def _seed_default_camera() -> dict[str, Any]:
 class CameraConfigStore:
     """Thread-safe JSON-backed repository for camera channel configurations."""
 
-    def __init__(
-        self,
-        config_file: str = "configs/cameras.json",
-        lock: Any = None,
-    ) -> None:
+    def __init__(self, config_file: str = "configs/cameras.json", lock: Any = None) -> None:
         self.config_file = config_file
         self._lock = lock or threading.RLock()
         self.camera_configs: dict[str, dict[str, Any]] = {}
@@ -165,15 +144,8 @@ class CameraConfigStore:
                 return False, False, None
 
             cfg = self.camera_configs[camera_id]
-            needs_restart = (
-                (updates.get("source") is not None and updates["source"] != cfg.get("source"))
-                or (updates.get("enabled") is not None and updates["enabled"] != cfg.get("enabled"))
-                or (updates.get("device_name") is not None and updates["device_name"] != cfg.get("device_name"))
-                or (updates.get("detector") is not None and updates["detector"] != cfg.get("detector"))
-                or (updates.get("tracker") is not None and updates["tracker"] != cfg.get("tracker"))
-                or (updates.get("confidence") is not None and updates["confidence"] != cfg.get("confidence"))
-                or (updates.get("classes") is not None and updates["classes"] != cfg.get("classes"))
-            )
+            restart_keys = ("source", "enabled", "device_name", "detector", "tracker", "confidence", "classes")
+            needs_restart = any(updates.get(k) is not None and updates[k] != cfg.get(k) for k in restart_keys)
 
             field_map = {"cam_type": "type"}
             for key, val in updates.items():

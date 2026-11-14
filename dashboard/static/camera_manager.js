@@ -167,6 +167,7 @@
       const resp = await fetch('/api/cameras');
       if (resp.ok) {
         activeCameras = await resp.json();
+        focusedCameraId = window.CameraAIConfig?.resolveInitialCameraId?.(activeCameras, focusedCameraId) || focusedCameraId;
         renderActiveCamerasTable();
         updateCameraDropdown();
         window.CameraGrid?.renderGrid(activeCameras, focusedCameraId, focusCamera);
@@ -224,10 +225,7 @@
     editingCameraId = id;
     selectedDeviceName = cam.device_name || null;
 
-    if (inputCamId) {
-      inputCamId.value = cam.id;
-      inputCamId.disabled = true;
-    }
+    if (inputCamId) { inputCamId.value = cam.id; inputCamId.disabled = true; }
     if (inputCamName) inputCamName.value = cam.name || '';
     if (inputCamSource) inputCamSource.value = cam.source || '';
     if (presetSelect && cam.type) presetSelect.value = cam.type;

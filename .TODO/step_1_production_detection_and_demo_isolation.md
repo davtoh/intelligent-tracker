@@ -77,10 +77,10 @@ python -m unittest discover -s tests -p "test_step1_entity_tagger_refactor.py"
 ---
 
 ### Milestone 4: Frontend Demo Simulation Gating, Initial Camera Focus Sync & Step 1 Sign-Off *(Deferred to Next Turn)*
-- [ ] **dashboard/static/js/camera_ai_config.js**: Label `mock` in `#cam-detector-select` as `🧪 Synthetic Mock (Demo Simulation Only)`, add a change listener that warns/switches `#cam-detector-select` to `yolov8` when a non-synthetic source is entered (or sets source to `synthetic` when Demo Simulation is explicitly chosen), and expose `resolveInitialCameraId(activeCameras, currentId)` to auto-select the first available camera when `cam_01` is not in `activeCameras`.
-- [ ] **dashboard/static/camera_manager.js**: Call `window.CameraAIConfig?.resolveInitialCameraId` inside `refreshCameras()` (1-line delegation keeping `camera_manager.js` line count unchanged or lower) so `#live` immediately attaches WebSocket telemetry and tagging to the actual first active camera on load.
-- [ ] **tests/test_step1_demo_mode_ui.py**: Add Node VM / unit tests verifying `CameraAIConfig.resolveInitialCameraId` and Demo Simulation detector/source synchronization plus full Step 1 regression verification.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/static/js/camera_ai_config.js**: Label `mock` in `#cam-detector-select` as `🧪 Synthetic Mock (Demo Simulation Only)`, add a change listener that warns/switches `#cam-detector-select` to `yolov8` when a non-synthetic source is entered (or sets source to `synthetic` when Demo Simulation is explicitly chosen), and expose `resolveInitialCameraId(activeCameras, currentId)` to auto-select the first available camera when `cam_01` is not in `activeCameras`.
+- [x] **dashboard/static/camera_manager.js**: Call `window.CameraAIConfig?.resolveInitialCameraId` inside `refreshCameras()` (1-line delegation keeping `camera_manager.js` line count unchanged or lower) so `#live` immediately attaches WebSocket telemetry and tagging to the actual first active camera on load.
+- [x] **tests/test_step1_demo_mode_ui.py**: Add Node VM / unit tests verifying `CameraAIConfig.resolveInitialCameraId` and Demo Simulation detector/source synchronization plus full Step 1 regression verification.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 4 Verification Command**:
 ```bash

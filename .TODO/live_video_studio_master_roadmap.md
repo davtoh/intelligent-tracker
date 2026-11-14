@@ -6,17 +6,17 @@
 ---
 
 ## Step 1: Production Detection Defaults, Demo Mode Isolation & Tagger Decomposition
-- **Child Plan**: `.TODO/step_1_production_detection_and_demo_isolation.md`
-- [ ] **Goal**: Eliminate `mock_person` hallucinations from real/video camera feeds, enforce production detector (`yolov8`) + deterministic Re-ID descriptor defaults, isolate `MockDetector` behind an explicit "Demo Simulation Mode" toggle, and decompose `EntityTaggerService.tag_entity` (110L) below the 40-line function budget.
-- [ ] **Pre-Plan Evaluation Check**:
-  - [ ] Run `diagnose.py audit --path intelligent_tracker/pipeline/config.py intelligent_tracker/pipeline/bundle.py dashboard/services/camera_config_store.py dashboard/services/entity_tagger.py`.
-- [ ] **Target Scope**:
-  - [ ] Set `detector_fallback_mock=False` for non-synthetic sources in `PipelineConfig` and report explicit `detector_status` (`ready` | `simulation` | `unavailable`) from `build_detector()` without exceeding `bundle.py`'s 350L ceiling.
-  - [ ] Add `heal_non_synthetic_mock_cameras()` in `CameraConfigStore` to upgrade non-synthetic entries (`usb`, `rtsp`, `video_file`) in `configs/cameras.json` from legacy `"detector": "mock"` to `"yolov8"`.
-  - [ ] Decompose `EntityTaggerService.tag_entity` (110L) into `<= 30L` helpers (`_resolve_target_bbox`, `_crop_frame_region`, `_extract_deterministic_embedding`, `_save_crop_and_record_sighting`), removing blind center-50% crops and `np.random.randn(128)` noise vectors.
-  - [ ] Gate `mock` in `camera_ai_config.js` as `Synthetic Mock (Demo Simulation Only)` and sync initial `activeCameraId` / `focusedCameraId` with the first configured camera when `cam_01` is absent.
-- [ ] **Definition of Done**:
-  - [ ] Zero non-synthetic cameras run `MockDetector`; `EntityTaggerService` passes `diagnose.py audit` (`<= 40L` functions) and produces deterministic embeddings; all Step 1 unit tests pass.
+- [x] **Child Plan**: `.TODO/step_1_production_detection_and_demo_isolation.md`
+- [x] **Goal**: Eliminate `mock_person` hallucinations from real/video camera feeds, enforce production detector (`yolov8`) + deterministic Re-ID descriptor defaults, isolate `MockDetector` behind an explicit "Demo Simulation Mode" toggle, and decompose `EntityTaggerService.tag_entity` (110L) below the 40-line function budget.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py audit --path intelligent_tracker/pipeline/config.py intelligent_tracker/pipeline/bundle.py dashboard/services/camera_config_store.py dashboard/services/entity_tagger.py`.
+- [x] **Target Scope**:
+  - [x] Set `detector_fallback_mock=False` for non-synthetic sources in `PipelineConfig` and report explicit `detector_status` (`ready` | `simulation` | `unavailable`) from `build_detector()` without exceeding `bundle.py`'s 350L ceiling.
+  - [x] Add `heal_non_synthetic_mock_cameras()` in `CameraConfigStore` to upgrade non-synthetic entries (`usb`, `rtsp`, `video_file`) in `configs/cameras.json` from legacy `"detector": "mock"` to `"yolov8"`.
+  - [x] Decompose `EntityTaggerService.tag_entity` (110L) into `<= 30L` helpers (`_resolve_target_bbox`, `_crop_frame_region`, `_extract_deterministic_embedding`, `_save_crop_and_record_sighting`), removing blind center-50% crops and `np.random.randn(128)` noise vectors.
+  - [x] Gate `mock` in `camera_ai_config.js` as `Synthetic Mock (Demo Simulation Only)` and sync initial `activeCameraId` / `focusedCameraId` with the first configured camera when `cam_01` is absent.
+- [x] **Definition of Done**:
+  - [x] Zero non-synthetic cameras run `MockDetector`; `EntityTaggerService` passes `diagnose.py audit` (`<= 40L` functions) and produces deterministic embeddings; all Step 1 unit tests pass.
 
 ---
 
