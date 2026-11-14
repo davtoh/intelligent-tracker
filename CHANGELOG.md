@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-14] feat: Step 3 Milestone 2: Unified RoiDrawTagger Canvas Controller
+- **Type**: feat
+- **Summary**: Added dashboard/static/js/roi_draw_tagger.js (233L) for pointer click-to-tag (<6px) and freehand drag-to-draw (>=6px) ROI selection mapped via UnifiedCanvasOverlay.computeContainBox, registered in index.html, and verified with 6 Node VM unit tests.
+- **Files** (3):
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/roi_draw_tagger.js`
+  - `tests/test_step3_roi_draw_tagger.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_roi_draw_tagger.py
+
 ## [2026-11-14] feat: Step 3 Milestone 1: On-Demand ROI Recognition & Tag Commit Backend
 - **Type**: feat
 - **Summary**: Added RoiRecognitionService and /api/tag/recognize-roi + /api/tag/commit endpoints with isolated unit tests
@@ -133,18 +142,3 @@
   - `documentation/intelligent_tracker.rst`
   - ... (+23 more)
 - **Verification**: python -m unittest discover tests && python -m sphinx -a -W --keep-going documentation/ documentation/_build/html/
-
-## [2026-11-14] feat: Step 6 Milestone 2: CLI Benchmarking, Model Verification & WorldGraph Parity
-- **Type**: feat
-- **Summary**: Added BenchmarkCollector (--benchmark/--benchmark-output/--check-models), GET/POST /api/system/models*, GET /api/world/snapshot|entities, and intelligent-tracker-ctl world|models subcommands.
-- **Files** (12):
-  - `.TODO/step_6_cli_dashboard_operator_parity.md`
-  - `dashboard/routers/system.py`
-  - `dashboard/routers/world.py`
-  - `intelligent_tracker/cli/__init__.py`
-  - `intelligent_tracker/cli/arguments.py`
-  - `intelligent_tracker/cli/ctl.py`
-  - `intelligent_tracker/cli/pipeline_builder.py`
-  - `intelligent_tracker/cli/runner.py`
-  - ... (+4 more)
-- **Verification**: python -m unittest tests/test_cli_operator_parity.py tests/test_cli_runner.py tests/test_cli_ask.py tests/test_world_query_api.py tests/test_entrypoints.py tests/test_modernization.py tests/test_camera_recording.py

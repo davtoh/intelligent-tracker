@@ -24,6 +24,7 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
 - Ensure 100% green test passes across all unit and integration tests.
 - When adding new modules or fixing bugs, add corresponding unit tests in `tests/test_<module>.py`.
 - **Strict Test State & Config Isolation**: Tests must NEVER read from or write to live repository config, database, or output paths (`configs/cameras.json`, `data/*.db`, `data/reports/`, or root backup archives) via default constructor arguments. Always pass an isolated `tempfile.TemporaryDirectory()` path to stateful managers (e.g. `CameraPool(config_file=os.path.join(tmpdir, "cameras.json"), autostart=False)`, `TrackerDB(db_path=...)`) and register cleanup via `addCleanup()` or `tearDown()`.
+- **Node VM & Test Method Function Budget (<= 40 Lines)**: Keep every test method (including Python tests embedding Node.js `vm.runInNewContext` scripts) strictly `<= 40` lines so `diagnose.py audit` passes on the first run. Split multi-scenario JS assertions (e.g., click-threshold vs. drag-threshold) into separate focused `test_*` methods.
 - Never leave temporary `scratch/` directories or browser profiles inside the repository root.
 
 ## 4. Documentation Standards (OS-Agnostic)
