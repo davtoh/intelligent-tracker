@@ -38,8 +38,8 @@
 
           <!-- Single Camera Focused Container (1x1 mode) -->
           <div class="video-container" id="video-wrapper">
-            <!-- MJPEG Video Stream -->
-            <img id="live-stream-img" src="/stream/cam_01" alt="Live Camera Stream" />
+            <!-- MJPEG Video Stream (un-burned; overlays rendered client-side on #interactive-canvas) -->
+            <img id="live-stream-img" src="/stream/cam_01?annotated=false" alt="Live Camera Stream" />
             <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
             <canvas id="interactive-canvas"></canvas>
             <!-- Hover Inspection Tooltip -->

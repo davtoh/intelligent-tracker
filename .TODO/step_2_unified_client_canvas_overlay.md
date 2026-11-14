@@ -66,12 +66,12 @@ python -m unittest discover -s tests -p "test_step2_unified_canvas_engine.py"
 ---
 
 ### Milestone 3: `#live` Client-Side Vector Overlay Delegation & Un-Burned Primary Stream Wiring *(Deferred to Next Turn)*
-- [ ] **dashboard/static/partials/tabs/live.html**: Update primary `<img id="live-stream-img">` default `src` to `/stream/cam_01?annotated=false`.
-- [ ] **dashboard/static/js/camera_grid.js**: Update `focusCamera()` primary stream URL assignment to `/stream/${encodeURIComponent(cam.id)}?annotated=false` while keeping `buildGridTileHtml()` multi-grid tiles on `/stream/${encodeURIComponent(cam.id)}?annotated=true`.
-- [ ] **dashboard/static/js/live_player.js**: Preserve `annotated=false` query parameter when reconnecting/resuming `#live-stream-img` in `resumeLiveStream()` and `camera_ai_config.js` initial focus sync.
-- [ ] **dashboard/static/js/interactive_canvas.js**: Refactor `syncCanvasSize()` and `drawInteractiveOverlay()` (`<= 30L` each) to use `UnifiedCanvasOverlay.computeContainBox()`, `UnifiedCanvasOverlay.syncCanvasDpr()`, and `UnifiedCanvasOverlay.renderScene()` to render `BBoxes`, `Track IDs`, `Dwell Timers`, `Velocity Vectors`, `Zones`, `Tripwires`, and `Heatmap` client-side according to `#overlay-toggle-*` states while preserving hover tooltips and click-to-tag.
-- [ ] **tests/test_step2_live_canvas_delegation.py**: Add unit tests verifying `#live` primary stream URL `?annotated=false` vs multi-grid `?annotated=true`, `interactive_canvas.js` HiDPI delegation to `UnifiedCanvasOverlay.renderScene`, and `diagnose.py audit` compliance.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/static/partials/tabs/live.html**: Update primary `<img id="live-stream-img">` default `src` to `/stream/cam_01?annotated=false`.
+- [x] **dashboard/static/js/camera_grid.js**: Update `focusCamera()` primary stream URL assignment to `/stream/${encodeURIComponent(cam.id)}?annotated=false` while keeping `buildGridTileHtml()` multi-grid tiles on `/stream/${encodeURIComponent(cam.id)}?annotated=true`.
+- [x] **dashboard/static/js/live_player.js**: Preserve `annotated=false` query parameter when reconnecting/resuming `#live-stream-img` in `resumeLiveStream()` and `camera_ai_config.js` initial focus sync.
+- [x] **dashboard/static/js/interactive_canvas.js**: Refactor `syncCanvasSize()` and `drawInteractiveOverlay()` (`<= 30L` each) to use `UnifiedCanvasOverlay.computeContainBox()`, `UnifiedCanvasOverlay.syncCanvasDpr()`, and `UnifiedCanvasOverlay.renderScene()` to render `BBoxes`, `Track IDs`, `Dwell Timers`, `Velocity Vectors`, `Zones`, `Tripwires`, and `Heatmap` client-side according to `#overlay-toggle-*` states while preserving hover tooltips and click-to-tag.
+- [x] **tests/test_step2_live_canvas_delegation.py**: Add unit tests verifying `#live` primary stream URL `?annotated=false` vs multi-grid `?annotated=true`, `interactive_canvas.js` HiDPI delegation to `UnifiedCanvasOverlay.renderScene`, and `diagnose.py audit` compliance.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 3 Verification Command**:
 ```bash

@@ -6,79 +6,73 @@
 (function () {
   'use strict';
 
+  function getCssDimensions(canvas) {
+    const w = parseFloat(canvas?.style?.width) || canvas?.clientWidth || canvas?.width || 0;
+    const h = parseFloat(canvas?.style?.height) || canvas?.clientHeight || canvas?.height || 0;
+    return { width: w, height: h };
+  }
+
+  function readLiveOverlayVisibility() {
+    const overlay = window.UnifiedCanvasOverlay;
+    const defaults = overlay?.DEFAULT_VISIBILITY || {
+      bboxes: true, track_ids: true, dwell_timers: true,
+      velocity: false, zones: true, tripwires: true, heatmap: false,
+    };
+    const vis = {};
+    Object.keys(defaults).forEach((key) => {
+      const el = typeof document !== 'undefined' ? document.getElementById(`overlay-toggle-${key}`) : null;
+      vis[key] = el ? Boolean(el.checked) : defaults[key];
+    });
+    return vis;
+  }
+
   function syncCanvasSize(videoImg, canvas) {
     if (!videoImg || !canvas) return;
     const imgW = videoImg.clientWidth;
     const imgH = videoImg.clientHeight;
     if (!imgW || !imgH) return;
-
     const natW = videoImg.naturalWidth || 640;
     const natH = videoImg.naturalHeight || 480;
-    const imgRatio = natW / natH;
-    const elemRatio = imgW / imgH;
-
-    let renderW, renderH, offsetX, offsetY;
-    if (elemRatio > imgRatio) {
-      renderH = imgH;
-      renderW = renderH * imgRatio;
-      offsetX = (imgW - renderW) / 2;
-      offsetY = 0;
-    } else {
-      renderW = imgW;
-      renderH = renderW / imgRatio;
-      offsetX = 0;
-      offsetY = (imgH - renderH) / 2;
-    }
-
-    const left = (videoImg.offsetLeft || 0) + offsetX;
-    const top = (videoImg.offsetTop || 0) + offsetY;
-    const pixelW = Math.round(renderW);
-    const pixelH = Math.round(renderH);
-
-    if (canvas.width !== pixelW || canvas.height !== pixelH) {
-      canvas.width = pixelW;
-      canvas.height = pixelH;
-    }
-
-    canvas.style.left = `${left}px`;
-    canvas.style.top = `${top}px`;
-    canvas.style.width = `${renderW}px`;
-    canvas.style.height = `${renderH}px`;
+    const overlay = window.UnifiedCanvasOverlay;
+    const elemRect = typeof videoImg.getBoundingClientRect === 'function'
+      ? videoImg.getBoundingClientRect()
+      : { left: videoImg.offsetLeft || 0, top: videoImg.offsetTop || 0, width: imgW, height: imgH };
+    const containerRect = typeof videoImg.parentElement?.getBoundingClientRect === 'function'
+      ? videoImg.parentElement.getBoundingClientRect()
+      : { left: 0, top: 0 };
+    const box = overlay.computeContainBox(elemRect, containerRect, natW, natH);
+    const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    overlay.syncCanvasDpr(canvas, ctx, box.renderW, box.renderH);
+    canvas.style.left = `${box.offsetX}px`;
+    canvas.style.top = `${box.offsetY}px`;
   }
 
-  function drawInteractiveOverlay(ctx, canvas, videoImg, tracks, hoveredTrack) {
+  function drawInteractiveOverlay(ctx, canvas, videoImg, tracks, hoveredTrack, sceneExtras = {}) {
     if (!ctx || !canvas) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!videoImg?.naturalWidth || !canvas.width) return;
-
-    const scaleX = canvas.width / videoImg.naturalWidth;
-    const scaleY = canvas.height / videoImg.naturalHeight;
-
-    (tracks || []).forEach(trk => {
-      const [bx, by, bw, bh] = trk.bbox;
-      const x = bx * scaleX;
-      const y = by * scaleY;
-      const w = bw * scaleX;
-      const h = bh * scaleY;
-
-      if (hoveredTrack && hoveredTrack.id === trk.id) {
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = 3;
-        ctx.shadowColor = '#06b6d4';
-        ctx.shadowBlur = 12;
-        ctx.strokeRect(x, y, w, h);
-        ctx.shadowBlur = 0;
-
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.12)';
-        ctx.fillRect(x, y, w, h);
-      }
+    const { width: cssW, height: cssH } = getCssDimensions(canvas);
+    ctx.clearRect(0, 0, cssW, cssH);
+    if (!videoImg?.naturalWidth || !cssW || !cssH) return;
+    const overlay = window.UnifiedCanvasOverlay;
+    const scales = overlay.resolveScaleFactors(cssW, cssH, sceneExtras?.sourceRes, videoImg.naturalWidth, videoImg.naturalHeight);
+    overlay.renderScene(ctx, {
+      clear: false,
+      clearWidth: cssW,
+      clearHeight: cssH,
+      transform: { offsetX: 0, offsetY: 0, scaleX: scales.scaleX, scaleY: scales.scaleY, renderW: cssW, renderH: cssH },
+      visibility: readLiveOverlayVisibility(),
+      tracks: tracks || [],
+      hoveredTrack: hoveredTrack || null,
+      zones: sceneExtras?.zones || [],
+      tripwires: sceneExtras?.tripwires || [],
+      heatmap: sceneExtras?.heatmap || null,
     });
   }
 
   function findHoveredTrack(mx, my, canvas, videoImg, tracks) {
     if (!videoImg?.naturalWidth) return null;
-    const scaleX = canvas.width / videoImg.naturalWidth;
-    const scaleY = canvas.height / videoImg.naturalHeight;
+    const { width: cssW, height: cssH } = getCssDimensions(canvas);
+    const scaleX = cssW / videoImg.naturalWidth;
+    const scaleY = cssH / videoImg.naturalHeight;
 
     for (const trk of (tracks || [])) {
       const [bx, by, bw, bh] = trk.bbox;
@@ -99,8 +93,9 @@
     const body = document.getElementById('tooltip-body');
     if (!tooltip || !track || !videoImg?.naturalWidth) return;
 
-    const scaleX = canvas.width / videoImg.naturalWidth;
-    const scaleY = canvas.height / videoImg.naturalHeight;
+    const { width: cssW, height: cssH } = getCssDimensions(canvas);
+    const scaleX = cssW / videoImg.naturalWidth;
+    const scaleY = cssH / videoImg.naturalHeight;
     const [bx, by] = track.bbox;
     const x = bx * scaleX;
     const y = by * scaleY;
@@ -108,7 +103,7 @@
     tooltip.style.display = 'block';
     const cLeft = parseFloat(canvas.style.left) || canvas.offsetLeft || 0;
     const cTop = parseFloat(canvas.style.top) || canvas.offsetTop || 0;
-    tooltip.style.left = `${Math.min(cLeft + canvas.width - 180, Math.max(cLeft + 10, cLeft + x))}px`;
+    tooltip.style.left = `${Math.min(cLeft + cssW - 180, Math.max(cLeft + 10, cLeft + x))}px`;
     tooltip.style.top = `${Math.max(cTop + 10, cTop + y - 70)}px`;
 
     if (title) title.textContent = track.entity_name || `Track #${track.id}`;

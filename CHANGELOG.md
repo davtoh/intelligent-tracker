@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-14] feat: Step 2 Milestone 3: #live Client-Side Vector Overlay Delegation
+- **Type**: feat
+- **Summary**: Wired #live primary stream to ?annotated=false (preserving multi-grid ?annotated=true) and delegated InteractiveCanvas to UnifiedCanvasOverlay HiDPI vector rendering.
+- **Files** (7):
+  - `dashboard/static/app.js`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/camera_grid.js`
+  - `dashboard/static/js/interactive_canvas.js`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/partials/tabs/live.html`
+  - `tests/test_step2_live_canvas_delegation.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_*.py
+
 ## [2026-11-14] feat: Step 2 Milestone 2: Shared UnifiedCanvasOverlay Engine
 - **Type**: feat
 - **Summary**: Added 225L HiDPI client-side <canvas> overlay engine (window.UnifiedCanvasOverlay) with contain geometry, DPR scaling, tracks, velocity vectors, zones, tripwires, and heatmap rendering, loaded before interactive_canvas.js.
@@ -124,19 +137,6 @@
   - `intelligent_tracker/cli/ctl.py`
   - ... (+6 more)
 - **Verification**: 522/522 unittest pass + Sphinx -W clean + arch-map compliant
-
-## [2026-11-13] feat: Step 4 Milestone 4: Multi-Camera Handoff, FOV Deduplication & Tactical World Minimap
-- **Type**: feat
-- **Summary**: Implemented MultiCameraHandoffCoordinator, WorldTacticalMinimap, GET /api/topology/world-map, and golden two-camera handoff tests.
-- **Files** (7):
-  - `intelligent_tracker/world/handoff.py`
-  - `intelligent_tracker/world/_handoff_helpers.py`
-  - `intelligent_tracker/world/minimap.py`
-  - `intelligent_tracker/world/_minimap_render.py`
-  - `intelligent_tracker/world/__init__.py`
-  - `dashboard/routers/topology.py`
-  - `tests/test_multi_camera_handoff.py`
-- **Verification**: 495/495 unittest pass + Sphinx -W clean + arch-map compliant
 
 ## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
 - **Type**: refactor

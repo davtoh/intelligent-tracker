@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const state = {
     activeTab: 'tab-live',
     tracks: [],
+    zones: [],
+    tripwires: [],
+    heatmap: null,
     hoveredTrack: null,
   };
 
@@ -175,6 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onTelemetryReceived(data) {
     state.tracks = data.active_tracks || [];
+    state.zones = data.zones || state.zones;
+    state.tripwires = data.tripwires || state.tripwires;
+    if (data.heatmap !== undefined) state.heatmap = data.heatmap;
     let totalCrossed = 0;
     if (data.tripwires) {
       data.tripwires.forEach(tw => { totalCrossed += (tw.in_count + tw.out_count); });
@@ -214,7 +220,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function syncCanvas() {
     window.InteractiveCanvas?.syncSize(videoImg, canvas);
-    window.InteractiveCanvas?.drawOverlay(ctx, canvas, videoImg, state.tracks, state.hoveredTrack);
+    window.InteractiveCanvas?.drawOverlay(ctx, canvas, videoImg, state.tracks, state.hoveredTrack, {
+      zones: state.zones,
+      tripwires: state.tripwires,
+      heatmap: state.heatmap,
+    });
   }
 
   function bindCanvasEvents() {

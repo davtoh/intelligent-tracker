@@ -204,7 +204,7 @@
     const appActiveId = window.App?.getActiveCameraId?.();
     if (resolvedId !== currentId || (appActiveId && appActiveId !== resolvedId)) {
       const streamImg = document.getElementById('live-stream-img');
-      if (streamImg) streamImg.src = `/stream/${resolvedId}`;
+      if (streamImg) streamImg.src = `/stream/${encodeURIComponent(resolvedId)}?annotated=false`;
       const streamTitle = document.getElementById('video-stream-title');
       if (streamTitle) {
         const title = `Camera Feed: ${String(targetCam.name || resolvedId).toUpperCase()} (${resolvedId})`;
