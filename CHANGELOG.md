@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-11-14] refactor: Step 1 Milestone 3: EntityTaggerService Decomposition & Deterministic Re-ID
+- **Type**: refactor
+- **Summary**: Decomposed EntityTaggerService.tag_entity into <=35L helpers, replaced blind center-50% crop with ValueError guard, and replaced random Re-ID fallback with deterministic color descriptor.
+- **Files** (2):
+  - `dashboard/services/entity_tagger.py`
+  - `tests/test_step1_entity_tagger_refactor.py`
+- **Verification**: python -m unittest discover -s tests -p test_step1_entity_tagger_refactor.py
+
 ## [2026-11-14] feat: Step 1 Milestone 2: CameraConfigStore Legacy Mock Healing & Telemetry Status
 - **Type**: feat
 - **Summary**: Added heal_non_synthetic_mock_cameras in CameraConfigStore, cleaned configs/cameras.json, and exposed detector_model/detector_status in StreamWorker telemetry.
@@ -132,13 +140,3 @@
   - `tests/test_entrypoints.py`
   - `tests/test_pipeline_config.py`
 - **Verification**: 427/427 unit tests passed (unittest discover tests); arch-map verified zero new modularity warnings
-
-## [2026-11-12] feat: CaptureReadGuard Concurrency & COM Hardening
-- **Type**: feat
-- **Summary**: Hardened VideoSource and CameraPool against Windows COM DirectShow deadlocks and race conditions. Initialized COM on reader and safe driver unbind worker threads, removed unguarded reads during video looping, and made CameraPool remove_camera and update_camera lock-free during stream teardown.
-- **Files** (4):
-  - `intelligent_tracker/video/capture_guard.py`
-  - `intelligent_tracker/video/capture_worker.py`
-  - `dashboard/camera_pool.py`
-  - `tests/test_capture_circuit_breaker.py`
-- **Verification**: Ran 409 tests in 50.7s: 100% passed

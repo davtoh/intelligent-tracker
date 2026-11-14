@@ -65,9 +65,9 @@ python -m unittest discover -s tests -p "test_step1_camera_config_healing.py"
 ---
 
 ### Milestone 3: `EntityTaggerService` Decomposition (`<= 35L` Functions) & Deterministic Re-ID Embeddings *(Deferred to Next Turn)*
-- [ ] **dashboard/services/entity_tagger.py**: Decompose the 110-line `tag_entity()` method into focused `<= 30L` static helpers (`_resolve_target_bbox`, `_extract_bounded_crop`, `_compute_deterministic_embedding`, `_upsert_entity_and_signature`, `_update_live_track_identity`), raising a clear `ValueError("Select or draw a bounding box on the video before tagging")` when neither `bbox` nor a valid live `track_id` is found (eliminating the blind center-50% screen crop) and computing a deterministic HSV/spatial signature via `ReIDExtractorFactory.create("color")` when `reid_extractor` is `None` (eliminating `np.random.randn(128)` noise vectors).
-- [ ] **tests/test_step1_entity_tagger_refactor.py**: Add unit tests exercising all branches of `EntityTaggerService.tag_entity` (explicit `bbox`, active `track_id`, missing bbox/track `ValueError`, deterministic embedding repeatability across identical crops, and `diagnose.py audit` zero-defect check on `entity_tagger.py`).
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/services/entity_tagger.py**: Decompose the 110-line `tag_entity()` method into focused `<= 30L` static helpers (`_resolve_target_bbox`, `_extract_bounded_crop`, `_compute_deterministic_embedding`, `_upsert_entity_and_signature`, `_update_live_track_identity`), raising a clear `ValueError("Select or draw a bounding box on the video before tagging")` when neither `bbox` nor a valid live `track_id` is found (eliminating the blind center-50% screen crop) and computing a deterministic HSV/spatial signature via `ReIDExtractorFactory.create("color")` when `reid_extractor` is `None` (eliminating `np.random.randn(128)` noise vectors).
+- [x] **tests/test_step1_entity_tagger_refactor.py**: Add unit tests exercising all branches of `EntityTaggerService.tag_entity` (explicit `bbox`, active `track_id`, missing bbox/track `ValueError`, deterministic embedding repeatability across identical crops, and `diagnose.py audit` zero-defect check on `entity_tagger.py`).
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 3 Verification Command**:
 ```bash
