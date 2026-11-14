@@ -23,7 +23,7 @@ This guide details how to configure, run, and develop **Intelligent Tracker** on
 ### Step 2.1: Open PowerShell or Command Prompt
 Navigate to the project root:
 ```powershell
-cd "G:\Mi unidad\projects\products\intelligent_tracker"
+cd intelligent_tracker
 ```
 
 ### Step 2.2: Create and Activate Virtual Environment
@@ -108,22 +108,23 @@ pip install opencv-python-headless
 
 ### Step 4.1: Install Prerequisites via Homebrew
 ```bash
-brew install python@3.12
+brew install python@3.12 ffmpeg
 ```
 
 ### Step 4.2: Create Virtual Environment
 ```bash
 cd intelligent_tracker
-python3.12 -m venv .venv
+python3.12 -m venv .venv || python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 
-### Step 4.3: Camera Permissions
+### Step 4.3: Camera Permissions & Hardware Acceleration
 When running camera captures on macOS:
 - macOS requires explicit Camera permission for the terminal application (e.g., Terminal, iTerm2, or VS Code).
-- Navigate to **System Settings > Privacy & Security > Camera** and ensure your terminal emulator is toggled on.
+- Navigate to **System Settings > Privacy & Security > Camera** and ensure your terminal emulator is toggled on. If authorization needs to be refreshed, run `tccutil reset Camera`.
+- **Apple Neural Engine / CoreML**: ONNX Runtime automatically discovers and activates `CoreMLExecutionProvider` for accelerated YOLO inference on Apple Silicon / macOS.
 
 ---
 
@@ -262,14 +263,21 @@ The project evolves according to `TODO_MODERNIZATION.md` and `milestone_plan.md`
    - Modular `BaseDetector` interface and `DetectorFactory` registry.
    - Ultralight ONNX Runtime inference (`yolov8n.onnx`, `yolo11n.onnx`) with pure NumPy letterboxing and vectorized multi-class NMS.
    - Full backwards compatibility for Haar cascades and color detection.
-   - 46/46 unit tests passing.
 3. ✅ **Milestone 3: RTSP Stream Pipelines & Retail / Occupancy Analytics**:
    - Threaded non-blocking RTSP video reader with auto-reconnection and zero-latency frame drop.
    - Polygonal ROI zones, entry/exit tripwire line intersections, dwell times, and 2D spatial occupancy heatmaps.
-   - Declarative YAML configs (`configs/demo.yaml`, `configs/retail.yaml`), video recording, and 63/63 tests passing.
-4. ⬜ **Milestone 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database**:
+   - Declarative YAML configs (`configs/demo.yaml`, `configs/retail.yaml`), video recording.
+4. ✅ **Milestone 4: Object Identity Gallery, Re-Identification (Re-ID) & Sighting Database**:
    - Persistent SQLite entity database, visual Re-ID embeddings (ONNX + color descriptor fallback), interactive screen selection/tagging, cross-session re-appearance matching, and offline recording occurrence analytics.
-5. ⬜ **Milestone 5: Modern Web Dashboard, Packaging & Edge Deployment**:
-   - FastAPI / WebSocket live dashboard, Docker containerization (ARM64 / amd64), and systemd service configurations.
+5. ✅ **Milestone 5: Event Dispatching & Alerting**:
+   - Webhook, Telegram bot, and MQTT dispatchers with retry backoff, quiet hours, and alerting rule engine.
+6. ✅ **Milestone 6: Web Dashboard, Packaging & Edge Deployment**:
+   - FastAPI / WebSocket live dashboard, Docker containerization (ARM64 / amd64), systemd services, and Sphinx documentation.
+7. ✅ **Milestone 7: Multi-Camera Edge VMS Platform**:
+   - RTSP camera pool, synthetic stream emulation, 2x2 / 3x3 responsive grid views, and digital PTZ presets.
+8. ✅ **Milestone 8: Visual Scenario Studio, Topology & Homography BEV Minimap**:
+   - Interactive polygon/tripwire canvas editor, 4-point planar homography calibration, BEV minimap, and multi-hop journey reconstruction.
+9. ✅ **Milestone 9: Universal Artifact & Face Intelligence, RSAC & Active Learning**:
+   - ONNX YuNet face detection, dual-model Re-ID fusion, role-based spatial access control (RSAC), "Review & Learn" inbox, locked reference anchors, bounded EMA, and descriptor rollback. All 544 unit tests passing.
 
 

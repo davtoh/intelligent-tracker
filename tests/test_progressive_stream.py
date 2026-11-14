@@ -18,6 +18,7 @@ from dashboard.app import app
 from dashboard.services import progressive_stream_store, video_report_store
 from dashboard.services.video_jobs_service import JobStatus, VideoJob, get_video_job_manager
 from intelligent_tracker.batch import VideoIndexer
+from intelligent_tracker.video import PipelineVideoWriter
 
 
 def create_synthetic_clip(
@@ -29,14 +30,12 @@ def create_synthetic_clip(
 ) -> str:
     """Create a tiny synthetic MP4 clip with a moving green target."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(path, fourcc, fps, (width, height))
-    for i in range(num_frames):
-        frame = np.zeros((height, width, 3), dtype=np.uint8)
-        x = int(20 + (i * 10) % max(40, width - 60))
-        cv2.rectangle(frame, (x, 40), (x + 40, 100), (0, 255, 0), -1)
-        writer.write(frame)
-    writer.release()
+    with PipelineVideoWriter(path, fps=fps, resolution=(width, height)) as writer:
+        for i in range(num_frames):
+            frame = np.zeros((height, width, 3), dtype=np.uint8)
+            x = int(20 + (i * 10) % max(40, width - 60))
+            cv2.rectangle(frame, (x, 40), (x + 40, 100), (0, 255, 0), -1)
+            writer.write(frame)
     return path
 
 

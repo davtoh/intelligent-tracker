@@ -100,8 +100,8 @@ Setup on Linux / Raspberry Pi OS / macOS
 
 .. code-block:: bash
 
-    # 1. Create and activate virtual environment
-    python3 -m venv .venv
+    # 1. Create and activate virtual environment (Python 3.10–3.12 recommended; e.g. python3.12)
+    python3.12 -m venv .venv || python3 -m venv .venv
     source .venv/bin/activate
 
     # 2. Upgrade pip and install requirements
@@ -111,6 +111,13 @@ Setup on Linux / Raspberry Pi OS / macOS
     # 3. Run diagnostics and download models
     python scripts/diagnostics.py
     python scripts/download_models.py --model yolov8n
+    python scripts/download_models.py --model yolo11n
+
+.. note::
+   **macOS Camera Access & CoreML**:
+   - macOS requires explicit Camera permission for your terminal emulator (Terminal, iTerm2, or VS Code) under **System Settings > Privacy & Security > Camera**.
+   - ONNX Runtime automatically leverages Apple Neural Engine / GPU acceleration via ``CoreMLExecutionProvider`` on macOS.
+   - For video transcoding capabilities, ensure ffmpeg is available (e.g. ``brew install ffmpeg``).
 
 Running the Application
 -----------------------
@@ -323,7 +330,7 @@ Scenario Combinations Matrix
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Color Blob / Marker Tracking**    | ``color``  | ``centroid``| ``real``          | -                   | -                                               | Interactive GUI     | ``python main.py --detector color --source real``                                                    |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
-| **Headless Remote Server / RPi**    | ``yolov8`` | ``centroid``| ``synthetic``     | ``configs/demo.yaml``| ``--headless --frames 120``                     | Headless Offscreen  | ``$env:MPLBACKEND="Agg"; python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 120`` |
+| **Headless Remote Server / RPi**    | ``yolov8`` | ``centroid``| ``synthetic``     | ``configs/demo.yaml``| ``--headless --frames 120``                     | Headless Offscreen  | ``MPLBACKEND=Agg python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 120`` |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Visual Re-ID Person Gallery**     | ``yolov8`` | ``centroid``| ``real``          | ``configs/retail.yaml``| ``--reid onnx --db data/tracker.db``         | Interactive GUI     | ``python main.py --detector yolov8 --source real --reid onnx --db data/tracker.db``                 |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
@@ -351,11 +358,13 @@ Running the Test Suite
 
 All unit tests run via Python's standard ``unittest`` discovery:
 
-.. code-block:: powershell
+.. code-block:: bash
 
-    # Run complete test suite
-    $env:MPLBACKEND="Agg"
-    python -m unittest discover tests
+    # Linux / macOS (bash / zsh)
+    MPLBACKEND=Agg python -m unittest discover tests
+
+    # Windows (PowerShell)
+    # $env:MPLBACKEND="Agg"; python -m unittest discover tests
 
     # Run CLI/Dashboard operator parity & live camera recording tests
     python -m unittest tests/test_camera_recording.py tests/test_cli_operator_parity.py

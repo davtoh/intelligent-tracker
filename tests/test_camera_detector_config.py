@@ -29,6 +29,7 @@ from dashboard.schemas import (
     VideoAddAsCameraRequest,
     VideoAnalyzeRequest,
 )
+from intelligent_tracker.video import PipelineVideoWriter
 from dashboard.services.pipeline_factory import StreamPipelineFactory
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.detectors import BaseDetector, MockDetector, OnnxDetector
@@ -61,14 +62,12 @@ class TestCameraDetectorConfig(unittest.TestCase):
         os.makedirs(VIDEOS_DIR, exist_ok=True)
         cls.test_video_filename = "detector_test_clip.mp4"
         cls.test_video_path = os.path.join(VIDEOS_DIR, cls.test_video_filename)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(cls.test_video_path, fourcc, 10.0, (320, 240))
-        for f in range(15):
-            frame = np.full((240, 320, 3), 50, dtype=np.uint8)
-            x = 20 + f * 5
-            cv2.rectangle(frame, (x, 40), (x + 30, 90), (0, 255, 0), -1)
-            writer.write(frame)
-        writer.release()
+        with PipelineVideoWriter(cls.test_video_path, fps=10.0, resolution=(320, 240)) as writer:
+            for f in range(15):
+                frame = np.full((240, 320, 3), 50, dtype=np.uint8)
+                x = 20 + f * 5
+                cv2.rectangle(frame, (x, 40), (x + 30, 90), (0, 255, 0), -1)
+                writer.write(frame)
 
     @classmethod
     def tearDownClass(cls):

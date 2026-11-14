@@ -17,19 +17,18 @@ from dashboard.services.video_jobs_service import (
 )
 from dashboard.services.video_transcoder import VideoTranscodeService
 from intelligent_tracker.batch import VideoIndexer
+from intelligent_tracker.video import PipelineVideoWriter
 
 
 def create_synthetic_video(path: str, num_frames: int = 30, fps: float = 30.0, width: int = 320, height: int = 240) -> str:
     """Create a minimal synthetic MP4 file for testing."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(path, fourcc, fps, (width, height))
-    for i in range(num_frames):
-        frame = np.zeros((height, width, 3), dtype=np.uint8)
-        x = int(10 + (i * 5) % (width - 60))
-        cv2.rectangle(frame, (x, 50), (x + 40, 100), (0, 255, 0), -1)
-        writer.write(frame)
-    writer.release()
+    with PipelineVideoWriter(path, fps=fps, resolution=(width, height)) as writer:
+        for i in range(num_frames):
+            frame = np.zeros((height, width, 3), dtype=np.uint8)
+            x = int(10 + (i * 5) % (width - 60))
+            cv2.rectangle(frame, (x, 50), (x + 40, 100), (0, 255, 0), -1)
+            writer.write(frame)
     return path
 
 
@@ -99,6 +98,7 @@ class TestVideoWorkerHooks(unittest.TestCase):
         self.assertTrue(summary.get("cancelled", False))
         self.assertLess(summary["read_frames"], 30)
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg binary required for transcoding tests")
     def test_video_transcoder_async_progress_and_completion(self):
         """VideoTranscodeService.transcode_to_h264_async transcodes and reports progress."""
         out_path = os.path.join(self.temp_dir.name, "transcoded.mp4")
@@ -119,6 +119,7 @@ class TestVideoWorkerHooks(unittest.TestCase):
         self.assertGreater(len(callbacks), 0)
         self.assertEqual(callbacks[-1]["percent"], 100.0)
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg binary required for transcoding tests")
     def test_video_transcoder_async_cancellation(self):
         """VideoTranscodeService.transcode_to_h264_async handles cancellation and removes partial output."""
         out_path = os.path.join(self.temp_dir.name, "cancelled.mp4")
