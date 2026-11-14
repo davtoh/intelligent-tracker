@@ -13,6 +13,7 @@ import numpy as np
 
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.batch import VideoIndexer
+from intelligent_tracker.video import PipelineVideoWriter
 
 
 class TestVideoIndexer(unittest.TestCase):
@@ -24,16 +25,13 @@ class TestVideoIndexer(unittest.TestCase):
 
         # Create a small synthetic video file
         self.video_path = os.path.join(self.temp_dir, "synthetic_test.mp4")
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(self.video_path, fourcc, 10.0, (320, 240))
-
-        for f in range(20):
-            frame = np.full((240, 320, 3), 40, dtype=np.uint8)
-            # Draw moving green rectangle
-            x = 30 + f * 4
-            cv2.rectangle(frame, (x, 50), (x + 40, 110), (0, 255, 0), -1)
-            writer.write(frame)
-        writer.release()
+        with PipelineVideoWriter(self.video_path, fps=10.0, resolution=(320, 240)) as writer:
+            for f in range(20):
+                frame = np.full((240, 320, 3), 40, dtype=np.uint8)
+                # Draw moving green rectangle
+                x = 30 + f * 4
+                cv2.rectangle(frame, (x, 50), (x + 40, 110), (0, 255, 0), -1)
+                writer.write(frame)
 
         # Enroll the synthetic green entity in the database
         ref_frame = np.full((240, 320, 3), 40, dtype=np.uint8)

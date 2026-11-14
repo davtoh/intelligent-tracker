@@ -17,6 +17,7 @@ import cv2
 import numpy as np
 
 from intelligent_tracker.journey_segmenter import EntityJourney, JourneyHop
+from intelligent_tracker.video.writers import DEFAULT_CODEC_FALLBACKS, _open_cv_writer
 
 logger = logging.getLogger("intelligent_tracker.journey")
 
@@ -56,12 +57,7 @@ class JourneyVideoExporter:
         fps: int,
         size: tuple[int, int],
     ) -> tuple[cv2.VideoWriter, str]:
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(output_path, fourcc, fps, size)
-        if not writer.isOpened():
-            fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-            output_path = output_path.replace(".mp4", ".avi")
-            writer = cv2.VideoWriter(output_path, fourcc, fps, size)
+        writer, _ = _open_cv_writer(output_path, float(fps), size[0], size[1], DEFAULT_CODEC_FALLBACKS)
         return writer, output_path
 
     def _write_title_segment(

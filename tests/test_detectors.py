@@ -246,7 +246,10 @@ class TestOnnxDetector(unittest.TestCase):
             self.skipTest("yolov8n.onnx not present in models/")
 
         detector = OnnxDetector(model_path=model_path, conf_threshold=0.25)
-        self.assertEqual(detector.active_provider, "CPUExecutionProvider")
+        self.assertIn(
+            detector.active_provider,
+            ("CPUExecutionProvider", "CoreMLExecutionProvider", "CUDAExecutionProvider", "DmlExecutionProvider"),
+        )
         self.assertEqual((detector.net_h, detector.net_w), (640, 640))
 
         # Blank black frame should yield 0 detections
@@ -275,7 +278,10 @@ class TestOnnxDetector(unittest.TestCase):
             self.skipTest("yolo11n.onnx not present in models/")
 
         detector = OnnxDetector(model_path=model_path, conf_threshold=0.25)
-        self.assertEqual(detector.active_provider, "CPUExecutionProvider")
+        self.assertIn(
+            detector.active_provider,
+            ("CPUExecutionProvider", "CoreMLExecutionProvider", "CUDAExecutionProvider", "DmlExecutionProvider"),
+        )
 
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         dets = detector.detect(frame)

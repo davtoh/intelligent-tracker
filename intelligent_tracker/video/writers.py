@@ -8,7 +8,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-DEFAULT_CODEC_FALLBACKS: tuple[str, ...] = ("mp4v", "avc1", "XVID")
+DEFAULT_CODEC_FALLBACKS: tuple[str, ...] = ("mp4v", "avc1", "MJPG", "XVID")
 
 
 def _open_cv_writer(
@@ -29,6 +29,11 @@ def _open_cv_writer(
             return writer, codec
         if writer is not None:
             writer.release()
+        if os.path.exists(output_path) and os.path.getsize(output_path) == 0:
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
     raise RuntimeError(
         f"Failed to open VideoWriter for '{output_path}' using codecs {codecs}"
     )
