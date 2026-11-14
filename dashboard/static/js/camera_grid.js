@@ -31,6 +31,50 @@
     renderGrid(activeCameras, focusedCameraId, onFocus);
   }
 
+  function buildGridTileHtml(cam, focusedCameraId) {
+    const idAttr = escapeHtml(cam.id);
+    const statusClass = cam.status === 'online' ? 'online' : 'offline';
+    return `
+      <div class="camera-grid-tile glass-panel ${cam.id === focusedCameraId ? 'focused-tile' : ''}" data-id="${idAttr}">
+        <div class="tile-header">
+          <span class="tile-title">${escapeHtml(cam.name)}</span>
+          <div class="tile-header-badges">
+            <span class="tile-rec-badge" data-camera-id="${idAttr}" hidden>REC</span>
+            <span class="tile-status-badge ${statusClass}">${escapeHtml(cam.status.toUpperCase())}</span>
+          </div>
+        </div>
+        <div class="tile-video-container">
+          <img src="/stream/${encodeURIComponent(cam.id)}" alt="${escapeHtml(cam.name)}" loading="lazy" />
+        </div>
+        <div class="tile-footer">
+          <span class="tile-fps">${cam.fps} FPS</span>
+          <span class="tile-tracks">${cam.active_tracks_count || 0} tracks</span>
+          <div class="tile-actions">
+            <button type="button" class="btn btn-xs btn-outline btn-tile-record" data-camera-id="${idAttr}" title="Start/Stop MP4 Recording">⏺ Rec</button>
+            <button type="button" class="btn btn-xs btn-primary btn-tile-focus" data-id="${idAttr}">🔍 View 1x1</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindGridTileEvents(multiGridContainer, onFocus) {
+    multiGridContainer.querySelectorAll('.btn-tile-record').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const camId = btn.getAttribute('data-camera-id');
+        if (camId) window.CameraRecording?.toggleCameraRecording?.(camId);
+      });
+    });
+    multiGridContainer.querySelectorAll('.camera-grid-tile, .btn-tile-focus').forEach(elem => {
+      elem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const camId = elem.getAttribute('data-id');
+        if (camId && onFocus) onFocus(camId);
+      });
+    });
+  }
+
   function renderGrid(activeCameras, focusedCameraId, onFocus) {
     const multiGridContainer = document.getElementById('multi-grid-container');
     const singleVideoWrapper = document.getElementById('video-wrapper');
@@ -45,31 +89,10 @@
       singleVideoWrapper.style.display = 'none';
       multiGridContainer.style.display = 'grid';
       multiGridContainer.className = `multi-camera-grid grid-${currentGridMode}`;
-
-      multiGridContainer.innerHTML = (activeCameras || []).map(cam => `
-        <div class="camera-grid-tile glass-panel ${cam.id === focusedCameraId ? 'focused-tile' : ''}" data-id="${escapeHtml(cam.id)}">
-          <div class="tile-header">
-            <span class="tile-title">${escapeHtml(cam.name)}</span>
-            <span class="tile-status-badge ${cam.status === 'online' ? 'online' : 'offline'}">${escapeHtml(cam.status.toUpperCase())}</span>
-          </div>
-          <div class="tile-video-container">
-            <img src="/stream/${encodeURIComponent(cam.id)}" alt="${escapeHtml(cam.name)}" loading="lazy" />
-          </div>
-          <div class="tile-footer">
-            <span class="tile-fps">${cam.fps} FPS</span>
-            <span class="tile-tracks">${cam.active_tracks_count || 0} tracks</span>
-            <button class="btn btn-xs btn-primary btn-tile-focus" data-id="${escapeHtml(cam.id)}">🔍 View 1x1</button>
-          </div>
-        </div>
-      `).join('');
-
-      multiGridContainer.querySelectorAll('.camera-grid-tile, .btn-tile-focus').forEach(elem => {
-        elem.addEventListener('click', () => {
-          const camId = elem.getAttribute('data-id');
-          if (camId && onFocus) onFocus(camId);
-        });
-      });
+      multiGridContainer.innerHTML = (activeCameras || []).map(c => buildGridTileHtml(c, focusedCameraId)).join('');
+      bindGridTileEvents(multiGridContainer, onFocus);
     }
+    window.CameraRecording?.hydrateFromCameraList?.(activeCameras);
   }
 
   function focusCamera(cameraId, activeCameras, onFocus) {
@@ -93,6 +116,7 @@
       if (window.App && typeof window.App.switchCamera === 'function') {
         window.App.switchCamera(cam.id);
       }
+      window.CameraRecording?.onCameraFocused?.(cam.id);
     }
     setGridMode('1x1', activeCameras, cameraId, onFocus);
   }

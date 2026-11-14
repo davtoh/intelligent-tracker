@@ -168,6 +168,9 @@
     if (resBadge && data.resolution) resBadge.textContent = data.resolution;
     if (kpiActiveTracks) kpiActiveTracks.textContent = trackCount;
     if (kpiTotalCrossed) kpiTotalCrossed.textContent = totalCrossed;
+    if (data.recording) {
+      window.CameraRecording?.onTelemetryUpdate?.(data.recording, data.camera_id);
+    }
   }
 
   window.TelemetryGateway = {

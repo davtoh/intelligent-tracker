@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-14] feat: Dashboard Live MP4 Recording UI
+- **Type**: feat
+- **Summary**: Added dedicated Jinja2 partial, responsive CSS without !important, CameraRecording JS controller with per-camera mismatch guards and Video Studio handoff, multi-grid tile recording actions, and Node vm mock-DOM + live CDP layout verification.
+- **Files** (11):
+  - `dashboard/app.py`
+  - `dashboard/dependencies.py`
+  - `dashboard/services/camera_pool_queries.py`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/camera_grid.js`
+  - `dashboard/static/js/telemetry.js`
+  - `dashboard/static/partials/tabs/live.html`
+  - `dashboard/static/css/camera_recording.css`
+  - ... (+3 more)
+- **Verification**: python -m unittest discover tests (550 passed) & diagnose.py audit (PASS)
+
 ## [2026-11-14] docs: Step 6 Milestone 3: Sphinx Docs Sync, Dead Import Cleanup & Packaging Polish
 - **Type**: docs
 - **Summary**: Updated Sphinx docs for pipeline/world/memory/cli/recording/models APIs, synced README.rst and pyproject.toml readme field, removed 28 unused imports across 21 modules while preserving availability probes, and verified 541/541 tests + Sphinx -W build.
@@ -126,17 +141,3 @@
   - `tests/test_progressive_stream.py`
   - `tests/test_video_report_store.py`
 - **Verification**: python -m unittest discover tests (352 passed); python -m sphinx -W --keep-going documentation/ documentation/_build/html/ (0 warnings)
-
-## [2026-11-11] feat: Reactive Cache Invalidation & Progressive Detection Streaming (M2)
-- **Type**: feat
-- **Summary**: Purged stale parent and _h264 client report cache aliases on job-finished in video_batch.js; added progressive 30-frame chunk flush callback in VideoIndexer.process_video, thread-safe progressive_stream_store.py buffer, GET /api/videos/{filename}/jobs/{job_id}/stream endpoint with incremental ?since= slicing and alias/persisted fallback, and live ScrubberOverlay progressive polling during active analytics.
-- **Files** (8):
-  - `intelligent_tracker/batch.py`
-  - `dashboard/services/progressive_stream_store.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `documentation/vms.rst`
-  - `tests/test_video_pairing_and_layers.py`
-- **Verification**: unittest discover tests (348 OK); Milestone 2 suites (26 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui live browser audit OK

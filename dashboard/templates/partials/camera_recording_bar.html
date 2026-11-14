@@ -1,0 +1,46 @@
+          <!-- Live Camera MP4 Recording Controls & Telemetry Bar -->
+          <section class="camera-recording-bar glass-panel" id="camera-recording-bar" data-camera-id="cam_01" aria-label="Live MP4 Recording Controls">
+            <div class="rec-bar-main">
+              <div class="rec-status-cluster">
+                <span class="rec-status-pill idle" id="rec-status-pill" title="Live Recording Status">
+                  <span class="rec-status-dot" id="rec-status-dot"></span>
+                  <span id="rec-status-text">IDLE</span>
+                </span>
+                <span class="rec-camera-badge" id="rec-camera-badge" title="Target Camera Channel">CAM_01</span>
+                <div class="rec-metrics-group" id="rec-metrics-group">
+                  <span class="rec-metric-chip" id="rec-elapsed-val" title="Elapsed Recording Duration">00:00.0</span>
+                  <span class="rec-metric-chip" id="rec-frames-val" title="Recorded MP4 Frames">0 frames</span>
+                  <span class="rec-metric-chip" id="rec-bytes-val" title="Recorded MP4 File Size">0 B</span>
+                  <span class="rec-filename-chip" id="rec-filename-val" title="Output MP4 Filename">—</span>
+                </div>
+              </div>
+              <div class="rec-actions-cluster">
+                <button type="button" class="btn btn-sm btn-danger rec-action-btn" id="btn-record-start" title="Start Live MP4 Recording for Active Camera">⏺ Record MP4</button>
+                <button type="button" class="btn btn-sm btn-outline rec-action-btn" id="btn-record-stop" title="Stop Active MP4 Recording" disabled>⏹ Stop</button>
+                <button type="button" class="btn btn-sm btn-outline rec-action-btn" id="btn-record-options-toggle" aria-expanded="false" aria-controls="rec-options-panel" title="Toggle Optional Recording Parameters">⚙️ Options</button>
+                <button type="button" class="btn btn-sm btn-primary rec-action-btn" id="btn-record-open-studio" style="display: none;" title="Open Recorded MP4 in Video Studio">📼 View in Studio</button>
+              </div>
+            </div>
+            <div class="rec-options-panel" id="rec-options-panel" hidden>
+              <label class="rec-field">
+                <span class="rec-field-label" title="Optional target MP4 filename in data/videos/">Filename</span>
+                <input type="text" id="rec-filename-input" class="rec-input" placeholder="Auto (cam_timestamp.mp4)" autocomplete="off" />
+              </label>
+              <label class="rec-field">
+                <span class="rec-field-label" title="Optional target recording framerate">Target FPS</span>
+                <input type="number" id="rec-fps-input" class="rec-input" min="1" max="120" step="0.5" placeholder="Stream default" />
+              </label>
+              <label class="rec-field">
+                <span class="rec-field-label" title="Optional maximum recording duration in seconds">Max Duration (s)</span>
+                <input type="number" id="rec-max-duration-input" class="rec-input" min="0.5" step="0.5" placeholder="Unlimited" />
+              </label>
+              <label class="rec-field">
+                <span class="rec-field-label" title="Optional maximum frame count bound">Max Frames</span>
+                <input type="number" id="rec-max-frames-input" class="rec-input" min="1" step="1" placeholder="Unlimited" />
+              </label>
+              <label class="rec-field rec-field-checkbox" title="Record HUD-annotated frames (checked) or raw frames (unchecked)">
+                <input type="checkbox" id="rec-annotated-toggle" checked />
+                <span>Record Annotated HUD</span>
+              </label>
+            </div>
+          </section>

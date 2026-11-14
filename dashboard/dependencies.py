@@ -30,10 +30,12 @@ from intelligent_tracker.scenarios import ScenarioManager
 logger = logging.getLogger("intelligent_tracker.dashboard.dependencies")
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 VIDEOS_DIR = os.path.join("data", "videos")
 CROPS_DIR = os.path.join("data", "crops")
 
 os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(TEMPLATES_DIR, exist_ok=True)
 os.makedirs(VIDEOS_DIR, exist_ok=True)
 os.makedirs(CROPS_DIR, exist_ok=True)
 

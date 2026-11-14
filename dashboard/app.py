@@ -30,6 +30,7 @@ from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     CROPS_DIR,
     STATIC_DIR,
+    TEMPLATES_DIR,
     VIDEOS_DIR,
     _get_active_learning_mgr,
     _get_db,
@@ -113,7 +114,7 @@ from intelligent_tracker.scenarios import ScenarioManager
 logger = logging.getLogger("intelligent_tracker.dashboard")
 
 _jinja_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(STATIC_DIR),
+    loader=jinja2.FileSystemLoader([STATIC_DIR, TEMPLATES_DIR]),
     autoescape=jinja2.select_autoescape(["html", "xml"]),
 )
 

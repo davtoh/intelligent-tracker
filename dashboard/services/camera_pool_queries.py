@@ -13,6 +13,19 @@ from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.stream_manager import StreamManager
 
 
+def _resolve_health_status(cam_id: str, cfg: dict[str, Any], is_running: bool):
+    """Resolve effective camera health status label and CameraHealth snapshot."""
+    health = CameraHealthManager().get_health(cam_id)
+    health_status = (
+        "paused"
+        if not cfg.get("enabled", True)
+        else (health.status if health.status != "unknown" else ("online" if is_running else "offline"))
+    )
+    if is_running and health.status == "error":
+        health_status = "error"
+    return health_status, health
+
+
 def build_camera_status_row(
     cam_id: str,
     cfg: dict[str, Any],
@@ -27,14 +40,8 @@ def build_camera_status_row(
         res_str = f"{mgr.video_source.width}x{mgr.video_source.height}"
         is_synth = mgr.video_source.is_synthetic
 
-    health = CameraHealthManager().get_health(cam_id)
-    health_status = (
-        "paused"
-        if not cfg.get("enabled", True)
-        else (health.status if health.status != "unknown" else ("online" if is_running else "offline"))
-    )
-    if is_running and health.status == "error":
-        health_status = "error"
+    health_status, health = _resolve_health_status(cam_id, cfg, is_running)
+    rec_state = telemetry.get("recording") or {"camera_id": cam_id, "is_recording": False, "status": "idle"}
 
     return {
         "id": cam_id,
@@ -55,6 +62,7 @@ def build_camera_status_row(
         "resolution": res_str,
         "active_tracks_count": len(telemetry.get("active_tracks", [])),
         "source_type": "synthetic" if is_synth else "physical",
+        "recording": rec_state,
     }
 
 
