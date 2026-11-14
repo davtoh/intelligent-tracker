@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-14] docs: Step 6 Milestone 3: Sphinx Docs Sync, Dead Import Cleanup & Packaging Polish
+- **Type**: docs
+- **Summary**: Updated Sphinx docs for pipeline/world/memory/cli/recording/models APIs, synced README.rst and pyproject.toml readme field, removed 28 unused imports across 21 modules while preserving availability probes, and verified 541/541 tests + Sphinx -W build.
+- **Files** (31):
+  - `README.rst`
+  - `dashboard/routers/videos.py`
+  - `dashboard/services/frame_overlay.py`
+  - `dashboard/services/shutdown_handler.py`
+  - `documentation/dashboard.rst`
+  - `documentation/deployment.rst`
+  - `documentation/index.rst`
+  - `documentation/intelligent_tracker.rst`
+  - ... (+23 more)
+- **Verification**: python -m unittest discover tests && python -m sphinx -a -W --keep-going documentation/ documentation/_build/html/
+
 ## [2026-11-14] feat: Step 6 Milestone 2: CLI Benchmarking, Model Verification & WorldGraph Parity
 - **Type**: feat
 - **Summary**: Added BenchmarkCollector (--benchmark/--benchmark-output/--check-models), GET/POST /api/system/models*, GET /api/world/snapshot|entities, and intelligent-tracker-ctl world|models subcommands.
@@ -125,18 +140,3 @@
   - `documentation/vms.rst`
   - `tests/test_video_pairing_and_layers.py`
 - **Verification**: unittest discover tests (348 OK); Milestone 2 suites (26 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui live browser audit OK
-
-## [2026-11-11] feat: Video Pairing, Idempotent Transcode & Resolution-Aware Overlay (M1)
-- **Type**: feat
-- **Summary**: Added H.264 pair detection in /api/videos, idempotent /transcode with force flag, unified _h264/base report and detection storage, container PTS + source_resolution propagation in BatchAnalyzer and VideoReportStore, Switch/Re-convert library and codec notice UI controls, and letterbox/pillarbox-compensated source_resolution overlay scaling.
-- **Files** (13):
-  - `intelligent_tracker/batch.py`
-  - `dashboard/services/video_transcoder.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/routers/videos.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/video_jobs.js`
-  - `dashboard/static/js/video_library.js`
-  - ... (+5 more)
-- **Verification**: unittest discover tests (344 OK); Milestone 1 suites (22 OK via plan_engine verify); sphinx -W --keep-going (0 warnings); headless diagnose.py ui audit OK

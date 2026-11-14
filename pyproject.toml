@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "intelligent_tracker"
 version = "0.1.2"
 description = "Intelligent multi-camera computer vision tracking, analytics, and world-state engine"
-readme = "README.md"
+readme = "README.rst"
 license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.10"
 authors = [

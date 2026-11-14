@@ -128,6 +128,15 @@ Camera Management & Discovery
    * - ``GET``
      - ``/api/cameras/presets``
      - Retrieve vendor RTSP URL builder templates.
+   * - ``POST``
+     - ``/api/cameras/{id}/record/start``
+     - Start live MP4 recording for a camera stream via ``PipelineVideoWriter``.
+   * - ``POST``
+     - ``/api/cameras/{id}/record/stop``
+     - Stop and finalize active MP4 recording for a camera stream.
+   * - ``GET``
+     - ``/api/cameras/{id}/record/status``
+     - Retrieve current or last finalized MP4 recording status and byte/frame counters.
 
 Video Studio & Scrubber Endpoints
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

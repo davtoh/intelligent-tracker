@@ -1,15 +1,10 @@
 """Polygonal chain representations, port connections, and recursive traversals."""
 
-from typing import Any, Optional
-
 from intelligent_tracker.geometry.indexing import (
     generate_poly_indexes,
     resolve_poly_connections,
 )
-from intelligent_tracker.geometry.primitives import (
-    IncompleteAssociations,
-    NotInvertible,
-)
+from intelligent_tracker.geometry.primitives import NotInvertible
 
 
 class PolyPortAccessMixin:

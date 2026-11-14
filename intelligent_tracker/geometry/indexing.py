@@ -1,7 +1,6 @@
 """Index generation and connection resolution helpers for polygonal chains."""
 
 from collections import Counter
-from typing import Any, Optional
 
 from intelligent_tracker.geometry.primitives import (
     IncompleteAssociations,

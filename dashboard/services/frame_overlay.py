@@ -8,7 +8,7 @@ velocity vectors, zone polygons, and BEV minimap overlays onto video frames.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 import cv2
 import numpy as np
 

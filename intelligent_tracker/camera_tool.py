@@ -17,7 +17,7 @@ import sys
 import time
 import argparse
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 import cv2
 import psutil

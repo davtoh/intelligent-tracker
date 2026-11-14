@@ -12,7 +12,7 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (

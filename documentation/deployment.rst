@@ -159,3 +159,80 @@ To stop the services:
 .. code-block:: bash
 
    docker compose down
+
+CLI & Dashboard Operator Parity
+-------------------------------
+
+Intelligent Tracker exposes three packaged console entrypoints (defined in ``pyproject.toml``):
+
+- ``intelligent-tracker`` (``python main.py``): Run live/headless CV tracking, bounded latency benchmarks, model integrity checks, and ``ask`` semantic queries.
+- ``intelligent-tracker-server`` (``python scripts/run_dashboard.py``): Start the FastAPI web dashboard and multi-camera VMS.
+- ``intelligent-tracker-ctl`` (``python scripts/stream_ctl.py``): Control running dashboard streams (``list``, ``stats``, ``evict``, ``prune``, ``history``, ``metrics``) and inspect ``ask``, ``world``, and ``models`` in remote (``--url`` / ``TRACKER_DASHBOARD_URL`` / ``APP_URL``) or offline mode.
+
+Live Camera Recording, WorldGraph & Model Verification APIs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 15 35 50
+   :header-rows: 1
+
+   * - Method
+     - Endpoint
+     - Description
+   * - ``POST``
+     - ``/api/cameras/{camera_id}/record/start``
+     - Start live MP4 recording via ``PipelineVideoWriter`` (supports ``filename``, ``fps``, ``annotated``, ``max_frames``, ``max_duration_s``).
+   * - ``POST``
+     - ``/api/cameras/{camera_id}/record/stop``
+     - Stop and finalize active MP4 recording for a camera stream.
+   * - ``GET``
+     - ``/api/cameras/{camera_id}/record/status``
+     - Retrieve live or last finalized recording metadata (frames written, elapsed seconds, byte size, codec).
+   * - ``GET``
+     - ``/api/system/models``
+     - Report registered ONNX model weights presence, file sizes, and SHA-256 verification status.
+   * - ``POST``
+     - ``/api/system/models/verify``
+     - Verify SHA-256 checksums across registered ONNX models (or a specific ``?model_name=``).
+   * - ``GET``
+     - ``/api/world/snapshot``
+     - Return a JSON-serializable topology and entity snapshot of the active ``WorldGraph``.
+   * - ``GET``
+     - ``/api/world/entities``
+     - List active ``WorldEntity`` nodes with optional ``?camera_id=`` and ``?min_confidence=`` filters.
+
+Operator Scenario Combinations Matrix
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :widths: 24 20 22 34
+   :header-rows: 1
+
+   * - Scenario / Objective
+     - Mode / Inputs
+     - Key Parameters
+     - Exact Runnable Command
+   * - Bounded Latency Benchmark
+     - Synthetic + mock detector
+     - ``--headless --frames 30 --benchmark``
+     - ``intelligent-tracker --source synthetic --detector mock --headless --frames 30 --benchmark --benchmark-output bench.json``
+   * - Verify ONNX Model Weights
+     - Local offline registry
+     - ``--check-models`` / ``models --verify``
+     - ``intelligent-tracker --check-models``
+   * - CTL Model Audit (JSON)
+     - Offline or remote ``--url``
+     - ``models status --verify --json``
+     - ``intelligent-tracker-ctl models status --verify --json``
+   * - WorldGraph Snapshot (CLI)
+     - Offline config/DB or remote
+     - ``world snapshot --json``
+     - ``intelligent-tracker-ctl world snapshot --json``
+   * - WorldGraph Filtered Entities
+     - Camera & confidence filter
+     - ``--camera``, ``--min-confidence``
+     - ``intelligent-tracker-ctl world entities --camera cam_01 --min-confidence 0.5``
+   * - Stream Pool Status & Prune
+     - Running dashboard API
+     - ``--url "$APP_URL"``
+     - ``intelligent-tracker-ctl --url "$APP_URL" list``

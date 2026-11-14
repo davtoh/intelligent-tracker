@@ -9,8 +9,6 @@ Provides:
 - Safe resolution of 'real' / 'auto' physical sources that strictly rejects virtual loopback devices (OBS).
 """
 
-import os
-import sys
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any

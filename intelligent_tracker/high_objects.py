@@ -11,11 +11,6 @@
     entity tracking must use :class:`intelligent_tracker.world.WorldGraph`.
 """
 
-# import built-in modules
-import sys
-from numbers import Number
-from time import time
-
 # import third party modules
 #from RRtoolbox.lib.plotter import fastplt  # DEBUG
 from .core import Space, Group, Agent

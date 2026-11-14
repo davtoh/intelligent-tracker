@@ -27,13 +27,12 @@ import csv
 import argparse
 import logging
 import threading
-from typing import Dict, List, Optional, Any, Tuple, Callable
+from typing import Dict, List, Optional, Any, Callable
 
 import cv2
-import numpy as np
 
 from intelligent_tracker.database import TrackerDB
-from intelligent_tracker.reid import ReIDExtractorFactory, BaseFeatureExtractor
+from intelligent_tracker.reid import ReIDExtractorFactory
 from intelligent_tracker.matcher import GalleryMatcher
 from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.detectors import DetectorFactory

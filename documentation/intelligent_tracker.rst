@@ -52,18 +52,32 @@ intelligent\_tracker.geometry module
     :undoc-members:
     :show-inheritance:
 
-intelligent\_tracker.high\_objects module
------------------------------------------
+intelligent\_tracker.pipeline module
+------------------------------------
 
-.. automodule:: intelligent_tracker.high_objects
+.. automodule:: intelligent_tracker.pipeline
     :members:
     :undoc-members:
     :show-inheritance:
 
-intelligent\_tracker.periferials module
----------------------------------------
+intelligent\_tracker.world module
+---------------------------------
 
-.. automodule:: intelligent_tracker.periferials
+.. automodule:: intelligent_tracker.world
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+intelligent\_tracker.memory module
+----------------------------------
+
+See :ref:`memory_and_world_query` for full ``intelligent_tracker.memory`` API documentation
+(``ConfidenceEngine``, ``EventFTSIndex``, ``WorldQueryEngine``, and synthesis providers).
+
+intelligent\_tracker.cli module
+-------------------------------
+
+.. automodule:: intelligent_tracker.cli
     :members:
     :undoc-members:
     :show-inheritance:

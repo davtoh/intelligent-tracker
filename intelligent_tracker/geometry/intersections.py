@@ -1,7 +1,6 @@
 """Contour intersection algorithms, Sutherland-Hodgman clipping, and analytical solvers."""
 
 from itertools import chain
-from typing import List, Optional, Tuple
 
 import numpy as np
 

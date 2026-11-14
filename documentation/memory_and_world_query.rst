@@ -70,6 +70,13 @@ REST API Reference
    (``entity_id``, ``camera_id``, ``zone_id``, ``event_type``, ``start_time``,
    ``end_time``, ``limit``, ``require_all``).
 
+``GET /api/world/snapshot``
+   Returns a JSON-serializable topology and entity snapshot of the active ``WorldGraph``.
+
+``GET /api/world/entities``
+   Lists live ``WorldEntity`` nodes from the active ``WorldGraph`` with optional
+   ``?camera_id=`` and ``?min_confidence=`` filters.
+
 CLI Parity (``ask``)
 --------------------
 

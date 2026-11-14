@@ -93,13 +93,13 @@
 ---
 
 ## Step 6: Full CLI $\leftrightarrow$ Dashboard Operator Parity & Packaging Polish
-- **Goal**: Close remaining operational asymmetries between terminal workflows and web dashboard workflows.
-- **Pre-Plan Evaluation Check**:
-  - Run `diagnose.py arch-map --path .` to compare `cli_surfaces` vs `routes_by_file`.
-- **Target Scope**:
-  - Add live stream MP4 recording control in Dashboard (`POST /api/cameras/{id}/record/start|stop`) using shared `PipelineEngine` writer support.
-  - Expose headless bounded benchmarking (`--frames N`), model verification/download status, and `WorldGraph` inspection commands in `scripts/stream_ctl.py` / `intelligent-tracker` CLI.
-  - Update Sphinx documentation (`documentation/`) and verify zero-warning Sphinx builds.
-- **Definition of Done**:
-  - Full `python -m unittest discover tests` green, `python -m sphinx -W --keep-going documentation/ documentation/_build/html/` green, and `diagnose.py arch-map` reports clean modularity budgets.
+- [x] **Goal**: Close remaining operational asymmetries between terminal workflows and web dashboard workflows.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py arch-map --path .` to compare `cli_surfaces` vs `routes_by_file`.
+- [x] **Target Scope**:
+  - [x] Add live stream MP4 recording control in Dashboard (`POST /api/cameras/{id}/record/start|stop`) using shared `PipelineEngine` writer support.
+  - [x] Expose headless bounded benchmarking (`--frames N`), model verification/download status, and `WorldGraph` inspection commands in `scripts/stream_ctl.py` / `intelligent-tracker` CLI.
+  - [x] Update Sphinx documentation (`documentation/`) and verify zero-warning Sphinx builds.
+- [x] **Definition of Done**:
+  - [x] Full `python -m unittest discover tests` green, `python -m sphinx -W --keep-going documentation/ documentation/_build/html/` green, and `diagnose.py arch-map` reports clean modularity budgets.
 

@@ -87,16 +87,16 @@ Static snapshot captured via `diagnose.py arch-map --path .` prior to Step 6 des
 ---
 
 ### Milestone 3: Sphinx Documentation Synchronization, Unused Import Cleanup & Master Plan Sign-Off — *Deferred to Next Turn / Milestone*
-- [ ] **documentation/intelligent_tracker.rst, documentation/deployment.rst & documentation/index.rst**: Update Sphinx documentation to cover `intelligent_tracker.pipeline`, `intelligent_tracker.world`, `intelligent_tracker.memory`, live camera recording APIs, `WorldGraph` & model status endpoints, and `intelligent-tracker` / `intelligent-tracker-ctl` CLI commands; replace deprecated `high_objects` / `periferials` entries with `world` and `video`.
-- [ ] **README.md**: Synchronize CLI recipes, API endpoint summary, and the Scenario Combinations Matrix with the new `--benchmark`, `--check-models`, `intelligent-tracker-ctl world|models`, and camera recording workflows.
-- [ ] **intelligent_tracker/ & dashboard/**: Remove unused imports flagged by `diagnose.py arch-map --path .` across active runtime modules while preserving public `__init__.py` facade re-exports.
-- [ ] **tests/**: Run full regression test suite (`python -m unittest discover tests`), Sphinx strict build (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`), and `diagnose.py arch-map --path .` modularity verification.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **documentation/intelligent_tracker.rst, documentation/deployment.rst & documentation/index.rst**: Update Sphinx documentation to cover `intelligent_tracker.pipeline`, `intelligent_tracker.world`, `intelligent_tracker.memory`, live camera recording APIs, `WorldGraph` & model status endpoints, and `intelligent-tracker` / `intelligent-tracker-ctl` CLI commands; replace deprecated `high_objects` / `periferials` entries with `world` and `video`.
+- [x] **README.md**: Synchronize CLI recipes, API endpoint summary, and the Scenario Combinations Matrix with the new `--benchmark`, `--check-models`, `intelligent-tracker-ctl world|models`, and camera recording workflows.
+- [x] **intelligent_tracker/ & dashboard/**: Remove unused imports flagged by `diagnose.py arch-map --path .` across active runtime modules while preserving public `__init__.py` facade re-exports.
+- [x] **tests/**: Run full regression test suite (`python -m unittest discover tests`), Sphinx strict build (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`), and `diagnose.py arch-map --path .` modularity verification.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Definition of Done (DoD)**:
-- [ ] Full `python -m unittest discover tests` passes 100% in headless mode (`MPLBACKEND=Agg`).
-- [ ] `python -m sphinx -W --keep-going documentation/ documentation/_build/html/` exits 0 with zero warnings.
-- [ ] `diagnose.py arch-map --path .` confirms clean modularity budgets and zero unused imports in modified files, completing Step 6 of `.TODO/world_architecture_master_roadmap.md`.
+- [x] Full `python -m unittest discover tests` passes 100% in headless mode (`MPLBACKEND=Agg`).
+- [x] `python -m sphinx -W --keep-going documentation/ documentation/_build/html/` exits 0 with zero warnings.
+- [x] `diagnose.py arch-map --path .` confirms clean modularity budgets and zero unused imports in modified files, completing Step 6 of `.TODO/world_architecture_master_roadmap.md`.
 
 ---
 

@@ -138,52 +138,69 @@ Interactive GUI Tracking
     # Run with legacy Haar cascade face detector
     python main.py --detector haar --source 0
 
-Headless Benchmarking (CI / Servers)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Headless Benchmarking & Model Checks (CI / Servers)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
     # Run 60 frames benchmark with YOLOv8 without opening GUI
     python main.py --detector yolov8 --source synthetic --headless --frames 60
 
+    # Collect per-frame latency quantiles (min/mean/p95/max ms) & export JSON
+    python main.py --detector mock --source synthetic --headless --frames 30 --benchmark --benchmark-output bench.json
+
+    # Verify registered ONNX model weights & SHA-256 checksums
+    python main.py --check-models
+
+    # Query semantic timeline & WorldGraph state from CLI
+    python main.py ask "Where was Alice?" --db data/tracker.db
+
 CLI Options
 ~~~~~~~~~~~
 
-+-----------------+---------------+--------------------------------------------------------------------------+
-| Argument        | Default       | Description                                                              |
-+=================+===============+==========================================================================+
-| ``--config``    | ``None``      | Path to YAML/JSON configuration file (e.g. ``configs/demo.yaml``)        |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--detector``  | ``haar``      | Detection architecture: ``yolov8``, ``yolo11``, ``haar``, ``mock``, etc. |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--tracker``   | ``centroid``  | Multi-object tracker: ``centroid`` or ``sort`` (Kalman filter)           |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--source``    | ``0``         | Camera index, ``real`` (auto-detects physical webcam), ``synthetic``, etc|
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--gui``       | ``opencv``    | GUI backend: ``opencv`` (interactive HUD) or ``forms`` (Matplotlib)     |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--resolution``| ``640x480``   | Frame resolution as ``WIDTHxHEIGHT``                                     |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--framerate`` | ``30``        | Target processing framerate (FPS)                                        |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--conf``      | ``0.25``      | Detection confidence threshold (``0.0`` – ``1.0``)                       |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--classes``   | ``None``      | Filter classes by name (``person``) or ID (``0``)                        |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--heatmap``   | ``False``     | Enable spatial occupancy heatmap overlay                                 |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--output``    | ``None``      | Output path to save annotated video recording (``output.mp4``)           |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--db``        | ``data/...``  | Path to SQLite database file for Re-ID gallery and sightings             |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--reid``      | ``None``      | Visual Re-ID extractor: ``color``, ``onnx``, ``mock``, or ``none``       |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--reid-thresh``| ``0.65``     | Cosine similarity threshold for Re-ID gallery matching (``0.0`` – ``1.0``)|
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--headless``  | ``False``     | Run without GUI (ideal for CI, servers, and benchmarks)                  |
-+-----------------+---------------+--------------------------------------------------------------------------+
-| ``--frames``    | ``60``        | Frames to process in headless mode (``0`` = infinite)                    |
-+-----------------+---------------+--------------------------------------------------------------------------+
++--------------------+---------------+--------------------------------------------------------------------------+
+| Argument           | Default       | Description                                                              |
++====================+===============+==========================================================================+
+| ``--config``       | ``None``      | Path to YAML/JSON configuration file (e.g. ``configs/demo.yaml``)        |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--detector``     | ``haar``      | Detection architecture: ``yolov8``, ``yolo11``, ``haar``, ``mock``, etc. |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--tracker``      | ``centroid``  | Multi-object tracker: ``centroid`` or ``sort`` (Kalman filter)           |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--source``       | ``0``         | Camera index, ``real`` (auto-detects physical webcam), ``synthetic``, etc|
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--gui``          | ``opencv``    | GUI backend: ``opencv`` (interactive HUD) or ``forms`` (Matplotlib)     |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--resolution``   | ``640x480``   | Frame resolution as ``WIDTHxHEIGHT``                                     |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--framerate``    | ``30``        | Target processing framerate (FPS)                                        |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--conf``         | ``0.25``      | Detection confidence threshold (``0.0`` – ``1.0``)                       |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--classes``      | ``None``      | Filter classes by name (``person``) or ID (``0``)                        |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--heatmap``      | ``False``     | Enable spatial occupancy heatmap overlay                                 |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--output``       | ``None``      | Output path to save annotated video recording (``output.mp4``)           |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--db``           | ``data/...``  | Path to SQLite database file for Re-ID gallery and sightings             |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--reid``         | ``None``      | Visual Re-ID extractor: ``color``, ``onnx``, ``mock``, or ``none``       |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--reid-thresh``  | ``0.65``      | Cosine similarity threshold for Re-ID gallery matching (``0.0`` – ``1.0``)|
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--headless``     | ``False``     | Run without GUI (ideal for CI, servers, and benchmarks)                  |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--frames``       | ``None``      | Max frames to process (defaults to 60 in headless/benchmark; 0=infinite) |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--benchmark``    | ``False``     | Record step latency stats (min/mean/p95/max ms, effective FPS)           |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--benchmark-output`` | ``None``  | Export benchmark latency/FPS summary report to JSON file                 |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--check-models`` | ``False``     | Verify registered ONNX weights presence & SHA-256 checksums, then exit   |
++--------------------+---------------+--------------------------------------------------------------------------+
+| ``--governance``   | ``False``     | Enable RSAC, active learning, and enrollment governance subsystems       |
++--------------------+---------------+--------------------------------------------------------------------------+
 
 Hardware Camera Management & Exclusive Lock Recovery
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -225,6 +242,36 @@ When multiple applications or Docker containers need simultaneous access to the 
     # Docker container client
     python main.py --source http://host.docker.internal:8000/api/v1/streams/cam_01/feed --detector yolov8
 
+Operator CLI & Dashboard API Parity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``intelligent-tracker-ctl`` utility (``scripts/stream_ctl.py``) and FastAPI dashboard share full operator parity for stream control, MP4 recording, model verification, semantic Q&A, and live ``WorldGraph`` inspection:
+
+.. code-block:: bash
+
+    # Inspect stream pool, process metrics, and lifecycle history (requires --url or APP_URL)
+    python scripts/stream_ctl.py --url "$APP_URL" list
+    python scripts/stream_ctl.py --url "$APP_URL" stats
+    python scripts/stream_ctl.py --url "$APP_URL" prune
+
+    # Verify ONNX model weights locally or via running dashboard (/api/system/models/verify)
+    python scripts/stream_ctl.py models --verify
+    python scripts/stream_ctl.py models status --json --url "$APP_URL"
+
+    # Inspect live or offline WorldGraph topology and entities (/api/world/snapshot, /api/world/entities)
+    python scripts/stream_ctl.py world summary
+    python scripts/stream_ctl.py world entities --camera cam_01 --min-confidence 0.5
+    python scripts/stream_ctl.py world snapshot --json
+
+    # Natural-language world timeline & confidence Q&A (offline SQLite or remote /api/world/query)
+    python scripts/stream_ctl.py ask "Where was Alice?" --db data/tracker.db
+
+Key Dashboard Operator Endpoints:
+
+- **Live Camera Recording**: ``POST /api/cameras/{camera_id}/record/start``, ``POST /api/cameras/{camera_id}/record/stop``, ``GET /api/cameras/{camera_id}/record/status``
+- **Model Integrity**: ``GET /api/system/models``, ``POST /api/system/models/verify``
+- **WorldGraph & Semantic Query**: ``GET /api/world/snapshot``, ``GET /api/world/entities``, ``POST /api/world/query``, ``GET /api/world/confidence/{entity_id}``, ``GET /api/world/timeline``
+
 
 Scenario Combinations Matrix
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -245,6 +292,14 @@ Scenario Combinations Matrix
 | **Multi-Consumer Stream Proxy**     | ``yolov8`` | ``centroid``| ``http://...``    | -                   | ``--classes person --conf 0.40``                | Shared Stream       | ``python main.py --source http://localhost:8000/api/v1/streams/cam_01/feed --detector yolov8``     |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **Synthetic CI Smoke Test**         | ``mock``   | ``centroid``| ``synthetic``    | ``configs/demo.yaml``| ``--headless --frames 30``                     | Headless (30f)      | ``python main.py --config configs/demo.yaml --headless --frames 30``                                |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Bounded Latency Benchmark**       | ``mock``   | ``centroid``| ``synthetic``     | -                   | ``--headless --frames 10 --benchmark``          | Headless Benchmark  | ``python main.py --source synthetic --detector mock --headless --frames 10 --benchmark``           |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Model Integrity Audit (CLI)**     | -          | -          | -                 | -                   | ``--check-models`` / ``models --verify``        | Offline / Remote    | ``python scripts/stream_ctl.py models --verify``                                                   |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **WorldGraph Snapshot (CLI)**       | -          | -          | -                 | -                   | ``world snapshot --json``                       | Offline / Remote    | ``python scripts/stream_ctl.py world snapshot --json``                                             |
++-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
+| **Semantic World Q&A (CLI)**        | -          | -          | -                 | -                   | ``--db data/tracker.db``                        | Offline / Remote    | ``python main.py ask "Where was Alice?" --db data/tracker.db``                                     |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
 | **YOLOv8 Edge AI Benchmark**        | ``yolov8`` | ``centroid``| ``synthetic``    | ``configs/demo.yaml``| ``--detector yolov8 --headless --frames 60``     | Headless (60f)      | ``python main.py --config configs/demo.yaml --detector yolov8 --headless --frames 60``              |
 +-------------------------------------+------------+------------+-------------------+---------------------+-------------------------------------------------+---------------------+----------------------------------------------------------------------------------------------------+
@@ -298,18 +353,21 @@ All unit tests run via Python's standard ``unittest`` discovery:
 
 .. code-block:: powershell
 
-    # Run complete test suite (209 unit and integration tests, 100% green)
+    # Run complete test suite
     $env:MPLBACKEND="Agg"
-    .\.venv\Scripts\python.exe -m unittest discover tests
+    python -m unittest discover tests
 
-    # Run Milestone 7 VMS and Camera Pool tests (13 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_vms.py
+    # Run CLI/Dashboard operator parity & live camera recording tests
+    python -m unittest tests/test_camera_recording.py tests/test_cli_operator_parity.py
 
-    # Run Milestone 8 Scenario Studio & Topology tests (34 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_scenario_studio.py tests/test_topology.py
+    # Run Milestone 7 VMS and Camera Pool tests
+    python -m unittest tests/test_vms.py
 
-    # Run Milestone 9 Artifact & Face Intelligence, RSAC & Active Learning tests (37 tests)
-    .\.venv\Scripts\python.exe -m unittest tests/test_artifact_and_face.py tests/test_active_learning.py
+    # Run Milestone 8 Scenario Studio & Topology tests
+    python -m unittest tests/test_scenario_studio.py tests/test_topology.py
+
+    # Run Milestone 9 Artifact & Face Intelligence, RSAC & Active Learning tests
+    python -m unittest tests/test_artifact_and_face.py tests/test_active_learning.py
 
 Web Analytics & Edge VMS Platform
 ---------------------------------

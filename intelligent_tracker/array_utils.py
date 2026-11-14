@@ -2,9 +2,6 @@
 # -*- coding: utf-8 -*-
 # (C) 2017 David Toro <davsamirtor@gmail.com>
 
-# import built-in modules
-import sys
-
 # import third party modules
 import cv2
 import numpy as np

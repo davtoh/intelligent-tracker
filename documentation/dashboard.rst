@@ -117,9 +117,16 @@ REST API Endpoints
 - ``GET /events``: Retrieve recent security and tracking alerts from EventBus.
 - ``POST /tag``: Interactive click-to-tag bounding box endpoint.
 - ``GET /status``: System hardware telemetry (CPU %, RAM %, active pipeline FPS, memory).
+- ``POST /api/cameras/{camera_id}/record/start``: Start live MP4 recording for a camera stream via ``PipelineVideoWriter`` (prevents idle hibernation while recording).
+- ``POST /api/cameras/{camera_id}/record/stop``: Stop and flush an active camera MP4 recording.
+- ``GET /api/cameras/{camera_id}/record/status``: Retrieve active or finalized camera recording status and byte/frame counters.
+- ``GET /api/system/models``: Inspect registered ONNX model weights presence and SHA-256 verification status.
+- ``POST /api/system/models/verify``: Run SHA-256 integrity checks across registered ONNX model weights.
 - ``POST /api/world/query``: Natural-language and structured semantic Q&A over FTS5 timelines, confidence state, and ``WorldGraph``.
 - ``GET /api/world/confidence/{entity_id}``: Retrieve calibrated long-term confidence telemetry for an entity.
 - ``GET /api/world/timeline``: BM25 full-text and structured search across indexed world timeline events.
+- ``GET /api/world/snapshot``: Return full live ``WorldGraph`` topology and entity snapshot.
+- ``GET /api/world/entities``: List active ``WorldEntity`` nodes with optional ``camera_id`` and ``min_confidence`` filters.
 
 Modernized Responsive UI & Ergonomics (Milestone 10)
 ----------------------------------------------------

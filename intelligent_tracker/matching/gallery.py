@@ -7,13 +7,13 @@ gallery matching against TrackerDB and in-memory session tracking.
 import time
 import logging
 from collections import deque
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any
 import numpy as np
 
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.reid import BaseFeatureExtractor, batch_cosine_similarity
 from intelligent_tracker.tracker import Track, check_track_occlusions
-from intelligent_tracker.matching.types import EntityIdentifiedEvent, SessionEntity
+from intelligent_tracker.matching.types import EntityIdentifiedEvent
 from intelligent_tracker.matching.session_gallery import SessionGalleryManager
 from intelligent_tracker.matching.adaptive_memory import apply_bounded_ema_update
 from intelligent_tracker.matching._gallery_signals import apply_track_confidence_signals, emit_periodic_sighting

@@ -19,7 +19,7 @@ import signal
 import sys
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable
 
 logger = logging.getLogger("intelligent_tracker.shutdown_handler")
 

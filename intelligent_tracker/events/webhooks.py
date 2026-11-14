@@ -6,7 +6,6 @@ import hmac
 import json
 import logging
 import threading
-import time
 from typing import Any, Dict, List, Optional, Union
 
 try:
@@ -16,10 +15,8 @@ except ImportError:
 
 try:
     import urllib.request as urllib_request
-    import urllib.error as urllib_error
 except ImportError:
     urllib_request = None
-    urllib_error = None
 
 from intelligent_tracker.events.types import BaseEvent
 
