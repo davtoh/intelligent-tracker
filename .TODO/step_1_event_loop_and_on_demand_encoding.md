@@ -41,11 +41,11 @@ Measured against workspace baseline before edits (304 files, 55,890 lines, 108 F
 
 ## 3. Phased Implementation Milestones
 
-### Milestone 1: Asyncio Event-Loop Offloading for Tagging & Sync Video Jobs *(Active Execution Target)*
-- [ ] **dashboard/routers/tagging.py**: Offload synchronous `svc.recognize_roi()`, `svc.commit_roi_tag()`, and `reload_all_galleries()` calls in `recognize_roi_endpoint` and `commit_roi_tag_endpoint` using `await asyncio.to_thread(...)` while keeping route handlers `<= 25L` and file `< 150L`.
-- [ ] **dashboard/routers/video_jobs.py**: Offload synchronous `_run_sync_transcode()` in `transcode_video` and `run_sync_analytics()` in `analyze_video` using `await asyncio.to_thread(...)` when `async_mode` is `False` while keeping file `< 325L` and functions `<= 40L`.
-- [ ] **tests/test_step1_event_loop_offload.py**: Add isolated unit tests (`tempfile.TemporaryDirectory()`, `<= 40L` per test method) verifying `recognize_roi_endpoint`, `commit_roi_tag_endpoint`, `transcode_video(async_mode=False)`, and `analyze_video(async_mode=False)` offload blocking execution via `asyncio.to_thread` without blocking concurrent event-loop tasks, including error branch coverage (`400`/`404`/`503`/`504`).
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+### Milestone 1: Asyncio Event-Loop Offloading for Tagging & Sync Video Jobs
+- [x] **dashboard/routers/tagging.py**: Offload synchronous `svc.recognize_roi()`, `svc.commit_roi_tag()`, and `reload_all_galleries()` calls in `recognize_roi_endpoint` and `commit_roi_tag_endpoint` using `await asyncio.to_thread(...)` while keeping route handlers `<= 25L` and file `< 150L`.
+- [x] **dashboard/routers/video_jobs.py**: Offload synchronous `_run_sync_transcode()` in `transcode_video` and `run_sync_analytics()` in `analyze_video` using `await asyncio.to_thread(...)` when `async_mode` is `False` while keeping file `< 325L` and functions `<= 40L`.
+- [x] **tests/test_step1_event_loop_offload.py**: Add isolated unit tests (`tempfile.TemporaryDirectory()`, `<= 40L` per test method) verifying `recognize_roi_endpoint`, `commit_roi_tag_endpoint`, `transcode_video(async_mode=False)`, and `analyze_video(async_mode=False)` offload blocking execution via `asyncio.to_thread` without blocking concurrent event-loop tasks, including error branch coverage (`400`/`404`/`503`/`504`).
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 1 Verification Command**:
 ```bash

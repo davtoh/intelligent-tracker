@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-15] perf: Step 1 M1: Asyncio Event-Loop Offloading for Tagging & Sync Video Jobs
+- **Type**: perf
+- **Summary**: Offloaded blocking ROI recognition/commit/gallery reload in dashboard/routers/tagging.py and sync transcode/analytics in dashboard/routers/video_jobs.py via asyncio.to_thread, with 9 isolated unit tests.
+- **Files** (3):
+  - `dashboard/routers/tagging.py`
+  - `dashboard/routers/video_jobs.py`
+  - `tests/test_step1_event_loop_offload.py`
+- **Verification**: python -m unittest discover -s tests -p test_step1_event_loop_offload.py
+
 ## [2026-11-15] fix: Fix CI failures in camera config healing and journey_segmenter modularity budget
 - **Type**: fix
 - **Summary**: Guard test_repo_cameras_json_has_no_non_synthetic_mock_or_docker_notice with skipTest when gitignored configs/cameras.json is absent, and extract JourneyHop/EntityJourney dataclasses into intelligent_tracker/journey_models.py so journey_segmenter.py is 137 lines (< 160 budget).
@@ -129,15 +138,3 @@
   - `dashboard/static/js/roi_draw_tagger.js`
   - `tests/test_step3_roi_draw_tagger.py`
 - **Verification**: python -m unittest discover -s tests -p test_step3_roi_draw_tagger.py
-
-## [2026-11-14] feat: Step 3 Milestone 1: On-Demand ROI Recognition & Tag Commit Backend
-- **Type**: feat
-- **Summary**: Added RoiRecognitionService and /api/tag/recognize-roi + /api/tag/commit endpoints with isolated unit tests
-- **Files** (6):
-  - `.agents/rules/pipeline_and_db_invariants.md`
-  - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/routers/tagging.py`
-  - `dashboard/services/roi_recognition_service.py`
-  - `tests/test_step3_roi_recognition_api.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_roi_recognition_api.py

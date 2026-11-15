@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Asynchronous video processing jobs router (transcoding and batch analytics)."""
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -150,7 +151,9 @@ async def transcode_video(
         return early_resp
     if async_mode:
         return _submit_async_transcode(job_mgr, safe_name, path, output_path, output_filename, target_resolution)
-    return _run_sync_transcode(safe_name, path, output_path, output_filename, target_resolution)
+    return await asyncio.to_thread(
+        _run_sync_transcode, safe_name, path, output_path, output_filename, target_resolution
+    )
 
 
 @router.get("/api/videos/jobs/{job_id}")
@@ -220,7 +223,7 @@ async def analyze_video(
             content={"status": "accepted", "job_id": job.job_id, "job": job.to_dict()},
         )
 
-    report = run_sync_analytics(safe_name, path, opts)
+    report = await asyncio.to_thread(run_sync_analytics, safe_name, path, opts)
     return {"status": "success", "report": report}
 
 
