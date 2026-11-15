@@ -58,6 +58,7 @@ from dashboard.routers import (
     cameras_router,
     camera_diagnostics_router,
     camera_recording_router,
+    processing_mode_router,
     rsac_router,
     scenarios_router,
     streaming_router,
@@ -219,6 +220,7 @@ def create_app() -> FastAPI:
     application.include_router(cameras_router)
     application.include_router(camera_diagnostics_router)
     application.include_router(camera_recording_router)
+    application.include_router(processing_mode_router)
     application.include_router(streaming_router)
     application.include_router(scenarios_router)
     application.include_router(rsac_router)

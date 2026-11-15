@@ -275,5 +275,24 @@ class CameraRecordStatusResponse(BaseModel):
     started_at: Optional[float] = None
     stopped_at: Optional[float] = None
     report_run_id: Optional[str] = None
+    processing_mode: Optional[str] = None
+    deferred_job_id: Optional[str] = None
+
+
+class ProcessingModeUpdateRequest(BaseModel):
+    mode: Optional[str] = Field(None, description="Processing mode: focus_only, full_realtime, capture_only, paused")
+    focused_camera_id: Optional[str] = Field(None, description="Focused camera ID for focus_only mode")
+    active_tab: Optional[str] = Field(None, description="Currently active dashboard tab")
+
+
+class ProcessingModeStatusResponse(BaseModel):
+    mode: str
+    focused_camera_id: Optional[str] = None
+    active_tab: str = "live"
+    valid_modes: List[str] = Field(default_factory=list)
+    deferred_jobs: List[Dict[str, Any]] = Field(default_factory=list)
+    camera_states: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    updated_at: float
+
 
 

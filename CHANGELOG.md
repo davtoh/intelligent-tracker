@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-15] feat: Step 3 M1: ProcessingModeService, /api/system/processing-mode Router & StreamTelemetry Extraction
+- **Type**: feat
+- **Summary**: Extracted stream_telemetry.py from stream_worker.py, added ProcessingModeService and /api/system/processing-mode endpoints, and updated schemas.
+- **Files** (9):
+  - `.TODO/step_3_backend_processing_modes_and_hibernation.md`
+  - `dashboard/app.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/schemas.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/routers/processing_mode.py`
+  - `dashboard/services/processing_mode_service.py`
+  - `dashboard/services/stream_telemetry.py`
+  - ... (+1 more)
+- **Verification**: python -m unittest discover -s tests -p test_step3_processing_mode_api.py
+
 ## [2026-11-15] test: Step 2 M4: Tab-Scoped Streams & Lazy Loading Integration Sign-Off
 - **Type**: test
 - **Summary**: Added end-to-end Node VM integration tests in tests/test_step2_tab_scoped_perf_integration.py verifying boot stream isolation, coalesced /api/cameras + /api/videos fetches, 250ms BEV minimap gating, and lazy #tab-videos loading; verified all 38 Step 2 tests and 697 total tests pass.
@@ -130,22 +145,3 @@
   - `intelligent_tracker/repositories/learning_repo.py`
   - ... (+3 more)
 - **Verification**: python -m unittest discover -s tests -p test_step5_batch_frame_processor.py
-
-## [2026-11-14] feat: Step 4 Milestone 4: E2E Video SSOT, Backup/Restore & Live Handoff Sign-Off
-- **Type**: feat
-- **Summary**: Added E2E integration tests for live-record-to-Studio handoff, single-file SQLite TrackerDB backup/restore, and non-mocked fallback branches; exposed report_run_id in CameraRecordStatusResponse; verified 628/628 tests green.
-- **Files** (2):
-  - `dashboard/schemas.py`
-  - `tests/test_step4_e2e_video_ssot.py`
-- **Verification**: python -m unittest discover tests
-
-## [2026-11-14] feat: Step 4 M3: Live-Record FrameStepResult Handoff & Export UI
-- **Type**: feat
-- **Summary**: Buffered time-indexed tracks in StreamRecordingController for instant live_capture TrackerDB persistence on stop(), wired step_res and db_getter in StreamWorker/StreamManager, and added Export JSON button and Live Capture badge to video_batch_reports.js.
-- **Files** (5):
-  - `dashboard/services/stream_recording.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/static/js/video_batch_reports.js`
-  - `dashboard/stream_manager.py`
-  - `tests/test_step4_live_recording_handoff.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_*.py
