@@ -12,6 +12,7 @@
 
 /* 3. Layout & Navigation */
 @import url("css/layout.css");
+@import url("css/processing_mode.css");
 @import url("css/drawer.css");
 @import url("css/sidebar.css");
 

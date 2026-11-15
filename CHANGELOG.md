@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-15] feat: Step 4 M1: Processing Mode UI Selector & Auto-Sync
+- **Type**: feat
+- **Summary**: Added top-bar #processing-mode-pill CSS/JS module, localStorage persistence, tab/visibility/camera focus auto-sync, and 8 unit/VM/TestClient tests.
+- **Files** (8):
+  - `AGENTS.md`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/nav_tabs_manager.js`
+  - `dashboard/static/styles.css`
+  - `dashboard/static/css/processing_mode.css`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_processing_mode_ui.py
+
 ## [2026-11-15] feat: Step 3 Milestone 3: Capture-Only Raw Recording & Deferred VideoIndexer Queue
 - **Type**: feat
 - **Summary**: Added capture_only raw MP4 recording bypass and automatic deferred VideoIndexer job queuing in StreamRecordingController, wired StreamManager mode_service_getter, tightened StreamPoolCoordinator to 236L, and verified 719/719 tests.
@@ -124,18 +138,3 @@
 - **Files** (1):
   - `tests/test_step5_e2e_closed_loop_ecosystem.py`
 - **Verification**: python -m unittest discover -s tests -p test_step5_*.py
-
-## [2026-11-15] feat: Step 5 M3: Timeline Tick-Marks & Seek in Studio Deep-Links
-- **Type**: feat
-- **Summary**: Added VideoTimelineLinks tick-mark rendering, video-seek-request bridge, JourneyHop media fields, and 1-click Seek in Studio buttons across #timeline, #alerts, #journey, and #review.
-- **Files** (12):
-  - `dashboard/static/css/scrubber_overlays.css`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/analytics_view.js`
-  - `dashboard/static/js/gallery_timeline.js`
-  - `dashboard/static/js/journey_search.js`
-  - `dashboard/static/js/scrubber_library_bridge.js`
-  - `dashboard/static/partials/tabs/videos.html`
-  - `dashboard/static/review_and_rsac.js`
-  - ... (+4 more)
-- **Verification**: python -m unittest discover -s tests -p test_step5_timeline_ticks_and_deeplinks.py

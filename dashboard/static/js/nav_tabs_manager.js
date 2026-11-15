@@ -50,6 +50,7 @@
 
   function emitTabLifecycle(prevTab, tabId) {
     window.LivePlayer?.syncTabStreams?.(prevTab, tabId);
+    window.ProcessingModeUI?.syncTabChange?.(String(tabId || '').replace(/^tab-/, ''));
     if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
       window.dispatchEvent(new CustomEvent('tab-changed', {
         detail: { previousTab: prevTab, activeTab: tabId },

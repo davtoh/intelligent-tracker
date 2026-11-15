@@ -49,6 +49,9 @@
     }
     videoImg.src = `${cleanBase}?annotated=false&t=${Date.now()}`;
     setStreamStatus('online');
+    if (activeCameraId) {
+      window.ProcessingModeUI?.syncCameraFocus?.(activeCameraId);
+    }
   }
 
   function detachStudioStream(studioImg) {
