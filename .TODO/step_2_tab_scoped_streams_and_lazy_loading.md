@@ -68,10 +68,10 @@ python -m unittest discover -s tests -p "test_step2_studio_minimap_gating.py"
 ---
 
 ### Milestone 3: Boot Fetch Deduplication & Deferred `#videos` Report/Detection Loading *(Deferred)*
-- [ ] **dashboard/static/js/nav_tabs_manager.js**: Add an idempotent boot GET fetch coalescer (`installBootFetchDeduplicator` / `window.fetchWithDedup` with `clearFetchDedupCache()`) that deduplicates concurrent/back-to-back GET requests to `/api/cameras` and `/api/videos` within a short coalescing window (`2000ms`), keeping `nav_tabs_manager.js` `< 280L` and functions `<= 35L`.
-- [ ] **dashboard/static/js/scrubber_library_bridge.js**: Gate auto-selection and heavy `/api/videos/{filename}/report` + `/detections` fetches behind `isVideosTabActive()` (`< 295L`, functions `<= 40L`), storing pending video/report state while `#tab-videos` is hidden and flushing via `flushDeferredVideoLoad()` when `#tab-videos` becomes active (`tab-changed` / `onTabEnter`).
-- [ ] **tests/test_step2_lazy_video_and_fetch_dedup.py**: Add Node VM unit tests (`<= 40L` per test method) verifying concurrent `fetch('/api/cameras')` and `fetch('/api/videos')` calls coalesce into 1 underlying HTTP call, `/report` and `/detections` fetches are deferred while `#tab-videos` is inactive and flushed on tab entry, and isolated test DOMs without `#tab-videos` remain 100% backward-compatible.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/static/js/nav_tabs_manager.js**: Add an idempotent boot GET fetch coalescer (`installBootFetchDeduplicator` / `window.fetchWithDedup` with `clearFetchDedupCache()`) that deduplicates concurrent/back-to-back GET requests to `/api/cameras` and `/api/videos` within a short coalescing window (`2000ms`), keeping `nav_tabs_manager.js` `< 280L` and functions `<= 35L`.
+- [x] **dashboard/static/js/scrubber_library_bridge.js**: Gate auto-selection and heavy `/api/videos/{filename}/report` + `/detections` fetches behind `isVideosTabActive()` (`< 295L`, functions `<= 40L`), storing pending video/report state while `#tab-videos` is hidden and flushing via `flushDeferredVideoLoad()` when `#tab-videos` becomes active (`tab-changed` / `onTabEnter`).
+- [x] **tests/test_step2_lazy_video_and_fetch_dedup.py**: Add Node VM unit tests (`<= 40L` per test method) verifying concurrent `fetch('/api/cameras')` and `fetch('/api/videos')` calls coalesce into 1 underlying HTTP call, `/report` and `/detections` fetches are deferred while `#tab-videos` is inactive and flushed on tab entry, and isolated test DOMs without `#tab-videos` remain 100% backward-compatible.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 3 Verification Command**:
 ```bash

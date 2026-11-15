@@ -8,6 +8,22 @@
 (function () {
   'use strict';
 
+  let deferredVideoSelection = null;
+  let deferredReportFilename = null;
+
+  function isVideosTabActive() {
+    const tabEl = document.getElementById('tab-videos');
+    if (!tabEl) return true;
+    return Boolean(tabEl.classList?.contains('active'));
+  }
+
+  function loadHeavyVideoData(filename) {
+    if (!filename) return;
+    window.VideoBatch?.restoreReportForFile(filename);
+    window.ScrubberOverlay?.loadDetections(filename);
+    refreshTimelineTicks(filename, document.getElementById('scrubber-video-player')?.duration);
+  }
+
   function updateLoadedTitle(filename) {
     const titleEl = document.getElementById('scrubber-loaded-title');
     if (!titleEl) return;
@@ -42,9 +58,12 @@
     if (context.btnAddAsCamera) context.btnAddAsCamera.disabled = false;
     window.VideoJobClient?.setCurrentViewedFilename(filename);
     window.VideoBatch?.setCurrentBatchFilename(filename);
-    window.VideoBatch?.restoreReportForFile(filename);
-    window.ScrubberOverlay?.loadDetections(filename);
-    refreshTimelineTicks(filename, document.getElementById('scrubber-video-player')?.duration);
+    if (isVideosTabActive()) {
+      deferredReportFilename = null;
+      loadHeavyVideoData(filename);
+    } else {
+      deferredReportFilename = filename;
+    }
 
     if (isWebCompatible === false) {
       window.VideoLibrary?.showCodecNotice(
@@ -148,9 +167,14 @@
 
       if (!activeFilename && files.length > 0) {
         const preferred = files.find(f => f.web_compatible) || files[0];
-        loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec, {
-          convertedFilename: preferred.converted_filename,
-        });
+        if (isVideosTabActive()) {
+          deferredVideoSelection = null;
+          loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec, {
+            convertedFilename: preferred.converted_filename,
+          });
+        } else {
+          deferredVideoSelection = { preferred, loadVideoIntoPlayer };
+        }
       }
     } catch (e) {
       console.warn('Could not load videos list:', e);
@@ -209,10 +233,33 @@
     return true;
   }
 
+  function flushDeferredVideoLoad() {
+    if (!isVideosTabActive()) return false;
+    if (deferredVideoSelection) {
+      const { preferred, loadVideoIntoPlayer } = deferredVideoSelection;
+      deferredVideoSelection = null;
+      loadVideoIntoPlayer(preferred.video_url, preferred.filename, preferred.web_compatible, preferred.codec, {
+        convertedFilename: preferred.converted_filename,
+      });
+      return true;
+    }
+    if (deferredReportFilename) {
+      const fn = deferredReportFilename;
+      deferredReportFilename = null;
+      loadHeavyVideoData(fn);
+      return true;
+    }
+    return false;
+  }
+
+  window.addEventListener?.('tab-changed', (e) => {
+    if (e?.detail?.activeTab === 'tab-videos') flushDeferredVideoLoad();
+  });
+
   window.ScrubberLibraryBridge = {
     updateLoadedTitle, handlePlayerError, syncLoadedVideoUI,
     bindVideoCardActions, loadVideosList, refreshTimelineTicks,
-    applyPendingSeek, handleSeekRequest,
+    applyPendingSeek, handleSeekRequest, isVideosTabActive, flushDeferredVideoLoad,
   };
 })();
 

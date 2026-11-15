@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-15] feat: Step 2 M3: Boot Fetch Deduplication & Lazy Video Report Loading
+- **Type**: feat
+- **Summary**: Added 2000ms boot GET fetch coalescing for /api/cameras and /api/videos in nav_tabs_manager.js and deferred #tab-videos player selection, /report, and /detections fetches until tab activation in scrubber_library_bridge.js.
+- **Files** (3):
+  - `dashboard/static/js/nav_tabs_manager.js`
+  - `dashboard/static/js/scrubber_library_bridge.js`
+  - `tests/test_step2_lazy_video_and_fetch_dedup.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_lazy_video_and_fetch_dedup.py
+
 ## [2026-11-15] feat: Step 2 M2: Tab-Scoped Studio BEV Minimap Timer & Stream Gating
 - **Type**: feat
 - **Summary**: Replaced unconditional 250ms BEV minimap interval in studio.js with tab-scoped startMinimapLoop/stopMinimapLoop/syncStudioTabState bound to tab-changed and gated studio-live-img.src updates when #tab-studio is hidden.
@@ -133,13 +142,3 @@
   - `dashboard/stream_manager.py`
   - `tests/test_step4_live_recording_handoff.py`
 - **Verification**: python -m unittest discover -s tests -p test_step4_*.py
-
-## [2026-11-14] feat: Step 4 M2: TrackerDB Video Report SSOT & Export API
-- **Type**: feat
-- **Summary**: Refactored video_report_store.py to persist runs and detection streams in TrackerDB with transparent legacy JSON auto-migration (video_report_migration.py) and added GET /api/videos/{filename}/reports/{run_id}/export.
-- **Files** (4):
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/services/video_report_migration.py`
-  - `tests/test_step4_report_ssot_and_export.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_report_ssot_and_export.py
