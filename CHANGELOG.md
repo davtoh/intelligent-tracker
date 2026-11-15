@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-15] feat: Step 3 Milestone 2: StreamWorker & StreamPoolCoordinator Hibernation and Tab-Scoped AI Gating
+- **Type**: feat
+- **Summary**: Integrated ProcessingModeService hibernation and vision-step gating into StreamWorker, StreamPoolCoordinator, and StreamManager with 9 unit tests.
+- **Files** (4):
+  - `dashboard/services/stream_pool_coordinator.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/stream_manager.py`
+  - `tests/test_step3_worker_hibernation_and_ai_gating.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_worker_hibernation_and_ai_gating.py
+
 ## [2026-11-15] feat: Step 3 M1: ProcessingModeService, /api/system/processing-mode Router & StreamTelemetry Extraction
 - **Type**: feat
 - **Summary**: Extracted stream_telemetry.py from stream_worker.py, added ProcessingModeService and /api/system/processing-mode endpoints, and updated schemas.
@@ -130,18 +140,3 @@
   - `dashboard/static/studio.js`
   - `tests/test_step5_video_spatial_and_rsac.py`
 - **Verification**: python -m unittest discover -s tests -p test_step5_video_spatial_and_rsac.py
-
-## [2026-11-14] feat: Step 5 M1: FrameProcessor Batch Unification & Media Offset Persistence
-- **Type**: feat
-- **Summary**: Decomposed batch.py via batch_reporting.py and FrameProcessor.step(), added review_queue media offset columns, and persisted video_filename/media_offset_sec across sightings and active learning.
-- **Files** (11):
-  - `.TODO/step_5_closed_loop_video_ecosystem.md`
-  - `.agents/rules/pipeline_and_db_invariants.md`
-  - `intelligent_tracker/active_learning.py`
-  - `intelligent_tracker/active_learning_triage.py`
-  - `intelligent_tracker/batch.py`
-  - `intelligent_tracker/matching/_gallery_signals.py`
-  - `intelligent_tracker/repositories/analytics_repo.py`
-  - `intelligent_tracker/repositories/learning_repo.py`
-  - ... (+3 more)
-- **Verification**: python -m unittest discover -s tests -p test_step5_batch_frame_processor.py

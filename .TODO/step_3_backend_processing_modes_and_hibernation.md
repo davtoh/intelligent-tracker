@@ -61,11 +61,11 @@ python -m unittest discover -s tests -p "test_step3_processing_mode_api.py"
 ---
 
 ### Milestone 2: `StreamWorker` & `StreamPoolCoordinator` Hibernation and Tab-Scoped AI Gating *(Deferred)*
-- [ ] **dashboard/services/stream_pool_coordinator.py**: Attach `processing_mode_service` and `_in_camera_pool = True` to registered `StreamManager` instances and add `sync_processing_mode()` (`< 270L`, `<= 11` methods, functions `<= 35L`) so unfocused cameras hibernate in `focus_only` mode (unless recording) and wake immediately when focused or switched to `full_realtime`.
-- [ ] **dashboard/stream_manager.py**: Wire `_processing_mode_service` initialization in `StreamManager.__init__` (`< 260L`, functions `<= 35L`) and wake/sync processing state when `start_recording()` is invoked.
-- [ ] **dashboard/services/stream_worker.py**: Integrate `ProcessingModeService.should_hibernate_camera()` in `_handle_hibernation()` and `should_run_vision_step()` in `run()` / `_process_single_frame()` (`< 290L`, functions `<= 40L`) so unfocused cameras hibernate in `focus_only` mode, all cameras pause `FrameProcessor.step()` AI when `active_tab != "live"` (unless recording or in `full_realtime`), and `capture_only`/`paused` skip `FrameProcessor.step()`.
-- [ ] **tests/test_step3_worker_hibernation_and_ai_gating.py**: Add unit tests (`<= 40L` per test method) exercising every branch of `StreamWorker` and `StreamPoolCoordinator` across `focus_only`, `full_realtime`, `capture_only`, `paused`, focused vs. unfocused cameras, recording overrides, and `active_tab` transitions.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/services/stream_pool_coordinator.py**: Attach `processing_mode_service` and `_in_camera_pool = True` to registered `StreamManager` instances and add `sync_processing_mode()` (`< 270L`, `<= 11` methods, functions `<= 35L`) so unfocused cameras hibernate in `focus_only` mode (unless recording) and wake immediately when focused or switched to `full_realtime`.
+- [x] **dashboard/stream_manager.py**: Wire `_processing_mode_service` initialization in `StreamManager.__init__` (`< 260L`, functions `<= 35L`) and wake/sync processing state when `start_recording()` is invoked.
+- [x] **dashboard/services/stream_worker.py**: Integrate `ProcessingModeService.should_hibernate_camera()` in `_handle_hibernation()` and `should_run_vision_step()` in `run()` / `_process_single_frame()` (`< 290L`, functions `<= 40L`) so unfocused cameras hibernate in `focus_only` mode, all cameras pause `FrameProcessor.step()` AI when `active_tab != "live"` (unless recording or in `full_realtime`), and `capture_only`/`paused` skip `FrameProcessor.step()`.
+- [x] **tests/test_step3_worker_hibernation_and_ai_gating.py**: Add unit tests (`<= 40L` per test method) exercising every branch of `StreamWorker` and `StreamPoolCoordinator` across `focus_only`, `full_realtime`, `capture_only`, `paused`, focused vs. unfocused cameras, recording overrides, and `active_tab` transitions.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash

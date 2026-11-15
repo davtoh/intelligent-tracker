@@ -131,11 +131,18 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         source_override: Optional[Any] = None,
         custom_cfg: Optional[Dict[str, Any]] = None,
         world_graph: Optional[WorldGraph] = None,
+        processing_mode_service: Optional[Any] = None,
     ) -> None:
         self.camera_id = camera_id
         self.name = name or f"Camera {camera_id.upper()}"
         self.source_override = source_override
         self.world_graph = world_graph
+        if processing_mode_service is None:
+            from dashboard.services.processing_mode_service import get_processing_mode_service
+
+            processing_mode_service = get_processing_mode_service()
+        self._processing_mode_service = processing_mode_service
+        self._in_camera_pool = False
         _init_manager_config(self, config_path, db_path, custom_cfg)
         _init_manager_runtime(self)
         self._init_subsystems()
@@ -238,6 +245,13 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             if self.db and hasattr(self.db, "close"):
                 self.db.close()
             logger.info("StreamManager stopped for %s", self.camera_id)
+
+    def start_recording(self, **kwargs: Any) -> Dict[str, Any]:
+        """Start MP4 recording, wake hibernating source, and sync processing state."""
+        res = super().start_recording(**kwargs)
+        if getattr(self, "_processing_mode_service", None) is not None:
+            self._resume_video_source()
+        return res
 
     def _worker_loop(self) -> None:
         """Continuous pipeline loop executing detection, tracking, analytics, and frame drawing."""

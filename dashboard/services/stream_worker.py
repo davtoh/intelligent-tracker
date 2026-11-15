@@ -85,6 +85,31 @@ class StreamWorker:
         bundle.world_bridge = getattr(self.manager, "world_bridge", bundle.world_bridge)
         return self._processor
 
+    def _should_run_vision_step(self, is_recording: bool) -> bool:
+        """Return True when FrameProcessor.step() AI inference should execute."""
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        if svc is None:
+            return True
+        return bool(svc.should_run_vision_step(self.manager.camera_id, is_recording=is_recording))
+
+    def _should_hibernate(self, is_recording: bool, frame_count: int) -> bool:
+        """Evaluate subscriber-count and ProcessingModeService hibernation rules."""
+        sub_count = int(getattr(self.manager, "subscriber_count", 0))
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        if svc is None:
+            return sub_count <= 0 and not is_recording and frame_count > 0
+        in_pool = bool(getattr(self.manager, "_in_camera_pool", False))
+        mode = getattr(svc, "mode", "focus_only")
+        focused = getattr(svc, "focused_camera_id", None)
+        is_unfocused = bool(in_pool and mode == "focus_only" and focused and self.manager.camera_id != focused)
+        should_hib = svc.should_hibernate_camera(
+            self.manager.camera_id,
+            subscriber_count=sub_count,
+            is_recording=is_recording,
+            in_camera_pool=in_pool,
+        )
+        return bool(should_hib and (frame_count > 0 or mode == "paused" or is_unfocused))
+
     def run(self) -> None:
         """Continuous pipeline loop executing FrameProcessor, overlays, and telemetry."""
         if not self.manager.video_source:
@@ -92,10 +117,11 @@ class StreamWorker:
 
         processor = self._get_processor()
         consecutive_empty = 0
+        frame_seq = 0
 
         with self.manager.video_source as vs:
             while self.manager._running and not self.manager._stop_event.is_set():
-                if self._handle_hibernation(vs, processor.frame_count):
+                if self._handle_hibernation(vs, max(processor.frame_count, frame_seq)):
                     continue
 
                 ret, frame = vs.read(timeout=1.0)
@@ -105,7 +131,14 @@ class StreamWorker:
                         continue
 
                 consecutive_empty = 0
-                step_res = processor.step(frame, timestamp=time.time(), max_dim=1280)
+                frame_seq += 1
+                is_rec = bool(getattr(self.manager, "is_recording", False))
+                if self._should_run_vision_step(is_rec):
+                    step_res = processor.step(frame, timestamp=time.time(), max_dim=1280)
+                else:
+                    step_res = FrameStepResult(
+                        frame=frame, timestamp=time.time(), fps=0.0, frame_count=frame_seq
+                    )
                 if step_res.frame_count % 30 == 1:
                     CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
 
@@ -139,9 +172,9 @@ class StreamWorker:
         self.manager._stop_event.wait(timeout=0.01)
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:
-        """Pause video capture if zero viewers are connected to conserve compute."""
-        is_recording = getattr(self.manager, "is_recording", False)
-        if self.manager.subscriber_count <= 0 and not is_recording and frame_count > 0:
+        """Pause video capture if zero viewers are connected or mode requires hibernation."""
+        is_recording = bool(getattr(self.manager, "is_recording", False))
+        if self._should_hibernate(is_recording, frame_count):
             if not self.manager._is_hibernating:
                 self.manager._is_hibernating = True
                 if hasattr(vs, "pause"):

@@ -8,6 +8,7 @@ WorldGraph propagation, lock-free parallel teardown, and telemetry queries.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
 import logging
 import threading
 from typing import Any
@@ -61,6 +62,27 @@ def _start_stream_if_ready(mgr: StreamManager | None, camera_id: str, name: str,
     logger.info("Started camera stream [%s] '%s' (%s -> %s)", camera_id, name, raw_source, resolved)
 
 
+def _sync_manager_hibernation(mgr: Any, should_hib: bool) -> None:
+    """Apply immediate pause/resume hibernation state to a StreamManager."""
+    vs = getattr(mgr, "video_source", None)
+    telemetry = getattr(mgr, "_latest_telemetry", None)
+    lock = getattr(mgr, "_lock", None) or nullcontext()
+    if not should_hib and getattr(mgr, "_is_hibernating", False):
+        mgr._is_hibernating = False
+        if vs is not None and hasattr(vs, "resume"):
+            vs.resume()
+        if telemetry:
+            with lock:
+                telemetry["status"] = "online"
+    elif should_hib and not getattr(mgr, "_is_hibernating", False) and getattr(mgr, "is_running", False):
+        mgr._is_hibernating = True
+        if vs is not None and hasattr(vs, "pause"):
+            vs.pause()
+        if telemetry:
+            with lock:
+                telemetry.update({"fps": 0.0, "status": "hibernating"})
+
+
 class StreamPoolCoordinator:
     """Thread-safe lifecycle coordinator for active StreamManager instances."""
 
@@ -70,11 +92,17 @@ class StreamPoolCoordinator:
         base_config_path: str,
         world_graph: WorldGraph,
         lock: Any = None,
+        processing_mode_service: Any = None,
     ) -> None:
         self.db_path = db_path
         self.base_config_path = base_config_path
         self.world_graph = world_graph
         self._lock = lock or threading.RLock()
+        if processing_mode_service is None:
+            from dashboard.services.processing_mode_service import get_processing_mode_service
+
+            processing_mode_service = get_processing_mode_service()
+        self.processing_mode_service = processing_mode_service
         self.streams: dict[str, StreamManager] = {}
 
     def create_and_register_stream(
@@ -90,16 +118,14 @@ class StreamPoolCoordinator:
         resolved_source, meta = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
 
         mgr = StreamManager(
-            config_path=self.base_config_path,
-            db_path=self.db_path,
-            camera_id=camera_id,
-            name=name,
-            source_override=resolved_source,
-            custom_cfg=_build_custom_cfg(cfg),
-            world_graph=self.world_graph,
+            config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
+            name=name, source_override=resolved_source,
+            custom_cfg=_build_custom_cfg(cfg), world_graph=self.world_graph,
         )
         mgr._resolved_source = resolved_source
         mgr._source_error = meta.get("status") == "error"
+        mgr._processing_mode_service = self.processing_mode_service
+        mgr._in_camera_pool = True
         with self._lock:
             self.streams[camera_id] = mgr
 
@@ -141,13 +167,12 @@ class StreamPoolCoordinator:
                 mgr = self.create_and_register_stream(camera_id, cam_entry, start=False)
             else:
                 mgr = StreamManager(
-                    config_path=self.base_config_path,
-                    db_path=self.db_path,
-                    camera_id=camera_id,
+                    config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
                     name=cam_entry.get("name", f"Camera {camera_id.upper()}"),
                     source_override=cam_entry.get("source", "synthetic"),
-                    world_graph=self.world_graph,
+                    world_graph=self.world_graph, processing_mode_service=self.processing_mode_service,
                 )
+                mgr._in_camera_pool = True
                 self.streams[camera_id] = mgr
 
         if old_mgr:
@@ -228,3 +253,17 @@ class StreamPoolCoordinator:
         else:
             for mgr in mgrs:
                 _stop_manager_safely(mgr, "stop_all")
+
+    def sync_processing_mode(self, service: Any = None) -> None:
+        """Synchronize all registered streams' hibernation state with ProcessingModeService."""
+        svc = service or self.processing_mode_service
+        with self._lock:
+            items = list(self.streams.items())
+        for cam_id, mgr in items:
+            mgr._processing_mode_service = svc
+            mgr._in_camera_pool = True
+            should_hib = svc.should_hibernate_camera(
+                cam_id, subscriber_count=int(getattr(mgr, "subscriber_count", 0)),
+                is_recording=bool(getattr(mgr, "is_recording", False)), in_camera_pool=True,
+            )
+            _sync_manager_hibernation(mgr, should_hib)
