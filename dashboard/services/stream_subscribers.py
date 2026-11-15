@@ -28,18 +28,20 @@ class StreamSubscriberRegistry:
         lease_ttl: float = 3.0,
     ) -> None:
         self._subscribers: Dict[str, float] = {}
+        self._subscriber_modes: Dict[str, bool] = {}
         self._ws_subscribers: List[Any] = []
         self._lock = threading.Lock()
-        self._is_hibernating: bool = False
+        self.is_hibernating: bool = False
         self.resume_callback = resume_callback
         self.lease_ttl = lease_ttl
 
-    def add_subscriber(self, sub_id: Optional[str] = None) -> str:
+    def add_subscriber(self, sub_id: Optional[str] = None, annotated: bool = True) -> str:
         """Register an active client subscriber (MJPEG stream or WebSocket) with a leased token."""
         token = str(sub_id) if sub_id else uuid.uuid4().hex
         now = time.time()
         with self._lock:
             self._subscribers[token] = now
+            self._subscriber_modes[token] = bool(annotated)
 
         if self.resume_callback is not None:
             try:
@@ -58,9 +60,13 @@ class StreamSubscriberRegistry:
         """Unregister an active client subscriber by token or pop one."""
         with self._lock:
             if sub_id:
-                self._subscribers.pop(str(sub_id), None)
+                key = str(sub_id)
+                self._subscribers.pop(key, None)
+                self._subscriber_modes.pop(key, None)
             elif self._subscribers:
-                self._subscribers.pop(next(iter(self._subscribers)))
+                key = next(iter(self._subscribers))
+                self._subscribers.pop(key, None)
+                self._subscriber_modes.pop(key, None)
             return self._active_subscriber_count_unlocked()
 
     def _active_subscriber_count_unlocked(self) -> int:
@@ -69,6 +75,7 @@ class StreamSubscriberRegistry:
         expired = [sid for sid, last_seen in self._subscribers.items() if (now - last_seen) > self.lease_ttl]
         for sid in expired:
             self._subscribers.pop(sid, None)
+            self._subscriber_modes.pop(sid, None)
         return len(self._subscribers) + len(self._ws_subscribers)
 
     @property
@@ -78,13 +85,18 @@ class StreamSubscriberRegistry:
             return self._active_subscriber_count_unlocked()
 
     @property
-    def is_hibernating(self) -> bool:
-        """Returns True if the stream is currently hibernating due to zero subscribers."""
-        return self._is_hibernating
+    def has_raw_subscribers(self) -> bool:
+        """Return True when at least one non-expired raw MJPEG subscriber is active."""
+        with self._lock:
+            self._active_subscriber_count_unlocked()
+            return any(not ann for ann in self._subscriber_modes.values())
 
-    @is_hibernating.setter
-    def is_hibernating(self, val: bool) -> None:
-        self._is_hibernating = bool(val)
+    @property
+    def has_annotated_subscribers(self) -> bool:
+        """Return True when at least one non-expired annotated MJPEG subscriber is active."""
+        with self._lock:
+            self._active_subscriber_count_unlocked()
+            return any(ann for ann in self._subscriber_modes.values())
 
     def register_ws_subscriber(self, sub: Any) -> None:
         """Register an active WebSocket subscriber queue."""
@@ -127,9 +139,9 @@ class StreamSubscriberRegistry:
 class StreamSubscriberMixin:
     """Mixin delegating subscriber lifecycle and telemetry distribution to _subscriber_registry."""
 
-    def add_subscriber(self, sub_id: Optional[str] = None) -> str:
+    def add_subscriber(self, sub_id: Optional[str] = None, annotated: bool = True) -> str:
         """Register an active client subscriber with a leased token."""
-        return self._subscriber_registry.add_subscriber(sub_id)
+        return self._subscriber_registry.add_subscriber(sub_id, annotated=annotated)
 
     def heartbeat_subscriber(self, sub_id: str) -> None:
         """Update last-seen timestamp for an active leased subscriber."""
@@ -149,13 +161,23 @@ class StreamSubscriberMixin:
         return self._subscriber_registry.subscriber_count
 
     @property
+    def has_raw_subscribers(self) -> bool:
+        """Return True when at least one non-expired raw MJPEG subscriber is active."""
+        return self._subscriber_registry.has_raw_subscribers
+
+    @property
+    def has_annotated_subscribers(self) -> bool:
+        """Return True when at least one non-expired annotated MJPEG subscriber is active."""
+        return self._subscriber_registry.has_annotated_subscribers
+
+    @property
     def is_hibernating(self) -> bool:
         """Returns True if the stream is currently hibernating due to zero subscribers."""
         return self._subscriber_registry.is_hibernating
 
     @is_hibernating.setter
     def is_hibernating(self, val: bool) -> None:
-        self._subscriber_registry.is_hibernating = val
+        self._subscriber_registry.is_hibernating = bool(val)
 
     _is_hibernating = is_hibernating
 

@@ -32,7 +32,7 @@ async def _stream_frame_generator(
     annotated: bool = True,
 ):
     """Yield multipart MJPEG frame chunks while client remains connected."""
-    mgr.add_subscriber(sub_id)
+    mgr.add_subscriber(sub_id, annotated=annotated)
     shutdown_evt = get_shutdown_event()
     try:
         while not is_shutting_down() and not shutdown_evt.is_set():

@@ -55,11 +55,11 @@ python -m unittest discover -s tests -p "test_step1_event_loop_offload.py"
 ---
 
 ### Milestone 2: Subscriber-Aware On-Demand Raw & Annotated JPEG Encoding *(Deferred)*
-- [ ] **dashboard/services/stream_subscribers.py**: Extend `StreamSubscriberRegistry` and `StreamSubscriberMixin` (`< 220L`, functions `<= 35L`) so `add_subscriber(sub_id=None, annotated=True)` records per-subscriber annotation mode alongside `_subscribers` lease timestamps and exposes `has_raw_subscribers` and `has_annotated_subscribers` properties.
-- [ ] **dashboard/routers/streaming.py**: Pass `annotated=annotated` into `mgr.add_subscriber(sub_id, annotated=annotated)` inside `_stream_frame_generator` (`< 150L`, functions `<= 35L`).
-- [ ] **dashboard/services/stream_worker.py**: Update `_process_single_frame` (`< 345L`, functions `<= 35L`) to encode raw JPEG only when `has_raw_subscribers` is `True` (or `_latest_raw_jpeg is None`) and render/encode annotated JPEG only when `has_annotated_subscribers` is `True`, `recorder.is_recording` is `True`, or `_latest_jpeg is None`.
-- [ ] **tests/test_step1_on_demand_jpeg_encoding.py**: Add unit tests (`<= 40L` per test method) verifying `StreamSubscriberRegistry` raw/annotated lease tracking, TTL expiration, and `StreamWorker` skipping redundant `cv2.imencode` calls when only raw, only annotated, or only WebSocket subscribers are connected.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/services/stream_subscribers.py**: Extend `StreamSubscriberRegistry` and `StreamSubscriberMixin` (`< 220L`, functions `<= 35L`) so `add_subscriber(sub_id=None, annotated=True)` records per-subscriber annotation mode alongside `_subscribers` lease timestamps and exposes `has_raw_subscribers` and `has_annotated_subscribers` properties.
+- [x] **dashboard/routers/streaming.py**: Pass `annotated=annotated` into `mgr.add_subscriber(sub_id, annotated=annotated)` inside `_stream_frame_generator` (`< 150L`, functions `<= 35L`).
+- [x] **dashboard/services/stream_worker.py**: Update `_process_single_frame` (`< 345L`, functions `<= 35L`) to encode raw JPEG only when `has_raw_subscribers` is `True` (or `_latest_raw_jpeg is None`) and render/encode annotated JPEG only when `has_annotated_subscribers` is `True`, `recorder.is_recording` is `True`, or `_latest_jpeg is None`.
+- [x] **tests/test_step1_on_demand_jpeg_encoding.py**: Add unit tests (`<= 40L` per test method) verifying `StreamSubscriberRegistry` raw/annotated lease tracking, TTL expiration, and `StreamWorker` skipping redundant `cv2.imencode` calls when only raw, only annotated, or only WebSocket subscribers are connected.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash

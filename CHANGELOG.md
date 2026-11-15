@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-15] feat: Subscriber-Aware On-Demand Raw & Annotated JPEG Encoding
+- **Type**: feat
+- **Summary**: Track per-subscriber annotated/raw MJPEG mode in StreamSubscriberRegistry/Mixin, forward annotated flag in streaming router, and skip redundant JPEG encodes in StreamWorker when no matching subscriber or active recorder needs them.
+- **Files** (4):
+  - `dashboard/routers/streaming.py`
+  - `dashboard/services/stream_subscribers.py`
+  - `dashboard/services/stream_worker.py`
+  - `tests/test_step1_on_demand_jpeg_encoding.py`
+- **Verification**: python -m unittest discover -s tests -p test_step1_on_demand_jpeg_encoding.py
+
 ## [2026-11-15] perf: Step 1 M1: Asyncio Event-Loop Offloading for Tagging & Sync Video Jobs
 - **Type**: perf
 - **Summary**: Offloaded blocking ROI recognition/commit/gallery reload in dashboard/routers/tagging.py and sync transcode/analytics in dashboard/routers/video_jobs.py via asyncio.to_thread, with 9 isolated unit tests.

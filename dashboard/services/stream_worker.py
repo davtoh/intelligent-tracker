@@ -195,22 +195,25 @@ class StreamWorker:
                 self._process_single_frame(step_res)
 
     def _process_single_frame(self, step_res: FrameStepResult) -> None:
-        """Store raw frame, encode overlays, and broadcast telemetry for a stepped frame."""
+        """Store raw frame, encode needed overlays, and broadcast telemetry."""
         with self.manager._lock:
             self.manager._latest_raw_frame = step_res.frame.copy()
+            raw_missing = getattr(self.manager, "_latest_raw_jpeg", None) is None
+            ann_missing = getattr(self.manager, "_latest_jpeg", None) is None
 
-        self._encode_raw_frame(step_res.frame)
-        annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+        if getattr(self.manager, "has_raw_subscribers", True) or raw_missing:
+            self._encode_raw_frame(step_res.frame)
+
         recorder = getattr(self.manager, "_recording_controller", None)
-        if recorder is not None and recorder.is_recording:
-            recorder.write_frame(step_res.frame, annotated, step_res=step_res)
+        is_rec = bool(recorder is not None and recorder.is_recording)
+        if getattr(self.manager, "has_annotated_subscribers", True) or is_rec or ann_missing:
+            annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+            if is_rec:
+                recorder.write_frame(step_res.frame, annotated, step_res=step_res)
 
         telemetry = self._build_telemetry(
-            step_res.tracks,
-            step_res.timestamp,
-            step_res.fps,
-            step_res.frame.shape,
-            step_res.frame_count,
+            step_res.tracks, step_res.timestamp, step_res.fps,
+            step_res.frame.shape, step_res.frame_count,
         )
         with self.manager._lock:
             self.manager._latest_telemetry = telemetry
