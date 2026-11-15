@@ -20,14 +20,14 @@ Measured against `$APP_URL` (`scripts/run_dashboard.py --local`) and the `main..
 ---
 
 ## Step 1: Asyncio Event-Loop Offloading, On-Demand JPEG Encoding & Storage Contention Fixes
-- [ ] **Child Plan**: `.TODO/step_1_event_loop_and_on_demand_encoding.md`
-- [ ] **Goal**: Offload synchronous OpenCV/ML/DB work from FastAPI async routes via `asyncio.to_thread()`, track raw vs. annotated subscriber counts so `StreamWorker` skips unsubscribed JPEG compression, cache completed legacy JSON report migrations per file mtime, and eliminate redundant multi-MB detection re-reads in `save_video_run()`.
-- [ ] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/routers/tagging.py dashboard/routers/video_jobs.py dashboard/routers/streaming.py dashboard/services/stream_subscribers.py dashboard/services/stream_worker.py dashboard/services/video_report_migration.py intelligent_tracker/repositories/video_run_repo.py`.
-- [ ] **Target Scope**:
-  - [ ] Offload `recognize_roi_endpoint`, `commit_roi_tag_endpoint`, and `reload_all_galleries` in `dashboard/routers/tagging.py` plus sync transcode/analyze branches in `dashboard/routers/video_jobs.py` via `asyncio.to_thread()`.
-  - [ ] Extend `StreamSubscriberRegistry` (`dashboard/services/stream_subscribers.py`) and `/stream/{camera_id}` (`dashboard/routers/streaming.py`) with annotated vs. raw subscriber tracking so `StreamWorker` (`dashboard/services/stream_worker.py`, kept `< 345L`) skips `_encode_raw_frame` and `_encode_annotated_frame` when unsubscribed.
-  - [ ] Add mtime-aware migration caching in `dashboard/services/video_report_migration.py` and avoid re-querying/re-parsing `frame_detections_json` inside `VideoRunRepositoryMixin.save_video_run()` (`intelligent_tracker/repositories/video_run_repo.py`).
-- [ ] **Definition of Done**: Zero blocking CV/DB calls on the asyncio event loop in tagging/video_jobs routes; 0-subscriber and single-mode subscriber streams skip redundant JPEG encodes; legacy report migration executes once per file mtime; all Step 1 unit tests and `diagnose.py audit` checks pass.
+- [x] **Child Plan**: `.TODO/step_1_event_loop_and_on_demand_encoding.md`
+- [x] **Goal**: Offload synchronous OpenCV/ML/DB work from FastAPI async routes via `asyncio.to_thread()`, track raw vs. annotated subscriber counts so `StreamWorker` skips unsubscribed JPEG compression, cache completed legacy JSON report migrations per file mtime, and eliminate redundant multi-MB detection re-reads in `save_video_run()`.
+- [x] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/routers/tagging.py dashboard/routers/video_jobs.py dashboard/routers/streaming.py dashboard/services/stream_subscribers.py dashboard/services/stream_worker.py dashboard/services/video_report_migration.py intelligent_tracker/repositories/video_run_repo.py`.
+- [x] **Target Scope**:
+  - [x] Offload `recognize_roi_endpoint`, `commit_roi_tag_endpoint`, and `reload_all_galleries` in `dashboard/routers/tagging.py` plus sync transcode/analyze branches in `dashboard/routers/video_jobs.py` via `asyncio.to_thread()`.
+  - [x] Extend `StreamSubscriberRegistry` (`dashboard/services/stream_subscribers.py`) and `/stream/{camera_id}` (`dashboard/routers/streaming.py`) with annotated vs. raw subscriber tracking so `StreamWorker` (`dashboard/services/stream_worker.py`, kept `< 345L`) skips `_encode_raw_frame` and `_encode_annotated_frame` when unsubscribed.
+  - [x] Add mtime-aware migration caching in `dashboard/services/video_report_migration.py` and avoid re-querying/re-parsing `frame_detections_json` inside `VideoRunRepositoryMixin.save_video_run()` (`intelligent_tracker/repositories/video_run_repo.py`).
+- [x] **Definition of Done**: Zero blocking CV/DB calls on the asyncio event loop in tagging/video_jobs routes; 0-subscriber and single-mode subscriber streams skip redundant JPEG encodes; legacy report migration executes once per file mtime; all Step 1 unit tests and `diagnose.py audit` checks pass.
 
 ---
 

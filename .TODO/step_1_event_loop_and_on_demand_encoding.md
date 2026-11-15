@@ -82,8 +82,8 @@ python -m unittest discover -s tests -p "test_step1_report_migration_and_repo_pe
 ---
 
 ### Milestone 4: Step 1 End-to-End Verification, Modularity Audit & Master Roadmap Sign-Off *(Deferred)*
-- [ ] **tests/test_step1_perf_integration.py**: Add end-to-end integration tests verifying concurrent ROI recognition + MJPEG subscriber mode switching + cached report listing under `diagnose.py audit` (all modified files `< 350L`, functions `<= 40L`).
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **tests/test_step1_perf_integration.py**: Add end-to-end integration tests verifying concurrent ROI recognition + MJPEG subscriber mode switching + cached report listing under `diagnose.py audit` (all modified files `< 350L`, functions `<= 40L`).
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 4 Verification Command**:
 ```bash

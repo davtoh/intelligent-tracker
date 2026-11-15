@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-11-15] test: Step 1 Milestone 4: End-to-End Integration, Modularity Audit & Sign-Off
+- **Type**: test
+- **Summary**: Added tests/test_step1_perf_integration.py verifying concurrent ROI offloading, MJPEG raw/annotated/WS mode switching, and mtime-cached report migration; verified 47 Step 1 tests and 672 full-suite tests pass with zero audit/scan defects.
+- **Files** (1):
+  - `tests/test_step1_perf_integration.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-15] perf: Step 1 M3: Legacy Report Migration Mtime Cache & save_video_run Hydration Optimization
 - **Type**: perf
 - **Summary**: Added thread-safe mtime-aware _MIGRATED_REPORT_FILES cache and clear_migration_cache() to video_report_migration.py, and optimized VideoRunRepositoryMixin.save_video_run() to attach in-memory frame_detections without re-parsing SQLite JSON blobs.
@@ -136,15 +143,3 @@
 - **Files** (1):
   - `tests/test_step3_e2e_tagging_flow.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-14] feat: Step 3 Milestone 3: ROI Tag Modal Preview, AI Auto-Select & Scrubber Wiring
-- **Type**: feat
-- **Summary**: Upgraded #modal-tag-entity with live ROI crop preview, AI class badge, and 1-click Re-ID candidate chips; wired InteractiveCanvas and ScrubberOverlay to RoiDrawTagger.openWithRecognition() and POST /api/tag/commit with gallery refresh.
-- **Files** (6):
-  - `dashboard/static/css/scrubber.css`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/partials/modals/entity_modals.html`
-  - `tests/test_step3_tag_modal_integration.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_*.py
