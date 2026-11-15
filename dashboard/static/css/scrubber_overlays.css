@@ -311,3 +311,15 @@
   }
 }
 
+.scrubber-slider-track-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.scrubber-slider-track-wrap input[type="range"] { width: 100%; }
+.scrubber-timeline-ticks { position: relative; height: 10px; margin-top: 2px; }
+.scrubber-tick {
+  position: absolute; top: 0; width: 6px; height: 10px; transform: translateX(-50%);
+  border: none; border-radius: 2px; padding: 0; cursor: pointer; background: var(--cyan, #06b6d4);
+}
+.scrubber-tick-alert { background: #ef4444; }
+.scrubber-tick-review { background: #f59e0b; }
+.btn-seek-studio { margin-left: 6px; white-space: nowrap; }
+
+

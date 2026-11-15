@@ -44,6 +44,7 @@
     window.VideoBatch?.setCurrentBatchFilename(filename);
     window.VideoBatch?.restoreReportForFile(filename);
     window.ScrubberOverlay?.loadDetections(filename);
+    refreshTimelineTicks(filename, document.getElementById('scrubber-video-player')?.duration);
 
     if (isWebCompatible === false) {
       window.VideoLibrary?.showCodecNotice(
@@ -156,12 +157,62 @@
     }
   }
 
+  let pendingSeek = null;
+  let boundPlayerForSeek = null;
+
+  async function refreshTimelineTicks(filename, durationSec) {
+    if (!filename || !Number.isFinite(durationSec) || durationSec <= 0) return;
+    if (!window.VideoTimelineLinks) return;
+    try {
+      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/report`);
+      if (!resp.ok) return;
+      const report = await resp.json();
+      const events = window.VideoTimelineLinks.extractEventsFromReport(report);
+      window.VideoTimelineLinks.renderTimelineTicks(events, durationSec);
+    } catch (e) {
+      console.debug('[ScrubberLibraryBridge] Timeline ticks unavailable:', e);
+    }
+  }
+
+  function applyPendingSeek(videoPlayer, getCurrentFilename, updateTimeline) {
+    if (!pendingSeek || !videoPlayer) return false;
+    const current = getCurrentFilename?.();
+    if (current && pendingSeek.filename !== current) return false;
+    const dur = Number(videoPlayer.duration);
+    if (!Number.isFinite(dur) || dur <= 0) return false;
+    videoPlayer.currentTime = Math.max(0, Math.min(dur, Number(pendingSeek.offsetSec) || 0));
+    pendingSeek = null;
+    updateTimeline?.(true);
+    window.ScrubberOverlay?.render?.();
+    return true;
+  }
+
+  function handleSeekRequest(e, context = {}) {
+    const fn = e?.detail?.filename;
+    const offsetSec = Math.max(0, Number(e?.detail?.offsetSec) || 0);
+    if (!fn) return false;
+    const { getCurrentFilename, videoPlayer, loadVideoIntoPlayer, updateTimeline } = context;
+    if (videoPlayer && boundPlayerForSeek !== videoPlayer) {
+      boundPlayerForSeek = videoPlayer;
+      videoPlayer.addEventListener('loadedmetadata', () => { applyPendingSeek(videoPlayer, getCurrentFilename, updateTimeline); refreshTimelineTicks(getCurrentFilename?.(), videoPlayer.duration); });
+    }
+    if (getCurrentFilename?.() === fn && videoPlayer && Number.isFinite(videoPlayer.duration) && videoPlayer.duration > 0) {
+      videoPlayer.currentTime = Math.max(0, Math.min(videoPlayer.duration, offsetSec));
+      updateTimeline?.(true);
+      window.ScrubberOverlay?.render?.();
+      return true;
+    }
+    pendingSeek = { filename: fn, offsetSec };
+    const cardBtn = document.querySelector(`.video-file-card[data-file="${CSS.escape(fn)}"] .btn-select-video`);
+    if (cardBtn) cardBtn.click();
+    else if (typeof loadVideoIntoPlayer === 'function') loadVideoIntoPlayer(`/api/videos/${encodeURIComponent(fn)}`, fn, true, 'h264');
+    return true;
+  }
+
   window.ScrubberLibraryBridge = {
-    updateLoadedTitle,
-    handlePlayerError,
-    syncLoadedVideoUI,
-    bindVideoCardActions,
-    loadVideosList,
+    updateLoadedTitle, handlePlayerError, syncLoadedVideoUI,
+    bindVideoCardActions, loadVideosList, refreshTimelineTicks,
+    applyPendingSeek, handleSeekRequest,
   };
 })();
 

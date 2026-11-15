@@ -107,6 +107,9 @@
         const snapshotBtn = ev.snapshot_base64
           ? `<button class="btn btn-xs btn-outline" onclick="window.showSnapshotModal('data:image/jpeg;base64,${ev.snapshot_base64}', '${escapeHtml(type)}')">View</button>`
           : '<span class="text-subtle">None</span>';
+        const vFile = ev.video_filename || ev.metadata?.video_filename || '';
+        const vOffset = ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0;
+        const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(vFile, vOffset) || '';
 
         return `
           <tr>
@@ -116,7 +119,7 @@
             <td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td>
             <td>${escapeHtml(ev.entity_name || (ev.entity_id ? '#' + ev.entity_id : 'Unknown'))}</td>
             <td>${escapeHtml(JSON.stringify(ev.metadata || {}))}</td>
-            <td>${snapshotBtn}</td>
+            <td>${snapshotBtn}${seekBtn}</td>
           </tr>
         `;
       }).join('');

@@ -29,6 +29,8 @@ class JourneyHop:
     global_start_xy: tuple[float, float] | None = None
     global_end_xy: tuple[float, float] | None = None
     global_path: list[tuple[float, float]] = field(default_factory=list)
+    video_filename: str = ""
+    media_offset_sec: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -50,6 +52,8 @@ class EntityJourney:
     global_start_xy: tuple[float, float] | None = None
     global_end_xy: tuple[float, float] | None = None
     global_path: list[tuple[float, float]] = field(default_factory=list)
+    video_filename: str = ""
+    media_offset_sec: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -93,6 +97,18 @@ def _extract_sighting_summary(
     return snap, zone_id, bboxes[:5]
 
 
+def _extract_media_ref(sightings: list[dict[str, Any]]) -> tuple[str, float]:
+    for s in sightings:
+        vfile = str(s.get("video_filename") or "").strip()
+        if vfile:
+            try:
+                offset = max(0.0, float(s.get("media_offset_sec") or 0.0))
+            except (TypeError, ValueError):
+                offset = 0.0
+            return vfile, offset
+    return "", 0.0
+
+
 def build_journey_hop(
     index: int, camera_id: str, sightings: list[dict[str, Any]], previous_hops: list[JourneyHop],
     coordinate_mapper: Any = None, homographies: dict[str, Any] | None = None,
@@ -104,6 +120,7 @@ def build_journey_hop(
     transit = max(0.0, start_t - previous_hops[-1].end_time) if previous_hops else None
 
     snap, zone_id, sample_bboxes = _extract_sighting_summary(sightings)
+    video_filename, media_offset_sec = _extract_media_ref(sightings)
     global_path = compute_hop_global_path(camera_id, sightings, coordinate_mapper=coordinate_mapper, homographies=homographies)
     cam_name = camera_id.upper()
     if not cam_name.startswith("CAM"):
@@ -118,6 +135,8 @@ def build_journey_hop(
         global_start_xy=global_path[0] if global_path else None,
         global_end_xy=global_path[-1] if global_path else None,
         global_path=global_path,
+        video_filename=video_filename,
+        media_offset_sec=media_offset_sec,
     )
 
 

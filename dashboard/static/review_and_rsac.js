@@ -108,6 +108,7 @@
       const cropUrl = item.crop_path ? (item.crop_path.startsWith('/') ? item.crop_path : `/${item.crop_path}`) : '/static/avatar-placeholder.png';
       const matchLabel = item.matched_entity_name ? `Matched: <strong>${escapeHtml(item.matched_entity_name)}</strong>` : 'Unidentified Borderline Track';
       const isPending = item.status === 'pending';
+      const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(item.video_filename, item.media_offset_sec) || '';
 
       const actionsHtml = isPending ? `
         <div class="review-actions">
@@ -146,6 +147,7 @@
                 <span style="font-weight: 600; color: ${simColor};">${sim.toFixed(1)}%</span>
               </div>
               <div class="review-timestamp">${escapeHtml(item.created_at)}</div>
+              ${seekBtn ? `<div class="review-seek-row">${seekBtn}</div>` : ''}
             </div>
           </div>
           ${actionsHtml}

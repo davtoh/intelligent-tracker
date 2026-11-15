@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-15] feat: Step 5 M3: Timeline Tick-Marks & Seek in Studio Deep-Links
+- **Type**: feat
+- **Summary**: Added VideoTimelineLinks tick-mark rendering, video-seek-request bridge, JourneyHop media fields, and 1-click Seek in Studio buttons across #timeline, #alerts, #journey, and #review.
+- **Files** (12):
+  - `dashboard/static/css/scrubber_overlays.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/analytics_view.js`
+  - `dashboard/static/js/gallery_timeline.js`
+  - `dashboard/static/js/journey_search.js`
+  - `dashboard/static/js/scrubber_library_bridge.js`
+  - `dashboard/static/partials/tabs/videos.html`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+4 more)
+- **Verification**: python -m unittest discover -s tests -p test_step5_timeline_ticks_and_deeplinks.py
+
 ## [2026-11-15] feat: Step 5 M2: Offline Video Spatial Profile, RSAC Alerts & Active Learning
 - **Type**: feat
 - **Summary**: Added scenario_camera_id to VideoAnalyzeRequest, wired ScenarioManager/AnalyticsEngine/RSACManager/ActiveLearningManager/EventBus into VideoIndexer offline analysis with media_offset_sec event tagging, added #batch-scenario-select modal control, and wired #studio-camera-select in Scenario Studio.
@@ -122,19 +137,6 @@
   - `tests/test_step2_clean_streaming.py`
   - `tests/test_step2_video_scrubber_parity.py`
 - **Verification**: python -m unittest discover tests (590 passed)
-
-## [2026-11-14] feat: Step 2 Milestone 3: #live Client-Side Vector Overlay Delegation
-- **Type**: feat
-- **Summary**: Wired #live primary stream to ?annotated=false (preserving multi-grid ?annotated=true) and delegated InteractiveCanvas to UnifiedCanvasOverlay HiDPI vector rendering.
-- **Files** (7):
-  - `dashboard/static/app.js`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/camera_grid.js`
-  - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/partials/tabs/live.html`
-  - `tests/test_step2_live_canvas_delegation.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_*.py
 
 ## [2026-11-14] feat: Step 2 Milestone 2: Shared UnifiedCanvasOverlay Engine
 - **Type**: feat
