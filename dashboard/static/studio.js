@@ -85,6 +85,7 @@
     loadCameraScenario(studioState.activeCamera);
     loadTopologyLinks();
     window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+    syncStudioTabState(isStudioTabActive());
   }
 
   async function loadStudioChannels() {
@@ -281,7 +282,11 @@
       studioState.activeCamera = targetId;
       const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
       const img = document.getElementById('studio-live-img');
-      if (img && !isVideo) img.src = `/stream/${encodeURIComponent(targetId)}`;
+      if (img && !isVideo) {
+        const streamBase = `/stream/${encodeURIComponent(targetId)}`;
+        if (img.dataset) img.dataset.activeStreamSrc = streamBase;
+        if (isStudioTabActive()) img.src = `${streamBase}?t=${Date.now()}`;
+      }
       updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
       loadCameraScenario(targetId);
       window.StudioOverlays?.loadCameraOverlays(targetId);
@@ -299,19 +304,34 @@
     });
   }
 
-  setInterval(() => {
-    if (document.getElementById('tab-studio')?.classList.contains('active') || studioState.overlays.bev_minimap) {
-      renderBEVMinimap();
-    }
-  }, 250);
+  let minimapTimer = null;
+  const isStudioTabActive = () => Boolean(document.getElementById('tab-studio')?.classList?.contains('active'));
+  function startMinimapLoop() {
+    if (minimapTimer !== null) return;
+    minimapTimer = setInterval(() => {
+      if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap();
+    }, 250);
+  }
+  function stopMinimapLoop() {
+    if (minimapTimer === null) return;
+    clearInterval(minimapTimer);
+    minimapTimer = null;
+  }
+  function syncStudioTabState(isActive) {
+    const active = typeof isActive === 'boolean' ? isActive : isStudioTabActive();
+    if (active) { renderBEVMinimap(); startMinimapLoop(); } else { stopMinimapLoop(); }
+  }
+  window.addEventListener('tab-changed', (ev) => {
+    const activeTab = ev?.detail?.activeTab;
+    syncStudioTabState(activeTab ? activeTab === 'tab-studio' : isStudioTabActive());
+  });
 
   window.Studio = {
-    init: initStudio,
-    setMode: setStudioMode,
-    deleteZone: deleteZone,
-    deleteTripwire: deleteTripwire,
-    deleteTopologyLink: deleteTopologyLink,
-    renderBEV: renderBEVMinimap,
+    init: initStudio, setMode: setStudioMode, deleteZone: deleteZone,
+    deleteTripwire: deleteTripwire, deleteTopologyLink: deleteTopologyLink,
+    renderBEV: renderBEVMinimap, startMinimapLoop: startMinimapLoop,
+    stopMinimapLoop: stopMinimapLoop, syncStudioTabState: syncStudioTabState,
+    syncTabVisibility: syncStudioTabState,
     searchJourney: (q) => window.JourneySearch?.search(q),
     exportJourney: (q) => window.JourneySearch?.exportVideo(q),
   };

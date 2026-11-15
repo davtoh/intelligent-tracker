@@ -56,9 +56,9 @@ python -m unittest discover -s tests -p "test_step2_tab_scoped_streams.py"
 ---
 
 ### Milestone 2: Tab-Scoped Studio BEV Minimap Timer & Studio Stream Gating *(Deferred)*
-- [ ] **dashboard/static/studio.js**: Replace the unconditional 250ms `setInterval` with `startMinimapLoop()`, `stopMinimapLoop()`, and `syncStudioTabState(isActive)` bound to `tab-changed` (`< 345L`, functions `<= 40L`) so the 250ms `renderBEVMinimap()` timer runs only when `#tab-studio` is active (`classList.contains('active')`), and guard `#studio-live-img.src` updates in `bindStudioUI()` when `#tab-studio` is inactive (updating `dataset.activeStreamSrc` instead).
-- [ ] **tests/test_step2_studio_minimap_gating.py**: Add Node VM unit tests (`<= 40L` per test method) verifying `studio.js` does not run `renderBEVMinimap()` on the 250ms interval while `#tab-studio` is inactive, starts/stops the timer deterministically on `tab-changed`, and updates `dataset.activeStreamSrc` without opening `/stream/` when `#tab-studio` is hidden.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/static/studio.js**: Replace the unconditional 250ms `setInterval` with `startMinimapLoop()`, `stopMinimapLoop()`, and `syncStudioTabState(isActive)` bound to `tab-changed` (`< 345L`, functions `<= 40L`) so the 250ms `renderBEVMinimap()` timer runs only when `#tab-studio` is active (`classList.contains('active')`), and guard `#studio-live-img.src` updates in `bindStudioUI()` when `#tab-studio` is inactive (updating `dataset.activeStreamSrc` instead).
+- [x] **tests/test_step2_studio_minimap_gating.py**: Add Node VM unit tests (`<= 40L` per test method) verifying `studio.js` does not run `renderBEVMinimap()` on the 250ms interval while `#tab-studio` is inactive, starts/stops the timer deterministically on `tab-changed`, and updates `dataset.activeStreamSrc` without opening `/stream/` when `#tab-studio` is hidden.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash

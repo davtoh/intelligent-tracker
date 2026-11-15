@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-11-15] feat: Step 2 M2: Tab-Scoped Studio BEV Minimap Timer & Stream Gating
+- **Type**: feat
+- **Summary**: Replaced unconditional 250ms BEV minimap interval in studio.js with tab-scoped startMinimapLoop/stopMinimapLoop/syncStudioTabState bound to tab-changed and gated studio-live-img.src updates when #tab-studio is hidden.
+- **Files** (2):
+  - `dashboard/static/studio.js`
+  - `tests/test_step2_studio_minimap_gating.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_studio_minimap_gating.py
+
 ## [2026-11-15] feat: Step 2 M1: Hidden-Tab Stream Disconnection & Tab-Scoped Stream Lifecycle
 - **Type**: feat
 - **Summary**: Replaced eager studio/analytics img src with data-src, added LivePlayer.syncTabStreams/attachStudioStream/detachStudioStream/attachHeatmapImage, and hooked NavTabsManager switchTab + window.switchTab to emit tab-changed.
@@ -135,16 +143,3 @@
   - `dashboard/services/video_report_migration.py`
   - `tests/test_step4_report_ssot_and_export.py`
 - **Verification**: python -m unittest discover -s tests -p test_step4_report_ssot_and_export.py
-
-## [2026-11-14] feat: Step 4 M1: TrackerDB Video Run Schema & VideoRunRepositoryMixin
-- **Type**: feat
-- **Summary**: Added video_runs table, media offset migrations on sightings/world_timeline_events, VideoRunRepositoryMixin, and compacted schema_manager.py below 240L
-- **Files** (7):
-  - `.TODO/step_4_trackerdb_video_ssot_and_live_handoff.md`
-  - `intelligent_tracker/database.py`
-  - `intelligent_tracker/repositories/__init__.py`
-  - `intelligent_tracker/repositories/schema_manager.py`
-  - `intelligent_tracker/repositories/video_run_repo.py`
-  - `intelligent_tracker/repositories/video_schema.py`
-  - `tests/test_step4_video_run_repo.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_video_run_repo.py
