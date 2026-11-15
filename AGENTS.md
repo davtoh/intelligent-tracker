@@ -121,3 +121,7 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   - Shared `fetch` deduplication helpers (e.g., in-flight request maps) MUST return `resp.clone()` before callers invoke `.json()` or `.text()` to avoid `"body stream already read"` errors across concurrent consumers.
   - Node VM tests exercising `dashboard/static/js/studio.js` incremental/delta list rendering must stub DOM creation/diff hooks (`document.createElement`, `innerHTML`, and row element stubs) cleanly in small (`<= 40L`) focused test helpers.
 - **Per-File Budget Note**: `intelligent_tracker/journey_segmenter.py` has a `< 160` line cap enforced by `tests/test_step4_preflight_budgets.py` (resolved at `137L` via `intelligent_tracker/journey_models.py`).
+- **Processing Mode DI & Sign-Off Invariants**:
+  - Import `get_processing_mode_service` lazily inside `StreamManager.__init__` and `StreamPoolCoordinator.__init__` rather than at module top-level, because `processing_mode_service.py` imports `video_analytics_service`/`dependencies` which transitively imports `CameraPool` -> `StreamManager`.
+  - Inject `mode_service_getter` into `StreamRecordingController` so standalone unit tests remain isolated while `StreamManager` shares its `ProcessingModeService`.
+  - Always run the full `python -m unittest discover tests` suite at child-plan sign-off to catch cross-step modularity budget tests such as `tests/test_dashboard_di.py`.
