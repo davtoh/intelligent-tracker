@@ -32,14 +32,14 @@ Measured against `$APP_URL` (`scripts/run_dashboard.py --local`) and the `main..
 ---
 
 ## Step 2: Tab-Scoped Streams, Lazy Tab Data & Startup Fetch Deduplication
-- [ ] **Child Plan**: `.TODO/step_2_tab_scoped_streams_and_lazy_loading.md`
-- [ ] **Goal**: Eliminate HTTP/1.1 6-connection pool saturation and multi-MB startup bottlenecks by disconnecting hidden-tab MJPEG/heatmap streams, pausing Live MJPEG when leaving the `#live` tab, gating the 250ms BEV minimap timer, deduplicating boot fetches, and deferring `/reports` and `/detections` until `#videos` is opened.
-- [ ] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/static/partials/tabs/studio.html dashboard/static/partials/tabs/analytics.html dashboard/static/js/nav_tabs_manager.js dashboard/static/js/live_player.js dashboard/static/studio.js dashboard/static/js/scrubber_library_bridge.js`.
-- [ ] **Target Scope**:
-  - [ ] Remove eager `src` attributes from `#studio-live-img` (`dashboard/static/partials/tabs/studio.html`) and `#static-heatmap-img` (`dashboard/static/partials/tabs/analytics.html`), binding/unbinding stream URLs on tab activation in `dashboard/static/js/nav_tabs_manager.js` and `dashboard/static/js/live_player.js`.
-  - [ ] Gate the 250ms `renderBEVMinimap()` interval in `dashboard/static/studio.js` (`< 345L`) to run only when `#studio` is the active tab.
-  - [ ] Deduplicate concurrent `/api/videos` and `/api/cameras` boot requests and defer `/api/videos/{filename}/reports` and `/detections` fetches in `dashboard/static/js/scrubber_library_bridge.js` until the `#videos` tab is active.
-- [ ] **Definition of Done**: Initial load on `#live` opens at most 1 MJPEG stream (`#live-stream-img`), zero hidden-tab streams, zero `/reports` or `/detections` fetches, and API responses complete in `< 500ms`.
+- [x] **Child Plan**: `.TODO/step_2_tab_scoped_streams_and_lazy_loading.md`
+- [x] **Goal**: Eliminate HTTP/1.1 6-connection pool saturation and multi-MB startup bottlenecks by disconnecting hidden-tab MJPEG/heatmap streams, pausing Live MJPEG when leaving the `#live` tab, gating the 250ms BEV minimap timer, deduplicating boot fetches, and deferring `/reports` and `/detections` until `#videos` is opened.
+- [x] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/static/partials/tabs/studio.html dashboard/static/partials/tabs/analytics.html dashboard/static/js/nav_tabs_manager.js dashboard/static/js/live_player.js dashboard/static/studio.js dashboard/static/js/scrubber_library_bridge.js`.
+- [x] **Target Scope**:
+  - [x] Remove eager `src` attributes from `#studio-live-img` (`dashboard/static/partials/tabs/studio.html`) and `#static-heatmap-img` (`dashboard/static/partials/tabs/analytics.html`), binding/unbinding stream URLs on tab activation in `dashboard/static/js/nav_tabs_manager.js` and `dashboard/static/js/live_player.js`.
+  - [x] Gate the 250ms `renderBEVMinimap()` interval in `dashboard/static/studio.js` (`< 345L`) to run only when `#studio` is the active tab.
+  - [x] Deduplicate concurrent `/api/videos` and `/api/cameras` boot requests and defer `/api/videos/{filename}/reports` and `/detections` fetches in `dashboard/static/js/scrubber_library_bridge.js` until the `#videos` tab is active.
+- [x] **Definition of Done**: Initial load on `#live` opens at most 1 MJPEG stream (`#live-stream-img`), zero hidden-tab streams, zero `/reports` or `/detections` fetches, and API responses complete in `< 500ms`.
 
 ---
 

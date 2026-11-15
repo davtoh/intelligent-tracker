@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-11-15] test: Step 2 M4: Tab-Scoped Streams & Lazy Loading Integration Sign-Off
+- **Type**: test
+- **Summary**: Added end-to-end Node VM integration tests in tests/test_step2_tab_scoped_perf_integration.py verifying boot stream isolation, coalesced /api/cameras + /api/videos fetches, 250ms BEV minimap gating, and lazy #tab-videos loading; verified all 38 Step 2 tests and 697 total tests pass.
+- **Files** (1):
+  - `tests/test_step2_tab_scoped_perf_integration.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_*.py
+
 ## [2026-11-15] feat: Step 2 M3: Boot Fetch Deduplication & Lazy Video Report Loading
 - **Type**: feat
 - **Summary**: Added 2000ms boot GET fetch coalescing for /api/cameras and /api/videos in nav_tabs_manager.js and deferred #tab-videos player selection, /report, and /detections fetches until tab activation in scrubber_library_bridge.js.

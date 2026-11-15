@@ -81,8 +81,8 @@ python -m unittest discover -s tests -p "test_step2_lazy_video_and_fetch_dedup.p
 ---
 
 ### Milestone 4: Step 2 End-to-End Verification, Modularity Audit & Master Roadmap Sign-Off *(Deferred)*
-- [ ] **tests/test_step2_tab_scoped_perf_integration.py**: Add end-to-end integration tests (`<= 40L` per test method) verifying initial `#tab-live` boot opens only `#live-stream-img`, zero hidden-tab streams or `/report`/`/detections` fetches, coalesced `/api/cameras` + `/api/videos` boot fetches, and clean tab transitions across `#tab-live`, `#tab-studio`, `#tab-analytics`, and `#tab-videos`.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **tests/test_step2_tab_scoped_perf_integration.py**: Add end-to-end integration tests (`<= 40L` per test method) verifying initial `#tab-live` boot opens only `#live-stream-img`, zero hidden-tab streams or `/report`/`/detections` fetches, coalesced `/api/cameras` + `/api/videos` boot fetches, and clean tab transitions across `#tab-live`, `#tab-studio`, `#tab-analytics`, and `#tab-videos`.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 4 Verification Command**:
 ```bash
