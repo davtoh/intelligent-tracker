@@ -23,7 +23,7 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
   ```
 - Ensure 100% green test passes across all unit and integration tests.
 - When adding new modules or fixing bugs, add corresponding unit tests in `tests/test_<module>.py`.
-- **Strict Test State & Config Isolation**: Tests must NEVER read from or write to live repository config, database, or output paths (`configs/cameras.json`, `data/*.db`, `data/reports/`, or root backup archives) via default constructor arguments. Always pass an isolated `tempfile.TemporaryDirectory()` path to stateful managers (e.g. `CameraPool(config_file=os.path.join(tmpdir, "cameras.json"), autostart=False)`, `TrackerDB(db_path=...)`) and register cleanup via `addCleanup()` or `tearDown()`.
+- **Strict Test State & Config Isolation**: Tests must NEVER read from or write to live repository config, database, or output paths (`configs/cameras.json`, `data/*.db`, `data/reports/`, or root backup archives) via default constructor arguments. Always pass an isolated `tempfile.TemporaryDirectory()` path to stateful managers (e.g. `CameraPool(config_file=os.path.join(tmpdir, "cameras.json"), autostart=False)`, `TrackerDB(db_path=...)`) and register explicit teardown (`worker.stop()`, `pool.close()`, `db.close()`) via `addCleanup()` in reverse creation order **before** the `TemporaryDirectory` cleanup runs so Windows file-lock `PermissionError` never occurs on `TempDir` removal.
 - **Node VM & Test Method Function Budget (<= 40 Lines)**: Keep every test method (including Python tests embedding Node.js `vm.runInNewContext` scripts) strictly `<= 40` lines so `diagnose.py audit` passes on the first run. Split multi-scenario JS assertions (e.g., click-threshold vs. drag-threshold) into separate focused `test_*` methods.
 - Never leave temporary `scratch/` directories or browser profiles inside the repository root.
 
@@ -113,4 +113,11 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
 - **`PipelineConfig` & `ActiveLearningTriage`**: `PipelineConfig` uses `detector_confidence` and `detector_classes`; `ActiveLearningTriage` debounce must treat `last=None` as eligible so `timestamp=0.0` offline frames are not suppressed.
 - **`ScenarioManager` & `TrackerDB` Signatures**: `ScenarioManager` uses `config_path`, `save_zone`, and `save_tripwire`; `TrackerDB` uses `set_rsac_rule(allowed_categories=...)`, `get_review_item(item_id)`, `add_entity()`, and `add_sighting()` (not `add_zone`, `add_rsac_rule`, `get_review_queue`, or `upsert_entity`).
 - **Offline Video Test Fixtures**: `VideoIndexer` defaults to `reid_name='color'`, and `MockDetector` ignores class filters unless `boxes=[]` is configured.
-- **Per-File Budget Note**: `intelligent_tracker/journey_segmenter.py` has a `< 160` line cap enforced by `tests/test_step4_preflight_budgets.py` (currently `178L` after Step 5 M3; extract a helper before next sign-off).
+- **`StreamSubscriberRegistry` & `StreamWorker` Test Invariants**:
+  - Keep `StreamSubscriberRegistry` `<= 12` methods by storing simple boolean flags (`is_hibernating`) as plain attributes on the registry while exposing property getters/setters on `StreamSubscriberMixin`.
+  - When testing `StreamWorker` mode switching or selective JPEG encoding in isolation, seed `_latest_raw_jpeg` and `_latest_jpeg` on the host unless testing cold-start cache seeding, because `StreamWorker` encodes both when caches are `None`.
+- **Dashboard JS, Fetch & HTML Asset Regex Invariants**:
+  - Match real HTML asset tags with negative lookbehind `(?<!data-)src=` in static/template tests so lazy-loaded `data-src=` attributes do not trigger false missing-asset failures.
+  - Shared `fetch` deduplication helpers (e.g., in-flight request maps) MUST return `resp.clone()` before callers invoke `.json()` or `.text()` to avoid `"body stream already read"` errors across concurrent consumers.
+  - Node VM tests exercising `dashboard/static/js/studio.js` incremental/delta list rendering must stub DOM creation/diff hooks (`document.createElement`, `innerHTML`, and row element stubs) cleanly in small (`<= 40L`) focused test helpers.
+- **Per-File Budget Note**: `intelligent_tracker/journey_segmenter.py` has a `< 160` line cap enforced by `tests/test_step4_preflight_budgets.py` (resolved at `137L` via `intelligent_tracker/journey_models.py`).
