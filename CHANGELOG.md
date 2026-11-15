@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-15] perf: Step 1 M3: Legacy Report Migration Mtime Cache & save_video_run Hydration Optimization
+- **Type**: perf
+- **Summary**: Added thread-safe mtime-aware _MIGRATED_REPORT_FILES cache and clear_migration_cache() to video_report_migration.py, and optimized VideoRunRepositoryMixin.save_video_run() to attach in-memory frame_detections without re-parsing SQLite JSON blobs.
+- **Files** (3):
+  - `dashboard/services/video_report_migration.py`
+  - `intelligent_tracker/repositories/video_run_repo.py`
+  - `tests/test_step1_report_migration_and_repo_perf.py`
+- **Verification**: python -m unittest discover -s tests -p test_step1_report_migration_and_repo_perf.py
+
 ## [2026-11-15] feat: Subscriber-Aware On-Demand Raw & Annotated JPEG Encoding
 - **Type**: feat
 - **Summary**: Track per-subscriber annotated/raw MJPEG mode in StreamSubscriberRegistry/Mixin, forward annotated flag in streaming router, and skip redundant JPEG encodes in StreamWorker when no matching subscriber or active recorder needs them.
@@ -139,12 +148,3 @@
   - `dashboard/static/partials/modals/entity_modals.html`
   - `tests/test_step3_tag_modal_integration.py`
 - **Verification**: python -m unittest discover -s tests -p test_step3_*.py
-
-## [2026-11-14] feat: Step 3 Milestone 2: Unified RoiDrawTagger Canvas Controller
-- **Type**: feat
-- **Summary**: Added dashboard/static/js/roi_draw_tagger.js (233L) for pointer click-to-tag (<6px) and freehand drag-to-draw (>=6px) ROI selection mapped via UnifiedCanvasOverlay.computeContainBox, registered in index.html, and verified with 6 Node VM unit tests.
-- **Files** (3):
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/roi_draw_tagger.js`
-  - `tests/test_step3_roi_draw_tagger.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_roi_draw_tagger.py

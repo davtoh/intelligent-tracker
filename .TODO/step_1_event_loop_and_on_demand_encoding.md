@@ -69,10 +69,10 @@ python -m unittest discover -s tests -p "test_step1_on_demand_jpeg_encoding.py"
 ---
 
 ### Milestone 3: Legacy Report Migration Mtime Cache & `save_video_run` Hydration Optimization *(Deferred)*
-- [ ] **dashboard/services/video_report_migration.py**: Add thread-safe mtime-aware migration cache (`_MIGRATED_REPORT_FILES` keyed by `(db_path, rep_path, mtime_ns)` plus `clear_migration_cache()` helper) so `migrate_legacy_json_for_aliases()` skips disk JSON parsing and DB lookups on repeated API requests when the file is unchanged (`< 180L`, functions `<= 35L`).
-- [ ] **intelligent_tracker/repositories/video_run_repo.py**: Optimize `VideoRunRepositoryMixin.save_video_run()` (`< 245L`, functions `<= 35L`) to fetch metadata with `include_detections=False` and attach the in-memory `frame_detections` list directly instead of re-reading and `json.loads()`-parsing multi-MB `frame_detections_json` blobs from SQLite.
-- [ ] **tests/test_step1_report_migration_and_repo_perf.py**: Add isolated unit tests (`tempfile.TemporaryDirectory()`, `<= 40L` per test method) verifying `migrate_legacy_json_for_aliases()` hits disk once across repeated calls, re-migrates when file mtime changes or a new DB is used, and `save_video_run()` returns hydrated `frame_detections` without redundant JSON deserialization.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/services/video_report_migration.py**: Add thread-safe mtime-aware migration cache (`_MIGRATED_REPORT_FILES` keyed by `(db_path, rep_path, mtime_ns)` plus `clear_migration_cache()` helper) so `migrate_legacy_json_for_aliases()` skips disk JSON parsing and DB lookups on repeated API requests when the file is unchanged (`< 180L`, functions `<= 35L`).
+- [x] **intelligent_tracker/repositories/video_run_repo.py**: Optimize `VideoRunRepositoryMixin.save_video_run()` (`< 245L`, functions `<= 35L`) to fetch metadata with `include_detections=False` and attach the in-memory `frame_detections` list directly instead of re-reading and `json.loads()`-parsing multi-MB `frame_detections_json` blobs from SQLite.
+- [x] **tests/test_step1_report_migration_and_repo_perf.py**: Add isolated unit tests (`tempfile.TemporaryDirectory()`, `<= 40L` per test method) verifying `migrate_legacy_json_for_aliases()` hits disk once across repeated calls, re-migrates when file mtime changes or a new DB is used, and `save_video_run()` returns hydrated `frame_detections` without redundant JSON deserialization.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 3 Verification Command**:
 ```bash
