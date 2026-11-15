@@ -91,8 +91,8 @@ python -m unittest discover -s tests -p "test_step5_timeline_ticks_and_deeplinks
 ---
 
 ### Milestone 4: End-to-End Closed-Loop Ecosystem Verification, Architecture Budgets & Master Roadmap Sign-Off
-- [ ] **tests/test_step5_e2e_closed_loop_ecosystem.py**: Add end-to-end integration tests verifying offline video indexing with `FrameProcessor.step()` + spatial profile -> sighting, alert, review item, and journey hop persistence with `video_filename` and `media_offset_sec` -> API response parity across `/sightings`, `/events`, `/api/active-learning/queue`, and `/api/journey/search` -> non-mocked fallback branch coverage (`scenario_camera_id=None`, missing profile, empty detections).
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **tests/test_step5_e2e_closed_loop_ecosystem.py**: Add end-to-end integration tests verifying offline video indexing with `FrameProcessor.step()` + spatial profile -> sighting, alert, review item, and journey hop persistence with `video_filename` and `media_offset_sec` -> API response parity across `/sightings`, `/events`, `/api/active-learning/queue`, and `/api/journey/search` -> non-mocked fallback branch coverage (`scenario_camera_id=None`, missing profile, empty detections).
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 4 Verification Command**:
 ```bash

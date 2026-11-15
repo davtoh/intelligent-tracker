@@ -63,16 +63,16 @@
 ---
 
 ## Step 5: Closed-Loop Ecosystem (`FrameProcessor` Batch Unification, Video Zones/Alerts/Active Learning & Deep-Link Seeking)
-- **Child Plan**: `.TODO/step_5_closed_loop_video_ecosystem.md`
-- [ ] **Goal**: Decompose `intelligent_tracker/batch.py` (485L) below 350 lines by routing `VideoIndexer` through `FrameProcessor.step()`, enabling Scenario Studio zones/tripwires, RSAC security alerts, and Active Learning (`#review`) on offline videos, and adding timeline event tick-marks plus 1-click `📼 Seek in Studio` deep-links from `#timeline`, `#alerts`, and `#journey`.
-- [ ] **Pre-Plan Evaluation Check**:
-  - [ ] Run `diagnose.py audit --path intelligent_tracker/batch.py dashboard/services/video_analytics_service.py dashboard/static/video_scrubber.js dashboard/static/js/gallery_timeline.js`.
-- [ ] **Target Scope**:
-  - [ ] Decompose `intelligent_tracker/batch.py` (485L -> `< 300L`, `process_video` 240L -> `<= 35L` helpers) by delegating per-frame execution to `FrameProcessor.step()` with `AnalyticsEngine`, `RSACManager`, and `ActiveLearningManager` wired in `video_analytics_service.py`.
-  - [ ] Allow selecting a camera/scenario spatial profile (`scenario_camera_id`) in the Video Studio Batch Analyze modal (and Scenario Studio `#studio` source selector) so zones, tripwires, and heatmaps apply to recorded videos.
-  - [ ] Create `dashboard/static/js/video_timeline_links.js` (`< 240L`) rendering color-coded sighting/alert tick-marks along `#scrubber-timeline-slider` and enabling 1-click `📼 Seek in Studio` deep-links from `#timeline`, `#alerts`, and `#journey` rows (`video_filename` + `media_offset_sec`).
-- [ ] **Definition of Done**:
-  - [ ] `batch.py` is `< 350L` with all functions `<= 40L`; offline video analysis populates zone/tripwire metrics, RSAC `#alerts`, and Active Learning `#review`; clicking any video-backed sighting or alert jumps to `#videos` and seeks to the exact timestamp.
+- [x] **Child Plan**: `.TODO/step_5_closed_loop_video_ecosystem.md`
+- [x] **Goal**: Decompose `intelligent_tracker/batch.py` (485L) below 350 lines by routing `VideoIndexer` through `FrameProcessor.step()`, enabling Scenario Studio zones/tripwires, RSAC security alerts, and Active Learning (`#review`) on offline videos, and adding timeline event tick-marks plus 1-click `📼 Seek in Studio` deep-links from `#timeline`, `#alerts`, and `#journey`.
+- [x] **Pre-Plan Evaluation Check**:
+  - [x] Run `diagnose.py audit --path intelligent_tracker/batch.py dashboard/services/video_analytics_service.py dashboard/static/video_scrubber.js dashboard/static/js/gallery_timeline.js`.
+- [x] **Target Scope**:
+  - [x] Decompose `intelligent_tracker/batch.py` (485L -> `< 300L`, `process_video` 240L -> `<= 35L` helpers) by delegating per-frame execution to `FrameProcessor.step()` with `AnalyticsEngine`, `RSACManager`, and `ActiveLearningManager` wired in `video_analytics_service.py`.
+  - [x] Allow selecting a camera/scenario spatial profile (`scenario_camera_id`) in the Video Studio Batch Analyze modal (and Scenario Studio `#studio` source selector) so zones, tripwires, and heatmaps apply to recorded videos.
+  - [x] Create `dashboard/static/js/video_timeline_links.js` (`< 240L`) rendering color-coded sighting/alert tick-marks along `#scrubber-timeline-slider` and enabling 1-click `📼 Seek in Studio` deep-links from `#timeline`, `#alerts`, and `#journey` rows (`video_filename` + `media_offset_sec`).
+- [x] **Definition of Done**:
+  - [x] `batch.py` is `< 350L` with all functions `<= 40L`; offline video analysis populates zone/tripwire metrics, RSAC `#alerts`, and Active Learning `#review`; clicking any video-backed sighting or alert jumps to `#videos` and seeks to the exact timestamp.
 
 ---
 

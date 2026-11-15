@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-11-15] test: Step 5 Milestone 4: End-to-End Closed-Loop Video Ecosystem Verification
+- **Type**: test
+- **Summary**: Added E2E integration tests covering FrameProcessor.step() offline indexing, 4-endpoint API parity (/sightings, /events, /api/active-learning/queue, /api/journey/search), and non-mocked fallback branches.
+- **Files** (1):
+  - `tests/test_step5_e2e_closed_loop_ecosystem.py`
+- **Verification**: python -m unittest discover -s tests -p test_step5_*.py
+
 ## [2026-11-15] feat: Step 5 M3: Timeline Tick-Marks & Seek in Studio Deep-Links
 - **Type**: feat
 - **Summary**: Added VideoTimelineLinks tick-mark rendering, video-seek-request bridge, JourneyHop media fields, and 1-click Seek in Studio buttons across #timeline, #alerts, #journey, and #review.
@@ -137,12 +144,3 @@
   - `tests/test_step2_clean_streaming.py`
   - `tests/test_step2_video_scrubber_parity.py`
 - **Verification**: python -m unittest discover tests (590 passed)
-
-## [2026-11-14] feat: Step 2 Milestone 2: Shared UnifiedCanvasOverlay Engine
-- **Type**: feat
-- **Summary**: Added 225L HiDPI client-side <canvas> overlay engine (window.UnifiedCanvasOverlay) with contain geometry, DPR scaling, tracks, velocity vectors, zones, tripwires, and heatmap rendering, loaded before interactive_canvas.js.
-- **Files** (3):
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/unified_canvas_overlay.js`
-  - `tests/test_step2_unified_canvas_engine.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_unified_canvas_engine.py
