@@ -10,6 +10,31 @@
 (function () {
   'use strict';
 
+  function emitTabLifecycle(prevTab, tabId) {
+    window.LivePlayer?.syncTabStreams?.(prevTab, tabId);
+    if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('tab-changed', {
+        detail: { previousTab: prevTab, activeTab: tabId },
+      }));
+    }
+  }
+
+  function wrapGlobalSwitchTab(manager) {
+    if (typeof window.switchTab !== 'function' || window.switchTab.__navTabsWrapped) return;
+    const origSwitchTab = window.switchTab;
+    const wrapped = function (tabId, updateHash = true) {
+      const prevTab = manager.activeTabId;
+      manager.activeTabId = tabId;
+      const result = origSwitchTab.call(this, tabId, updateHash);
+      if (!manager._inSwitchTab) {
+        emitTabLifecycle(prevTab, tabId);
+      }
+      return result;
+    };
+    wrapped.__navTabsWrapped = true;
+    window.switchTab = wrapped;
+  }
+
   class NavTabsManager {
     constructor() {
       this.container = document.querySelector('.nav-tabs-container');
@@ -19,11 +44,13 @@
       this.nextBtn = document.getElementById('nav-tabs-next');
       this.tabs = [];
       this.activeTabId = 'tab-live';
+      this._inSwitchTab = false;
 
       this.init();
     }
 
     init() {
+      wrapGlobalSwitchTab(this);
       if (!this.wrapper || !this.nav) return;
       this.collectTabs();
       this.setupScrollControls();
@@ -151,6 +178,7 @@
     }
 
     switchTab(tabId) {
+      const prevTab = this.activeTabId;
       this.activeTabId = tabId;
 
       // Update Header nav tabs
@@ -171,11 +199,18 @@
       });
 
       // Delegate to global switchTab in app.js
-      if (typeof window.switchTab === 'function') {
-        window.switchTab(tabId);
-      } else {
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
+      this._inSwitchTab = true;
+      try {
+        if (typeof window.switchTab === 'function') {
+          window.switchTab(tabId);
+        } else {
+          document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
+        }
+      } finally {
+        this._inSwitchTab = false;
       }
+
+      emitTabLifecycle(prevTab, tabId);
 
       // Lock window horizontal scroll to 0
       if (window.scrollX !== 0) {

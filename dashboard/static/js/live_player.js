@@ -41,10 +41,60 @@
       clearTimeout(streamRetryTimer);
       streamRetryTimer = null;
     }
-    const baseSrc = videoImg.dataset.activeStreamSrc || `/stream/${encodeURIComponent(activeCameraId || 'cam_01')}`;
+    const baseSrc = videoImg.dataset?.activeStreamSrc || `/stream/${encodeURIComponent(activeCameraId || 'cam_01')}`;
     const cleanBase = baseSrc.split('?')[0];
+    if (!forceReconnect && videoImg.src && videoImg.src.includes(cleanBase)) {
+      setStreamStatus('online');
+      return;
+    }
     videoImg.src = `${cleanBase}?annotated=false&t=${Date.now()}`;
     setStreamStatus('online');
+  }
+
+  function detachStudioStream(studioImg) {
+    if (!studioImg) return;
+    if (studioImg.src && !studioImg.src.startsWith('data:image/svg+xml')) {
+      if (studioImg.dataset) studioImg.dataset.activeStreamSrc = studioImg.src.split('?')[0];
+    }
+    studioImg.src = STANDBY_POSTER_SVG;
+  }
+
+  function attachStudioStream(studioImg, cameraId) {
+    if (!studioImg) return;
+    const fallbackSrc = studioImg.dataset?.activeStreamSrc || studioImg.dataset?.src || studioImg.getAttribute?.('data-src') || '/stream/cam_01';
+    const baseSrc = cameraId ? `/stream/${encodeURIComponent(cameraId)}` : fallbackSrc;
+    const cleanBase = baseSrc.split('?')[0];
+    if (studioImg.dataset) studioImg.dataset.activeStreamSrc = cleanBase;
+    studioImg.src = `${cleanBase}?t=${Date.now()}`;
+  }
+
+  function attachHeatmapImage(heatmapImg) {
+    if (!heatmapImg) return;
+    const baseSrc = heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap';
+    const cleanBase = baseSrc.split('?')[0];
+    heatmapImg.src = `${cleanBase}?t=${Date.now()}`;
+  }
+
+  function syncTabStreams(previousTabId, targetTabId) {
+    const liveImg = document.getElementById('live-stream-img');
+    const studioImg = document.getElementById('studio-live-img');
+    const heatmapImg = document.getElementById('static-heatmap-img');
+    if (previousTabId === 'tab-live' && targetTabId !== 'tab-live') {
+      detachLiveStream(liveImg);
+    } else if (previousTabId === 'tab-studio' && targetTabId !== 'tab-studio') {
+      detachStudioStream(studioImg);
+    }
+    if (targetTabId === 'tab-live' && !streamPaused) {
+      const camId = window.App?.getActiveCameraId?.() || 'cam_01';
+      attachLiveStream(liveImg, camId, false);
+    } else if (targetTabId === 'tab-studio') {
+      const studioCam = document.getElementById('studio-camera-select')?.value
+        || studioImg?.dataset?.activeStreamSrc?.split('/stream/')[1]
+        || 'cam_01';
+      attachStudioStream(studioImg, studioCam);
+    } else if (targetTabId === 'tab-analytics') {
+      attachHeatmapImage(heatmapImg);
+    }
   }
 
   function toggleFullscreen(videoImg) {
@@ -112,6 +162,10 @@
     STANDBY_POSTER_SVG: STANDBY_POSTER_SVG,
     detachLiveStream: detachLiveStream,
     attachLiveStream: attachLiveStream,
+    detachStudioStream: detachStudioStream,
+    attachStudioStream: attachStudioStream,
+    attachHeatmapImage: attachHeatmapImage,
+    syncTabStreams: syncTabStreams,
     setStreamStatus: setStreamStatus,
     toggleFullscreen: toggleFullscreen,
     bindHudButtons: bindPlayerHudButtons,

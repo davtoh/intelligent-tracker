@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-15] feat: Step 2 M1: Hidden-Tab Stream Disconnection & Tab-Scoped Stream Lifecycle
+- **Type**: feat
+- **Summary**: Replaced eager studio/analytics img src with data-src, added LivePlayer.syncTabStreams/attachStudioStream/detachStudioStream/attachHeatmapImage, and hooked NavTabsManager switchTab + window.switchTab to emit tab-changed.
+- **Files** (6):
+  - `.TODO/step_2_tab_scoped_streams_and_lazy_loading.md`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/nav_tabs_manager.js`
+  - `dashboard/static/partials/tabs/analytics.html`
+  - `dashboard/static/partials/tabs/studio.html`
+  - `tests/test_step2_tab_scoped_streams.py`
+- **Verification**: python -m unittest discover -s tests -p test_step2_tab_scoped_streams.py
+
 ## [2026-11-15] test: Step 1 Milestone 4: End-to-End Integration, Modularity Audit & Sign-Off
 - **Type**: test
 - **Summary**: Added tests/test_step1_perf_integration.py verifying concurrent ROI offloading, MJPEG raw/annotated/WS mode switching, and mtime-cached report migration; verified 47 Step 1 tests and 672 full-suite tests pass with zero audit/scan defects.
@@ -136,10 +148,3 @@
   - `intelligent_tracker/repositories/video_schema.py`
   - `tests/test_step4_video_run_repo.py`
 - **Verification**: python -m unittest discover -s tests -p test_step4_video_run_repo.py
-
-## [2026-11-14] test: Step 3 Milestone 4: End-to-End ROI Tagging Verification & Sign-Off
-- **Type**: test
-- **Summary**: Added E2E ROI tagging integration tests covering live camera, recorded video timestamp seek, gallery reload, and single-stream/detector fallback branches; verified 610/610 repository tests pass.
-- **Files** (1):
-  - `tests/test_step3_e2e_tagging_flow.py`
-- **Verification**: python -m unittest discover tests
