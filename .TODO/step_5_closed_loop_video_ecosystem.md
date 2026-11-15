@@ -59,13 +59,13 @@ python -m unittest discover -s tests -p "test_step5_batch_frame_processor.py"
 ---
 
 ### Milestone 2: Spatial Profile (`scenario_camera_id`), RSAC Alerts & Active Learning Wiring for Offline Videos
-- [ ] **dashboard/schemas.py**: Add optional `scenario_camera_id: Optional[str] = None` to `VideoAnalyzeRequest` while keeping `schemas.py` `< 260L`.
-- [ ] **dashboard/services/video_analytics_service.py**: Update `parse_analyze_options()` and `create_video_indexer()` (`< 260L`, functions `<= 35L`) to resolve `scenario_camera_id` zones/tripwires via `ScenarioManager`, wire `AnalyticsEngine`, `RSACManager`, `ActiveLearningManager`, and `EventBus` (tagging emitted offline events with `video_filename` and `media_offset_sec`), and persist spatial `zones`, `tripwires`, `zone_metrics`, `tripwire_counts`, and `alerts` in the saved video report run.
-- [ ] **dashboard/static/partials/modals/video_modals.html**: Add `#batch-scenario-select` (`Spatial Scenario Profile`) to `#modal-video-batch-analyze` while keeping `video_modals.html` `< 235L`.
-- [ ] **dashboard/static/js/video_batch.js**: Populate `#batch-scenario-select` from `/api/cameras` and pass `scenario_camera_id` in `handleBatchFormSubmit()` while keeping `video_batch.js` `< 320L` and functions `<= 35L`.
-- [ ] **dashboard/static/studio.js**: Wire `#studio-camera-select` (`< 345L`, functions `<= 35L`) to dynamically load configured camera profiles and recorded video files so operators can author and preview zones/tripwires for offline video analysis.
-- [ ] **tests/test_step5_video_spatial_and_rsac.py**: Add unit and FastAPI `TestClient` tests (`tempfile.TemporaryDirectory()`, synthetic video fixture, `detector="mock"`) verifying offline analysis with `scenario_camera_id` computes zone/tripwire metrics, emits RSAC alerts with `video_filename` + `media_offset_sec`, queues Active Learning items, and passes `diagnose.py audit` + `tests/test_step3_architecture_budgets.py`.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/schemas.py**: Add optional `scenario_camera_id: Optional[str] = None` to `VideoAnalyzeRequest` while keeping `schemas.py` `< 260L`.
+- [x] **dashboard/services/video_analytics_service.py**: Update `parse_analyze_options()` and `create_video_indexer()` (`< 260L`, functions `<= 35L`) to resolve `scenario_camera_id` zones/tripwires via `ScenarioManager`, wire `AnalyticsEngine`, `RSACManager`, `ActiveLearningManager`, and `EventBus` (tagging emitted offline events with `video_filename` and `media_offset_sec`), and persist spatial `zones`, `tripwires`, `zone_metrics`, `tripwire_counts`, and `alerts` in the saved video report run.
+- [x] **dashboard/static/partials/modals/video_modals.html**: Add `#batch-scenario-select` (`Spatial Scenario Profile`) to `#modal-video-batch-analyze` while keeping `video_modals.html` `< 235L`.
+- [x] **dashboard/static/js/video_batch.js**: Populate `#batch-scenario-select` from `/api/cameras` and pass `scenario_camera_id` in `handleBatchFormSubmit()` while keeping `video_batch.js` `< 320L` and functions `<= 35L`.
+- [x] **dashboard/static/studio.js**: Wire `#studio-camera-select` (`< 345L`, functions `<= 35L`) to dynamically load configured camera profiles and recorded video files so operators can author and preview zones/tripwires for offline video analysis.
+- [x] **tests/test_step5_video_spatial_and_rsac.py**: Add unit and FastAPI `TestClient` tests (`tempfile.TemporaryDirectory()`, synthetic video fixture, `detector="mock"`) verifying offline analysis with `scenario_camera_id` computes zone/tripwire metrics, emits RSAC alerts with `video_filename` + `media_offset_sec`, queues Active Learning items, and passes `diagnose.py audit` + `tests/test_step3_architecture_budgets.py`.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 2 Verification Command**:
 ```bash

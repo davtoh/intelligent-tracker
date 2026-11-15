@@ -81,9 +81,31 @@
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
 
+    loadStudioChannels();
     loadCameraScenario(studioState.activeCamera);
     loadTopologyLinks();
     window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+  }
+
+  async function loadStudioChannels() {
+    const sel = document.getElementById('studio-camera-select');
+    if (!sel) return;
+    const [camRes, vidRes] = await Promise.allSettled([fetch('/api/cameras'), fetch('/api/videos')]);
+    const cams = camRes.status === 'fulfilled' && camRes.value.ok ? await camRes.value.json() : [];
+    const vids = vidRes.status === 'fulfilled' && vidRes.value.ok ? await vidRes.value.json() : [];
+    sel.innerHTML = '';
+    const appendGroup = (label, items, mapFn) => {
+      if (!Array.isArray(items) || !items.length) return;
+      const grp = document.createElement('optgroup');
+      grp.label = label;
+      items.forEach((it) => { const opt = mapFn(it); if (opt) grp.appendChild(opt); });
+      if (grp.children.length) sel.appendChild(grp);
+    };
+    appendGroup('Camera Profiles', cams, (c) => c?.id && Object.assign(document.createElement('option'), { value: c.id, textContent: c.name ? `${c.name} (${c.id})` : c.id }));
+    appendGroup('Recorded Videos', vids, (v) => v?.filename && Object.assign(document.createElement('option'), { value: v.filename, textContent: `🎬 ${v.filename}` }));
+    if (!sel.options.length) sel.innerHTML = '<option value="cam_01">cam_01</option>';
+    if ([...sel.options].some((o) => o.value === studioState.activeCamera)) sel.value = studioState.activeCamera;
+    else studioState.activeCamera = sel.value || 'cam_01';
   }
 
   function setupCanvasListeners() {
@@ -155,89 +177,65 @@
     window.BEVMinimap?.render(studioState.bevCanvas, studioState.homography, studioState.zones, studioState.activeCamera);
   }
 
-  async function saveZone(zoneData) {
+  async function studioRequest(url, options, okTitle, okBody, errTitle, onSuccess) {
     try {
-      const res = await fetch('/api/scenarios/zones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(zoneData),
-      });
+      const res = await fetch(url, options);
       if (res.ok) {
-        updateStudioStatus(`Zone '${zoneData.name}' saved successfully.`);
-        showToast('Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'success');
-        loadCameraScenario(zoneData.camera_id);
+        const data = await res.json().catch(() => ({}));
+        if (okTitle) showToast(okTitle, okBody, options?.method === 'DELETE' ? 'info' : 'success');
+        if (onSuccess) onSuccess(data);
       }
     } catch (err) {
-      showToast('Error saving zone', err.message, 'error');
+      showToast(errTitle, err.message, 'error');
     }
   }
 
-  async function deleteZone(camera_id, zone_name) {
+  function saveZone(zoneData) {
+    return studioRequest('/api/scenarios/zones', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(zoneData),
+    }, 'Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'Error saving zone', () => {
+      updateStudioStatus(`Zone '${zoneData.name}' saved successfully.`);
+      loadCameraScenario(zoneData.camera_id);
+    });
+  }
+
+  function deleteZone(camera_id, zone_name) {
     if (!confirm(`Delete zone '${zone_name}'?`)) return;
-    try {
-      const res = await fetch(`/api/scenarios/zones/${camera_id}/${encodeURIComponent(zone_name)}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        updateStudioStatus(`Deleted zone '${zone_name}'.`);
-        showToast('Zone Deleted', `Zone '${zone_name}' removed.`, 'info');
-        loadCameraScenario(camera_id);
-      }
-    } catch (err) {
-      showToast('Error deleting zone', err.message, 'error');
-    }
+    return studioRequest(`/api/scenarios/zones/${camera_id}/${encodeURIComponent(zone_name)}`, {
+      method: 'DELETE',
+    }, 'Zone Deleted', `Zone '${zone_name}' removed.`, 'Error deleting zone', () => {
+      updateStudioStatus(`Deleted zone '${zone_name}'.`);
+      loadCameraScenario(camera_id);
+    });
   }
 
-  async function saveTripwire(tripwireData) {
-    try {
-      const res = await fetch('/api/scenarios/tripwires', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tripwireData),
-      });
-      if (res.ok) {
-        updateStudioStatus(`Tripwire '${tripwireData.name}' saved successfully.`);
-        showToast('Tripwire Saved', `Directional tripwire '${tripwireData.name}' saved.`, 'success');
-        loadCameraScenario(tripwireData.camera_id);
-      }
-    } catch (err) {
-      showToast('Error saving tripwire', err.message, 'error');
-    }
+  function saveTripwire(tripwireData) {
+    return studioRequest('/api/scenarios/tripwires', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tripwireData),
+    }, 'Tripwire Saved', `Directional tripwire '${tripwireData.name}' saved.`, 'Error saving tripwire', () => {
+      updateStudioStatus(`Tripwire '${tripwireData.name}' saved successfully.`);
+      loadCameraScenario(tripwireData.camera_id);
+    });
   }
 
-  async function deleteTripwire(camera_id, tripwire_name) {
+  function deleteTripwire(camera_id, tripwire_name) {
     if (!confirm(`Delete tripwire '${tripwire_name}'?`)) return;
-    try {
-      const res = await fetch(`/api/scenarios/tripwires/${camera_id}/${encodeURIComponent(tripwire_name)}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        updateStudioStatus(`Deleted tripwire '${tripwire_name}'.`);
-        showToast('Tripwire Deleted', `Tripwire '${tripwire_name}' removed.`, 'info');
-        loadCameraScenario(camera_id);
-      }
-    } catch (err) {
-      showToast('Error deleting tripwire', err.message, 'error');
-    }
+    return studioRequest(`/api/scenarios/tripwires/${camera_id}/${encodeURIComponent(tripwire_name)}`, {
+      method: 'DELETE',
+    }, 'Tripwire Deleted', `Tripwire '${tripwire_name}' removed.`, 'Error deleting tripwire', () => {
+      updateStudioStatus(`Deleted tripwire '${tripwire_name}'.`);
+      loadCameraScenario(camera_id);
+    });
   }
 
-  async function saveHomographyCalibration(data) {
-    try {
-      const res = await fetch('/api/scenarios/homography', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) {
-        const result = await res.json();
-        studioState.homography = result.homography;
-        updateStudioStatus(`Homography calibrated for ${data.camera_id} (${data.metric_width}m x ${data.metric_height}m).`);
-        showToast('Calibration Saved', `Homography calibrated for ${data.camera_id}.`, 'success');
-        renderBEVMinimap();
-      }
-    } catch (err) {
-      showToast('Calibration Error', err.message, 'error');
-    }
+  function saveHomographyCalibration(data) {
+    return studioRequest('/api/scenarios/homography', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }, 'Calibration Saved', `Homography calibrated for ${data.camera_id}.`, 'Calibration Error', (result) => {
+      studioState.homography = result.homography;
+      updateStudioStatus(`Homography calibrated for ${data.camera_id} (${data.metric_width}m x ${data.metric_height}m).`);
+      renderBEVMinimap();
+    });
   }
 
   async function loadTopologyLinks() {
@@ -251,36 +249,20 @@
     }
   }
 
-  async function saveTopologyLink(linkData) {
-    try {
-      const res = await fetch('/api/topology/transitions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(linkData),
-      });
-      if (res.ok) {
-        updateStudioStatus(`Transition link active.`);
-        showToast('Transition Saved', 'Spatial transition link established.', 'success');
-        loadTopologyLinks();
-      }
-    } catch (err) {
-      showToast('Transition Error', err.message, 'error');
-    }
+  function saveTopologyLink(linkData) {
+    return studioRequest('/api/topology/transitions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(linkData),
+    }, 'Transition Saved', 'Spatial transition link established.', 'Transition Error', () => {
+      updateStudioStatus('Transition link active.');
+      loadTopologyLinks();
+    });
   }
 
-  async function deleteTopologyLink(linkId) {
+  function deleteTopologyLink(linkId) {
     if (!confirm(`Remove transition link '${linkId}'?`)) return;
-    try {
-      const res = await fetch(`/api/topology/transitions/${encodeURIComponent(linkId)}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        showToast('Transition Removed', `Link '${linkId}' deleted.`, 'info');
-        loadTopologyLinks();
-      }
-    } catch (err) {
-      showToast('Transition Delete Error', err.message, 'error');
-    }
+    return studioRequest(`/api/topology/transitions/${encodeURIComponent(linkId)}`, {
+      method: 'DELETE',
+    }, 'Transition Removed', `Link '${linkId}' deleted.`, 'Transition Delete Error', () => loadTopologyLinks());
   }
 
   function bindStudioUI() {
@@ -294,6 +276,16 @@
       updateStudioStatus('Canvas cleared. Mode: Idle.');
     });
 
+    document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
+      const targetId = e.target.value || 'cam_01';
+      studioState.activeCamera = targetId;
+      const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
+      const img = document.getElementById('studio-live-img');
+      if (img && !isVideo) img.src = `/stream/${encodeURIComponent(targetId)}`;
+      updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
+      loadCameraScenario(targetId);
+      window.StudioOverlays?.loadCameraOverlays(targetId);
+    });
     document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
       window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);
     });

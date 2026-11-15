@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-15] feat: Step 5 M2: Offline Video Spatial Profile, RSAC Alerts & Active Learning
+- **Type**: feat
+- **Summary**: Added scenario_camera_id to VideoAnalyzeRequest, wired ScenarioManager/AnalyticsEngine/RSACManager/ActiveLearningManager/EventBus into VideoIndexer offline analysis with media_offset_sec event tagging, added #batch-scenario-select modal control, and wired #studio-camera-select in Scenario Studio.
+- **Files** (6):
+  - `dashboard/schemas.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `dashboard/static/js/video_batch.js`
+  - `dashboard/static/partials/modals/video_modals.html`
+  - `dashboard/static/studio.js`
+  - `tests/test_step5_video_spatial_and_rsac.py`
+- **Verification**: python -m unittest discover -s tests -p test_step5_video_spatial_and_rsac.py
+
 ## [2026-11-14] feat: Step 5 M1: FrameProcessor Batch Unification & Media Offset Persistence
 - **Type**: feat
 - **Summary**: Decomposed batch.py via batch_reporting.py and FrameProcessor.step(), added review_queue media offset columns, and persisted video_filename/media_offset_sec across sightings and active learning.
@@ -132,17 +144,3 @@
   - `dashboard/static/js/unified_canvas_overlay.js`
   - `tests/test_step2_unified_canvas_engine.py`
 - **Verification**: python -m unittest discover -s tests -p test_step2_unified_canvas_engine.py
-
-## [2026-11-14] feat: Step 2 Milestone 1: Clean Un-Burned MJPEG Streaming & streaming.py Budget Fix
-- **Type**: feat
-- **Summary**: Added _encode_raw_frame, annotated=True|False in get_latest_frame_jpeg and /stream/{camera_id}, and extracted _stream_frame_generator.
-- **Files** (8):
-  - `.TODO/step_2_unified_client_canvas_overlay.md`
-  - `.agents/rules/pipeline_and_db_invariants.md`
-  - `dashboard/routers/streaming.py`
-  - `dashboard/services/camera_pool_queries.py`
-  - `dashboard/services/stream_media.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/stream_manager.py`
-  - `tests/test_step2_clean_streaming.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_clean_streaming.py
