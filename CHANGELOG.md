@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-11-15] fix: Fix CI failures in camera config healing and journey_segmenter modularity budget
+- **Type**: fix
+- **Summary**: Guard test_repo_cameras_json_has_no_non_synthetic_mock_or_docker_notice with skipTest when gitignored configs/cameras.json is absent, and extract JourneyHop/EntityJourney dataclasses into intelligent_tracker/journey_models.py so journey_segmenter.py is 137 lines (< 160 budget).
+- **Files** (5):
+  - `.TODO/performance_and_processing_modes_master_roadmap.md`
+  - `.TODO/step_1_event_loop_and_on_demand_encoding.md`
+  - `intelligent_tracker/journey_segmenter.py`
+  - `tests/test_step1_camera_config_healing.py`
+  - `intelligent_tracker/journey_models.py`
+- **Verification**: python -m unittest discover -s tests -p test_*.py
+
 ## [2026-11-15] test: Step 5 Milestone 4: End-to-End Closed-Loop Video Ecosystem Verification
 - **Type**: test
 - **Summary**: Added E2E integration tests covering FrameProcessor.step() offline indexing, 4-endpoint API parity (/sightings, /events, /api/active-learning/queue, /api/journey/search), and non-mocked fallback branches.
@@ -130,17 +141,3 @@
   - `dashboard/services/roi_recognition_service.py`
   - `tests/test_step3_roi_recognition_api.py`
 - **Verification**: python -m unittest discover -s tests -p test_step3_roi_recognition_api.py
-
-## [2026-11-14] feat: Step 2 M4: #videos Scrubber Overlay Parity & Budget Reduction
-- **Type**: feat
-- **Summary**: Delegated ScrubberOverlay, ScrubberOverlayRenderer, and OverlayLayers to UnifiedCanvasOverlay, added 6 feature toggle pills to OverlayLayerToolbar, and reduced scrubber_overlay.js (326L) and overlay_layers.js (338L) under 350L.
-- **Files** (8):
-  - `dashboard/static/css/scrubber_overlays.css`
-  - `dashboard/static/js/overlay_layer_toolbar.js`
-  - `dashboard/static/js/overlay_layers.js`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/scrubber_overlay_renderer.js`
-  - `tests/test_step1_demo_mode_ui.py`
-  - `tests/test_step2_clean_streaming.py`
-  - `tests/test_step2_video_scrubber_parity.py`
-- **Verification**: python -m unittest discover tests (590 passed)

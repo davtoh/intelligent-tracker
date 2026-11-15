@@ -121,6 +121,8 @@ class TestCameraConfigHealing(unittest.TestCase):
 
     def test_repo_cameras_json_has_no_non_synthetic_mock_or_docker_notice(self) -> None:
         repo_cfg = os.path.join("configs", "cameras.json")
+        if not os.path.exists(repo_cfg):
+            self.skipTest("configs/cameras.json not present (gitignored runtime config)")
         with open(repo_cfg, "r", encoding="utf-8") as f:
             entries = json.load(f)
         by_id = {entry["id"]: entry for entry in entries}
