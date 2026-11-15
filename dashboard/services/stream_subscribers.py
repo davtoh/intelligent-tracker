@@ -15,6 +15,16 @@ import uuid
 logger = logging.getLogger(__name__)
 
 
+def _prune_expired_and_count(registry: "StreamSubscriberRegistry") -> int:
+    """Prune expired subscriber leases (caller must hold registry._lock) and return count."""
+    now = time.time()
+    expired = [sid for sid, last_seen in registry._subscribers.items() if (now - last_seen) > registry.lease_ttl]
+    for sid in expired:
+        registry._subscribers.pop(sid, None)
+        registry._subscriber_modes.pop(sid, None)
+    return len(registry._subscribers) + len(registry._ws_subscribers)
+
+
 class StreamSubscriberRegistry:
     """
     Self-healing leased subscriber registry for active camera streams.
@@ -31,9 +41,21 @@ class StreamSubscriberRegistry:
         self._subscriber_modes: Dict[str, bool] = {}
         self._ws_subscribers: List[Any] = []
         self._lock = threading.Lock()
-        self.is_hibernating: bool = False
+        self._is_hibernating: bool = False
         self.resume_callback = resume_callback
         self.lease_ttl = lease_ttl
+
+    @property
+    def is_hibernating(self) -> bool:
+        """Return whether the stream is currently hibernating (thread-safe)."""
+        with self._lock:
+            return self._is_hibernating
+
+    @is_hibernating.setter
+    def is_hibernating(self, val: bool) -> None:
+        """Update hibernation flag under the registry leaf lock."""
+        with self._lock:
+            self._is_hibernating = bool(val)
 
     def add_subscriber(self, sub_id: Optional[str] = None, annotated: bool = True) -> str:
         """Register an active client subscriber (MJPEG stream or WebSocket) with a leased token."""
@@ -67,35 +89,26 @@ class StreamSubscriberRegistry:
                 key = next(iter(self._subscribers))
                 self._subscribers.pop(key, None)
                 self._subscriber_modes.pop(key, None)
-            return self._active_subscriber_count_unlocked()
-
-    def _active_subscriber_count_unlocked(self) -> int:
-        """Internal helper to prune expired subscriber leases and count active viewers."""
-        now = time.time()
-        expired = [sid for sid, last_seen in self._subscribers.items() if (now - last_seen) > self.lease_ttl]
-        for sid in expired:
-            self._subscribers.pop(sid, None)
-            self._subscriber_modes.pop(sid, None)
-        return len(self._subscribers) + len(self._ws_subscribers)
+            return _prune_expired_and_count(self)
 
     @property
     def subscriber_count(self) -> int:
         """Current number of active, non-expired subscribers."""
         with self._lock:
-            return self._active_subscriber_count_unlocked()
+            return _prune_expired_and_count(self)
 
     @property
     def has_raw_subscribers(self) -> bool:
         """Return True when at least one non-expired raw MJPEG subscriber is active."""
         with self._lock:
-            self._active_subscriber_count_unlocked()
+            _prune_expired_and_count(self)
             return any(not ann for ann in self._subscriber_modes.values())
 
     @property
     def has_annotated_subscribers(self) -> bool:
         """Return True when at least one non-expired annotated MJPEG subscriber is active."""
         with self._lock:
-            self._active_subscriber_count_unlocked()
+            _prune_expired_and_count(self)
             return any(ann for ann in self._subscriber_modes.values())
 
     def register_ws_subscriber(self, sub: Any) -> None:
@@ -153,7 +166,7 @@ class StreamSubscriberMixin:
 
     def _active_subscriber_count_unlocked(self) -> int:
         """Internal helper to prune expired subscriber leases and count active viewers."""
-        return self._subscriber_registry._active_subscriber_count_unlocked()
+        return _prune_expired_and_count(self._subscriber_registry)
 
     @property
     def subscriber_count(self) -> int:

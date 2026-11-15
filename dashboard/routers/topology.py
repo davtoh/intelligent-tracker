@@ -7,6 +7,7 @@ Provides endpoints for spatial transition links between camera zones,
 active predictive Re-ID priors, and multi-camera trajectory journey reconstruction/video export.
 """
 
+import asyncio
 import logging
 import os
 import time
@@ -72,7 +73,8 @@ async def create_spatial_transition(
     )
     sm.topology.add_link(link)
     if sm.db:
-        sm.db.save_spatial_transition(
+        await asyncio.to_thread(
+            sm.db.save_spatial_transition,
             link_id=link.link_id,
             source_camera=link.source_camera,
             source_zone=link.source_zone,
@@ -84,7 +86,7 @@ async def create_spatial_transition(
             bidirectional=link.bidirectional,
             active=link.active,
         )
-    sm.save_to_yaml()
+    await asyncio.to_thread(sm.save_to_yaml)
     return {"status": "success", "link": link.to_dict()}
 
 
@@ -96,10 +98,10 @@ async def delete_spatial_transition(
     """Delete a spatial transition link by ID."""
     deleted = sm.topology.remove_link(link_id)
     if sm.db:
-        db_del = sm.db.delete_spatial_transition(link_id)
+        db_del = await asyncio.to_thread(sm.db.delete_spatial_transition, link_id)
         deleted = deleted or db_del
     if deleted:
-        sm.save_to_yaml()
+        await asyncio.to_thread(sm.save_to_yaml)
     return {"status": "success" if deleted else "not_found", "deleted": link_id}
 
 
@@ -141,7 +143,8 @@ async def search_trajectory_journey(
 ):
     """Reconstruct an entity's complete chronological trajectory across multiple cameras."""
     searcher = TrajectoryJourneySearcher(db)
-    journey = searcher.search_journey(
+    journey = await asyncio.to_thread(
+        searcher.search_journey,
         entity_id=entity_id,
         entity_name=entity_name,
         track_id=track_id,
@@ -158,7 +161,8 @@ async def export_journey_video_route(
 ):
     """Slices and concatenates cross-camera video segments into a downloadable MP4 journey file."""
     searcher = TrajectoryJourneySearcher(db)
-    journey = searcher.search_journey(
+    journey = await asyncio.to_thread(
+        searcher.search_journey,
         entity_id=req.entity_id,
         entity_name=req.entity_name,
         track_id=req.track_id,
@@ -173,7 +177,7 @@ async def export_journey_video_route(
         )
 
     exporter = JourneyVideoExporter(output_dir=VIDEOS_DIR)
-    exported_file = exporter.export_journey_video(journey)
+    exported_file = await asyncio.to_thread(exporter.export_journey_video, journey)
     filename = os.path.basename(exported_file)
 
     return {
