@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-11-15] feat: Step 3 Milestone 3: Capture-Only Raw Recording & Deferred VideoIndexer Queue
+- **Type**: feat
+- **Summary**: Added capture_only raw MP4 recording bypass and automatic deferred VideoIndexer job queuing in StreamRecordingController, wired StreamManager mode_service_getter, tightened StreamPoolCoordinator to 236L, and verified 719/719 tests.
+- **Files** (5):
+  - `dashboard/services/stream_pool_coordinator.py`
+  - `dashboard/services/stream_recording.py`
+  - `dashboard/stream_manager.py`
+  - `tests/test_dashboard_di.py`
+  - `tests/test_step3_capture_only_deferred_queue.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-15] feat: Step 3 Milestone 2: StreamWorker & StreamPoolCoordinator Hibernation and Tab-Scoped AI Gating
 - **Type**: feat
 - **Summary**: Integrated ProcessingModeService hibernation and vision-step gating into StreamWorker, StreamPoolCoordinator, and StreamManager with 9 unit tests.
@@ -128,15 +139,3 @@
   - `dashboard/static/review_and_rsac.js`
   - ... (+4 more)
 - **Verification**: python -m unittest discover -s tests -p test_step5_timeline_ticks_and_deeplinks.py
-
-## [2026-11-15] feat: Step 5 M2: Offline Video Spatial Profile, RSAC Alerts & Active Learning
-- **Type**: feat
-- **Summary**: Added scenario_camera_id to VideoAnalyzeRequest, wired ScenarioManager/AnalyticsEngine/RSACManager/ActiveLearningManager/EventBus into VideoIndexer offline analysis with media_offset_sec event tagging, added #batch-scenario-select modal control, and wired #studio-camera-select in Scenario Studio.
-- **Files** (6):
-  - `dashboard/schemas.py`
-  - `dashboard/services/video_analytics_service.py`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/partials/modals/video_modals.html`
-  - `dashboard/static/studio.js`
-  - `tests/test_step5_video_spatial_and_rsac.py`
-- **Verification**: python -m unittest discover -s tests -p test_step5_video_spatial_and_rsac.py

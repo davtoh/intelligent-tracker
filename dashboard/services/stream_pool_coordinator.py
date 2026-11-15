@@ -24,13 +24,7 @@ logger = logging.getLogger("intelligent_tracker.stream_pool_coordinator")
 def _build_custom_cfg(cfg: dict[str, Any]) -> dict[str, Any] | None:
     """Extract detector and tracker override sections from a camera config entry."""
     custom_cfg: dict[str, Any] = {}
-    det_dict: dict[str, Any] = {}
-    if cfg.get("detector"):
-        det_dict["model"] = cfg["detector"]
-    if cfg.get("confidence") is not None:
-        det_dict["confidence"] = cfg["confidence"]
-    if cfg.get("classes") is not None:
-        det_dict["classes"] = cfg["classes"]
+    det_dict = {k: cfg[src] for src, k in (("detector", "model"), ("confidence", "confidence"), ("classes", "classes")) if cfg.get(src) is not None and (src != "detector" or cfg.get(src))}
     if det_dict:
         custom_cfg["detector"] = det_dict
     if cfg.get("tracker"):
@@ -64,8 +58,7 @@ def _start_stream_if_ready(mgr: StreamManager | None, camera_id: str, name: str,
 
 def _sync_manager_hibernation(mgr: Any, should_hib: bool) -> None:
     """Apply immediate pause/resume hibernation state to a StreamManager."""
-    vs = getattr(mgr, "video_source", None)
-    telemetry = getattr(mgr, "_latest_telemetry", None)
+    vs, telemetry = getattr(mgr, "video_source", None), getattr(mgr, "_latest_telemetry", None)
     lock = getattr(mgr, "_lock", None) or nullcontext()
     if not should_hib and getattr(mgr, "_is_hibernating", False):
         mgr._is_hibernating = False
@@ -87,54 +80,38 @@ class StreamPoolCoordinator:
     """Thread-safe lifecycle coordinator for active StreamManager instances."""
 
     def __init__(
-        self,
-        db_path: str,
-        base_config_path: str,
-        world_graph: WorldGraph,
-        lock: Any = None,
-        processing_mode_service: Any = None,
+        self, db_path: str, base_config_path: str, world_graph: WorldGraph,
+        lock: Any = None, processing_mode_service: Any = None,
     ) -> None:
-        self.db_path = db_path
-        self.base_config_path = base_config_path
-        self.world_graph = world_graph
+        self.db_path, self.base_config_path, self.world_graph = db_path, base_config_path, world_graph
         self._lock = lock or threading.RLock()
         if processing_mode_service is None:
             from dashboard.services.processing_mode_service import get_processing_mode_service
-
             processing_mode_service = get_processing_mode_service()
         self.processing_mode_service = processing_mode_service
         self.streams: dict[str, StreamManager] = {}
 
     def create_and_register_stream(
-        self,
-        camera_id: str,
-        cfg: dict[str, Any],
-        start: bool = True,
+        self, camera_id: str, cfg: dict[str, Any], start: bool = True,
     ) -> StreamManager:
         """Instantiate and register a StreamManager for ``camera_id``."""
         raw_source = cfg.get("source", "synthetic")
         device_name = cfg.get("device_name") or (cfg.get("details") or {}).get("device_name")
         name = cfg.get("name", f"Camera {camera_id.upper()}")
         resolved_source, meta = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
-
         mgr = StreamManager(
             config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
             name=name, source_override=resolved_source,
             custom_cfg=_build_custom_cfg(cfg), world_graph=self.world_graph,
         )
-        mgr._resolved_source = resolved_source
-        mgr._source_error = meta.get("status") == "error"
-        mgr._processing_mode_service = self.processing_mode_service
-        mgr._in_camera_pool = True
+        mgr._resolved_source, mgr._source_error = resolved_source, meta.get("status") == "error"
+        mgr._processing_mode_service, mgr._in_camera_pool = self.processing_mode_service, True
         with self._lock:
             self.streams[camera_id] = mgr
-
         if mgr._source_error:
             CameraHealthManager().set_error(
-                camera_id,
-                f"Source not found: {raw_source}",
-                error_code=meta.get("error_code", "FILE_NOT_FOUND"),
-                attempted_paths=meta.get("attempted_paths"),
+                camera_id, f"Source not found: {raw_source}",
+                error_code=meta.get("error_code", "FILE_NOT_FOUND"), attempted_paths=meta.get("attempted_paths"),
             )
             logger.warning("Camera stream [%s] '%s' registered offline: source not found (%s)", camera_id, name, raw_source)
         elif start:
@@ -154,11 +131,7 @@ class StreamPoolCoordinator:
                 _start_stream_if_ready(mgr, cam_id, name, raw_source)
 
     def register_camera_stream(
-        self,
-        camera_id: str,
-        cam_entry: dict[str, Any],
-        enabled: bool = True,
-        autostart: bool = True,
+        self, camera_id: str, cam_entry: dict[str, Any], enabled: bool = True, autostart: bool = True,
     ) -> StreamManager:
         """Replace any existing stream for ``camera_id`` and start if enabled."""
         with self._lock:
@@ -174,10 +147,8 @@ class StreamPoolCoordinator:
                 )
                 mgr._in_camera_pool = True
                 self.streams[camera_id] = mgr
-
         if old_mgr:
             _stop_manager_safely(old_mgr, "add_camera")
-
         if enabled and autostart:
             _start_stream_if_ready(mgr, camera_id, cam_entry.get("name", f"Camera {camera_id.upper()}"), cam_entry.get("source", ""))
         return mgr
@@ -241,11 +212,9 @@ class StreamPoolCoordinator:
             self.signal_stop_all()
             mgrs = list(self.streams.values())
             self.streams.clear()
-
         if parallel and mgrs:
             with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
-                futures = [executor.submit(_stop_manager_safely, m, "stop_all") for m in mgrs]
-                for future in as_completed(futures):
+                for future in as_completed([executor.submit(_stop_manager_safely, m, "stop_all") for m in mgrs]):
                     try:
                         future.result()
                     except Exception:

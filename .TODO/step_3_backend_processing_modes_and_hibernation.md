@@ -75,9 +75,9 @@ python -m unittest discover -s tests -p "test_step3_worker_hibernation_and_ai_ga
 ---
 
 ### Milestone 3: `Capture-Only` Raw MP4 Recording, Deferred `VideoIndexer` Queue & Step 3 Integration Sign-Off *(Deferred)*
-- [ ] **dashboard/services/stream_recording.py**: Update `StreamRecordingController` (`< 310L`, `<= 12` methods, functions `<= 40L`) so recordings started or finalized in `capture_only` mode write raw un-annotated frames (`annotated=False`, `step_res=None`), bypass empty `live_capture` report persistence, and auto-submit a deferred `VideoIndexer` job via `ProcessingModeService.enqueue_deferred_indexing()`, populating `deferred_job_id` and `processing_mode` in the returned status snapshot.
-- [ ] **tests/test_step3_capture_only_deferred_queue.py**: Add end-to-end unit and `TestClient` integration tests (`<= 40L` per test method, using lightweight mock detector fixtures) verifying `capture_only` recording skips `FrameProcessor.step()`, writes raw MP4 frames, automatically enqueues a `VideoIndexer` job on `stop_recording()` / `POST /api/cameras/{camera_id}/record/stop`, and passes all Step 3 modularity budgets.
-- [ ] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
+- [x] **dashboard/services/stream_recording.py**: Update `StreamRecordingController` (`< 310L`, `<= 12` methods, functions `<= 40L`) so recordings started or finalized in `capture_only` mode write raw un-annotated frames (`annotated=False`, `step_res=None`), bypass empty `live_capture` report persistence, and auto-submit a deferred `VideoIndexer` job via `ProcessingModeService.enqueue_deferred_indexing()`, populating `deferred_job_id` and `processing_mode` in the returned status snapshot.
+- [x] **tests/test_step3_capture_only_deferred_queue.py**: Add end-to-end unit and `TestClient` integration tests (`<= 40L` per test method, using lightweight mock detector fixtures) verifying `capture_only` recording skips `FrameProcessor.step()`, writes raw MP4 frames, automatically enqueues a `VideoIndexer` job on `stop_recording()` / `POST /api/cameras/{camera_id}/record/stop`, and passes all Step 3 modularity budgets.
+- [x] **CHANGELOG.md**: Record milestone completion via 'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'
 
 **Milestone 3 Verification Command**:
 ```bash

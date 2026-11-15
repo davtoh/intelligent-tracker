@@ -44,14 +44,14 @@ Measured against `$APP_URL` (`scripts/run_dashboard.py --local`) and the `main..
 ---
 
 ## Step 3: Backend Processing Modes (`Focus Only`, `Full Real-Time`, `Capture-Only`, `Paused`) & Deferred Queue
-- [ ] **Child Plan**: `.TODO/step_3_backend_processing_modes_and_hibernation.md`
-- [ ] **Goal**: Introduce `ProcessingModeService` and `/api/system/processing-mode` supporting `focus_only` (default), `full_realtime`, `capture_only`, and `paused` modes with smart camera hibernation and automatic deferred `VideoIndexer` queueing when `capture_only` recordings complete.
-- [ ] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/services/stream_worker.py dashboard/services/stream_recording.py dashboard/services/stream_pool_coordinator.py dashboard/app.py`.
-- [ ] **Target Scope**:
-  - [ ] Create `dashboard/services/processing_mode_service.py` (`< 200L`) and `dashboard/routers/processing_mode.py` (`< 120L`, mounted in `dashboard/app.py`) managing `mode` (`focus_only` default, `full_realtime`, `capture_only`, `paused`), `focused_camera_id`, and `active_tab`.
-  - [ ] Integrate `ProcessingModeService` with `StreamWorker` and `StreamPoolCoordinator` so unfocused cameras hibernate in `focus_only` mode (unless actively recording) and all cameras pause AI when `active_tab != "live"` (unless recording or in `full_realtime`).
-  - [ ] In `capture_only` mode, record raw MP4 frames in `StreamRecordingController` without per-frame `FrameProcessor.step()` and auto-submit an async `VideoIndexer` job to `VideoJobsService` when recording stops.
-- [ ] **Definition of Done**: Switching between `focus_only`, `full_realtime`, `capture_only`, and `paused` deterministically controls per-camera AI/capture threads and queues deferred `VideoIndexer` jobs on `capture_only` recording completion.
+- [x] **Child Plan**: `.TODO/step_3_backend_processing_modes_and_hibernation.md`
+- [x] **Goal**: Introduce `ProcessingModeService` and `/api/system/processing-mode` supporting `focus_only` (default), `full_realtime`, `capture_only`, and `paused` modes with smart camera hibernation and automatic deferred `VideoIndexer` queueing when `capture_only` recordings complete.
+- [x] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/services/stream_worker.py dashboard/services/stream_recording.py dashboard/services/stream_pool_coordinator.py dashboard/app.py`.
+- [x] **Target Scope**:
+  - [x] Create `dashboard/services/processing_mode_service.py` (`< 200L`) and `dashboard/routers/processing_mode.py` (`< 120L`, mounted in `dashboard/app.py`) managing `mode` (`focus_only` default, `full_realtime`, `capture_only`, `paused`), `focused_camera_id`, and `active_tab`.
+  - [x] Integrate `ProcessingModeService` with `StreamWorker` and `StreamPoolCoordinator` so unfocused cameras hibernate in `focus_only` mode (unless actively recording) and all cameras pause AI when `active_tab != "live"` (unless recording or in `full_realtime`).
+  - [x] In `capture_only` mode, record raw MP4 frames in `StreamRecordingController` without per-frame `FrameProcessor.step()` and auto-submit an async `VideoIndexer` job to `VideoJobsService` when recording stops.
+- [x] **Definition of Done**: Switching between `focus_only`, `full_realtime`, `capture_only`, and `paused` deterministically controls per-camera AI/capture threads and queues deferred `VideoIndexer` jobs on `capture_only` recording completion.
 
 ---
 

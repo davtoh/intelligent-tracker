@@ -109,6 +109,7 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
         manager.camera_id,
         output_dir=rec_dir,
         db_getter=lambda: getattr(manager, "db", None),
+        mode_service_getter=lambda: getattr(manager, "_processing_mode_service", None),
     )
     manager._subscribers = manager._subscriber_registry._subscribers
     manager._ws_subscribers = manager._subscriber_registry._ws_subscribers
