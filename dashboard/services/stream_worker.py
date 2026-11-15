@@ -30,6 +30,16 @@ from intelligent_tracker.pipeline import (
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
 
+__all__ = [
+    "StreamWorker",
+    "build_stream_telemetry",
+    "_build_tripwires_data",
+    "_build_zones_data",
+    "_extract_recent_alerts",
+    "_extract_track_telemetry",
+    "_resolve_detector_telemetry",
+]
+
 
 def _diagnose_source_error(vs: Any) -> tuple[str, str]:
     """Diagnose source failure root cause for health manager reporting."""

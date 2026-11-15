@@ -56,14 +56,14 @@ Measured against `$APP_URL` (`scripts/run_dashboard.py --local`) and the `main..
 ---
 
 ## Step 4: Top-Bar Processing Mode Selector UI, Tab Visibility Auto-Sync & E2E Benchmark
-- [ ] **Child Plan**: `.TODO/step_4_processing_mode_ui_and_e2e_verification.md`
-- [ ] **Goal**: Add a compact Processing Mode selector pill in the dashboard header bar persisted in `localStorage`, wire automatic focus/tab-visibility state synchronization with the backend, and verify end-to-end responsiveness and modularity budgets.
-- [ ] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/static/index.html dashboard/static/js/nav_tabs_manager.js dashboard/static/js/live_player.js`.
-- [ ] **Target Scope**:
-  - [ ] Create `dashboard/static/js/processing_mode.js` (`< 220L`) and `dashboard/static/css/processing_mode.css` (`< 140L`) rendering the header Processing Mode selector (`Focus Only` [Default], `Full Real-Time`, `Capture-Only`, `Paused`) without using `!important` or exceeding `index.html`'s `< 180L` budget.
-  - [ ] Persist operator mode selection in `localStorage` and sync `mode`, `focusedCameraId`, and `activeTab` transitions to `POST /api/system/processing-mode`.
-  - [ ] Add end-to-end unit, Node VM, and CDP layout/responsiveness verification tests.
-- [ ] **Definition of Done**: Header mode selector switches modes seamlessly, persists across reloads, passes WCAG AA touch-target and `0px` overflow checks, and full test + Sphinx suites pass.
+- [x] **Child Plan**: `.TODO/step_4_processing_mode_ui_and_e2e_verification.md`
+- [x] **Goal**: Add a compact Processing Mode selector pill in the dashboard header bar persisted in `localStorage`, wire automatic focus/tab-visibility state synchronization with the backend, and verify end-to-end responsiveness and modularity budgets.
+- [x] **Pre-Plan Evaluation Check**: Run `diagnose.py audit --path dashboard/static/index.html dashboard/static/js/nav_tabs_manager.js dashboard/static/js/live_player.js`.
+- [x] **Target Scope**:
+  - [x] Create `dashboard/static/js/processing_mode.js` (`< 220L`) and `dashboard/static/css/processing_mode.css` (`< 140L`) rendering the header Processing Mode selector (`Focus Only` [Default], `Full Real-Time`, `Capture-Only`, `Paused`) without using `!important` or exceeding `index.html`'s `< 180L` budget.
+  - [x] Persist operator mode selection in `localStorage` and sync `mode`, `focusedCameraId`, and `activeTab` transitions to `POST /api/system/processing-mode`.
+  - [x] Add end-to-end unit, Node VM, and CDP layout/responsiveness verification tests.
+- [x] **Definition of Done**: Header mode selector switches modes seamlessly, persists across reloads, passes WCAG AA touch-target and `0px` overflow checks, and full test + Sphinx suites pass.
 
 ---
 

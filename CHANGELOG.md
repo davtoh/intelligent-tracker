@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-11-15] test: Step 4 Milestone 2: E2E Processing Mode Verification, StreamWorker __all__ & Master Sign-Off
+- **Type**: test
+- **Summary**: Added explicit __all__ exports in stream_worker.py (0 arch-map unused imports) and end-to-end tests in tests/test_step4_e2e_performance_and_modes.py covering mode lifecycle, worker parity, capture_only deferred badge propagation, <200ms latency, and Step 1-4 modularity budgets.
+- **Files** (2):
+  - `dashboard/services/stream_worker.py`
+  - `tests/test_step4_e2e_performance_and_modes.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-15] feat: Step 4 M1: Processing Mode UI Selector & Auto-Sync
 - **Type**: feat
 - **Summary**: Added top-bar #processing-mode-pill CSS/JS module, localStorage persistence, tab/visibility/camera focus auto-sync, and 8 unit/VM/TestClient tests.
