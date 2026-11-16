@@ -12,6 +12,7 @@ from typing import Any
 import cv2
 import numpy as np
 
+from dashboard.services.async_inference_worker import AsyncInferenceWorker
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.services.stream_telemetry import (
     _build_tripwires_data,
@@ -50,6 +51,30 @@ def _diagnose_source_error(vs: Any) -> tuple[str, str]:
     if getattr(vs, "is_rtsp", False) and not getattr(vs, "_is_connected", False):
         return "RTSP_TIMEOUT", f"RTSP connection timed out: {vs.source}"
     return "NO_FRAMES_DECODED", "No video frames could be decoded from source"
+
+
+def _build_live_step_result(
+    async_worker: AsyncInferenceWorker,
+    frame: np.ndarray,
+    now: float,
+    frame_seq: int,
+    run_vision: bool,
+) -> FrameStepResult:
+    """Submit frame to async AI when enabled and merge latest cached detections."""
+    if run_vision:
+        async_worker.submit(frame, now)
+        cached = async_worker.get_latest_result()
+        if cached is not None:
+            return FrameStepResult(
+                frame=frame,
+                tracks=cached.tracks,
+                analytics=cached.analytics,
+                identifications=cached.identifications,
+                timestamp=now,
+                fps=cached.fps,
+                frame_count=frame_seq,
+            )
+    return FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq)
 
 
 class StreamWorker:
@@ -126,33 +151,36 @@ class StreamWorker:
             return
 
         processor = self._get_processor()
+        async_worker = AsyncInferenceWorker(processor)
+        async_worker.start()
         consecutive_empty = 0
         frame_seq = 0
 
-        with self.manager.video_source as vs:
-            while self.manager._running and not self.manager._stop_event.is_set():
-                if self._handle_hibernation(vs, max(processor.frame_count, frame_seq)):
-                    continue
-
-                ret, frame = vs.read(timeout=1.0)
-                if not ret or frame is None:
-                    consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
-                    if should_skip:
+        try:
+            with self.manager.video_source as vs:
+                while self.manager._running and not self.manager._stop_event.is_set():
+                    if self._handle_hibernation(vs, max(processor.frame_count, frame_seq)):
                         continue
 
-                consecutive_empty = 0
-                frame_seq += 1
-                is_rec = bool(getattr(self.manager, "is_recording", False))
-                if self._should_run_vision_step(is_rec):
-                    step_res = processor.step(frame, timestamp=time.time(), max_dim=1280)
-                else:
-                    step_res = FrameStepResult(
-                        frame=frame, timestamp=time.time(), fps=0.0, frame_count=frame_seq
-                    )
-                if step_res.frame_count % 30 == 1:
-                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
+                    ret, frame = vs.read(timeout=1.0)
+                    if not ret or frame is None:
+                        consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
+                        if should_skip:
+                            continue
 
-                self._process_single_frame(step_res)
+                    consecutive_empty = 0
+                    frame_seq += 1
+                    now = time.time()
+                    is_rec = bool(getattr(self.manager, "is_recording", False))
+                    step_res = _build_live_step_result(
+                        async_worker, frame, now, frame_seq, self._should_run_vision_step(is_rec)
+                    )
+                    if step_res.frame_count % 30 == 1:
+                        CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
+
+                    self._process_single_frame(step_res)
+        finally:
+            async_worker.stop()
 
     def _process_single_frame(self, step_res: FrameStepResult) -> None:
         """Store raw frame, encode needed overlays, and broadcast telemetry."""
@@ -179,7 +207,6 @@ class StreamWorker:
             self.manager._latest_telemetry = telemetry
 
         self.manager._broadcast_telemetry(telemetry)
-        self.manager._stop_event.wait(timeout=0.01)
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:
         """Pause video capture if zero viewers are connected or mode requires hibernation."""

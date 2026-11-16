@@ -143,7 +143,11 @@ class TestStreamWorkerHibernationAndGating(unittest.TestCase):
 
         svc.update(mode="full_realtime")
         host._stop_event.clear()
-        worker._process_single_frame = MagicMock(side_effect=lambda _: host._stop_event.set())
+        step_done = threading.Event()
+        mock_proc.step.side_effect = lambda *a, **kw: step_done.set()
+        worker._process_single_frame = MagicMock(
+            side_effect=lambda _: step_done.wait(timeout=1.0) and host._stop_event.set()
+        )
         worker.run()
         mock_proc.step.assert_called_once()
 
