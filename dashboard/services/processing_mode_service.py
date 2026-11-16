@@ -84,11 +84,11 @@ class ProcessingModeService:
             return not in_camera_pool and subscriber_count <= 0
         if mode == "capture_only":
             return subscriber_count <= 0
-        if tab != "live" and subscriber_count <= 0:
+        if subscriber_count > 0:
+            return False
+        if tab != "live":
             return True
-        if in_camera_pool and focused and camera_id != focused:
-            return True
-        return subscriber_count <= 0
+        return bool(in_camera_pool and focused and camera_id != focused)
 
     def should_run_vision_step(self, camera_id: str, is_recording: bool = False) -> bool:
         """Return True when FrameProcessor.step() AI inference should execute."""

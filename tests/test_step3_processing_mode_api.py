@@ -80,7 +80,8 @@ class TestProcessingModeService(unittest.TestCase):
     def test_focus_only_hibernates_unfocused_and_gates_tabs(self):
         svc = pms_mod.ProcessingModeService(mode="focus_only", focused_camera_id="cam_01", active_tab="live")
         self.assertFalse(svc.should_hibernate_camera("cam_01", subscriber_count=1))
-        self.assertTrue(svc.should_hibernate_camera("cam_02", subscriber_count=1))
+        self.assertFalse(svc.should_hibernate_camera("cam_02", subscriber_count=1))
+        self.assertTrue(svc.should_hibernate_camera("cam_02", subscriber_count=0))
         self.assertFalse(svc.should_hibernate_camera("cam_02", subscriber_count=0, is_recording=True))
         self.assertTrue(svc.should_run_vision_step("cam_01"))
         self.assertFalse(svc.should_run_vision_step("cam_02"))

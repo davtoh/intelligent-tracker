@@ -72,7 +72,12 @@ class TestStreamWorkerHibernationAndGating(unittest.TestCase):
 
     def test_focus_only_hibernates_unfocused_and_respects_recording(self) -> None:
         svc = ProcessingModeService(mode="focus_only", focused_camera_id="cam_01", active_tab="live")
-        cam2 = _make_worker_host(camera_id="cam_02", subscriber_count=1, svc=svc, in_pool=True)
+        cam2_sub = _make_worker_host(camera_id="cam_02", subscriber_count=1, svc=svc, in_pool=True)
+        w2_sub = StreamWorker(cam2_sub)
+        self.assertFalse(w2_sub._should_hibernate(False, frame_count=0))
+        self.assertFalse(w2_sub._should_run_vision_step(False))
+
+        cam2 = _make_worker_host(camera_id="cam_02", subscriber_count=0, svc=svc, in_pool=True)
         w2 = StreamWorker(cam2)
         self.assertTrue(w2._should_hibernate(False, frame_count=0))
         self.assertFalse(w2._should_hibernate(True, frame_count=0))
