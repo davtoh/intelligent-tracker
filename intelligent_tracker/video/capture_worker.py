@@ -9,6 +9,10 @@ import cv2
 import numpy as np
 
 from intelligent_tracker.camera_device import CameraDeviceHandler
+from intelligent_tracker.video.capture_helpers import (
+    compute_reconnect_backoff,
+    probe_capture_dimensions,
+)
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 
 logger = logging.getLogger(__name__)
@@ -43,6 +47,7 @@ class CaptureWorkerMixin:
 
             self._read_guard = CaptureReadGuard(
                 timeout=getattr(self, "read_timeout", 2.0),
+                warmup_timeout=getattr(self, "warmup_timeout", 5.0),
                 safe_unbind_cb=lambda cap: CameraDeviceHandler.safe_release(cap, settle_delay=0.1),
             )
         return self._read_guard
@@ -113,34 +118,16 @@ class CaptureWorkerMixin:
 
     def _configure_capture_dimensions(self) -> None:
         """Probe frame dimensions, compute aspect ratio, and configure target bounds."""
-        if self.target_width and self.target_height:
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(self.target_width))
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.target_height))
-
-        w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(self._cap.get(cv2.CAP_PROP_FPS))
-
-        if w > 0 and h > 0:
+        w, h, fps = probe_capture_dimensions(self._cap, self.target_width, self.target_height)
+        if w is not None and h is not None:
             self.width, self.height = w, h
             if self.target_width and self.target_height:
-                src_ratio = w / float(h)
-                target_ratio = self.target_width / float(self.target_height)
-                if src_ratio >= target_ratio:
-                    adj_w = self.target_width
-                    adj_h = int(round(self.target_width / src_ratio))
-                else:
-                    adj_h = self.target_height
-                    adj_w = int(round(self.target_height * src_ratio))
-                self.target_width = adj_w if adj_w % 2 == 0 else adj_w - 1
-                self.target_height = adj_h if adj_h % 2 == 0 else adj_h - 1
-                self.width, self.height = self.target_width, self.target_height
-        elif w > 0:
+                self.target_width, self.target_height = w, h
+        elif w is not None:
             self.width = w
-        elif h > 0:
+        elif h is not None:
             self.height = h
-
-        if fps > 0 and not np.isnan(fps):
+        if fps is not None:
             self.source_fps = fps
 
     def _open_capture(self) -> bool:
@@ -154,6 +141,7 @@ class CaptureWorkerMixin:
             self.width, self.height = self._cap.width, self._cap.height
             self.source_fps = float(self._cap.fps)
             self._is_connected = True
+            self._needs_warmup = True
             return True
 
         try:
@@ -163,6 +151,7 @@ class CaptureWorkerMixin:
                 return False
             self._configure_capture_dimensions()
             self._is_connected = True
+            self._needs_warmup = True
             return True
         except Exception as e:
             logger.warning("Error opening video capture '%s': %s", self.source, e)
@@ -181,13 +170,18 @@ class CaptureWorkerMixin:
 
         reconnect_attempts += 1
         self._reconnections += 1
+        delay = compute_reconnect_backoff(
+            reconnect_attempts,
+            base_delay=self.reconnect_delay,
+            max_backoff=getattr(self, "max_reconnect_backoff", 30.0),
+        )
         logger.info(
             "VideoSource '%s': Attempting reconnect #%d in %.1fs...",
             self.source,
             reconnect_attempts,
-            self.reconnect_delay,
+            delay,
         )
-        if self._stop_event.wait(timeout=self.reconnect_delay):
+        if self._stop_event.wait(timeout=delay):
             return False, reconnect_attempts
         if self._open_capture():
             logger.info("VideoSource '%s': Successfully reconnected.", self.source)
@@ -229,7 +223,12 @@ class CaptureWorkerMixin:
         if self.auto_reconnect and not self.is_file:
             reconnect_attempts += 1
             self._reconnections += 1
-            if self._stop_event.wait(timeout=self.reconnect_delay):
+            delay = compute_reconnect_backoff(
+                reconnect_attempts,
+                base_delay=self.reconnect_delay,
+                max_backoff=getattr(self, "max_reconnect_backoff", 30.0),
+            )
+            if self._stop_event.wait(timeout=delay):
                 return False, consecutive_empty, reconnect_attempts
             if self._cap:
                 CameraDeviceHandler.safe_release(self._cap, settle_delay=0.25)
@@ -303,7 +302,8 @@ class CaptureWorkerMixin:
                         break
                     continue
 
-                timeout = getattr(self, "read_timeout", 2.0)
+                needs_warmup = getattr(self, "_needs_warmup", True)
+                timeout = getattr(self, "warmup_timeout", 5.0) if needs_warmup else getattr(self, "read_timeout", 2.0)
                 ret, frame = guard.read(self._cap, timeout=timeout, stop_event=self._stop_event)
                 if not ret or frame is None:
                     if not self._running:
@@ -332,7 +332,9 @@ class CaptureWorkerMixin:
                         break
                     continue
 
+                self._needs_warmup = False
                 consecutive_empty = 0
+                reconnect_attempts = 0
                 if not self._enqueue_frame(frame, loop_start, min_frame_time):
                     break
         finally:

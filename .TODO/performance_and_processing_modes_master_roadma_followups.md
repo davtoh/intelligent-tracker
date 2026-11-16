@@ -39,11 +39,11 @@
 - [x] **Verification**: `.\.venv\Scripts\python.exe -m unittest tests/test_async_inference_worker.py tests/test_stream_manager.py`
 
 ### Milestone 3: Pool-Aware Camera Discovery, DirectShow Warmup Grace & Auto-Reopen
-- **Files**:
-  - `intelligent_tracker/camera_device.py` & `dashboard/routers/cameras.py`: Pass active `CameraPool` USB indices to `discover_usb_cameras(active_indices=...)` so live DirectShow handles are reported without re-opening/contending.
-  - `intelligent_tracker/video/capture_guard.py` & `intelligent_tracker/video/capture_worker.py`: Apply a `5.0s` warmup timeout on the first read after `open_camera()` (falling back to `2.0s` steady-state), and support exponential-backoff auto-reopen when a driver is severed.
-  - `tests/test_camera_discovery_and_guard.py` (new): Test active-index skipping, warmup grace vs steady-state timeout, and backoff reconnect.
-- **Verification**: `.\.venv\Scripts\python.exe -m unittest tests/test_camera_discovery_and_guard.py`
+- [x] **Files**:
+  - [x] `intelligent_tracker/camera_device.py` & `dashboard/routers/cameras.py`: Pass active `CameraPool` USB indices to `discover_usb_cameras(active_indices=...)` so live DirectShow handles are reported without re-opening/contending.
+  - [x] `intelligent_tracker/video/capture_guard.py` & `intelligent_tracker/video/capture_worker.py`: Apply a `5.0s` warmup timeout on the first read after `open_camera()` (falling back to `2.0s` steady-state), and support exponential-backoff auto-reopen when a driver is severed.
+  - [x] `tests/test_camera_discovery_and_guard.py` (new): Test active-index skipping, warmup grace vs steady-state timeout, and backoff reconnect.
+- [x] **Verification**: `.\.venv\Scripts\python.exe -m unittest tests/test_camera_discovery_and_guard.py`
 
 ### Milestone 4: Frontend Reliability, Canvas Sync & Closed-Loop Verification
 - **Files**:

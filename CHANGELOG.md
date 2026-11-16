@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-16] feat: Step 3 Milestone 2: DirectShow Warmup Grace & Exponential-Backoff Auto-Reopen
+- **Type**: feat
+- **Summary**: Added 5.0s warmup grace timeout (proportional when read_timeout is overridden), pure capture_helpers.py, and interruptible exponential backoff reconnection in CaptureReadGuard/CaptureWorkerMixin/VideoSource.
+- **Files** (7):
+  - `.TODO/performance_and_processing_modes_master_roadma_followups.md`
+  - `.TODO/step_3_pool_discovery_and_driver_resilience.md`
+  - `intelligent_tracker/video/capture_guard.py`
+  - `intelligent_tracker/video/capture_worker.py`
+  - `intelligent_tracker/video/source.py`
+  - `tests/test_camera_discovery_and_guard.py`
+  - `intelligent_tracker/video/capture_helpers.py`
+- **Verification**: python -m unittest tests/test_camera_discovery_and_guard.py tests/test_capture_circuit_breaker.py tests/test_camera_device.py tests/test_discovery.py
+
 ## [2026-11-16] refactor: Step 2 Milestone 2: Event-Driven MJPEG Wakeup & StreamManager Waiter Lifecycle
 - **Type**: refactor
 - **Summary**: Replaced 40ms polling in _stream_frame_generator with event-driven asyncio.wait on frame_event and shutdown_evt (1.5s heartbeat safety timeout), added thread-safe frame-ready waiter registry on StreamMediaMixin, notified waiters on frame encode and StreamManager.signal_stop(), and extracted build_live_step_result to keep stream_worker.py within 285L.
@@ -134,14 +147,3 @@
   - `dashboard/routers/video_jobs.py`
   - `tests/test_step1_event_loop_offload.py`
 - **Verification**: python -m unittest discover -s tests -p test_step1_event_loop_offload.py
-
-## [2026-11-15] fix: Fix CI failures in camera config healing and journey_segmenter modularity budget
-- **Type**: fix
-- **Summary**: Guard test_repo_cameras_json_has_no_non_synthetic_mock_or_docker_notice with skipTest when gitignored configs/cameras.json is absent, and extract JourneyHop/EntityJourney dataclasses into intelligent_tracker/journey_models.py so journey_segmenter.py is 137 lines (< 160 budget).
-- **Files** (5):
-  - `.TODO/performance_and_processing_modes_master_roadmap.md`
-  - `.TODO/step_1_event_loop_and_on_demand_encoding.md`
-  - `intelligent_tracker/journey_segmenter.py`
-  - `tests/test_step1_camera_config_healing.py`
-  - `intelligent_tracker/journey_models.py`
-- **Verification**: python -m unittest discover -s tests -p test_*.py

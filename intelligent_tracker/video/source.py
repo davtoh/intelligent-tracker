@@ -33,6 +33,8 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         width: Optional[int] = None,
         height: Optional[int] = None,
         read_timeout: float = 2.0,
+        warmup_timeout: Optional[float] = None,
+        max_reconnect_backoff: float = 30.0,
     ):
         self.source = source
         self.buffer_size = max(1, int(buffer_size))
@@ -44,6 +46,12 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self.target_width = width
         self.target_height = height
         self.read_timeout = float(read_timeout)
+        self.warmup_timeout = (
+            float(warmup_timeout)
+            if warmup_timeout is not None
+            else max(self.read_timeout, self.read_timeout * 2.5)
+        )
+        self.max_reconnect_backoff = float(max_reconnect_backoff)
 
         self.is_synthetic = False
         self.is_rtsp = False
@@ -76,6 +84,7 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self._frames_dropped = 0
         self._reconnections = 0
         self._is_connected = False
+        self._needs_warmup = True
         self._start_time: Optional[float] = None
         self._last_frame_time: Optional[float] = None
         self._measured_fps = 0.0

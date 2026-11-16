@@ -6,9 +6,12 @@ Unit tests for Step 3: Pool-Aware Camera Discovery & Driver Resilience.
 
 import os
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
@@ -16,6 +19,9 @@ from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import bind_app_state, clear_app_state
 from intelligent_tracker.camera_device import CameraDeviceHandler
 from intelligent_tracker.discovery import discover_all_cameras, find_physical_cameras
+from intelligent_tracker.video.capture_guard import CaptureReadGuard
+from intelligent_tracker.video.capture_helpers import compute_reconnect_backoff
+from intelligent_tracker.video.source import VideoSource
 
 
 class TestPoolAwareCameraDiscovery(unittest.TestCase):
@@ -138,6 +144,101 @@ class TestPoolAwareCameraDiscovery(unittest.TestCase):
         self.assertEqual(data[0]["status"], "in_use")
         self.assertEqual(data[0]["resolution"], "1280x720")
         self.assertNotIn(0, [c.args[0] for c in mock_probe.call_args_list])
+
+
+class TestDriverWarmupAndAutoReopen(unittest.TestCase):
+    """Tests for DirectShow warmup grace, exponential backoff, and auto-reopen."""
+
+    def test_capture_guard_warmup_vs_steady_state_timeout(self):
+        """First read uses warmup_timeout; subsequent reads use steady-state timeout."""
+        frame = np.zeros((10, 10, 3), dtype=np.uint8)
+        cap = MagicMock()
+        cap.read.side_effect = lambda: (time.sleep(0.18), (True, frame))[1]
+        guard = CaptureReadGuard(timeout=0.08, warmup_timeout=0.45)
+        self.addCleanup(guard.stop)
+
+        ret1, res1 = guard.read(cap)
+        self.assertTrue(ret1)
+        self.assertIsNotNone(res1)
+
+        ret2, res2 = guard.read(cap)
+        self.assertFalse(ret2)
+        self.assertIsNone(res2)
+        self.assertTrue(guard.last_read_timed_out)
+
+    def test_video_source_passes_warmup_then_steady_timeout(self):
+        """CaptureWorkerMixin passes warmup_timeout on first read, then read_timeout."""
+        vs = VideoSource(source="synthetic", read_timeout=2.0, warmup_timeout=5.0)
+        vs._cap = MagicMock()
+        vs._cap.isOpened.return_value = True
+        vs._running = True
+        timeouts = []
+        frame = np.zeros((10, 10, 3), dtype=np.uint8)
+
+        def fake_read(_cap, timeout=None, stop_event=None):
+            timeouts.append(timeout)
+            if len(timeouts) >= 2:
+                vs._running = False
+            return True, frame
+
+        vs._read_guard = MagicMock()
+        vs._read_guard.read.side_effect = fake_read
+        vs._capture_worker()
+        self.assertEqual(timeouts, [5.0, 2.0])
+
+    def test_exponential_backoff_progression(self):
+        """compute_reconnect_backoff and _handle_reconnection scale exponentially."""
+        delays = [compute_reconnect_backoff(i, base_delay=1.0, max_backoff=30.0) for i in range(1, 8)]
+        self.assertEqual(delays, [1.0, 2.0, 4.0, 8.0, 16.0, 30.0, 30.0])
+
+        vs = VideoSource(source="synthetic", reconnect_delay=1.0, max_reconnect_attempts=5)
+        observed_waits = []
+        vs._stop_event = MagicMock()
+        vs._stop_event.wait.side_effect = lambda timeout: (observed_waits.append(timeout), False)[1]
+        with patch.object(vs, "_open_capture", return_value=False):
+            _, attempts = vs._handle_reconnection(0)
+            _, attempts = vs._handle_reconnection(attempts)
+            _, attempts = vs._handle_reconnection(attempts)
+        self.assertEqual(observed_waits, [1.0, 2.0, 4.0])
+        self.assertEqual(attempts, 3)
+
+    def test_severed_driver_auto_reopen_and_interruptible_stop(self):
+        """Severed driver triggers auto-reopen and _stop_event wakes backoff in <10ms."""
+        vs = VideoSource(source="synthetic", reconnect_delay=10.0, max_reconnect_attempts=3)
+        timer = threading.Timer(0.02, vs._stop_event.set)
+        timer.start()
+        self.addCleanup(timer.cancel)
+        t0 = time.perf_counter()
+        cont, _ = vs._handle_reconnection(0)
+        elapsed = time.perf_counter() - t0
+        self.assertFalse(cont)
+        self.assertLess(elapsed, 0.2)
+
+    def test_severed_driver_reopens_and_resets_guard(self):
+        """Timed-out read severs driver, triggers auto-reopen, and resets guard."""
+        vs = VideoSource(source="synthetic", reconnect_delay=0.01, max_reconnect_attempts=3)
+        vs.is_file = False
+        vs._cap = MagicMock()
+        vs._cap.isOpened.return_value = True
+        vs._running = True
+        frame = np.zeros((10, 10, 3), dtype=np.uint8)
+        calls = {"n": 0}
+
+        def fake_read(_cap, timeout=None, stop_event=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                vs._read_guard.last_read_timed_out = True
+                return False, None
+            vs._read_guard.last_read_timed_out = False
+            vs._running = False
+            return True, frame
+
+        vs._read_guard = MagicMock(is_reconnecting=False, last_read_timed_out=False)
+        vs._read_guard.read.side_effect = fake_read
+        with patch.object(vs, "_open_capture", side_effect=lambda: (setattr(vs, "_cap", MagicMock()), True)[1]):
+            vs._capture_worker()
+        vs._read_guard.safe_driver_unbind.assert_called_once()
+        vs._read_guard.reset.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -43,13 +43,13 @@
 - [x] **Verification**:
   - [x] `.venv\Scripts\python.exe -m unittest tests/test_camera_discovery_and_guard.py tests/test_camera_device.py tests/test_discovery.py`
 
-### Milestone 2: DirectShow Warmup Grace & Exponential-Backoff Auto-Reopen (*Deferred to Next Turn*)
-- [ ] **Files**:
-  - [ ] `intelligent_tracker/video/capture_guard.py`: Support `warmup_timeout: float = 5.0` (or per-call `timeout` override / warmup tracking without adding new methods to `CaptureReadGuard`), keeping file `< 350` lines.
-  - [ ] `intelligent_tracker/video/capture_worker.py` (and `intelligent_tracker/video/capture_helpers.py` if needed to keep `capture_worker.py < 350` lines):
-    - Track `_needs_warmup: bool = True` on `_open_capture()` success, passing `warmup_timeout` (`5.0s` default) on the first `guard.read()` and clearing `_needs_warmup = False` once a frame is read.
-    - Replace fixed `self.reconnect_delay` wait in `_handle_reconnection()` with exponential backoff (`min(max_backoff, base_delay * (2 ** min(attempt, 5)))`) using interruptible `self._stop_event.wait(timeout=delay)`.
-  - [ ] `tests/test_camera_discovery_and_guard.py`: Add unit tests for `5.0s` warmup grace vs `2.0s` steady-state timeout, severed-driver auto-reopen, exponential backoff progression, and `< 10ms` interruptible stop wakeups.
-- [ ] **Verification**:
-  - `diagnose.py audit --path intelligent_tracker/camera_device.py dashboard/routers/cameras.py intelligent_tracker/video/capture_guard.py intelligent_tracker/video/capture_worker.py --max-lines 350 --max-fn-lines 40`
-  - `.venv\Scripts\python.exe -m unittest tests/test_camera_discovery_and_guard.py tests/test_capture_circuit_breaker.py tests/test_camera_device.py tests/test_discovery.py`
+### Milestone 2: DirectShow Warmup Grace & Exponential-Backoff Auto-Reopen
+- [x] **Files**:
+  - [x] `intelligent_tracker/video/capture_guard.py`: Support `warmup_timeout: float = 5.0` (or per-call `timeout` override / warmup tracking without adding new methods to `CaptureReadGuard`), keeping file `< 350` lines.
+  - [x] `intelligent_tracker/video/capture_worker.py` (and `intelligent_tracker/video/capture_helpers.py` if needed to keep `capture_worker.py < 350` lines):
+    - [x] Track `_needs_warmup: bool = True` on `_open_capture()` success, passing `warmup_timeout` (`5.0s` default) on the first `guard.read()` and clearing `_needs_warmup = False` once a frame is read.
+    - [x] Replace fixed `self.reconnect_delay` wait in `_handle_reconnection()` with exponential backoff (`min(max_backoff, base_delay * (2 ** min(attempt, 5)))`) using interruptible `self._stop_event.wait(timeout=delay)`.
+  - [x] `tests/test_camera_discovery_and_guard.py`: Add unit tests for `5.0s` warmup grace vs `2.0s` steady-state timeout, severed-driver auto-reopen, exponential backoff progression, and `< 10ms` interruptible stop wakeups.
+- [x] **Verification**:
+  - [x] `diagnose.py audit --path intelligent_tracker/camera_device.py dashboard/routers/cameras.py intelligent_tracker/video/capture_guard.py intelligent_tracker/video/capture_worker.py --max-lines 350 --max-fn-lines 40`
+  - [x] `.venv\Scripts\python.exe -m unittest tests/test_camera_discovery_and_guard.py tests/test_capture_circuit_breaker.py tests/test_camera_device.py tests/test_discovery.py`

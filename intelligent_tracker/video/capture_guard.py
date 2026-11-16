@@ -106,8 +106,10 @@ class CaptureReadGuard:
         stalled_threshold: int = 3,
         reconnect_threshold: int = 5,
         safe_unbind_cb: Optional[Callable[[Any], None]] = None,
+        warmup_timeout: Optional[float] = None,
     ):
         self.timeout = float(timeout)
+        self.warmup_timeout = float(warmup_timeout) if warmup_timeout is not None else self.timeout * 2.5
         self.stalled_threshold = int(stalled_threshold)
         self.reconnect_threshold = int(reconnect_threshold)
         self._safe_unbind_cb = safe_unbind_cb
@@ -118,6 +120,7 @@ class CaptureReadGuard:
         self._active_cap: Any = None
         self._timed_out_caps: Set[int] = set()
         self._unbound_caps: Set[int] = set()
+        self._warmed_caps: Set[int] = set()
         self._last_read_timed_out: bool = False
         self._lock = threading.RLock()
 
@@ -231,7 +234,8 @@ class CaptureReadGuard:
             self._record_failure()
             return False, None
 
-        effective_timeout = float(timeout) if timeout is not None else self.timeout
+        is_warm = id(cap) in self._warmed_caps
+        effective_timeout = float(timeout) if timeout is not None else (self.timeout if is_warm else self.warmup_timeout)
 
         with self._lock:
             job = self._ensure_job(cap)
@@ -255,6 +259,7 @@ class CaptureReadGuard:
             with self._lock:
                 self._last_read_timed_out = True
                 self._timed_out_caps.add(id(cap))
+                self._warmed_caps.discard(id(cap))
                 if self._current_job is job:
                     self._current_job.stop()
                     self._current_job = None
@@ -266,6 +271,7 @@ class CaptureReadGuard:
         self._last_read_timed_out = False
         ret, frame = job.ret, job.frame
         if ret and frame is not None:
+            self._warmed_caps.add(id(cap))
             self.reset()
             return True, frame
 
@@ -335,6 +341,7 @@ class CaptureReadGuard:
                 self._active_cap = None
             self._timed_out_caps.clear()
             self._unbound_caps.clear()
+            self._warmed_caps.clear()
             self._last_read_timed_out = False
 
 
