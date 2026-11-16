@@ -12,7 +12,10 @@ from typing import Any
 import cv2
 import numpy as np
 
-from dashboard.services.async_inference_worker import AsyncInferenceWorker
+from dashboard.services.async_inference_worker import (
+    AsyncInferenceWorker,
+    build_live_step_result,
+)
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.services.stream_telemetry import (
     _build_tripwires_data,
@@ -53,30 +56,6 @@ def _diagnose_source_error(vs: Any) -> tuple[str, str]:
     return "NO_FRAMES_DECODED", "No video frames could be decoded from source"
 
 
-def _build_live_step_result(
-    async_worker: AsyncInferenceWorker,
-    frame: np.ndarray,
-    now: float,
-    frame_seq: int,
-    run_vision: bool,
-) -> FrameStepResult:
-    """Submit frame to async AI when enabled and merge latest cached detections."""
-    if run_vision:
-        async_worker.submit(frame, now)
-        cached = async_worker.get_latest_result()
-        if cached is not None:
-            return FrameStepResult(
-                frame=frame,
-                tracks=cached.tracks,
-                analytics=cached.analytics,
-                identifications=cached.identifications,
-                timestamp=now,
-                fps=cached.fps,
-                frame_count=frame_seq,
-            )
-    return FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq)
-
-
 class StreamWorker:
     """Collaborator executing continuous background video pipeline loop."""
 
@@ -89,24 +68,17 @@ class StreamWorker:
         if self._processor is None:
             bundle = getattr(self.manager, "_pipeline_bundle", None)
             if bundle is None:
+                m = self.manager
                 bundle = PipelineBundle(
-                    config=PipelineConfig(camera_id=getattr(self.manager, "camera_id", "default")),
-                    db=getattr(self.manager, "db", None),
-                    video_source=getattr(self.manager, "video_source", None),
-                    detector=getattr(self.manager, "detector", None),
-                    tracker=getattr(self.manager, "tracker", None),
-                    analytics=getattr(self.manager, "analytics", None),
-                    reid_extractor=getattr(self.manager, "reid_extractor", None),
-                    gallery_matcher=getattr(self.manager, "gallery_matcher", None),
-                    rsac_manager=getattr(self.manager, "rsac_manager", None),
-                    active_learning=getattr(self.manager, "active_learning", None),
-                    enrollment_manager=getattr(self.manager, "enrollment_manager", None),
-                    event_bus=getattr(self.manager, "event_bus", None),
-                    event_pipeline=getattr(self.manager, "event_pipeline", None),
-                    world_graph=getattr(self.manager, "world_graph", None),
-                    world_bridge=getattr(self.manager, "world_bridge", None),
-                    world_rule_engine=getattr(self.manager, "world_rule_engine", None),
-                    confidence_engine=getattr(self.manager, "confidence_engine", None),
+                    config=PipelineConfig(camera_id=getattr(m, "camera_id", "default")),
+                    db=getattr(m, "db", None), video_source=getattr(m, "video_source", None),
+                    detector=getattr(m, "detector", None), tracker=getattr(m, "tracker", None),
+                    analytics=getattr(m, "analytics", None), reid_extractor=getattr(m, "reid_extractor", None),
+                    gallery_matcher=getattr(m, "gallery_matcher", None), rsac_manager=getattr(m, "rsac_manager", None),
+                    active_learning=getattr(m, "active_learning", None), enrollment_manager=getattr(m, "enrollment_manager", None),
+                    event_bus=getattr(m, "event_bus", None), event_pipeline=getattr(m, "event_pipeline", None),
+                    world_graph=getattr(m, "world_graph", None), world_bridge=getattr(m, "world_bridge", None),
+                    world_rule_engine=getattr(m, "world_rule_engine", None), confidence_engine=getattr(m, "confidence_engine", None),
                 )
             self._processor = FrameProcessor(bundle, topology=getattr(self.manager, "topology", None))
 
@@ -172,7 +144,7 @@ class StreamWorker:
                     frame_seq += 1
                     now = time.time()
                     is_rec = bool(getattr(self.manager, "is_recording", False))
-                    step_res = _build_live_step_result(
+                    step_res = build_live_step_result(
                         async_worker, frame, now, frame_seq, self._should_run_vision_step(is_rec)
                     )
                     if step_res.frame_count % 30 == 1:
@@ -207,6 +179,9 @@ class StreamWorker:
             self.manager._latest_telemetry = telemetry
 
         self.manager._broadcast_telemetry(telemetry)
+        notify = getattr(self.manager, "notify_frame_ready", None)
+        if callable(notify):
+            notify()
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:
         """Pause video capture if zero viewers are connected or mode requires hibernation."""

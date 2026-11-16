@@ -1,5 +1,11 @@
 # Changelog
 
+## [2026-11-16] refactor: Step 2 Milestone 2: Event-Driven MJPEG Wakeup & StreamManager Waiter Lifecycle
+- **Type**: refactor
+- **Summary**: Replaced 40ms polling in _stream_frame_generator with event-driven asyncio.wait on frame_event and shutdown_evt (1.5s heartbeat safety timeout), added thread-safe frame-ready waiter registry on StreamMediaMixin, notified waiters on frame encode and StreamManager.signal_stop(), and extracted build_live_step_result to keep stream_worker.py within 285L.
+- **Files** (1):
+  - `dashboard/services/stream_media.py,dashboard/stream_manager.py,dashboard/routers/streaming.py,dashboard/services/stream_worker.py,dashboard/services/async_inference_worker.py,tests/test_stream_manager.py`
+
 ## [2026-11-15] test: Step 4 Milestone 2: E2E Processing Mode Verification, StreamWorker __all__ & Master Sign-Off
 - **Type**: test
 - **Summary**: Added explicit __all__ exports in stream_worker.py (0 arch-map unused imports) and end-to-end tests in tests/test_step4_e2e_performance_and_modes.py covering mode lifecycle, worker parity, capture_only deferred badge propagation, <200ms latency, and Step 1-4 modularity budgets.
@@ -139,10 +145,3 @@
   - `tests/test_step1_camera_config_healing.py`
   - `intelligent_tracker/journey_models.py`
 - **Verification**: python -m unittest discover -s tests -p test_*.py
-
-## [2026-11-15] test: Step 5 Milestone 4: End-to-End Closed-Loop Video Ecosystem Verification
-- **Type**: test
-- **Summary**: Added E2E integration tests covering FrameProcessor.step() offline indexing, 4-endpoint API parity (/sightings, /events, /api/active-learning/queue, /api/journey/search), and non-mocked fallback branches.
-- **Files** (1):
-  - `tests/test_step5_e2e_closed_loop_ecosystem.py`
-- **Verification**: python -m unittest discover -s tests -p test_step5_*.py

@@ -92,6 +92,9 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
     manager._latest_jpeg = None
     manager._latest_raw_jpeg = None
     manager._latest_raw_frame = None
+    manager._frame_seq = 0
+    manager._frame_waiters = []
+    manager._frame_waiter_lock = threading.Lock()
     manager._latest_telemetry = _default_telemetry(manager.camera_id)
     manager.draw_heatmap = False
     manager.start_time = time.time()
@@ -204,6 +207,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         """Signal worker loop and video source to terminate immediately without waiting."""
         self._running = False
         self._stop_event.set()
+        self.notify_frame_ready()
         if self.video_source and hasattr(self.video_source, "signal_stop"):
             try:
                 self.video_source.signal_stop()

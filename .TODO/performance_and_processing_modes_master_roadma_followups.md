@@ -31,12 +31,12 @@
 - [x] **Verification**: `.venv\Scripts\python.exe -m unittest tests/test_processing_mode.py tests/test_step3_processing_mode_api.py tests/test_step3_worker_hibernation_and_ai_gating.py tests/test_step4_e2e_performance_and_modes.py`
 
 ### Milestone 2: Decoupled Async AI + Event-Driven MJPEG + On-Demand Single JPEG
-- **Files**:
-  - `dashboard/services/async_inference_worker.py` (new module, `<= 150` lines): Non-blocking latest-frame inference slot running `FrameProcessor.step()` on a background thread and caching the latest `FrameStepResult` / tracks.
-  - `dashboard/services/stream_worker.py`: Delegate AI to `AsyncInferenceWorker` when `should_run_vision` is `True`; draw latest cached tracks when `annotated` subscribers exist; encode only the subscribed JPEG variant (`raw` vs `annotated`); signal frame-ready event instead of `0.01s` blind sleep.
-  - `dashboard/stream_manager.py` & `dashboard/routers/streaming.py`: Track `raw` vs `annotated` subscriber counts and replace `asyncio.wait_for(..., timeout=0.04)` with event-driven frame wakeups.
-  - `tests/test_async_inference_worker.py` (new): Verify non-blocking latest-frame dropping, cached overlay reuse, and selective JPEG encoding.
-- **Verification**: `.\.venv\Scripts\python.exe -m unittest tests/test_async_inference_worker.py tests/test_stream_manager.py`
+- [x] **Files**:
+  - [x] `dashboard/services/async_inference_worker.py` (new module, `<= 150` lines): Non-blocking latest-frame inference slot running `FrameProcessor.step()` on a background thread and caching the latest `FrameStepResult` / tracks.
+  - [x] `dashboard/services/stream_worker.py`: Delegate AI to `AsyncInferenceWorker` when `should_run_vision` is `True`; draw latest cached tracks when `annotated` subscribers exist; encode only the subscribed JPEG variant (`raw` vs `annotated`); signal frame-ready event instead of `0.01s` blind sleep.
+  - [x] `dashboard/stream_manager.py` & `dashboard/routers/streaming.py`: Track `raw` vs `annotated` subscriber counts and replace `asyncio.wait_for(..., timeout=0.04)` with event-driven frame wakeups.
+  - [x] `tests/test_async_inference_worker.py` (new): Verify non-blocking latest-frame dropping, cached overlay reuse, and selective JPEG encoding.
+- [x] **Verification**: `.\.venv\Scripts\python.exe -m unittest tests/test_async_inference_worker.py tests/test_stream_manager.py`
 
 ### Milestone 3: Pool-Aware Camera Discovery, DirectShow Warmup Grace & Auto-Reopen
 - **Files**:

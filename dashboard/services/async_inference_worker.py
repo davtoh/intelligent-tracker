@@ -88,3 +88,27 @@ class AsyncInferenceWorker:
 
             with self._lock:
                 self._latest_result = result
+
+
+def build_live_step_result(
+    async_worker: AsyncInferenceWorker,
+    frame: np.ndarray,
+    now: float,
+    frame_seq: int,
+    run_vision: bool,
+) -> FrameStepResult:
+    """Submit frame to async AI when enabled and merge latest cached detections."""
+    if run_vision:
+        async_worker.submit(frame, now)
+        cached = async_worker.get_latest_result()
+        if cached is not None:
+            return FrameStepResult(
+                frame=frame,
+                tracks=cached.tracks,
+                analytics=cached.analytics,
+                identifications=cached.identifications,
+                timestamp=now,
+                fps=cached.fps,
+                frame_count=frame_seq,
+            )
+    return FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq)

@@ -46,15 +46,15 @@
   - [x] `.\.venv\Scripts\python.exe "C:\Users\User\.gemini\config\skills\system-diagnostics\scripts\diagnose.py" audit --path dashboard/services/async_inference_worker.py dashboard/services/stream_worker.py tests/test_async_inference_worker.py --max-lines 350 --max-fn-lines 40`
   - [x] `.\.venv\Scripts\python.exe -m unittest tests/test_async_inference_worker.py tests/test_step1_on_demand_jpeg_encoding.py tests/test_step2_clean_streaming.py tests/test_step1_perf_integration.py`
 
-### Milestone 2: Event-Driven MJPEG Wakeup, On-Demand Single JPEG & `StreamManager` Lifecycle (Deferred to Next Turn)
-- [ ] **Update `dashboard/services/stream_media.py` & `dashboard/stream_manager.py`**:
-  - Add thread-safe frame-ready waiter registry (`register_frame_waiter(loop, event)`, `unregister_frame_waiter(loop, event)`, `notify_frame_ready()`) and monotonic `_frame_seq` counter on `StreamMediaMixin`.
-  - Call `self.manager.notify_frame_ready()` at the end of `StreamWorker._process_single_frame()` after JPEG encoding.
-  - Ensure `StreamManager.stop()` wakes all frame waiters so streaming generators exit immediately on shutdown.
-- [ ] **Update `dashboard/routers/streaming.py`**:
-  - Replace `await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)` in `_stream_frame_generator()` with event-driven `asyncio.wait` on `frame_event.wait()` and `shutdown_evt.wait()` (with a `1.5s` safety timeout for `heartbeat_subscriber`), clearing `frame_event` before reading `get_latest_frame_jpeg(annotated=annotated)`.
-- [ ] **Create `tests/test_stream_manager.py`**:
-  - Verify event-driven frame wakeup fires immediately on `notify_frame_ready()` (`< 50ms`), `annotated=False` vs `annotated=True` on-demand JPEG selection, and clean `StreamManager.stop()` waiter wakeup.
-- [ ] **Verification**:
-  - `.\.venv\Scripts\python.exe "C:\Users\User\.gemini\config\skills\system-diagnostics\scripts\diagnose.py" audit --path dashboard/services/stream_media.py dashboard/stream_manager.py dashboard/routers/streaming.py tests/test_stream_manager.py --max-lines 350 --max-fn-lines 40`
-  - `.\.venv\Scripts\python.exe -m unittest tests/test_async_inference_worker.py tests/test_stream_manager.py tests/test_hibernation.py tests/test_graceful_shutdown_perf.py`
+### Milestone 2: Event-Driven MJPEG Wakeup, On-Demand Single JPEG & `StreamManager` Lifecycle
+- [x] **Update `dashboard/services/stream_media.py` & `dashboard/stream_manager.py`**:
+  - [x] Add thread-safe frame-ready waiter registry (`register_frame_waiter(loop, event)`, `unregister_frame_waiter(loop, event)`, `notify_frame_ready()`) and monotonic `_frame_seq` counter on `StreamMediaMixin`.
+  - [x] Call `self.manager.notify_frame_ready()` at the end of `StreamWorker._process_single_frame()` after JPEG encoding.
+  - [x] Ensure `StreamManager.stop()` wakes all frame waiters so streaming generators exit immediately on shutdown.
+- [x] **Update `dashboard/routers/streaming.py`**:
+  - [x] Replace `await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)` in `_stream_frame_generator()` with event-driven `asyncio.wait` on `frame_event.wait()` and `shutdown_evt.wait()` (with a `1.5s` safety timeout for `heartbeat_subscriber`), clearing `frame_event` before reading `get_latest_frame_jpeg(annotated=annotated)`.
+- [x] **Create `tests/test_stream_manager.py`**:
+  - [x] Verify event-driven frame wakeup fires immediately on `notify_frame_ready()` (`< 50ms`), `annotated=False` vs `annotated=True` on-demand JPEG selection, and clean `StreamManager.stop()` waiter wakeup.
+- [x] **Verification**:
+  - [x] `.\.venv\Scripts\python.exe "C:\Users\User\.gemini\config\skills\system-diagnostics\scripts\diagnose.py" audit --path dashboard/services/stream_media.py dashboard/stream_manager.py dashboard/routers/streaming.py tests/test_stream_manager.py --max-lines 350 --max-fn-lines 40`
+  - [x] `.\.venv\Scripts\python.exe -m unittest tests/test_async_inference_worker.py tests/test_stream_manager.py tests/test_hibernation.py tests/test_graceful_shutdown_perf.py`
