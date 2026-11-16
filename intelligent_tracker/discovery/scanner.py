@@ -4,7 +4,8 @@ Coordinates concurrent hardware USB capture probing, ONVIF WS-Discovery,
 and LAN RTSP port sweeping into a unified device inventory.
 """
 
-from typing import List
+from collections.abc import Collection
+from typing import Any, Dict, List, Optional
 
 from intelligent_tracker.camera_device import CameraDeviceHandler
 from intelligent_tracker.discovery.network import get_local_subnet_ips
@@ -53,6 +54,8 @@ def discover_all_cameras(
     include_onvif: bool = True,
     include_lan_rtsp: bool = True,
     mock_fallback: bool = False,
+    active_indices: Optional[Collection[int]] = None,
+    active_devices: Optional[Dict[int, Dict[str, Any]]] = None,
 ) -> List[DiscoveredCamera]:
     """
     Central discovery routine scanning USB webcams, ONVIF devices,
@@ -61,7 +64,10 @@ def discover_all_cameras(
     results: List[DiscoveredCamera] = []
 
     if include_usb:
-        usb_cams = find_physical_cameras()
+        usb_cams = find_physical_cameras(
+            active_indices=active_indices,
+            active_devices=active_devices,
+        )
         results.extend(usb_cams)
 
     if include_onvif:

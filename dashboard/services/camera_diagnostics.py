@@ -244,3 +244,26 @@ def probe_camera_test_request(req: Any, pool: Any = None) -> Dict[str, Any]:
     res["resolved_source"] = str(target_source)
     return res
 
+
+def collect_active_usb_metadata(pool: Any, active_indices: set[int]) -> dict[int, dict[str, Any]]:
+    """Build USB discovery metadata from active pool streams without probing hardware."""
+    meta: dict[int, dict[str, Any]] = {}
+    for row in pool.list_cameras():
+        src = str(row.get("source", "")).strip()
+        if not src.isdigit():
+            continue
+        idx = int(src)
+        if idx in active_indices:
+            res = row.get("resolution", "640x480")
+            w, _, h = str(res).partition("x")
+            meta[idx] = {
+                "index": idx,
+                "name": row.get("device_name") or row.get("name") or f"USB Camera {idx}",
+                "resolution": res,
+                "width": int(w) if w.isdigit() else 640,
+                "height": int(h) if h.isdigit() else 480,
+                "fps": float(row.get("fps") or 30.0),
+                "in_use": True,
+            }
+    return meta
+

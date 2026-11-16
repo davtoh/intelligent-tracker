@@ -13,6 +13,7 @@ import sys
 import time
 import logging
 import threading
+from collections.abc import Collection
 from typing import Dict, List, Optional, Tuple, Union, Any
 
 import cv2
@@ -269,14 +270,29 @@ class CameraDeviceHandler:
                 cls.safe_release(cap, settle_delay=0.25)
 
     @classmethod
-    def discover_usb_cameras(cls, max_devices: int = 6) -> List[Dict[str, Any]]:
-        """
-        Probe connected USB/local cameras sequentially with driver settle delays.
-        Returns list of working device dictionaries.
-        """
+    def discover_usb_cameras(
+        cls,
+        max_devices: int = 6,
+        active_indices: Optional[Collection[int]] = None,
+        active_devices: Optional[Dict[int, Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Probe USB/local cameras sequentially, skipping active indices to avoid COM contention."""
+        skip = set(active_indices or ())
+        if active_devices:
+            skip.update(active_devices.keys())
+        backend_default = "DirectShow" if sys.platform.startswith("win") else "V4L2"
         with cls._device_lock:
             discovered = []
             for idx in range(max_devices):
+                if idx in skip:
+                    meta = dict((active_devices or {}).get(idx) or {})
+                    name = meta.get("name") or cls.get_friendly_name(idx)
+                    discovered.append({
+                        "index": idx, "name": name, "resolution": meta.get("resolution", "640x480"), "width": meta.get("width", 640),
+                        "height": meta.get("height", 480), "fps": meta.get("fps", 30.0), "backend": meta.get("backend", backend_default),
+                        "valid": True, "in_use": True, "is_virtual": meta.get("is_virtual", cls.is_virtual_device(name)),
+                    })
+                    continue
                 dev_info = cls.probe_device(idx)
                 if dev_info:
                     discovered.append(dev_info)

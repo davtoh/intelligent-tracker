@@ -27,7 +27,10 @@ from dashboard.schemas import (
     CameraUpdateRequest,
     OverlayUpdateRequest,
 )
-from dashboard.services.camera_diagnostics import probe_camera_test_request
+from dashboard.services.camera_diagnostics import (
+    collect_active_usb_metadata,
+    probe_camera_test_request,
+)
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.discovery import (
     CAMERA_PRESETS,
@@ -105,13 +108,18 @@ async def discover_cameras_route(
     include_usb: bool = True,
     include_onvif: bool = True,
     include_lan_rtsp: bool = True,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Probe physical USB webcams, ONVIF WS-Discovery, and local RTSP network cameras."""
+    active_indices = pool.get_active_usb_indices() if pool else None
+    active_devices = collect_active_usb_metadata(pool, active_indices) if (pool and active_indices) else None
     cams = discover_all_cameras(
         include_usb=include_usb,
         include_onvif=include_onvif,
         include_lan_rtsp=include_lan_rtsp,
         mock_fallback=True,
+        active_indices=active_indices,
+        active_devices=active_devices,
     )
     return [c.to_dict() for c in cams]
 
