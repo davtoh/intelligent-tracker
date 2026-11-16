@@ -205,6 +205,7 @@
     if (resolvedId !== currentId || (appActiveId && appActiveId !== resolvedId)) {
       const streamImg = document.getElementById('live-stream-img');
       if (streamImg) streamImg.src = `/stream/${encodeURIComponent(resolvedId)}?annotated=false`;
+      window.ProcessingModeUI?.syncCameraFocus?.(resolvedId);
       const streamTitle = document.getElementById('video-stream-title');
       if (streamTitle) {
         const title = `Camera Feed: ${String(targetCam.name || resolvedId).toUpperCase()} (${resolvedId})`;

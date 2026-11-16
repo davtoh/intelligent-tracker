@@ -310,7 +310,13 @@
 
   function init() {
     bindEvents();
-    syncStatus(getActiveCameraId());
+    const select = document.getElementById('active-camera-select');
+    const isPlaceholderOnly = Boolean(
+      select && select.options && select.options.length === 1 && !select.options[0].value
+    );
+    if (!isPlaceholderOnly) {
+      syncStatus(getActiveCameraId());
+    }
   }
 
   window.CameraRecording = {

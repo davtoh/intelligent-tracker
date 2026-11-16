@@ -45,10 +45,10 @@
   - [x] `python -m unittest tests/test_step4_frontend_reliability.py tests/test_step2_live_canvas_delegation.py tests/test_responsive_navigation.py tests/test_dashboard_ui.py`
 
 ### Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
-- [ ] **Files**:
-  - [ ] Fix any regressions surfaced by full-suite discovery or CDP browser inspection.
-- [ ] **Verification**:
-  - [ ] `python -m unittest discover tests` (with `MPLBACKEND=Agg`)
-  - [ ] `diagnose.py scan --path .`
-  - [ ] Headless & live browser CDP audit (`diagnose.py ui --headless --audit-layout` and `--live` if available) confirming 0 JS exceptions, 0 `404`s, and working 1x1/2x2/3x3 grid streaming.
-  - [ ] Record milestone in `CHANGELOG.md` via `diagnose.py changelog add` and run `plan_engine.py digest`.
+- [x] **Files**:
+  - [x] Fix any regressions surfaced by full-suite discovery or CDP browser inspection.
+- [x] **Verification**:
+  - [x] `python -m unittest discover tests` (with `MPLBACKEND=Agg`)
+  - [x] `diagnose.py scan --path .`
+  - [x] Headless & live browser CDP audit (`diagnose.py ui --headless --audit-layout` and `--live` if available) confirming 0 JS exceptions, 0 `404`s, and working 1x1/2x2/3x3 grid streaming.
+  - [x] Record milestone in `CHANGELOG.md` via `diagnose.py changelog add` and run `plan_engine.py digest`.

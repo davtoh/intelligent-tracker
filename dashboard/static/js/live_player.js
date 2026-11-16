@@ -26,7 +26,31 @@
     }
   }
 
+  function detachGridStreams() {
+    const grid = document.getElementById('multi-grid-container');
+    if (!grid || typeof grid.querySelectorAll !== 'function') return;
+    grid.querySelectorAll('img').forEach(img => {
+      if (img.src && !img.src.startsWith('data:image/svg+xml')) {
+        if (img.dataset) img.dataset.activeStreamSrc = img.src.split('?')[0];
+      }
+      window.MjpegReconnect?.detach?.(img);
+      img.src = STANDBY_POSTER_SVG;
+    });
+  }
+
+  function attachGridStreams() {
+    const grid = document.getElementById('multi-grid-container');
+    if (!grid || typeof grid.querySelectorAll !== 'function') return;
+    grid.querySelectorAll('img').forEach(img => {
+      const base = img.dataset?.activeStreamSrc || (img.src && !img.src.startsWith('data:image/svg+xml') ? img.src.split('?')[0] : '');
+      if (!base) return;
+      img.src = `${base}?annotated=true&t=${Date.now()}`;
+      window.MjpegReconnect?.attach?.(img);
+    });
+  }
+
   function detachLiveStream(videoImg) {
+    detachGridStreams();
     if (!videoImg) return;
     if (videoImg.src && !videoImg.src.startsWith('data:image/svg+xml')) {
       videoImg.dataset.activeStreamSrc = videoImg.src.split('?')[0];
@@ -37,6 +61,13 @@
 
   function attachLiveStream(videoImg, activeCameraId, forceReconnect = false) {
     if (!videoImg || streamPaused) return;
+    const gridMode = window.CameraGrid?.getGridMode?.();
+    if (gridMode && gridMode !== '1x1') {
+      detachLiveStream(videoImg);
+      attachGridStreams();
+      setStreamStatus('online');
+      return;
+    }
     if (streamRetryTimer) {
       clearTimeout(streamRetryTimer);
       streamRetryTimer = null;

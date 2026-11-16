@@ -63,6 +63,8 @@
         ? `${count} deferred video indexing job(s) queued`
         : 'No deferred indexing jobs';
     }
+    const pausedOverlay = document.getElementById('live-paused-overlay');
+    if (pausedOverlay) pausedOverlay.hidden = state.mode !== 'paused';
   }
 
   function applyServerState(data) {
@@ -118,7 +120,12 @@
     state.mode = mode;
     writeStoredMode(mode);
     renderUI();
-    return postModeUpdate({ mode });
+    return postModeUpdate({ mode }).then(res => {
+      if (mode !== 'paused' && state.activeTab === 'live' && !window.LivePlayer?.isPaused?.()) {
+        window.LivePlayer?.attachLiveStream?.(document.getElementById('live-stream-img'), window.App?.getActiveCameraId?.(), true);
+      }
+      return res;
+    });
   }
 
   function syncTabChange(tabId) {
@@ -146,6 +153,12 @@
     if (select && !select.dataset.pmBound) {
       select.dataset.pmBound = '1';
       select.addEventListener('change', (e) => setMode(e.target.value));
+    }
+
+    const resumeBtn = document.getElementById('btn-resume-processing-mode');
+    if (resumeBtn && !resumeBtn.dataset.pmBound) {
+      resumeBtn.dataset.pmBound = '1';
+      resumeBtn.addEventListener('click', () => setMode('focus_only'));
     }
 
     const camSelect = document.getElementById('active-camera-select');

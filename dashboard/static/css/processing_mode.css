@@ -109,3 +109,16 @@
     font-size: 0.74rem;
   }
 }
+
+.live-paused-overlay {
+  position: absolute; inset: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(2, 6, 23, 0.78); padding: 16px;
+}
+.live-paused-overlay[hidden] { display: none; }
+.live-paused-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 20px 24px; text-align: center; max-width: 340px;
+}
+.live-paused-title { font-size: 0.98rem; font-weight: 600; color: var(--text-main); }
+.live-paused-subtitle { font-size: 0.82rem; color: var(--text-muted); }

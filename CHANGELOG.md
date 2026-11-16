@@ -1,5 +1,35 @@
 # Changelog
 
+## [2026-11-16] fix: Detach Multi-Grid MJPEG Streams on Tab Leave and Refresh on Mode Change
+- **Type**: fix
+- **Summary**: Added detachGridStreams/attachGridStreams in live_player.js so 2x2/3x3 grid tiles detach on tab leave and #live-stream-img stays detached in grid mode; refreshed active streams in processing_mode.js setMode().
+- **Files** (11):
+  - `.TODO/performance_and_processing_modes_master_roadma_followups.md`
+  - `.TODO/step_4_frontend_reliability_and_verification.md`
+  - `AGENTS.md`
+  - `CHANGELOG.md`
+  - `dashboard/static/css/processing_mode.css`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/camera_recording.js`
+  - `dashboard/static/js/live_player.js`
+  - ... (+3 more)
+- **Verification**: python -m unittest tests/test_step2_tab_scoped_streams.py tests/test_step2_tab_scoped_perf_integration.py tests/test_step2_live_canvas_delegation.py tests/test_step4_processing_mode_ui.py
+
+## [2026-11-16] fix: Fix Live Monitor Paused Black Screen, Boot cam_01 404, and Video Studio Preload
+- **Type**: fix
+- **Summary**: Added #live-paused-overlay with 1-click Resume in live.html/processing_mode.js/css, synced initial camera focus in camera_ai_config.js, skipped placeholder cam_01 recording status poll in camera_recording.js, and set preload=auto on #scrubber-video-player in videos.html.
+- **Files** (9):
+  - `.TODO/performance_and_processing_modes_master_roadma_followups.md`
+  - `.TODO/step_4_frontend_reliability_and_verification.md`
+  - `AGENTS.md`
+  - `dashboard/static/css/processing_mode.css`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/camera_recording.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `dashboard/static/partials/tabs/live.html`
+  - ... (+1 more)
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
 - **Type**: fix
 - **Summary**: Fixed standalone StreamManager hibernation in ProcessingModeService.should_hibernate_camera and isolated FrameProcessor.step spy in test_step5_batch_frame_processor; verified 760/760 unit tests, 0 latent defects, and headless CDP layout + 1x1/2x2/3x3 grid streaming.
@@ -109,40 +139,9 @@
   - `tests/test_step2_studio_minimap_gating.py`
 - **Verification**: python -m unittest discover -s tests -p test_step2_studio_minimap_gating.py
 
-## [2026-11-15] feat: Step 2 M1: Hidden-Tab Stream Disconnection & Tab-Scoped Stream Lifecycle
-- **Type**: feat
-- **Summary**: Replaced eager studio/analytics img src with data-src, added LivePlayer.syncTabStreams/attachStudioStream/detachStudioStream/attachHeatmapImage, and hooked NavTabsManager switchTab + window.switchTab to emit tab-changed.
-- **Files** (6):
-  - `.TODO/step_2_tab_scoped_streams_and_lazy_loading.md`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/nav_tabs_manager.js`
-  - `dashboard/static/partials/tabs/analytics.html`
-  - `dashboard/static/partials/tabs/studio.html`
-  - `tests/test_step2_tab_scoped_streams.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_tab_scoped_streams.py
-
 ## [2026-11-15] test: Step 1 Milestone 4: End-to-End Integration, Modularity Audit & Sign-Off
 - **Type**: test
 - **Summary**: Added tests/test_step1_perf_integration.py verifying concurrent ROI offloading, MJPEG raw/annotated/WS mode switching, and mtime-cached report migration; verified 47 Step 1 tests and 672 full-suite tests pass with zero audit/scan defects.
 - **Files** (1):
   - `tests/test_step1_perf_integration.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-15] perf: Step 1 M3: Legacy Report Migration Mtime Cache & save_video_run Hydration Optimization
-- **Type**: perf
-- **Summary**: Added thread-safe mtime-aware _MIGRATED_REPORT_FILES cache and clear_migration_cache() to video_report_migration.py, and optimized VideoRunRepositoryMixin.save_video_run() to attach in-memory frame_detections without re-parsing SQLite JSON blobs.
-- **Files** (3):
-  - `dashboard/services/video_report_migration.py`
-  - `intelligent_tracker/repositories/video_run_repo.py`
-  - `tests/test_step1_report_migration_and_repo_perf.py`
-- **Verification**: python -m unittest discover -s tests -p test_step1_report_migration_and_repo_perf.py
-
-## [2026-11-15] feat: Subscriber-Aware On-Demand Raw & Annotated JPEG Encoding
-- **Type**: feat
-- **Summary**: Track per-subscriber annotated/raw MJPEG mode in StreamSubscriberRegistry/Mixin, forward annotated flag in streaming router, and skip redundant JPEG encodes in StreamWorker when no matching subscriber or active recorder needs them.
-- **Files** (4):
-  - `dashboard/routers/streaming.py`
-  - `dashboard/services/stream_subscribers.py`
-  - `dashboard/services/stream_worker.py`
-  - `tests/test_step1_on_demand_jpeg_encoding.py`
-- **Verification**: python -m unittest discover -s tests -p test_step1_on_demand_jpeg_encoding.py

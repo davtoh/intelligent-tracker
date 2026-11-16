@@ -46,12 +46,12 @@
 - [x] **Verification**: `.\.venv\Scripts\python.exe -m unittest tests/test_camera_discovery_and_guard.py`
 
 ### Milestone 4: Frontend Reliability, Canvas Sync & Closed-Loop Verification
-- **Files**:
-  - `dashboard/static/partials/tabs/live.html`: Replace hardcoded `cam_01` option with an empty/loading placeholder.
-  - `dashboard/static/js/camera_diagnostics_ui.js`: Skip `/api/cameras/{id}/diagnostics` polling when `camId` is empty or not in the loaded camera list.
-  - `dashboard/static/js/nav_tabs_manager.js` & `dashboard/static/app.js`: Add null-guards before reading `.scrollLeft`.
-  - `dashboard/static/js/camera_grid.js` (or `dashboard/static/js/mjpeg_reconnect.js`): Add `onerror` / stall watchdog auto-reconnect on `<img>` MJPEG tiles.
-- **Verification**:
-  - Full test suite: `.\.venv\Scripts\python.exe -m unittest discover tests`
-  - Static & modularity audit: `diagnose.py audit`
-  - Live + headless browser CDP audit (`run_diagnose.py ui --headless --audit-layout` and `--live`) confirming 0 JS exceptions, 0 `404`s, working 2x2/3x3 grids, and improved FPS.
+- [x] **Files**:
+  - [x] `dashboard/static/partials/tabs/live.html`: Replace hardcoded `cam_01` option with an empty/loading placeholder.
+  - [x] `dashboard/static/js/camera_diagnostics_ui.js`: Skip `/api/cameras/{id}/diagnostics` polling when `camId` is empty or not in the loaded camera list.
+  - [x] `dashboard/static/js/nav_tabs_manager.js` & `dashboard/static/app.js`: Add null-guards before reading `.scrollLeft`.
+  - [x] `dashboard/static/js/camera_grid.js` (or `dashboard/static/js/mjpeg_reconnect.js`): Add `onerror` / stall watchdog auto-reconnect on `<img>` MJPEG tiles.
+- [x] **Verification**:
+  - [x] Full test suite: `.\.venv\Scripts\python.exe -m unittest discover tests`
+  - [x] Static & modularity audit: `diagnose.py audit`
+  - [x] Live + headless browser CDP audit (`run_diagnose.py ui --headless --audit-layout` and `--live`) confirming 0 JS exceptions, 0 `404`s, working 2x2/3x3 grids, and improved FPS.

@@ -42,6 +42,14 @@
             <img id="live-stream-img" alt="Live Camera Stream" />
             <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
             <canvas id="interactive-canvas"></canvas>
+            <!-- Processing Mode Paused Overlay -->
+            <div id="live-paused-overlay" class="live-paused-overlay" hidden>
+              <div class="live-paused-card glass-panel">
+                <span class="live-paused-title">Processing Mode: Paused</span>
+                <span class="live-paused-subtitle">All camera pipelines are hibernating to save CPU/GPU.</span>
+                <button type="button" class="btn btn-sm btn-primary" id="btn-resume-processing-mode">▶ Resume Live Feed</button>
+              </div>
+            </div>
             <!-- Hover Inspection Tooltip -->
             <div class="track-hover-tooltip" id="track-tooltip" style="display: none;">
               <div class="tooltip-header" id="tooltip-title">Track #--</div>

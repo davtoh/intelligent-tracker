@@ -127,3 +127,10 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   - Inject `mode_service_getter` into `StreamRecordingController` so standalone unit tests remain isolated while `StreamManager` shares its `ProcessingModeService`.
   - When seeding `CameraPool` in isolated tests with stubbed streams, mark cameras `enabled=False` in the temp `cameras.json` so `load_cameras()` does not open real `TrackerDB` SQLite handles that block Windows `TemporaryDirectory` cleanup.
   - Always run the full `python -m unittest discover tests` suite at child-plan sign-off to catch cross-step modularity budget tests such as `tests/test_dashboard_di.py`.
+
+## 13. Async Pipeline, Warmup & Test Synchronization Invariants
+- **Standalone `StreamManager` Hibernation (`focus_only`)**: `ProcessingModeService.should_hibernate_camera()` must return `True` when `not in_camera_pool` and `subscriber_count <= 0` in `focus_only` mode; in `StreamWorker._should_hibernate()`, distinguish `frame_count` from `subscriber_count`.
+- **Async `StreamWorker` `step_done` Test Sync**: Because `StreamWorker.run()` dispatches `FrameProcessor.step()` asynchronously via `AsyncInferenceWorker`, tests that set `_stop_event` inside `_process_single_frame` must wait on a `step_done` event before asserting `mock_proc.step.assert_called_once()`.
+- **`asyncio.Event` Loop Binding (Python 3.12+)**: Construct `asyncio.Event()` inside the active `asyncio.run(...)` coroutine in unit tests rather than in `setUp()` or outside the loop, so it is never bound to a closed event loop across sub-runs.
+- **`warmup_timeout=None` Scaling**: `VideoSource` and `CaptureReadGuard` default `warmup_timeout=None` to scale dynamically with `read_timeout` (`read_timeout * 2.5`) so fast unit tests with small `read_timeout` (e.g., `0.1s`) are not stretched to `5.0s`.
+- **`FrameProcessor.step` Spy Filtering**: Class-level `FrameProcessor.step` spies in batch tests must filter by `self.db` to avoid cross-talk from background/daemon stream threads.
