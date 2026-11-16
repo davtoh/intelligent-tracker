@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
+- **Type**: fix
+- **Summary**: Fixed standalone StreamManager hibernation in ProcessingModeService.should_hibernate_camera and isolated FrameProcessor.step spy in test_step5_batch_frame_processor; verified 760/760 unit tests, 0 latent defects, and headless CDP layout + 1x1/2x2/3x3 grid streaming.
+- **Files** (2):
+  - `dashboard/services/processing_mode_service.py`
+  - `tests/test_step5_batch_frame_processor.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-16] feat: Step 3 Milestone 2: DirectShow Warmup Grace & Exponential-Backoff Auto-Reopen
 - **Type**: feat
 - **Summary**: Added 5.0s warmup grace timeout (proportional when read_timeout is overridden), pure capture_helpers.py, and interruptible exponential backoff reconnection in CaptureReadGuard/CaptureWorkerMixin/VideoSource.
@@ -138,12 +146,3 @@
   - `dashboard/services/stream_worker.py`
   - `tests/test_step1_on_demand_jpeg_encoding.py`
 - **Verification**: python -m unittest discover -s tests -p test_step1_on_demand_jpeg_encoding.py
-
-## [2026-11-15] perf: Step 1 M1: Asyncio Event-Loop Offloading for Tagging & Sync Video Jobs
-- **Type**: perf
-- **Summary**: Offloaded blocking ROI recognition/commit/gallery reload in dashboard/routers/tagging.py and sync transcode/analytics in dashboard/routers/video_jobs.py via asyncio.to_thread, with 9 isolated unit tests.
-- **Files** (3):
-  - `dashboard/routers/tagging.py`
-  - `dashboard/routers/video_jobs.py`
-  - `tests/test_step1_event_loop_offload.py`
-- **Verification**: python -m unittest discover -s tests -p test_step1_event_loop_offload.py
