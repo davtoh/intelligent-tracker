@@ -106,6 +106,7 @@
     const cameras = activeCameras || [];
 
     if (currentGridMode === '1x1') {
+      window.MjpegReconnect?.detachAll?.(multiGridContainer);
       multiGridContainer.style.display = 'none';
       multiGridContainer.innerHTML = '';
       singleVideoWrapper.style.display = 'flex';
@@ -117,8 +118,10 @@
       multiGridContainer.style.display = 'grid';
       multiGridContainer.className = `multi-camera-grid grid-${currentGridMode}`;
       if (!syncExistingTiles(multiGridContainer, cameras, focusedCameraId)) {
+        window.MjpegReconnect?.detachAll?.(multiGridContainer);
         multiGridContainer.innerHTML = cameras.map(c => buildGridTileHtml(c, focusedCameraId)).join('');
         bindGridTileEvents(multiGridContainer, onFocus);
+        multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
       }
     }
     window.CameraRecording?.hydrateFromCameraList?.(cameras);

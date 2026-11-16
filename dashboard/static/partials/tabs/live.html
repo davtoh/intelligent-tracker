@@ -12,7 +12,7 @@
               <!-- Active Camera Dropdown -->
               <div class="camera-select-wrapper">
                 <select id="active-camera-select" class="form-select-sm" title="Select Focused Camera">
-                  <option value="cam_01">Main Entrance (cam_01)</option>
+                  <option value="">Loading cameras...</option>
                 </select>
               </div>
 
@@ -39,7 +39,7 @@
           <!-- Single Camera Focused Container (1x1 mode) -->
           <div class="video-container" id="video-wrapper">
             <!-- MJPEG Video Stream (un-burned; overlays rendered client-side on #interactive-canvas) -->
-            <img id="live-stream-img" src="/stream/cam_01?annotated=false" alt="Live Camera Stream" />
+            <img id="live-stream-img" alt="Live Camera Stream" />
             <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
             <canvas id="interactive-canvas"></canvas>
             <!-- Hover Inspection Tooltip -->
