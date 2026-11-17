@@ -104,14 +104,14 @@ Audited 2026-11-16: `StreamSubscriberRegistry` = 12 methods (at ceiling), `Strea
 
 ## 5. Milestones
 
-### Milestone 1: Grid Stabilization, Pagination, MJPEG Socket Budget & Diagnostics Bridge *(Active Execution Target)*
+### Milestone 1: Grid Stabilization, Pagination, MJPEG Socket Budget & Diagnostics Bridge
 Ships the immediate fix for the black-screen bug. The MJPEG budget logic built here becomes the Milestone 4 fallback mode, so none of it is throwaway.
-- [ ] **dashboard/static/js/camera_grid.js**: Call `window.LivePlayer?.detachGridStreams?.()` before every `innerHTML` teardown (1x1 switch and tile rebuild); render only the current page (via `GridPagination`); add `4x4` layout; MJPEG budget = 4 live tiles per page, the rest show a standby poster with a "View" action (until Milestone 4 replaces them with canvas tiles).
-- [ ] **dashboard/static/js/grid_pagination.js**: Pure page-state module (`pageSize` per layout 4/9/16, clamp on camera list change, Prev/Next, persisted to `localStorage` keys `it_grid_layout`/`it_grid_page`).
-- [ ] **dashboard/static/partials/tabs/live.html** + **dashboard/static/css/grid_pagination.css** + **dashboard/static/css/vms_grid.css**: Pagination controls (Prev / "Page x of y" / Next, ≥ 32 px targets, ≥ 8 px gaps, no `!important`), `.grid-4x4`, `4x4` switch button; link the new CSS/JS in `dashboard/static/index.html`.
-- [ ] **dashboard/services/diagnostic_log_handler.py**: `DiagnosticLogHandler(logging.Handler)`: ERROR+ from `intelligent_tracker.*`/`dashboard.*`, dedup key `(logger, message[:80])`, ≤ 1 trace per key per 60 s, never raises; installed in app lifespan next to `init_diagnostic_tracer`, removed on shutdown.
-- [ ] **tests/test_grid_pagination.py**, **tests/test_camera_grid_teardown.py** (Node VM, ≤ 40 L per method), **tests/test_diagnostic_log_handler.py** (temp workspace root, no live `.diagnostics/` writes).
-- **Definition of Done**: CDP repro `1x1→2x2→1x1` restores 1x1 at 640x360 and `fetch` < 2 s; with 6 cameras, 3x3 holds ≤ 4 MJPEG sockets; full suite green; `diagnose.py audit` passes on all touched files.
+- [x] **dashboard/static/js/camera_grid.js**: Call `window.LivePlayer?.detachGridStreams?.()` before every `innerHTML` teardown (1x1 switch and tile rebuild); render only the current page (via `GridPagination`); add `4x4` layout; MJPEG budget = 4 live tiles per page, the rest show a standby poster with a "View" action (until Milestone 4 replaces them with canvas tiles).
+- [x] **dashboard/static/js/grid_pagination.js**: Pure page-state module (`pageSize` per layout 4/9/16, clamp on camera list change, Prev/Next, persisted to `localStorage` keys `it_grid_layout`/`it_grid_page`).
+- [x] **dashboard/static/partials/tabs/live.html** + **dashboard/static/css/grid_pagination.css** + **dashboard/static/css/vms_grid.css**: Pagination controls (Prev / "Page x of y" / Next, ≥ 32 px targets, ≥ 8 px gaps, no `!important`), `.grid-4x4`, `4x4` switch button; link the new CSS/JS in `dashboard/static/index.html`.
+- [x] **dashboard/services/diagnostic_log_handler.py**: `DiagnosticLogHandler(logging.Handler)`: ERROR+ from `intelligent_tracker.*`/`dashboard.*`, dedup key `(logger, message[:80])`, ≤ 1 trace per key per 60 s, never raises; installed in app lifespan next to `init_diagnostic_tracer`, removed on shutdown.
+- [x] **tests/test_grid_pagination.py**, **tests/test_camera_grid_teardown.py** (Node VM, ≤ 40 L per method), **tests/test_diagnostic_log_handler.py** (temp workspace root, no live `.diagnostics/` writes).
+- [x] **Definition of Done**: CDP repro `1x1→2x2→1x1` restores 1x1 at 640x360 and `fetch` < 2 s; with 6 cameras, 3x3 holds ≤ 4 MJPEG sockets; full suite green; `diagnose.py audit` passes on all touched files.
 
 ### Milestone 2: WebSocket Security, Protocol Contract & `armed` Policy *(Deferred)*
 - [ ] **dashboard/services/security_config.py**: `parse_allowed_origins()`, `is_origin_allowed(origin, host_header, allowlist)`, `sign_token()/verify_token()` (HMAC-SHA256, `exp`), all from env with empty-string defaults.

@@ -24,6 +24,8 @@
                   title="Quad Multi-View (2x2)">2x2</button>
                 <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="3x3"
                   title="Matrix Multi-View (3x3)">3x3</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="4x4"
+                  title="Quad Matrix Multi-View (4x4)">4x4</button>
               </div>
 
               <span class="resolution-badge" id="stream-res-badge">640x480</span>
@@ -58,8 +60,13 @@
             </div>
           </div>
 
-          <!-- Multi-Camera Grid Container (2x2, 3x3 mode) -->
+          <!-- Multi-Camera Grid Container (2x2, 3x3, 4x4 mode) -->
           <div id="multi-grid-container" class="multi-camera-grid" style="display: none;"></div>
+          <div id="grid-pagination-bar" class="grid-pagination-bar" hidden>
+            <button type="button" class="btn btn-sm btn-outline grid-page-btn" id="btn-grid-prev" title="Previous Grid Page">‹ Prev</button>
+            <span class="grid-page-indicator" id="grid-page-indicator">Page 1 of 1</span>
+            <button type="button" class="btn btn-sm btn-outline grid-page-btn" id="btn-grid-next" title="Next Grid Page">Next ›</button>
+          </div>
 
           <!-- Live Player HUD Toolbar (Milestone 10) -->
           <div class="live-player-hud glass-panel">

@@ -1,12 +1,14 @@
 /**
  * Intelligent Tracker - Multi-Camera VMS Grid Switcher Submodule.
- * Handles 1x1, 2x2, and 3x3 matrix layouts, stream tile rendering, and camera focus.
+ * Handles 1x1, 2x2, 3x3, and 4x4 matrix layouts, pagination, and MJPEG socket budget.
  */
 
 (function () {
   'use strict';
 
+  const MAX_MJPEG_TILES_PER_PAGE = 4;
   let currentGridMode = '1x1';
+  let lastRenderArgs = { activeCameras: [], focusedCameraId: null, onFocus: null };
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -23,6 +25,7 @@
 
   function setGridMode(mode, activeCameras, focusedCameraId, onFocus) {
     currentGridMode = mode;
+    window.GridPagination?.setLayout?.(mode, (activeCameras || []).length);
 
     document.querySelectorAll('.grid-switch-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-grid') === mode);
@@ -31,7 +34,20 @@
     renderGrid(activeCameras, focusedCameraId, onFocus);
   }
 
-  function buildGridTileHtml(cam, focusedCameraId) {
+  function buildTileMediaHtml(cam, index) {
+    const idAttr = escapeHtml(cam.id);
+    if (index < MAX_MJPEG_TILES_PER_PAGE) {
+      return `<img src="/stream/${encodeURIComponent(cam.id)}?annotated=true" alt="${escapeHtml(cam.name)}" />`;
+    }
+    return `
+      <div class="tile-standby-poster" data-standby-tile="true">
+        <span class="tile-standby-label">Standby (4 live/page cap)</span>
+        <button type="button" class="btn btn-xs btn-primary btn-tile-view" data-id="${idAttr}">🔍 View</button>
+      </div>
+    `;
+  }
+
+  function buildGridTileHtml(cam, focusedCameraId, index) {
     const idAttr = escapeHtml(cam.id);
     const statusText = String(cam.status || 'offline');
     const statusClass = statusText === 'online' ? 'online' : 'offline';
@@ -44,9 +60,7 @@
             <span class="tile-status-badge ${statusClass}">${escapeHtml(statusText.toUpperCase())}</span>
           </div>
         </div>
-        <div class="tile-video-container">
-          <img src="/stream/${encodeURIComponent(cam.id)}?annotated=true" alt="${escapeHtml(cam.name)}" />
-        </div>
+        <div class="tile-video-container">${buildTileMediaHtml(cam, index)}</div>
         <div class="tile-footer">
           <span class="tile-fps">${cam.fps ?? 0} FPS</span>
           <span class="tile-tracks">${cam.active_tracks_count || 0} tracks</span>
@@ -67,7 +81,7 @@
         if (camId) window.CameraRecording?.toggleCameraRecording?.(camId);
       });
     });
-    multiGridContainer.querySelectorAll('.camera-grid-tile, .btn-tile-focus').forEach(elem => {
+    multiGridContainer.querySelectorAll('.camera-grid-tile, .btn-tile-focus, .btn-tile-view').forEach(elem => {
       elem.addEventListener('click', (e) => {
         e.stopPropagation();
         const camId = elem.getAttribute('data-id');
@@ -99,17 +113,65 @@
     return true;
   }
 
+  function getPageSlice(cameras) {
+    if (window.GridPagination && typeof window.GridPagination.paginate === 'function') {
+      return window.GridPagination.paginate(cameras, currentGridMode);
+    }
+    return { items: cameras, page: 1, totalPages: 1, pageSize: cameras.length || 1, totalItems: cameras.length };
+  }
+
+  function updatePaginationBar(pageInfo) {
+    const bar = document.getElementById('grid-pagination-bar');
+    if (!bar) return;
+    const show = currentGridMode !== '1x1' && pageInfo.totalItems > 0;
+    bar.hidden = !show;
+    if (!show) return;
+    const indicator = document.getElementById('grid-page-indicator');
+    const prevBtn = document.getElementById('btn-grid-prev');
+    const nextBtn = document.getElementById('btn-grid-next');
+    if (indicator) indicator.textContent = `Page ${pageInfo.page} of ${pageInfo.totalPages}`;
+    if (prevBtn) prevBtn.disabled = pageInfo.page <= 1;
+    if (nextBtn) nextBtn.disabled = pageInfo.page >= pageInfo.totalPages;
+  }
+
+  function bindPaginationControls() {
+    const prevBtn = document.getElementById('btn-grid-prev');
+    const nextBtn = document.getElementById('btn-grid-next');
+    if (prevBtn && !prevBtn.dataset?.bound) {
+      if (prevBtn.dataset) prevBtn.dataset.bound = '1';
+      prevBtn.addEventListener('click', () => {
+        window.GridPagination?.prevPage?.(lastRenderArgs.activeCameras.length, currentGridMode);
+        renderGrid(lastRenderArgs.activeCameras, lastRenderArgs.focusedCameraId, lastRenderArgs.onFocus);
+      });
+    }
+    if (nextBtn && !nextBtn.dataset?.bound) {
+      if (nextBtn.dataset) nextBtn.dataset.bound = '1';
+      nextBtn.addEventListener('click', () => {
+        window.GridPagination?.nextPage?.(lastRenderArgs.activeCameras.length, currentGridMode);
+        renderGrid(lastRenderArgs.activeCameras, lastRenderArgs.focusedCameraId, lastRenderArgs.onFocus);
+      });
+    }
+  }
+
+  function teardownGridContainer(multiGridContainer) {
+    window.LivePlayer?.detachGridStreams?.();
+    window.MjpegReconnect?.detachAll?.(multiGridContainer);
+    multiGridContainer.innerHTML = '';
+  }
+
   function renderGrid(activeCameras, focusedCameraId, onFocus) {
     const multiGridContainer = document.getElementById('multi-grid-container');
     const singleVideoWrapper = document.getElementById('video-wrapper');
     if (!multiGridContainer || !singleVideoWrapper) return;
     const cameras = activeCameras || [];
+    lastRenderArgs = { activeCameras: cameras, focusedCameraId, onFocus };
+    bindPaginationControls();
 
     if (currentGridMode === '1x1') {
-      window.MjpegReconnect?.detachAll?.(multiGridContainer);
+      teardownGridContainer(multiGridContainer);
       multiGridContainer.style.display = 'none';
-      multiGridContainer.innerHTML = '';
       singleVideoWrapper.style.display = 'flex';
+      updatePaginationBar({ page: 1, totalPages: 1, totalItems: 0 });
       window.LivePlayer?.attachLiveStream?.(document.getElementById('live-stream-img'), focusedCameraId);
       window.dispatchEvent(new Event('resize'));
     } else {
@@ -117,9 +179,13 @@
       singleVideoWrapper.style.display = 'none';
       multiGridContainer.style.display = 'grid';
       multiGridContainer.className = `multi-camera-grid grid-${currentGridMode}`;
-      if (!syncExistingTiles(multiGridContainer, cameras, focusedCameraId)) {
-        window.MjpegReconnect?.detachAll?.(multiGridContainer);
-        multiGridContainer.innerHTML = cameras.map(c => buildGridTileHtml(c, focusedCameraId)).join('');
+      const pageInfo = getPageSlice(cameras);
+      updatePaginationBar(pageInfo);
+      if (!syncExistingTiles(multiGridContainer, pageInfo.items, focusedCameraId)) {
+        teardownGridContainer(multiGridContainer);
+        multiGridContainer.innerHTML = pageInfo.items
+          .map((c, idx) => buildGridTileHtml(c, focusedCameraId, idx))
+          .join('');
         bindGridTileEvents(multiGridContainer, onFocus);
         multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
       }
@@ -142,22 +208,18 @@
         streamTitle.textContent = fullTitle;
         streamTitle.title = fullTitle;
       }
-      if (cameraSelectDropdown) {
-        cameraSelectDropdown.value = cam.id;
-      }
-      if (window.App && typeof window.App.switchCamera === 'function') {
-        window.App.switchCamera(cam.id);
-      }
+      if (cameraSelectDropdown) cameraSelectDropdown.value = cam.id;
+      if (window.App && typeof window.App.switchCamera === 'function') window.App.switchCamera(cam.id);
       window.CameraRecording?.onCameraFocused?.(cam.id);
     }
     setGridMode('1x1', activeCameras, cameraId, onFocus);
   }
 
   window.CameraGrid = {
+    MAX_MJPEG_TILES_PER_PAGE: MAX_MJPEG_TILES_PER_PAGE,
     getGridMode: getGridMode,
     setGridMode: setGridMode,
     renderGrid: renderGrid,
     focusCamera: focusCamera,
   };
 })();
-

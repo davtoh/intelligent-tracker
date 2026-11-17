@@ -96,6 +96,10 @@ from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
 )
+from dashboard.services.diagnostic_log_handler import (
+    install_diagnostic_log_handler,
+    remove_diagnostic_log_handler,
+)
 from dashboard.services.process_supervisor import (
     set_parent_death_signal,
     start_parent_watchdog,
@@ -174,6 +178,7 @@ async def lifespan(application: FastAPI):
     install_shutdown_handlers()
     set_parent_death_signal()
     start_parent_watchdog()
+    log_handler = install_diagnostic_log_handler()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     pool, primary_sm, lifecycle_mgr, owned_db = _init_runtime_services(application)
 
@@ -189,6 +194,7 @@ async def lifespan(application: FastAPI):
     if owned_db is not None:
         owned_db.close()
     clear_app_state(application)
+    remove_diagnostic_log_handler(log_handler)
     stop_parent_watchdog()
 
 

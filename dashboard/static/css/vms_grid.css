@@ -89,6 +89,11 @@
   grid-template-rows: repeat(3, 1fr);
 }
 
+.multi-camera-grid.grid-4x4 {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+
 .camera-grid-tile {
   display: flex;
   flex-direction: column;
