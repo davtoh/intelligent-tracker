@@ -68,10 +68,13 @@
     if (pausedOverlay) pausedOverlay.hidden = state.mode !== 'paused';
   }
 
+  let serverFocusedCameraId = null;
+
   function applyServerState(data) {
     if (!data || typeof data !== 'object') return;
     if (VALID_MODES.includes(data.mode)) { state.mode = data.mode; writeStoredMode(data.mode); }
-    if (typeof data.focused_camera_id === 'string' && data.focused_camera_id && isValidCameraId(data.focused_camera_id)) state.focusedCameraId = data.focused_camera_id;
+    serverFocusedCameraId = (typeof data.focused_camera_id === 'string' && data.focused_camera_id) ? data.focused_camera_id : null;
+    if (serverFocusedCameraId && isValidCameraId(serverFocusedCameraId)) state.focusedCameraId = serverFocusedCameraId;
     if (typeof data.active_tab === 'string' && data.active_tab && data.active_tab !== 'hidden') state.activeTab = data.active_tab;
     if (Array.isArray(data.deferred_jobs)) state.deferredCount = data.deferred_jobs.length;
     renderUI();
@@ -133,6 +136,12 @@
     if (!Array.isArray(ids)) return;
     availableCameras = new Set(ids.filter(id => typeof id === 'string' && id.trim()).map(id => id.trim()));
     if (state.focusedCameraId && !availableCameras.has(state.focusedCameraId)) state.focusedCameraId = null;
+    if (!state.focusedCameraId && serverFocusedCameraId && availableCameras.has(serverFocusedCameraId)) {
+      state.focusedCameraId = serverFocusedCameraId; writeStorage(CAM_STORAGE_KEY, serverFocusedCameraId);
+    }
+    const appCam = window.App?.getActiveCameraId?.();
+    const reconcileId = state.focusedCameraId || (availableCameras.has(appCam) ? appCam : null);
+    if (state.initialized && reconcileId && !serverFocusedCameraId) syncCameraFocus(reconcileId);
   }
 
   function isValidCameraId(id) {
@@ -191,16 +200,8 @@
   }
 
   window.ProcessingModeUI = {
-    STORAGE_KEY,
-    VALID_MODES,
-    init,
-    setMode,
-    setAvailableCameras,
-    syncTabChange,
-    syncCameraFocus,
-    syncVisibility,
-    refresh: fetchStatus,
-    getState: () => ({ ...state }),
+    STORAGE_KEY, VALID_MODES, init, setMode, setAvailableCameras,
+    syncTabChange, syncCameraFocus, syncVisibility, refresh: fetchStatus, getState: () => ({ ...state }),
   };
 
   if (document.readyState === 'loading') {

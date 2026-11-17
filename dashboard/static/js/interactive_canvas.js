@@ -128,7 +128,7 @@
       const res = await fetch('/api/tag/recognize-roi', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          camera_id: payload?.sourceType === 'video' ? null : (payload?.cameraId || activeCameraGetter?.() || 'cam_01'),
+          camera_id: payload?.sourceType === 'video' ? null : (payload?.cameraId || activeCameraGetter?.() || null),
           video_filename: payload?.videoFilename || null, timestamp_sec: payload?.timestampSec ?? null,
           bbox: payload?.bbox || payload?.track?.bbox || null, crop_base64: payload?.cropBase64 || null, top_k: 3,
         }),
@@ -164,7 +164,7 @@
     Object.entries(fields).forEach(([id, val]) => { if (el(id)) el(id).value = val; });
     if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${track.id}` : '🏷️ Enroll New Identity');
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
-    if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || 'cam_01', track, bbox });
+    if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, track, bbox });
     el('tag-name-input')?.focus();
   }
 
@@ -194,7 +194,7 @@
       track_id: el('tag-track-id')?.value ? parseInt(el('tag-track-id').value, 10) : null,
       bbox: el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null,
       crop_base64: el('tag-crop-base64')?.value || null, notes: (el('tag-notes-input')?.value || '').trim(),
-      camera_id: sourceType === 'video' ? null : (activeCameraGetter?.() || 'cam_01'),
+      camera_id: sourceType === 'video' ? null : (activeCameraGetter?.() || null),
       video_filename: sourceType === 'video' ? ((el('tag-video-filename')?.value || '').trim() || null) : null,
       timestamp_sec: sourceType === 'video' && tsVal !== '' ? parseFloat(tsVal) : null,
     };
@@ -216,7 +216,7 @@
       window.RoiDrawTagger.attach({
         canvas: liveCanvas, mediaEl: liveVideo, containerEl: liveCanvas.parentElement,
         getTracks: () => latestState.tracks,
-        getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || 'cam_01', sourceWidth: liveVideo?.naturalWidth || 0, sourceHeight: liveVideo?.naturalHeight || 0 }),
+        getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, sourceWidth: liveVideo?.naturalWidth || 0, sourceHeight: liveVideo?.naturalHeight || 0 }),
         onRenderOverlay: () => drawInteractiveOverlay(latestState.ctx, latestState.canvas, latestState.videoImg, latestState.tracks, latestState.hoveredTrack, latestState.sceneExtras),
         onTrackClick: ({ track, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, bbox: track.bbox }),
         onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),

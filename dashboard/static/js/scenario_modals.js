@@ -187,7 +187,7 @@
 
   function openTransitionLinkModal(activeCamera) {
     const srcCamInput = document.getElementById('modal-trans-src-cam-input');
-    if (srcCamInput) srcCamInput.value = activeCamera || 'cam_01';
+    if (srcCamInput) srcCamInput.value = activeCamera || window.App?.getActiveCameraId?.() || '';
     const modal = document.getElementById('modal-studio-transition');
     if (modal) modal.style.display = 'flex';
   }

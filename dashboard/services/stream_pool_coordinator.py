@@ -76,6 +76,28 @@ def _sync_manager_hibernation(mgr: Any, should_hib: bool) -> None:
                 telemetry.update({"fps": 0.0, "status": "hibernating"})
 
 
+def _seed_initial_focused_camera(pms: Any, camera_configs: dict[str, dict[str, Any]]) -> None:
+    """Seed focused_camera_id from the first enabled camera on cold boot when unset."""
+    if pms is not None and pms.focused_camera_id is None:
+        first_enabled = next((cid for cid, cfg in camera_configs.items() if cfg.get("enabled", True)), None)
+        if first_enabled:
+            pms.update(focused_camera_id=first_enabled)
+
+
+def _start_enabled_streams(coord: Any, camera_configs: dict[str, dict[str, Any]], autostart: bool, reuse_existing: bool) -> None:
+    """Register and optionally start all enabled streams outside the coordinator lock."""
+    with coord._lock:
+        to_start = [
+            ((coord.streams.get(cid) if reuse_existing else None) or coord.create_and_register_stream(cid, cfg, start=False),
+             cid, cfg.get("name", f"Camera {cid.upper()}"), cfg.get("source", "synthetic"))
+            for cid, cfg in list(camera_configs.items()) if cfg.get("enabled", True)
+        ]
+    if autostart:
+        _seed_initial_focused_camera(coord.processing_mode_service, camera_configs)
+        for mgr, cam_id, name, raw_source in to_start:
+            _start_stream_if_ready(mgr, cam_id, name, raw_source)
+
+
 class StreamPoolCoordinator:
     """Thread-safe lifecycle coordinator for active StreamManager instances."""
 
@@ -120,15 +142,7 @@ class StreamPoolCoordinator:
 
     def restore_enabled_streams(self, camera_configs: dict[str, dict[str, Any]], autostart: bool = True) -> None:
         """Instantiate streams for all enabled camera entries."""
-        to_start: list[tuple[StreamManager, str, str, Any]] = []
-        with self._lock:
-            for cam_id, cfg in list(camera_configs.items()):
-                if cfg.get("enabled", True):
-                    mgr = self.create_and_register_stream(cam_id, cfg, start=False)
-                    to_start.append((mgr, cam_id, cfg.get("name", f"Camera {cam_id.upper()}"), cfg.get("source", "synthetic")))
-        if autostart:
-            for mgr, cam_id, name, raw_source in to_start:
-                _start_stream_if_ready(mgr, cam_id, name, raw_source)
+        _start_enabled_streams(self, camera_configs, autostart=autostart, reuse_existing=False)
 
     def register_camera_stream(
         self, camera_id: str, cam_entry: dict[str, Any], enabled: bool = True, autostart: bool = True,
@@ -177,24 +191,15 @@ class StreamPoolCoordinator:
         """Resolve a StreamManager by ID or return the primary active fallback."""
         with self._lock:
             if not camera_id or camera_id in ("default", "primary"):
-                if "cam_01" in self.streams and self.streams["cam_01"].is_running:
-                    return self.streams["cam_01"]
-                for mgr in self.streams.values():
-                    if mgr.is_running:
-                        return mgr
-                return next(iter(self.streams.values()), None)
+                focused = getattr(self.processing_mode_service, "focused_camera_id", None)
+                if focused and focused in self.streams and self.streams[focused].is_running:
+                    return self.streams[focused]
+                return next((m for m in self.streams.values() if m.is_running), next(iter(self.streams.values()), None))
             return self.streams.get(camera_id)
 
     def start_all(self, camera_configs: dict[str, dict[str, Any]]) -> None:
         """Start all enabled camera streams outside ``self._lock``."""
-        to_start: list[tuple[StreamManager, str, str, Any]] = []
-        with self._lock:
-            for cam_id, cfg in camera_configs.items():
-                if cfg.get("enabled", True):
-                    mgr = self.streams.get(cam_id) or self.create_and_register_stream(cam_id, cfg, start=False)
-                    to_start.append((mgr, cam_id, cfg.get("name", f"Camera {cam_id.upper()}"), cfg.get("source", "synthetic")))
-        for mgr, cam_id, name, raw_source in to_start:
-            _start_stream_if_ready(mgr, cam_id, name, raw_source)
+        _start_enabled_streams(self, camera_configs, autostart=True, reuse_existing=True)
 
     def signal_stop_all(self) -> None:
         """Immediately broadcast stop signal to all active streams without blocking."""
@@ -215,10 +220,7 @@ class StreamPoolCoordinator:
         if parallel and mgrs:
             with ThreadPoolExecutor(max_workers=min(8, len(mgrs))) as executor:
                 for future in as_completed([executor.submit(_stop_manager_safely, m, "stop_all") for m in mgrs]):
-                    try:
-                        future.result()
-                    except Exception:
-                        pass
+                    future.result()
         else:
             for mgr in mgrs:
                 _stop_manager_safely(mgr, "stop_all")
@@ -232,7 +234,5 @@ class StreamPoolCoordinator:
             mgr._processing_mode_service = svc
             mgr._in_camera_pool = True
             should_hib = svc.should_hibernate_camera(
-                cam_id, subscriber_count=int(getattr(mgr, "subscriber_count", 0)),
-                is_recording=bool(getattr(mgr, "is_recording", False)), in_camera_pool=True,
-            )
+                cam_id, subscriber_count=int(getattr(mgr, "subscriber_count", 0)), is_recording=bool(getattr(mgr, "is_recording", False)), in_camera_pool=True)
             _sync_manager_hibernation(mgr, should_hib)

@@ -94,3 +94,39 @@ class TestCameraGridMultiStreamLifecycle(unittest.TestCase):
         out = _run_node(script)
         self.assertEqual(out["html"], "EXISTING")
         self.assertEqual(out["fps"], "60 FPS")
+
+
+class TestColdBootCoordinatorSSOT(unittest.TestCase):
+    """Verify StreamPoolCoordinator seeds cold-boot focus and resolves get_stream(None) via SSOT."""
+
+    def test_start_all_seeds_focused_camera_from_first_enabled_camera(self) -> None:
+        from unittest.mock import MagicMock, patch
+        from dashboard.services.stream_pool_coordinator import StreamPoolCoordinator
+
+        pms = ProcessingModeService(mode="focus_only", focused_camera_id=None, active_tab="live")
+        coord = StreamPoolCoordinator("data/test.db", "configs/alert_demo.yaml", MagicMock(), processing_mode_service=pms)
+        coord.streams["vid_02"] = MagicMock(is_running=True)
+        coord.streams["vid_03"] = MagicMock(is_running=True)
+        configs = {
+            "vid_01": {"enabled": False, "name": "Disabled", "source": "synthetic"},
+            "vid_02": {"enabled": True, "name": "Front", "source": "synthetic"},
+            "vid_03": {"enabled": True, "name": "Back", "source": "synthetic"},
+        }
+        with patch("dashboard.services.stream_pool_coordinator._start_stream_if_ready"):
+            coord.start_all(configs)
+        self.assertEqual(pms.focused_camera_id, "vid_02")
+        self.assertFalse(pms.should_hibernate_camera("vid_02", subscriber_count=0))
+        self.assertTrue(pms.should_hibernate_camera("vid_03", subscriber_count=0))
+        self.assertFalse(pms.should_run_vision_step("vid_03"))
+
+    def test_get_stream_fallback_prioritizes_focused_camera_over_cam_01(self) -> None:
+        from unittest.mock import MagicMock
+        from dashboard.services.stream_pool_coordinator import StreamPoolCoordinator
+
+        pms = ProcessingModeService(mode="focus_only", focused_camera_id="vid_02", active_tab="live")
+        coord = StreamPoolCoordinator("data/test.db", "configs/alert_demo.yaml", MagicMock(), processing_mode_service=pms)
+        cam_01 = MagicMock(is_running=True)
+        vid_02 = MagicMock(is_running=True)
+        coord.streams = {"cam_01": cam_01, "vid_02": vid_02}
+        self.assertIs(coord.get_stream(None), vid_02)
+        self.assertIs(coord.get_stream("default"), vid_02)

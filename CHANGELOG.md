@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-17] fix: Cold-Boot cam_01 SSOT & Focus Reconciliation
+- **Type**: fix
+- **Summary**: Removed remaining hardcoded cam_01 fallbacks and eager stream attributes across Studio, Recording, Enrollment, Interactive Canvas, Gallery Timeline, Scenario Modals, and StreamPoolCoordinator. Seeded initial focused_camera_id from the first enabled camera on StreamPoolCoordinator start/restore, delegated CameraAIConfig.resolveInitialCameraId to LivePlayer.attachLiveStream(), and reconciled null server focus in ProcessingModeUI.setAvailableCameras().
+- **Files** (21):
+  - `AGENTS.md`
+  - `dashboard/services/processing_mode_service.py`
+  - `dashboard/services/stream_pool_coordinator.py`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/camera_recording.js`
+  - `dashboard/static/js/gallery_timeline.js`
+  - `dashboard/static/js/interactive_canvas.js`
+  - `dashboard/static/js/live_player.js`
+  - ... (+13 more)
+- **Verification**: python -m unittest discover tests (779 tests OK) + diagnose.py ui --live --capture-runtime (0 exceptions, 0 networkErrors)
+
 ## [2026-11-17] fix: Unify active camera SSOT across frontend modules and eliminate cam_01 stub leakage
 - **Type**: fix
 - **Summary**: Initialize app.js and camera_manager.js from it_focused_camera_id/null instead of cam_01, validate syncCameraFocus against ProcessingModeUI.setAvailableCameras(), and gate LivePlayer.syncCameraFocus on resolved camera IDs.
@@ -129,17 +144,3 @@
   - `dashboard/services/stream_worker.py`
   - `tests/test_step4_e2e_performance_and_modes.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-15] feat: Step 4 M1: Processing Mode UI Selector & Auto-Sync
-- **Type**: feat
-- **Summary**: Added top-bar #processing-mode-pill CSS/JS module, localStorage persistence, tab/visibility/camera focus auto-sync, and 8 unit/VM/TestClient tests.
-- **Files** (8):
-  - `AGENTS.md`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/nav_tabs_manager.js`
-  - `dashboard/static/styles.css`
-  - `dashboard/static/css/processing_mode.css`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_processing_mode_ui.py

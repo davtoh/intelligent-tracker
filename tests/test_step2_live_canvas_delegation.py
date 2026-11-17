@@ -108,7 +108,7 @@ class TestLiveCanvasDelegation(unittest.TestCase):
         )
         out = _run_node(script)
         self.assertTrue(out["reconnectedSrc"].startswith("/stream/cam_01?annotated=false&t="))
-        self.assertEqual(out["resolvedSrc"], "/stream/cam_07?annotated=false")
+        self.assertTrue(out["resolvedSrc"].startswith("/stream/cam_07?annotated=false&t="))
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_interactive_canvas_hidpi_sync_and_render_delegation(self) -> None:

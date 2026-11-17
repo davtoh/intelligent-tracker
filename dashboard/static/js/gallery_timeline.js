@@ -224,7 +224,8 @@
       if (modal) modal.style.display = 'none';
     });
     document.getElementById('btn-snapshot-save')?.addEventListener('click', () => {
-      window.open('/stream/cam_01', '_blank');
+      const camId = window.App?.getActiveCameraId?.();
+      if (camId) window.open(`/stream/${encodeURIComponent(camId)}`, '_blank');
     });
   }
 

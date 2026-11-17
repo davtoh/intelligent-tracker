@@ -256,5 +256,56 @@ class TestProcessingModeStaticEndpoints(unittest.TestCase):
         self.assertIn('id="processing-mode-select"', html)
 
 
+class TestColdBootFocusReconciliation(unittest.TestCase):
+    """Verify ProcessingModeUI.setAvailableCameras and CameraAIConfig.resolveInitialCameraId."""
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
+    def test_set_available_cameras_reconciles_null_server_focus(self) -> None:
+        script = (
+            "const fs = require('fs'), vm = require('vm');\n"
+            f"const code = fs.readFileSync({json.dumps(str(JS_PATH))}, 'utf8');\n"
+            "const store = { it_focused_camera_id: 'vid_02' };\n"
+            "const fetchCalls = [];\n"
+            "const win = { localStorage: { getItem: (k) => store[k] || null, setItem: (k, v) => { store[k] = v; } }, addEventListener: () => {} };\n"
+            "const doc = { readyState: 'complete', hidden: false, getElementById: () => null, addEventListener: () => {} };\n"
+            "async function fakeFetch(url, opts) {\n"
+            "  const body = opts && opts.body ? JSON.parse(opts.body) : null;\n"
+            "  fetchCalls.push({ url, method: (opts && opts.method) || 'GET', body });\n"
+            "  const cam = (body && body.focused_camera_id) || null;\n"
+            "  return { ok: true, json: async () => ({ mode: 'focus_only', focused_camera_id: cam, active_tab: 'live', deferred_jobs: [] }) };\n"
+            "}\n"
+            "const sb = { window: win, document: doc, fetch: fakeFetch, Set, Array, Object, String, Number, Boolean, JSON, Promise, console };\n"
+            "vm.runInNewContext(code, sb);\n"
+            "(async () => {\n"
+            "  await Promise.resolve(); await Promise.resolve();\n"
+            "  await win.ProcessingModeUI.setAvailableCameras(['vid_01', 'vid_02']);\n"
+            "  process.stdout.write(JSON.stringify({ calls: fetchCalls.map(c => c.body), state: win.ProcessingModeUI.getState() }));\n"
+            "})();\n"
+        )
+        proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, env=dict(os.environ), timeout=15, check=True)
+        out = json.loads(proc.stdout)
+        self.assertEqual(out["calls"][-1], {"focused_camera_id": "vid_02", "active_tab": "live"})
+        self.assertEqual(out["state"]["focusedCameraId"], "vid_02")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
+    def test_resolve_initial_camera_delegates_to_live_player(self) -> None:
+        ai_cfg_path = REPO_ROOT / "dashboard" / "static" / "js" / "camera_ai_config.js"
+        script = (
+            "const fs = require('fs'), vm = require('vm');\n"
+            f"const code = fs.readFileSync({json.dumps(str(ai_cfg_path))}, 'utf8');\n"
+            "const liveImg = { src: '' }; const calls = [];\n"
+            "const doc = { readyState: 'loading', getElementById: (id) => (id === 'live-stream-img' ? liveImg : null), querySelectorAll: () => [], addEventListener: () => {} };\n"
+            "const win = { localStorage: { getItem: () => null }, App: { getActiveCameraId: () => null, switchCamera: (id) => calls.push('switch:' + id) }, LivePlayer: { attachLiveStream: (_el, id) => calls.push('attach:' + id) } };\n"
+            "vm.runInNewContext(code, { window: win, document: doc, fetch: async () => ({ ok: false }), Array, String, Math, console, encodeURIComponent });\n"
+            "const resolved = win.CameraAIConfig.resolveInitialCameraId([{ id: 'vid_01', name: 'Cam 1', enabled: true }], null);\n"
+            "process.stdout.write(JSON.stringify({ resolved, calls, src: liveImg.src }));\n"
+        )
+        proc = subprocess.run(["node", "-e", script], capture_output=True, text=True, env=dict(os.environ), timeout=15, check=True)
+        out = json.loads(proc.stdout)
+        self.assertEqual(out["resolved"], "vid_01")
+        self.assertEqual(out["calls"], ["attach:vid_01", "switch:vid_01"])
+        self.assertEqual(out["src"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

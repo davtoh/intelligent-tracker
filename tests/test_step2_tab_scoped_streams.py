@@ -85,7 +85,7 @@ class TestStep2TabScopedStreams(unittest.TestCase):
     def test_studio_html_omits_eager_stream_src(self):
         html = (PARTIALS_DIR / "studio.html").read_text(encoding="utf-8")
         self.assertIn('id="studio-live-img"', html)
-        self.assertIn('data-src="/stream/cam_01"', html)
+        self.assertNotIn("cam_01", html)
         self.assertIsNone(re.search(r'(?<![-\w])src="/stream/', html))
 
     def test_analytics_html_omits_eager_heatmap_src(self):
