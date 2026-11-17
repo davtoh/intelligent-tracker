@@ -24,8 +24,9 @@
       clearTimeout(wsReconnectTimer);
       wsReconnectTimer = null;
     }
+    if (!cameraId) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(cameraId || 'cam_01')}`;
+    const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(cameraId)}`;
 
     if (activeWs) {
       activeWs.onclose = null;

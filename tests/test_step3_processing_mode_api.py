@@ -133,7 +133,7 @@ class TestProcessingModeRouterAPI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.prev_service = pms_mod._service_instance
-        pms_mod._service_instance = pms_mod.ProcessingModeService()
+        pms_mod._service_instance = pms_mod.ProcessingModeService(focused_camera_id="cam_01")
         cls.fake_pool = SimpleNamespace(
             streams={
                 "cam_01": SimpleNamespace(is_running=True, _is_hibernating=False, is_recording=False, subscriber_count=1),

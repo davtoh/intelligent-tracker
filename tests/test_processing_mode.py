@@ -25,6 +25,12 @@ def _run_node(script: str) -> dict:
 class TestViewAwareFocusOnlyPolicy(unittest.TestCase):
     """Verify view-aware focus_only keeps subscribed grid cameras awake in capture-only mode."""
 
+    def test_default_focused_camera_id_is_none(self) -> None:
+        svc = ProcessingModeService()
+        self.assertIsNone(svc.focused_camera_id)
+        self.assertFalse(svc.should_hibernate_camera("vid_01", subscriber_count=0))
+        self.assertTrue(svc.should_run_vision_step("vid_01"))
+
     def test_focus_only_keeps_subscribed_unfocused_cameras_awake_without_vision(self) -> None:
         svc = ProcessingModeService(mode="focus_only", focused_camera_id="cam_01", active_tab="live")
         self.assertFalse(svc.should_hibernate_camera("cam_02", subscriber_count=1))

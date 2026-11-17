@@ -17,7 +17,7 @@
   }
 
   function writeStorage(key, val) {
-    try { if (val) window.localStorage?.setItem(key, val); } catch (_) {}
+    try { if (val) window.localStorage?.setItem(key, val); } catch (err) { console.debug('localStorage write skipped:', err); }
   }
 
   const state = {
@@ -137,7 +137,7 @@
 
   function isValidCameraId(id) {
     if (!id || typeof id !== 'string' || !id.trim()) return false;
-    return !(availableCameras instanceof Set) || availableCameras.has(id.trim());
+    return availableCameras instanceof Set && availableCameras.has(id.trim());
   }
 
   function syncCameraFocus(cameraId) {
@@ -182,7 +182,7 @@
       renderUI();
       state.initialized = true;
       const payload = { mode: savedMode, active_tab: getEffectiveActiveTab() };
-      if (state.focusedCameraId) payload.focused_camera_id = state.focusedCameraId;
+      if (state.focusedCameraId && isValidCameraId(state.focusedCameraId)) payload.focused_camera_id = state.focusedCameraId;
       return postModeUpdate(payload);
     }
     state.initialized = true;

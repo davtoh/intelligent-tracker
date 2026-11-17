@@ -74,9 +74,11 @@
       streamRetryTimer = null;
     }
     const resolvedCam = activeCameraId || window.App?.getActiveCameraId?.() || null;
-    const cleanBase = resolvedCam
+    const rawBase = resolvedCam
       ? `/stream/${encodeURIComponent(resolvedCam)}`
-      : (videoImg.dataset?.activeStreamSrc || '/stream/cam_01').split('?')[0];
+      : (videoImg.dataset?.activeStreamSrc || '');
+    const cleanBase = rawBase.split('?')[0];
+    if (!cleanBase) return;
     if (videoImg.dataset) {
       videoImg.dataset.activeStreamSrc = cleanBase;
     }
@@ -109,9 +111,10 @@
 
   function attachStudioStream(studioImg, cameraId) {
     if (!studioImg) return;
-    const fallbackSrc = studioImg.dataset?.activeStreamSrc || studioImg.dataset?.src || studioImg.getAttribute?.('data-src') || '/stream/cam_01';
+    const fallbackSrc = studioImg.dataset?.activeStreamSrc || studioImg.dataset?.src || studioImg.getAttribute?.('data-src') || '';
     const baseSrc = cameraId ? `/stream/${encodeURIComponent(cameraId)}` : fallbackSrc;
     const cleanBase = baseSrc.split('?')[0];
+    if (!cleanBase) return;
     if (studioImg.dataset) studioImg.dataset.activeStreamSrc = cleanBase;
     studioImg.src = `${cleanBase}?t=${Date.now()}`;
   }
@@ -138,8 +141,9 @@
     } else if (targetTabId === 'tab-studio') {
       const studioCam = document.getElementById('studio-camera-select')?.value
         || studioImg?.dataset?.activeStreamSrc?.split('/stream/')[1]
-        || 'cam_01';
-      attachStudioStream(studioImg, studioCam);
+        || window.App?.getActiveCameraId?.()
+        || null;
+      if (studioCam) attachStudioStream(studioImg, studioCam);
     } else if (targetTabId === 'tab-analytics') {
       attachHeatmapImage(heatmapImg);
     }

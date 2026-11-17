@@ -26,7 +26,7 @@ class ProcessingModeService:
     def __init__(
         self,
         mode: str = "focus_only",
-        focused_camera_id: str | None = "cam_01",
+        focused_camera_id: str | None = None,
         active_tab: str = "live",
     ) -> None:
         if mode not in VALID_PROCESSING_MODES:

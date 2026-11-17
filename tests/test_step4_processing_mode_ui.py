@@ -185,8 +185,19 @@ class TestProcessingModeUIVM(unittest.TestCase):
         self.assertEqual(res["addedCalls"], 0)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
+    def test_sync_camera_focus_rejects_before_cameras_loaded(self) -> None:
+        res = _run_node(
+            "const before = await windowObj.ProcessingModeUI.syncCameraFocus('cam_01');\n"
+            "return { before, saved: store['it_focused_camera_id'] || null };",
+            saved_mode="focus_only",
+        )
+        self.assertIsNone(res["before"])
+        self.assertIsNone(res["saved"])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_sync_camera_focus_persists_and_init_restores_camera(self) -> None:
         res = _run_node(
+            "windowObj.ProcessingModeUI.setAvailableCameras(['vid_01', 'vid_02']);\n"
             "await windowObj.ProcessingModeUI.syncCameraFocus('vid_02');\n"
             "const saved = store['it_focused_camera_id'];\n"
             "await windowObj.ProcessingModeUI.init();\n"
@@ -210,6 +221,7 @@ class TestProcessingModeUIVM(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_tab_change_visibility_and_camera_focus_sync(self) -> None:
         res = _run_node(
+            "windowObj.ProcessingModeUI.setAvailableCameras(['cam_01', 'cam_02']);\n"
             "windowObj.dispatchEvent({ type: 'tab-changed', detail: { activeTab: 'tab-videos' } });\n"
             "documentObj.hidden = true; documentObj.dispatch('visibilitychange');\n"
             "documentObj.hidden = false; documentObj.dispatch('visibilitychange');\n"

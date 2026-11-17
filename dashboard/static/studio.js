@@ -13,7 +13,7 @@
   'use strict';
 
   const studioState = {
-    activeCamera: 'cam_01',
+    activeCamera: null,
     mode: 'idle',
     points: [],
     zones: [],
@@ -81,10 +81,13 @@
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
 
-    loadStudioChannels();
-    loadCameraScenario(studioState.activeCamera);
+    loadStudioChannels().then(() => {
+      if (studioState.activeCamera) {
+        loadCameraScenario(studioState.activeCamera);
+        window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+      }
+    });
     loadTopologyLinks();
-    window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
     syncStudioTabState(isStudioTabActive());
   }
 
@@ -104,9 +107,9 @@
     };
     appendGroup('Camera Profiles', cams, (c) => c?.id && Object.assign(document.createElement('option'), { value: c.id, textContent: c.name ? `${c.name} (${c.id})` : c.id }));
     appendGroup('Recorded Videos', vids, (v) => v?.filename && Object.assign(document.createElement('option'), { value: v.filename, textContent: `🎬 ${v.filename}` }));
-    if (!sel.options.length) sel.innerHTML = '<option value="cam_01">cam_01</option>';
-    if ([...sel.options].some((o) => o.value === studioState.activeCamera)) sel.value = studioState.activeCamera;
-    else studioState.activeCamera = sel.value || 'cam_01';
+    if (!sel.options.length) sel.innerHTML = '<option value="">No cameras available</option>';
+    if (studioState.activeCamera && [...sel.options].some((o) => o.value === studioState.activeCamera)) sel.value = studioState.activeCamera;
+    else studioState.activeCamera = sel.value || null;
   }
 
   function setupCanvasListeners() {
@@ -278,7 +281,8 @@
     });
 
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
-      const targetId = e.target.value || 'cam_01';
+      const targetId = e.target.value;
+      if (!targetId) return;
       studioState.activeCamera = targetId;
       const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
       const img = document.getElementById('studio-live-img');
