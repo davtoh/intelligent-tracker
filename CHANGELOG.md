@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-11-17] fix: Stop init() from clobbering focused_camera_id and add no-cache for /static
+- **Type**: fix
+- **Summary**: Omit default cam_01 focused_camera_id from processing_mode.js init() POST so page load never overwrites the resolved camera, remove ?v=2 from index.html, and set Cache-Control: no-cache on /static/* in dashboard/app.py.
+- **Files** (5):
+  - `CHANGELOG.md`
+  - `dashboard/app.py`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step3_architecture_budgets tests.test_dashboard_di
+
 ## [2026-11-17] fix: Fix stale hidden active_tab and browser-cache recovery in processing_mode.js
 - **Type**: fix
 - **Summary**: Unconditionally sync active_tab on visible setMode/syncCameraFocus/window-focus and cache-bust processing_mode.js?v=2 so background/other-tab hidden state never blocks vision overlays.
@@ -131,18 +142,3 @@
   - `dashboard/stream_manager.py`
   - `tests/test_step3_worker_hibernation_and_ai_gating.py`
 - **Verification**: python -m unittest discover -s tests -p test_step3_worker_hibernation_and_ai_gating.py
-
-## [2026-11-15] feat: Step 3 M1: ProcessingModeService, /api/system/processing-mode Router & StreamTelemetry Extraction
-- **Type**: feat
-- **Summary**: Extracted stream_telemetry.py from stream_worker.py, added ProcessingModeService and /api/system/processing-mode endpoints, and updated schemas.
-- **Files** (9):
-  - `.TODO/step_3_backend_processing_modes_and_hibernation.md`
-  - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/schemas.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/routers/processing_mode.py`
-  - `dashboard/services/processing_mode_service.py`
-  - `dashboard/services/stream_telemetry.py`
-  - ... (+1 more)
-- **Verification**: python -m unittest discover -s tests -p test_step3_processing_mode_api.py

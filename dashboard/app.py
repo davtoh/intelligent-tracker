@@ -198,6 +198,16 @@ async def lifespan(application: FastAPI):
     stop_parent_watchdog()
 
 
+def _attach_static_no_cache(application: FastAPI) -> None:
+    """Ensure /static/* assets always revalidate with ETag so JS/CSS edits take effect on reload."""
+    @application.middleware("http")
+    async def _static_no_cache(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+
 def create_app() -> FastAPI:
     """FastAPI Application Factory mounting routers, static assets, and middleware."""
     application = FastAPI(
@@ -216,6 +226,7 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(GracefulCancellationMiddleware)
     application.add_middleware(DiagnosticTraceMiddleware)
+    _attach_static_no_cache(application)
 
     # Mount static assets and crops
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

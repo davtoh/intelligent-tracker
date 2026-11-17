@@ -190,8 +190,7 @@
       state.initialized = true;
       return postModeUpdate({
         mode: savedMode,
-        focused_camera_id: state.focusedCameraId,
-        active_tab: document.hidden ? 'hidden' : state.activeTab,
+        active_tab: getEffectiveActiveTab(),
       });
     }
     state.initialized = true;
