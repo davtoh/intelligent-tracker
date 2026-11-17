@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-11-17] fix: Fix stale hidden active_tab and browser-cache recovery in processing_mode.js
+- **Type**: fix
+- **Summary**: Unconditionally sync active_tab on visible setMode/syncCameraFocus/window-focus and cache-bust processing_mode.js?v=2 so background/other-tab hidden state never blocks vision overlays.
+- **Files** (4):
+  - `CHANGELOG.md`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: MPLBACKEND=Agg .venv\\Scripts\\python.exe -m unittest discover tests
+
+## [2026-11-17] fix: Fix stale hidden active_tab blocking vision overlays on mode/grid switch
+- **Type**: fix
+- **Summary**: Track serverActiveTab/serverFocusedCameraId in processing_mode.js so visible tabs recover from stale server active_tab=hidden on init, setMode, and syncCameraFocus without requiring tab bounce.
+- **Files** (1):
+  - `dashboard/static/js/processing_mode.js`
+- **Verification**: python -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode
+
 ## [2026-11-17] fix: Fix 1x1 camera mismatch, black stream recovery, and 4x4 grid CSS
 - **Type**: fix
 - **Summary**: Prioritize activeCameraId over stale dataset.activeStreamSrc in LivePlayer.attachLiveStream, attach MjpegReconnect to #live-stream-img, and enforce 4x4 grid minmax(0, 1fr) rules in grid_pagination.css.
@@ -129,19 +146,3 @@
   - `dashboard/services/stream_telemetry.py`
   - ... (+1 more)
 - **Verification**: python -m unittest discover -s tests -p test_step3_processing_mode_api.py
-
-## [2026-11-15] test: Step 2 M4: Tab-Scoped Streams & Lazy Loading Integration Sign-Off
-- **Type**: test
-- **Summary**: Added end-to-end Node VM integration tests in tests/test_step2_tab_scoped_perf_integration.py verifying boot stream isolation, coalesced /api/cameras + /api/videos fetches, 250ms BEV minimap gating, and lazy #tab-videos loading; verified all 38 Step 2 tests and 697 total tests pass.
-- **Files** (1):
-  - `tests/test_step2_tab_scoped_perf_integration.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_*.py
-
-## [2026-11-15] feat: Step 2 M3: Boot Fetch Deduplication & Lazy Video Report Loading
-- **Type**: feat
-- **Summary**: Added 2000ms boot GET fetch coalescing for /api/cameras and /api/videos in nav_tabs_manager.js and deferred #tab-videos player selection, /report, and /detections fetches until tab activation in scrubber_library_bridge.js.
-- **Files** (3):
-  - `dashboard/static/js/nav_tabs_manager.js`
-  - `dashboard/static/js/scrubber_library_bridge.js`
-  - `tests/test_step2_lazy_video_and_fetch_dedup.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_lazy_video_and_fetch_dedup.py

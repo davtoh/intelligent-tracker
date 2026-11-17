@@ -19,6 +19,10 @@
     initialized: false,
   };
 
+  function getEffectiveActiveTab() {
+    return (typeof document !== 'undefined' && document.hidden) ? 'hidden' : (state.activeTab || 'live');
+  }
+
   function readStoredMode() {
     try {
       const val = window.localStorage?.getItem(STORAGE_KEY);
@@ -59,9 +63,7 @@
       const count = Math.max(0, Number(state.deferredCount) || 0);
       badge.textContent = String(count);
       badge.classList.toggle('is-hidden', count === 0);
-      badge.title = count > 0
-        ? `${count} deferred video indexing job(s) queued`
-        : 'No deferred indexing jobs';
+      badge.title = count > 0 ? `${count} deferred video indexing job(s) queued` : 'No deferred indexing jobs';
     }
     const pausedOverlay = document.getElementById('live-paused-overlay');
     if (pausedOverlay) pausedOverlay.hidden = state.mode !== 'paused';
@@ -73,15 +75,9 @@
       state.mode = data.mode;
       writeStoredMode(data.mode);
     }
-    if (typeof data.focused_camera_id === 'string' && data.focused_camera_id) {
-      state.focusedCameraId = data.focused_camera_id;
-    }
-    if (typeof data.active_tab === 'string' && data.active_tab && data.active_tab !== 'hidden') {
-      state.activeTab = data.active_tab;
-    }
-    if (Array.isArray(data.deferred_jobs)) {
-      state.deferredCount = data.deferred_jobs.length;
-    }
+    if (typeof data.focused_camera_id === 'string' && data.focused_camera_id) state.focusedCameraId = data.focused_camera_id;
+    if (typeof data.active_tab === 'string' && data.active_tab && data.active_tab !== 'hidden') state.activeTab = data.active_tab;
+    if (Array.isArray(data.deferred_jobs)) state.deferredCount = data.deferred_jobs.length;
     renderUI();
   }
 
@@ -92,6 +88,7 @@
       if (!resp || !resp.ok) return null;
       const data = await resp.json();
       applyServerState(data);
+      if (data?.active_tab === 'hidden' && typeof document !== 'undefined' && !document.hidden) syncVisibility();
       return data;
     } catch (_) {
       return null;
@@ -120,7 +117,8 @@
     state.mode = mode;
     writeStoredMode(mode);
     renderUI();
-    return postModeUpdate({ mode }).then(res => {
+    const payload = !document?.hidden ? { mode, active_tab: getEffectiveActiveTab() } : { mode };
+    return postModeUpdate(payload).then(res => {
       if (mode !== 'paused' && state.activeTab === 'live' && !window.LivePlayer?.isPaused?.()) {
         window.LivePlayer?.attachLiveStream?.(document.getElementById('live-stream-img'), window.App?.getActiveCameraId?.(), true);
       }
@@ -129,23 +127,24 @@
   }
 
   function syncTabChange(tabId) {
-    const normalized = normalizeTabName(tabId);
-    state.activeTab = normalized;
-    const effectiveTab = document.hidden ? 'hidden' : normalized;
-    return postModeUpdate({ active_tab: effectiveTab });
+    state.activeTab = normalizeTabName(tabId);
+    return postModeUpdate({ active_tab: getEffectiveActiveTab() });
   }
 
   function syncCameraFocus(cameraId) {
     if (!cameraId || typeof cameraId !== 'string') return Promise.resolve(null);
     const trimmed = cameraId.trim();
-    if (!trimmed || trimmed === state.focusedCameraId) return Promise.resolve(null);
+    if (!trimmed) return Promise.resolve(null);
+    const effectiveTab = getEffectiveActiveTab();
     state.focusedCameraId = trimmed;
-    return postModeUpdate({ focused_camera_id: trimmed });
+    const payload = effectiveTab !== 'hidden'
+      ? { focused_camera_id: trimmed, active_tab: effectiveTab }
+      : { focused_camera_id: trimmed };
+    return postModeUpdate(payload);
   }
 
   function syncVisibility() {
-    const targetTab = document.hidden ? 'hidden' : (state.activeTab || 'live');
-    return postModeUpdate({ active_tab: targetTab });
+    return postModeUpdate({ active_tab: getEffectiveActiveTab() });
   }
 
   function bindEvents() {
@@ -175,6 +174,9 @@
       });
       document.addEventListener('visibilitychange', () => {
         syncVisibility();
+      });
+      window.addEventListener('focus', () => {
+        if (typeof document === 'undefined' || !document.hidden) syncVisibility();
       });
     }
   }

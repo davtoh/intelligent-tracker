@@ -177,7 +177,7 @@ class TestProcessingModeUIVM(unittest.TestCase):
         )
         self.assertEqual(res["stored"], "full_realtime")
         self.assertIn("mode-full_realtime", res["dot"])
-        self.assertEqual(res["lastCall"]["body"], {"mode": "full_realtime"})
+        self.assertEqual(res["lastCall"]["body"], {"mode": "full_realtime", "active_tab": "live"})
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_tab_change_visibility_and_camera_focus_sync(self) -> None:
@@ -195,7 +195,7 @@ class TestProcessingModeUIVM(unittest.TestCase):
                 {"active_tab": "videos"},
                 {"active_tab": "hidden"},
                 {"active_tab": "videos"},
-                {"focused_camera_id": "cam_02"},
+                {"focused_camera_id": "cam_02", "active_tab": "videos"},
             ],
         )
 
