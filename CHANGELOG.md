@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-17] fix: Fix 1x1 camera mismatch, black stream recovery, and 4x4 grid CSS
+- **Type**: fix
+- **Summary**: Prioritize activeCameraId over stale dataset.activeStreamSrc in LivePlayer.attachLiveStream, attach MjpegReconnect to #live-stream-img, and enforce 4x4 grid minmax(0, 1fr) rules in grid_pagination.css.
+- **Files** (13):
+  - `.TODO/multiview_ws_streaming_plan.md`
+  - `dashboard/app.py`
+  - `dashboard/services/diagnostic_log_handler.py`
+  - `dashboard/static/css/grid_pagination.css`
+  - `dashboard/static/css/vms_grid.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/camera_grid.js`
+  - `dashboard/static/js/grid_pagination.js`
+  - ... (+5 more)
+- **Verification**: python -m unittest tests.test_grid_pagination tests.test_camera_grid_teardown tests.test_processing_mode tests.test_step2_live_canvas_delegation tests.test_refactor_contract
+
 ## [2026-11-16] fix: Detach Multi-Grid MJPEG Streams on Tab Leave and Refresh on Mode Change
 - **Type**: fix
 - **Summary**: Added detachGridStreams/attachGridStreams in live_player.js so 2x2/3x3 grid tiles detach on tab leave and #live-stream-img stays detached in grid mode; refreshed active streams in processing_mode.js setMode().
@@ -130,18 +145,3 @@
   - `dashboard/static/js/scrubber_library_bridge.js`
   - `tests/test_step2_lazy_video_and_fetch_dedup.py`
 - **Verification**: python -m unittest discover -s tests -p test_step2_lazy_video_and_fetch_dedup.py
-
-## [2026-11-15] feat: Step 2 M2: Tab-Scoped Studio BEV Minimap Timer & Stream Gating
-- **Type**: feat
-- **Summary**: Replaced unconditional 250ms BEV minimap interval in studio.js with tab-scoped startMinimapLoop/stopMinimapLoop/syncStudioTabState bound to tab-changed and gated studio-live-img.src updates when #tab-studio is hidden.
-- **Files** (2):
-  - `dashboard/static/studio.js`
-  - `tests/test_step2_studio_minimap_gating.py`
-- **Verification**: python -m unittest discover -s tests -p test_step2_studio_minimap_gating.py
-
-## [2026-11-15] test: Step 1 Milestone 4: End-to-End Integration, Modularity Audit & Sign-Off
-- **Type**: test
-- **Summary**: Added tests/test_step1_perf_integration.py verifying concurrent ROI offloading, MJPEG raw/annotated/WS mode switching, and mtime-cached report migration; verified 47 Step 1 tests and 672 full-suite tests pass with zero audit/scan defects.
-- **Files** (1):
-  - `tests/test_step1_perf_integration.py`
-- **Verification**: python -m unittest discover tests

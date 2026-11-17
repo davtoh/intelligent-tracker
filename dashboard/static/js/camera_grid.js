@@ -201,7 +201,9 @@
 
     if (cam) {
       if (liveStreamImg) {
-        liveStreamImg.src = `/stream/${encodeURIComponent(cam.id)}?annotated=false`;
+        const cleanBase = `/stream/${encodeURIComponent(cam.id)}`;
+        if (liveStreamImg.dataset) liveStreamImg.dataset.activeStreamSrc = cleanBase;
+        liveStreamImg.src = `${cleanBase}?annotated=false`;
       }
       if (streamTitle) {
         const fullTitle = `Camera Feed: ${cam.name.toUpperCase()} (${cam.id})`;

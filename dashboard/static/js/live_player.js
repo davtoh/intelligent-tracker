@@ -52,6 +52,7 @@
   function detachLiveStream(videoImg) {
     detachGridStreams();
     if (!videoImg) return;
+    window.MjpegReconnect?.detach?.(videoImg);
     if (videoImg.src && !videoImg.src.startsWith('data:image/svg+xml')) {
       videoImg.dataset.activeStreamSrc = videoImg.src.split('?')[0];
     }
@@ -72,13 +73,25 @@
       clearTimeout(streamRetryTimer);
       streamRetryTimer = null;
     }
-    const baseSrc = videoImg.dataset?.activeStreamSrc || `/stream/${encodeURIComponent(activeCameraId || 'cam_01')}`;
-    const cleanBase = baseSrc.split('?')[0];
-    if (!forceReconnect && videoImg.src && videoImg.src.includes(cleanBase)) {
+    const cleanBase = activeCameraId
+      ? `/stream/${encodeURIComponent(activeCameraId)}`
+      : (videoImg.dataset?.activeStreamSrc || '/stream/cam_01').split('?')[0];
+    if (videoImg.dataset) {
+      videoImg.dataset.activeStreamSrc = cleanBase;
+    }
+    const isHealthySameStream = (
+      !forceReconnect
+      && videoImg.src
+      && videoImg.src.includes(cleanBase)
+      && !videoImg.src.startsWith('data:image/svg+xml')
+      && (videoImg.naturalWidth === undefined || videoImg.naturalWidth > 0)
+    );
+    if (isHealthySameStream) {
       setStreamStatus('online');
       return;
     }
     videoImg.src = `${cleanBase}?annotated=false&t=${Date.now()}`;
+    window.MjpegReconnect?.attach?.(videoImg);
     setStreamStatus('online');
     if (activeCameraId) {
       window.ProcessingModeUI?.syncCameraFocus?.(activeCameraId);

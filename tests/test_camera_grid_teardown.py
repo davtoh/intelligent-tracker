@@ -107,3 +107,19 @@ class TestCameraGridTeardownAndBudget(unittest.TestCase):
         self.assertIn("grid-4x4", out["cls4"])
         self.assertEqual(out["p1Tiles"], 4)
         self.assertEqual(out["indicator"], "Page 1 of 2")
+
+    def test_attach_live_stream_overrides_stale_active_stream_src(self) -> None:
+        lp_js = STATIC_JS / "live_player.js"
+        script = (
+            "const fs = require('fs'), vm = require('vm');\n"
+            f"const code = fs.readFileSync({json.dumps(str(lp_js))}, 'utf8');\n"
+            "const img = { src: '', naturalWidth: 0, dataset: { activeStreamSrc: '/stream/cam_01' } };\n"
+            "const doc = { getElementById: (id) => (id === 'live-stream-img' ? img : null), querySelectorAll: () => [], addEventListener: () => {} };\n"
+            "const win = { CameraGrid: { getGridMode: () => '1x1' } };\n"
+            "vm.runInNewContext(code, { window: win, document: doc, Date, encodeURIComponent, clearTimeout, setTimeout, console });\n"
+            "win.LivePlayer.attachLiveStream(img, 'cam_02');\n"
+            "process.stdout.write(JSON.stringify({ src: img.src, active: img.dataset.activeStreamSrc }));\n"
+        )
+        out = _run_node(script)
+        self.assertTrue(out["src"].startswith("/stream/cam_02?annotated=false"))
+        self.assertEqual(out["active"], "/stream/cam_02")
