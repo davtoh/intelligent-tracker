@@ -44,7 +44,7 @@
           </div>
         </div>
         <div class="tile-video-container">
-          <img src="/stream/${encodeURIComponent(cam.id)}" alt="${escapeHtml(cam.name)}" loading="lazy" />
+          <img src="/stream/${encodeURIComponent(cam.id)}?annotated=true" alt="${escapeHtml(cam.name)}" loading="lazy" />
         </div>
         <div class="tile-footer">
           <span class="tile-fps">${cam.fps} FPS</span>
@@ -103,7 +103,7 @@
 
     if (cam) {
       if (liveStreamImg) {
-        liveStreamImg.src = `/stream/${cam.id}`;
+        liveStreamImg.src = `/stream/${encodeURIComponent(cam.id)}?annotated=false`;
       }
       if (streamTitle) {
         const fullTitle = `Camera Feed: ${cam.name.toUpperCase()} (${cam.id})`;

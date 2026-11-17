@@ -26,7 +26,10 @@
           <!-- Interactive Playback Scrubber Toolbar -->
           <div class="scrubber-toolbar glass-panel">
             <div class="scrubber-timeline-row">
-              <input type="range" id="scrubber-timeline-slider" min="0" max="100" value="0" step="0.1" />
+              <div class="scrubber-slider-track-wrap">
+                <input type="range" id="scrubber-timeline-slider" min="0" max="100" value="0" step="0.1" />
+                <div id="scrubber-timeline-ticks" class="scrubber-timeline-ticks" aria-label="Timeline event markers"></div>
+              </div>
               <span id="scrubber-time-display" class="time-display">0:00 / 0:00 (Frame #0)</span>
             </div>
             <div id="scrubber-overlay-layers" class="scrubber-overlay-layers" role="toolbar" focusgroup="toolbar wrap"

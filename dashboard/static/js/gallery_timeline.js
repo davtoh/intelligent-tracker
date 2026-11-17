@@ -173,6 +173,7 @@
         const name = s.entity_name || 'Unidentified Track';
         const cat = s.entity_category || 'person';
         const confPct = s.confidence ? (s.confidence * 100).toFixed(0) : '100';
+        const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(s.video_filename, s.media_offset_sec) || '';
 
         return `
           <div class="timeline-node">
@@ -189,6 +190,7 @@
                   <span>🕒 ${escapeHtml(timeStr)}</span> &bull;
                   <span>Track #${s.track_id}</span> &bull;
                   <span>Match Confidence: ${confPct}%</span>
+                  ${seekBtn}
                 </div>
               </div>
             </div>

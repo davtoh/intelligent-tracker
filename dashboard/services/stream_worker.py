@@ -104,6 +104,27 @@ def _build_tripwires_data(analytics: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _resolve_detector_telemetry(manager: Any) -> tuple[str, str]:
+    """Resolve ``(detector_model, detector_status)`` from bundle or fallback attrs."""
+    bundle = getattr(manager, "_pipeline_bundle", None)
+    if bundle is not None:
+        cfg = getattr(bundle, "config", None)
+        model = str(getattr(cfg, "detector_model", "") or "").strip().lower()
+        status = str(getattr(bundle, "detector_status", "ready") or "ready")
+        return model or "unknown", status
+
+    cfg_dict = getattr(manager, "cfg", None) or {}
+    det_cfg = cfg_dict.get("detector", {}) if isinstance(cfg_dict, dict) else {}
+    model = str(det_cfg.get("model", "") or "").strip().lower()
+    detector = getattr(manager, "detector", None)
+    if detector is None:
+        return model or "unknown", "unavailable"
+    if not model:
+        model = getattr(detector, "name", None) or type(detector).__name__.lower()
+    status = "simulation" if model == "mock" else "ready"
+    return str(model), status
+
+
 class StreamWorker:
     """Collaborator executing continuous background video pipeline loop."""
 
@@ -178,10 +199,11 @@ class StreamWorker:
         with self.manager._lock:
             self.manager._latest_raw_frame = step_res.frame.copy()
 
+        self._encode_raw_frame(step_res.frame)
         annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
         recorder = getattr(self.manager, "_recording_controller", None)
         if recorder is not None and recorder.is_recording:
-            recorder.write_frame(step_res.frame, annotated)
+            recorder.write_frame(step_res.frame, annotated, step_res=step_res)
 
         telemetry = self._build_telemetry(
             step_res.tracks,
@@ -251,6 +273,13 @@ class StreamWorker:
         """Delegate single-frame CV stepping to canonical FrameProcessor."""
         return self._get_processor().step(frame, timestamp=curr_t, max_dim=1280).tracks
 
+    def _encode_raw_frame(self, frame: np.ndarray) -> None:
+        """Compress clean un-annotated frame to JPEG for client-side canvas viewports."""
+        ret, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if ret:
+            with self.manager._lock:
+                self.manager._latest_raw_jpeg = buf.tobytes()
+
     def _encode_annotated_frame(
         self,
         frame: np.ndarray,
@@ -290,9 +319,12 @@ class StreamWorker:
             if hasattr(self.manager, "get_recording_status")
             else {"is_recording": False}
         )
+        detector_model, detector_status = _resolve_detector_telemetry(self.manager)
         return {
             "camera_id": self.manager.camera_id,
             "status": "online",
+            "detector_model": detector_model,
+            "detector_status": detector_status,
             "timestamp": curr_t,
             "fps": round(measured_fps, 1),
             "resolution": f"{shape[1]}x{shape[0]}",

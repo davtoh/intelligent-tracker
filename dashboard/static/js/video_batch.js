@@ -56,6 +56,28 @@
     }
   }
 
+  async function loadBatchScenarioProfiles() {
+    const sel = document.getElementById('batch-scenario-select');
+    if (!sel) return;
+    const prev = sel.value;
+    try {
+      const resp = await fetch('/api/cameras');
+      if (!resp.ok) return;
+      const cams = await resp.json();
+      sel.innerHTML = '<option value="">None (Detection &amp; Re-ID Only)</option>';
+      (Array.isArray(cams) ? cams : []).forEach((cam) => {
+        if (!cam?.id) return;
+        const opt = document.createElement('option');
+        opt.value = cam.id;
+        opt.textContent = cam.name ? `${cam.name} (${cam.id})` : cam.id;
+        sel.appendChild(opt);
+      });
+      if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+    } catch (err) {
+      console.warn('Failed to load scenario camera profiles:', err);
+    }
+  }
+
   function openBatchModal(filename) {
     if (!filename) return;
     setCurrentBatchFilename(filename);
@@ -63,6 +85,7 @@
     const modal = document.getElementById('modal-video-batch-analyze');
     if (!modal) return;
     applyModalTargetTitle(filename);
+    loadBatchScenarioProfiles();
 
     const detSelect = document.getElementById('batch-detector-select');
     if (detSelect && window.CameraAIConfig && !detSelect.value) detSelect.value = 'yolov8';
@@ -150,6 +173,7 @@
       detector: options.detector || 'yolov8',
       confidence: options.confidence !== undefined ? options.confidence : 0.40,
       classes: options.classes || null,
+      scenario_camera_id: options.scenarioCameraId || null,
     };
     setCurrentBatchFilename(filename);
 
@@ -183,10 +207,12 @@
     const sampleSelect = document.getElementById('batch-sample-rate-select');
     const confInputEl = document.getElementById('batch-conf-input');
     const classesInputEl = document.getElementById('batch-classes-input');
+    const scenarioSelectEl = document.getElementById('batch-scenario-select');
 
     const confVal = parseFloat(confInputEl?.value || '0.40');
     const classesRaw = (classesInputEl?.value || '').trim();
     const classes = classesRaw ? classesRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+    const scenarioCameraId = (scenarioSelectEl?.value || '').trim() || null;
 
     closeBatchModal();
     runBatchAnalytics(currentBatchFilename, {
@@ -194,6 +220,7 @@
       sampleRate: parseInt(sampleSelect?.value || '1', 10),
       confidence: isNaN(confVal) ? 0.40 : Math.min(Math.max(confVal, 0.05), 1.00),
       classes,
+      scenarioCameraId,
     });
   }
 

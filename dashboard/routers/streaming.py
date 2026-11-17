@@ -25,12 +25,37 @@ logger = logging.getLogger("intelligent_tracker.dashboard.routers.streaming")
 router = APIRouter(tags=["Streaming"])
 
 
+async def _stream_frame_generator(
+    mgr,
+    sub_id: str,
+    request: Request,
+    annotated: bool = True,
+):
+    """Yield multipart MJPEG frame chunks while client remains connected."""
+    mgr.add_subscriber(sub_id)
+    shutdown_evt = get_shutdown_event()
+    try:
+        while not is_shutting_down() and not shutdown_evt.is_set():
+            if await request.is_disconnected():
+                break
+            mgr.heartbeat_subscriber(sub_id)
+            jpeg_bytes = mgr.get_latest_frame_jpeg(annotated=annotated)
+            if jpeg_bytes:
+                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
+            try:
+                await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)
+                break
+            except asyncio.TimeoutError:
+                pass
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
+    finally:
+        mgr.remove_subscriber(sub_id)
+
+
 @router.get("/stream/{camera_id}")
-async def get_live_stream(camera_id: str, request: Request):
-    """
-    Live MJPEG video streaming endpoint for a specific camera channel.
-    Compatible with standard <img> tags: `<img src="/stream/cam_01" />`.
-    """
+async def get_live_stream(camera_id: str, request: Request, annotated: bool = True):
+    """Live MJPEG video streaming endpoint for a specific camera channel."""
     from fastapi.responses import StreamingResponse
 
     mgr = get_active_stream_manager(camera_id, conn=request)
@@ -39,35 +64,9 @@ async def get_live_stream(camera_id: str, request: Request):
             status_code=503,
             detail=f"Stream for camera '{camera_id}' not initialized",
         )
-
     sub_id = uuid.uuid4().hex
-
-    async def frame_generator():
-        mgr.add_subscriber(sub_id)
-        shutdown_evt = get_shutdown_event()
-        try:
-            while not is_shutting_down() and not shutdown_evt.is_set():
-                if await request.is_disconnected():
-                    break
-                mgr.heartbeat_subscriber(sub_id)
-                jpeg_bytes = mgr.get_latest_frame_jpeg()
-                if jpeg_bytes:
-                    yield (
-                        b"--frame\r\n"
-                        b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
-                    )
-                try:
-                    await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)
-                    break
-                except asyncio.TimeoutError:
-                    pass
-        except (asyncio.CancelledError, GeneratorExit):
-            pass
-        finally:
-            mgr.remove_subscriber(sub_id)
-
     return StreamingResponse(
-        frame_generator(),
+        _stream_frame_generator(mgr, sub_id, request, annotated=annotated),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 

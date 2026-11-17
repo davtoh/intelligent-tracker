@@ -41,9 +41,9 @@
       clearTimeout(streamRetryTimer);
       streamRetryTimer = null;
     }
-    const baseSrc = videoImg.dataset.activeStreamSrc || `/stream/${activeCameraId || 'cam_01'}`;
+    const baseSrc = videoImg.dataset.activeStreamSrc || `/stream/${encodeURIComponent(activeCameraId || 'cam_01')}`;
     const cleanBase = baseSrc.split('?')[0];
-    videoImg.src = `${cleanBase}?t=${Date.now()}`;
+    videoImg.src = `${cleanBase}?annotated=false&t=${Date.now()}`;
     setStreamStatus('online');
   }
 

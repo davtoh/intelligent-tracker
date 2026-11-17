@@ -156,6 +156,7 @@
       const card = document.querySelector(`.video-file-card[data-file="${CSS.escape(fn)}"]`);
       card?.querySelector('.btn-select-video')?.click();
     });
+    window.addEventListener('video-seek-request', (e) => window.ScrubberLibraryBridge?.handleSeekRequest?.(e, { getCurrentFilename: () => currentVideoFilename, videoPlayer, loadVideoIntoPlayer, updateTimeline }));
 
     if (btnUploadVideo && videoFileInput) {
       btnUploadVideo.addEventListener('click', () => videoFileInput.click());

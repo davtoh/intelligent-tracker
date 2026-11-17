@@ -3,12 +3,12 @@
 import os
 from typing import Any
 
+from intelligent_tracker.pipeline._detector_setup import build_detector_with_status
 from intelligent_tracker.pipeline.bundle import (
     PipelineBundle,
     build_analytics,
     build_confidence_engine,
     build_database,
-    build_detector,
     build_events,
     build_governance,
     build_memory_index,
@@ -36,7 +36,11 @@ class PipelineEngine:
         """Assemble core capture, detection, tracking, analytics, Re-ID, and events."""
         bundle.db = build_database(config.db_path)
         bundle.video_source = build_video_source(config)
-        bundle.detector = build_detector(config, raise_on_error=raise_on_detector_error)
+        (
+            bundle.detector,
+            bundle.detector_status,
+            bundle.detector_error,
+        ) = build_detector_with_status(config, raise_on_error=raise_on_detector_error)
         bundle.tracker = build_tracker(config)
         bundle.analytics = build_analytics(config, bundle.video_source)
         bundle.reid_extractor, bundle.gallery_matcher = build_reid(config, bundle.db)

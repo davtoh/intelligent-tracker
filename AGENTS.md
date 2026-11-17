@@ -24,6 +24,7 @@ All codebase additions and refactors MUST strictly follow modern Python 3.10–3
 - Ensure 100% green test passes across all unit and integration tests.
 - When adding new modules or fixing bugs, add corresponding unit tests in `tests/test_<module>.py`.
 - **Strict Test State & Config Isolation**: Tests must NEVER read from or write to live repository config, database, or output paths (`configs/cameras.json`, `data/*.db`, `data/reports/`, or root backup archives) via default constructor arguments. Always pass an isolated `tempfile.TemporaryDirectory()` path to stateful managers (e.g. `CameraPool(config_file=os.path.join(tmpdir, "cameras.json"), autostart=False)`, `TrackerDB(db_path=...)`) and register cleanup via `addCleanup()` or `tearDown()`.
+- **Node VM & Test Method Function Budget (<= 40 Lines)**: Keep every test method (including Python tests embedding Node.js `vm.runInNewContext` scripts) strictly `<= 40` lines so `diagnose.py audit` passes on the first run. Split multi-scenario JS assertions (e.g., click-threshold vs. drag-threshold) into separate focused `test_*` methods.
 - Never leave temporary `scratch/` directories or browser profiles inside the repository root.
 
 ## 4. Documentation Standards (OS-Agnostic)
@@ -107,3 +108,9 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
 - **Authoritative Blueprint**: All new modules, refactors, and feature plans MUST follow the layered architecture, folder ownership (`intelligent_tracker/pipeline/`, `intelligent_tracker/world/`, `intelligent_tracker/memory/`), and ADRs in `docs/architecture/IDEAL_WORLD_ARCHITECTURE.md`.
 - **Master Roadmap Sequencing**: Execute and plan major architectural changes one step at a time following `.TODO/world_architecture_master_roadmap.md` (Steps 1–6). Never bypass `intelligent_tracker/` to put business or CV pipeline logic inside `dashboard/` or `cli/`, and never let `intelligent_tracker/` import `dashboard/` or `scripts/`.
 - **Pre-Plan Static Architecture Check**: Before evaluating or drafting any Step plan, run the unified architecture mapper (`diagnose.py arch-map --path .`) to verify current modularity budgets, route/CLI parity, coupling, and unused imports.
+
+## 12. Step 5 Runtime & Test Fixture Invariants
+- **`PipelineConfig` & `ActiveLearningTriage`**: `PipelineConfig` uses `detector_confidence` and `detector_classes`; `ActiveLearningTriage` debounce must treat `last=None` as eligible so `timestamp=0.0` offline frames are not suppressed.
+- **`ScenarioManager` & `TrackerDB` Signatures**: `ScenarioManager` uses `config_path`, `save_zone`, and `save_tripwire`; `TrackerDB` uses `set_rsac_rule(allowed_categories=...)`, `get_review_item(item_id)`, `add_entity()`, and `add_sighting()` (not `add_zone`, `add_rsac_rule`, `get_review_queue`, or `upsert_entity`).
+- **Offline Video Test Fixtures**: `VideoIndexer` defaults to `reid_name='color'`, and `MockDetector` ignores class filters unless `boxes=[]` is configured.
+- **Per-File Budget Note**: `intelligent_tracker/journey_segmenter.py` has a `< 160` line cap enforced by `tests/test_step4_preflight_budgets.py` (currently `178L` after Step 5 M3; extract a helper before next sign-off).

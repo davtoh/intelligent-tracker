@@ -2,21 +2,32 @@
 # -*- coding: utf-8 -*-
 """Batch Video Analytics Execution & Report Finalization Service."""
 
+import copy
 import logging
 from typing import Any
 
-from dashboard.dependencies import get_db
+from dashboard.dependencies import get_db, get_scenario_mgr
 from dashboard.schemas import VideoAnalyzeRequest
-from dashboard.services.progressive_stream_store import (
-    append_progressive_chunk,
-    finalize_progressive_stream,
-)
+from dashboard.services.progressive_stream_store import append_progressive_chunk, finalize_progressive_stream
 from dashboard.services.video_jobs_service import VideoJob, VideoJobManager
 from dashboard.services.video_report_store import save_report_run
+from intelligent_tracker.active_learning import ActiveLearningManager
+from intelligent_tracker.analytics.engine import AnalyticsEngine
 from intelligent_tracker.batch import VideoIndexer
 from intelligent_tracker.database import TrackerDB
+from intelligent_tracker.events.bus import EventBus
+from intelligent_tracker.events.types import (
+    IntrusionAlert, OccupancyThresholdEvent, RestrictedEntityAlert,
+    RSACViolationEvent, TripwireCrossEvent, ZoneEvent,
+)
+from intelligent_tracker.memory.fts_index import EventFTSIndex
+from intelligent_tracker.rsac import RSACManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard.services.video_analytics_service")
+_ALERT_EVENT_TYPES = (
+    RSACViolationEvent, IntrusionAlert, RestrictedEntityAlert,
+    ZoneEvent, TripwireCrossEvent, OccupancyThresholdEvent,
+)
 
 
 def parse_analyze_options(
@@ -26,30 +37,30 @@ def parse_analyze_options(
     classes: str | None,
     async_mode: bool | None,
     req: VideoAnalyzeRequest | None,
+    scenario_camera_id: str | None = None,
 ) -> dict[str, Any]:
     """Normalize query and JSON body options for batch video analytics."""
     sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
     det = req.detector if (req and req.detector is not None) else (detector or "yolov8")
     conf = req.confidence if (req and req.confidence is not None) else (confidence if confidence is not None else 0.40)
     raw_classes = (req.classes if req and req.classes is not None else None) or classes
-
     if isinstance(raw_classes, str):
         target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
     elif isinstance(raw_classes, (list, tuple, set)):
         target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
     else:
         target_classes = None
-
     is_async = req.async_mode if (req and req.async_mode is not None) else None
-    if is_async is None:
-        is_async = bool(async_mode)
-
+    is_async = bool(async_mode) if is_async is None else is_async
+    raw_scen = req.scenario_camera_id if (req and req.scenario_camera_id is not None) else scenario_camera_id
+    scen_cam = str(raw_scen).strip() if raw_scen and str(raw_scen).strip() else None
     return {
         "sample_rate": sr,
         "detector": det,
         "confidence": conf,
         "classes": target_classes,
         "is_async": is_async,
+        "scenario_camera_id": scen_cam,
     }
 
 
@@ -57,26 +68,118 @@ def _resolve_db() -> TrackerDB:
     return get_db()
 
 
-def create_video_indexer(db: TrackerDB, opts: dict[str, Any]) -> VideoIndexer:
-    """Instantiate VideoIndexer with graceful mock fallback if detector weights fail to load."""
+def _serialize_offline_alert(event: Any, safe_name: str, offset_sec: float) -> dict[str, Any]:
+    return {
+        "event_type": getattr(event, "event_type", "alert"),
+        "camera_id": getattr(event, "camera_id", ""),
+        "zone_id": getattr(event, "zone_id", "") or "",
+        "tripwire_id": getattr(event, "tripwire_id", "") or "",
+        "entity_id": getattr(event, "entity_id", None),
+        "entity_name": getattr(event, "entity_name", None) or getattr(event, "name", "") or "",
+        "track_id": getattr(event, "track_id", None),
+        "severity": getattr(event, "severity", "info"),
+        "message": getattr(event, "reason", None) or getattr(event, "message", "") or "",
+        "video_filename": safe_name,
+        "media_offset_sec": offset_sec,
+        "timestamp": offset_sec,
+    }
+
+
+def _build_offline_analytics_and_bus(
+    db: TrackerDB, scenario_camera_id: str | None, safe_name: str
+) -> tuple[AnalyticsEngine, RSACManager, EventBus, list[dict[str, Any]], EventFTSIndex]:
+    rsac_mgr = RSACManager(db=db)
+    event_bus = EventBus(capacity=500)
+    event_bus.start()
+    collected_alerts: list[dict[str, Any]] = []
+
+    def _tag_and_collect(event: Any) -> None:
+        offset_sec = float(getattr(event, "timestamp", 0.0) or 0.0)
+        setattr(event, "video_filename", safe_name)
+        setattr(event, "media_offset_sec", offset_sec)
+        meta = getattr(event, "metadata", None)
+        if isinstance(meta, dict):
+            meta["video_filename"] = safe_name
+            meta["media_offset_sec"] = offset_sec
+        if isinstance(event, _ALERT_EVENT_TYPES):
+            collected_alerts.append(_serialize_offline_alert(event, safe_name, offset_sec))
+
+    event_bus.subscribe(_tag_and_collect)
+    fts_index = EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
+    analytics = AnalyticsEngine(
+        camera_id=scenario_camera_id or "offline_video",
+        event_bus=event_bus,
+        rsac_manager=rsac_mgr,
+    )
+    if scenario_camera_id:
+        entry = (get_scenario_mgr().cameras or {}).get(scenario_camera_id) or {}
+        for z in (entry.get("zones") or {}).values():
+            analytics.add_zone(copy.deepcopy(z))
+        for tw in (entry.get("tripwires") or {}).values():
+            analytics.add_tripwire(copy.deepcopy(tw))
+    return analytics, rsac_mgr, event_bus, collected_alerts, fts_index
+
+
+def _teardown_indexer_bus(indexer: VideoIndexer | None) -> None:
+    if indexer is None:
+        return
+    bus = getattr(indexer, "event_bus", None)
+    if bus is not None:
+        bus.wait_until_empty(timeout=2.0)
+    fts = getattr(indexer, "_fts_index", None)
+    if fts is not None:
+        fts.stop()
+    if bus is not None:
+        bus.stop(timeout=2.0)
+
+
+def create_video_indexer(db: TrackerDB, opts: dict[str, Any], safe_name: str = "") -> VideoIndexer:
+    """Instantiate VideoIndexer with spatial scenario, RSAC, ActiveLearning, and EventBus wiring."""
+    analytics, rsac_mgr, event_bus, collected_alerts, fts_index = _build_offline_analytics_and_bus(
+        db, opts.get("scenario_camera_id"), safe_name
+    )
+    al_mgr = ActiveLearningManager(db=db, event_bus=event_bus)
     det = opts["detector"]
+    kwargs: dict[str, Any] = {
+        "db": db, "sample_rate": opts["sample_rate"], "conf_threshold": opts["confidence"],
+        "classes": opts["classes"], "analytics": analytics, "rsac_manager": rsac_mgr,
+        "active_learning": al_mgr, "event_bus": event_bus, "video_filename": safe_name,
+    }
     try:
-        return VideoIndexer(
-            db=db,
-            detector_name=det,
-            sample_rate=opts["sample_rate"],
-            conf_threshold=opts["confidence"],
-            classes=opts["classes"],
-        )
+        indexer = VideoIndexer(detector_name=det, **kwargs)
     except Exception as err:
         logger.warning("VideoIndexer initialization with detector '%s' failed (%s), falling back to mock", det, err)
-        return VideoIndexer(
-            db=db,
-            detector_name="mock",
-            sample_rate=opts["sample_rate"],
-            conf_threshold=opts["confidence"],
-            classes=opts["classes"],
-        )
+        indexer = VideoIndexer(detector_name="mock", **kwargs)
+    setattr(indexer, "_collected_alerts", collected_alerts)
+    setattr(indexer, "_fts_index", fts_index)
+    return indexer
+
+
+def _extract_spatial_report_fields(indexer: VideoIndexer, config_meta: dict[str, Any]) -> dict[str, Any]:
+    analytics = getattr(indexer, "analytics", None)
+    summary_data = analytics.export_summary() if analytics is not None else {}
+    zones_list = [
+        {
+            "name": name,
+            "polygon": z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon),
+            "category_filter": getattr(z, "category_filter", ""),
+            "dwell_threshold": z.dwell_threshold,
+            "capacity_limit": z.capacity_limit,
+        }
+        for name, z in (analytics.zones.items() if analytics is not None else [])
+    ]
+    tripwires_list = [
+        {"name": name, "line_segment": [list(tw.pt1), list(tw.pt2)], "bidirectional": tw.bidirectional}
+        for name, tw in (analytics.tripwires.items() if analytics is not None else [])
+    ]
+    return {
+        "scenario_camera_id": config_meta.get("scenario_camera_id"),
+        "zones": zones_list,
+        "tripwires": tripwires_list,
+        "zone_metrics": summary_data.get("zones", {}),
+        "tripwire_counts": summary_data.get("tripwires", {}),
+        "alerts": list(getattr(indexer, "_collected_alerts", [])),
+    }
 
 
 def finalize_analytics_report(
@@ -86,6 +189,7 @@ def finalize_analytics_report(
     config_meta: dict[str, Any],
 ) -> dict[str, Any]:
     """Assemble occurrence report metrics and persist stacked report + detection stream."""
+    _teardown_indexer_bus(indexer)
     report = indexer.generate_occurrence_report()
     report["frames_processed"] = summary.get("processed_frames", 0)
     report["total_detections"] = summary.get("total_detections", 0)
@@ -94,6 +198,7 @@ def finalize_analytics_report(
     report["source_resolution"] = summary.get("source_resolution")
     report["source_fps"] = summary.get("source_fps")
     report["execution_summary"] = summary
+    report.update(_extract_spatial_report_fields(indexer, config_meta))
 
     run_rec = save_report_run(
         filename=safe_name,
@@ -116,33 +221,25 @@ def submit_async_analytics_job(
     """Submit a background VideoIndexer job with progressive detection streaming."""
     db = _resolve_db()
     config_meta = {
-        "detector": opts["detector"],
-        "sample_rate": opts["sample_rate"],
-        "confidence": opts["confidence"],
-        "classes": opts["classes"],
+        "detector": opts["detector"], "sample_rate": opts["sample_rate"],
+        "confidence": opts["confidence"], "classes": opts["classes"],
+        "scenario_camera_id": opts.get("scenario_camera_id"),
     }
 
     def _runner(job, stop_event, progress_cb):
-        indexer = create_video_indexer(db, opts)
+        indexer = create_video_indexer(db, opts, safe_name=safe_name)
         try:
             summary = indexer.process_video(
-                video_path=path,
-                verbose=False,
-                progress_callback=progress_cb,
-                stop_event=stop_event,
-                frame_flush_callback=lambda chunk, meta: append_progressive_chunk(
-                    job.job_id, safe_name, chunk, meta
-                ),
+                video_path=path, verbose=False, progress_callback=progress_cb, stop_event=stop_event,
+                frame_flush_callback=lambda chunk, meta: append_progressive_chunk(job.job_id, safe_name, chunk, meta),
             )
             return finalize_analytics_report(indexer, summary, safe_name, config_meta)
         finally:
+            _teardown_indexer_bus(indexer)
             finalize_progressive_stream(job.job_id)
 
     return job_mgr.submit_job(
-        job_type="analytics",
-        filename=safe_name,
-        runner_fn=_runner,
-        initial_metrics=config_meta,
+        job_type="analytics", filename=safe_name, runner_fn=_runner, initial_metrics=config_meta,
     )
 
 
@@ -150,12 +247,14 @@ def run_sync_analytics(safe_name: str, path: str, opts: dict[str, Any]) -> dict[
     """Execute synchronous VideoIndexer analytics and return persisted report."""
     db = _resolve_db()
     config_meta = {
-        "detector": opts["detector"],
-        "sample_rate": opts["sample_rate"],
-        "confidence": opts["confidence"],
-        "classes": opts["classes"],
+        "detector": opts["detector"], "sample_rate": opts["sample_rate"],
+        "confidence": opts["confidence"], "classes": opts["classes"],
+        "scenario_camera_id": opts.get("scenario_camera_id"),
     }
-    indexer = create_video_indexer(db, opts)
-    summary = indexer.process_video(video_path=path, verbose=False)
-    return finalize_analytics_report(indexer, summary, safe_name, config_meta)
+    indexer = create_video_indexer(db, opts, safe_name=safe_name)
+    try:
+        summary = indexer.process_video(video_path=path, verbose=False)
+        return finalize_analytics_report(indexer, summary, safe_name, config_meta)
+    finally:
+        _teardown_indexer_bus(indexer)
 

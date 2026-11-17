@@ -33,6 +33,19 @@ class TagRequest(BaseModel):
     camera_id: Optional[str] = "cam_01"
 
 
+def _parse_classes_list(v: Any) -> Optional[List[str]]:
+    """Normalize comma-separated string or iterable into a clean class list."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        res = [c.strip() for c in v.split(",") if c.strip()]
+        return res if res else None
+    if isinstance(v, (list, tuple, set)):
+        res = [str(c).strip() for c in v if str(c).strip()]
+        return res if res else None
+    return v
+
+
 class CameraAddRequest(BaseModel):
     id: str = Field(..., min_length=1, description="Unique camera ID (e.g. cam_02)")
     name: str = Field(..., min_length=1, description="Friendly display label")
@@ -48,15 +61,7 @@ class CameraAddRequest(BaseModel):
     @field_validator("classes", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            res = [c.strip() for c in v.split(",") if c.strip()]
-            return res if res else None
-        if isinstance(v, (list, tuple, set)):
-            res = [str(c).strip() for c in v if str(c).strip()]
-            return res if res else None
-        return v
+        return _parse_classes_list(v)
 
 
 class CameraUpdateRequest(BaseModel):
@@ -72,15 +77,7 @@ class CameraUpdateRequest(BaseModel):
     @field_validator("classes", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            res = [c.strip() for c in v.split(",") if c.strip()]
-            return res if res else None
-        if isinstance(v, (list, tuple, set)):
-            res = [str(c).strip() for c in v if str(c).strip()]
-            return res if res else None
-        return v
+        return _parse_classes_list(v)
 
 
 class VideoAnalyzeRequest(BaseModel):
@@ -89,19 +86,12 @@ class VideoAnalyzeRequest(BaseModel):
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Optional target class filters")
     async_mode: Optional[bool] = Field(None, description="Run analysis asynchronously in background")
+    scenario_camera_id: Optional[str] = Field(None, description="Optional camera/profile ID whose ScenarioManager zones/tripwires apply")
 
     @field_validator("classes", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            res = [c.strip() for c in v.split(",") if c.strip()]
-            return res if res else None
-        if isinstance(v, (list, tuple, set)):
-            res = [str(c).strip() for c in v if str(c).strip()]
-            return res if res else None
-        return v
+        return _parse_classes_list(v)
 
 
 class VideoAddAsCameraRequest(BaseModel):
@@ -115,15 +105,7 @@ class VideoAddAsCameraRequest(BaseModel):
     @field_validator("classes", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            res = [c.strip() for c in v.split(",") if c.strip()]
-            return res if res else None
-        if isinstance(v, (list, tuple, set)):
-            res = [str(c).strip() for c in v if str(c).strip()]
-            return res if res else None
-        return v
+        return _parse_classes_list(v)
 
 
 class CameraTestRequest(BaseModel):
@@ -292,5 +274,6 @@ class CameraRecordStatusResponse(BaseModel):
     annotated: bool = True
     started_at: Optional[float] = None
     stopped_at: Optional[float] = None
+    report_run_id: Optional[str] = None
 
 

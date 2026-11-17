@@ -51,9 +51,15 @@ class StreamMediaMixin:
             ret, buf = cv2.imencode(".jpg", bev, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             return buf.tobytes() if ret else b""
 
-    def get_latest_frame_jpeg(self, camera_id: Optional[str] = None) -> bytes:
-        """Retrieve most recent encoded JPEG frame or placeholder."""
+    def get_latest_frame_jpeg(
+        self,
+        camera_id: Optional[str] = None,
+        annotated: bool = True,
+    ) -> bytes:
+        """Retrieve most recent encoded JPEG frame (annotated or raw) or placeholder."""
         with self._lock:
+            if not annotated and getattr(self, "_latest_raw_jpeg", None) is not None:
+                return self._latest_raw_jpeg
             if self._latest_jpeg is not None:
                 return self._latest_jpeg
             return self._create_placeholder_jpeg("Waiting for stream...")

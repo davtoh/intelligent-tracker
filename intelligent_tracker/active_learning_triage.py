@@ -52,6 +52,7 @@ class ActiveLearningTriage:
         self.debounce_interval = float(debounce_interval)
         self.crops_dir = crops_dir
         self.event_bus = event_bus
+        self.video_filename: str = ""
         self._last_queued: dict[tuple[str, int], float] = {}
         os.makedirs(self.crops_dir, exist_ok=True)
 
@@ -60,7 +61,8 @@ class ActiveLearningTriage:
         score = float(similarity)
         if not (self.min_confidence <= score < self.max_confidence):
             return False
-        return (now - self._last_queued.get((camera_id, track_id), 0.0)) >= self.debounce_interval
+        last = self._last_queued.get((camera_id, track_id))
+        return last is None or (now - last) >= self.debounce_interval or now < last
 
     def _save_crop(self, camera_id: str, track_id: int, crop: np.ndarray, now: float) -> str | None:
         """Persist candidate BGR crop thumbnail to ``crops_dir``."""
@@ -90,6 +92,8 @@ class ActiveLearningTriage:
         suggested_name: str,
         suggested_category: str,
         now: float,
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
     ) -> int | None:
         """Persist crop, insert review queue record, update debounce, and emit event."""
         if not _is_valid_crop(crop):
@@ -102,6 +106,7 @@ class ActiveLearningTriage:
             camera_id=camera_id, track_id=track_id, crop_path=crop_path,
             suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
             suggested_category=suggested_category, similarity=score, status="pending",
+            video_filename=video_filename, media_offset_sec=media_offset_sec,
         )
         self._last_queued[(camera_id, track_id)] = now
         self._publish_queued_event(
@@ -121,6 +126,8 @@ class ActiveLearningTriage:
         suggested_category: str = "",
         camera_id: str = "cam_01",
         timestamp: float | None = None,
+        video_filename: str = "",
+        media_offset_sec: float | None = None,
     ) -> int | None:
         """Evaluate track detection; crop from frame and queue if ambiguous."""
         now = timestamp if timestamp is not None else time.time()
@@ -128,10 +135,17 @@ class ActiveLearningTriage:
         if not self._is_candidate_eligible(camera_id, tid, similarity, now):
             return None
         crop = _extract_crop_from_frame(frame, getattr(track, "bbox", None))
+        resolved_video = str(video_filename or self.video_filename or "").strip()
+        resolved_offset = (
+            float(media_offset_sec)
+            if media_offset_sec is not None
+            else (float(now) if resolved_video and timestamp is not None else 0.0)
+        )
         return self._queue_crop(
             camera_id=camera_id, track_id=tid, crop=crop, similarity=similarity,
             suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
             suggested_category=suggested_category, now=now,
+            video_filename=resolved_video, media_offset_sec=resolved_offset,
         )
 
     def maybe_queue_candidate(

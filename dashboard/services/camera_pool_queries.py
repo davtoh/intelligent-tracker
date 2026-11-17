@@ -144,10 +144,12 @@ class CameraPoolQueryMixin:
         """Retrieve StreamManager for ``camera_id``, or primary stream when omitted."""
         return self._coordinator.get_stream(camera_id)
 
-    def get_latest_frame_jpeg(self, camera_id: str | None = None) -> bytes | None:
+    def get_latest_frame_jpeg(
+        self, camera_id: str | None = None, annotated: bool = True
+    ) -> bytes | None:
         """Return latest encoded JPEG frame bytes for a camera channel."""
         mgr = self.get_stream(camera_id)
-        return mgr.get_latest_frame_jpeg() if mgr else None
+        return mgr.get_latest_frame_jpeg(annotated=annotated) if mgr else None
 
     def list_cameras(self) -> list[dict[str, Any]]:
         """Return real-time status and telemetry for all configured cameras."""

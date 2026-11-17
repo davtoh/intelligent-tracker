@@ -90,6 +90,7 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
     manager._running = False
     manager._stop_event = threading.Event()
     manager._latest_jpeg = None
+    manager._latest_raw_jpeg = None
     manager._latest_raw_frame = None
     manager._latest_telemetry = _default_telemetry(manager.camera_id)
     manager.draw_heatmap = False
@@ -104,7 +105,11 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
     manager._overlay_renderer = FrameOverlayRenderer()
     rec_cfg = manager.cfg.get("recording", {}) if isinstance(manager.cfg, dict) else {}
     rec_dir = rec_cfg.get("output_dir") if isinstance(rec_cfg, dict) else None
-    manager._recording_controller = StreamRecordingController(manager.camera_id, output_dir=rec_dir)
+    manager._recording_controller = StreamRecordingController(
+        manager.camera_id,
+        output_dir=rec_dir,
+        db_getter=lambda: getattr(manager, "db", None),
+    )
     manager._subscribers = manager._subscriber_registry._subscribers
     manager._ws_subscribers = manager._subscriber_registry._ws_subscribers
     manager._subscriber_lock = manager._subscriber_registry._lock

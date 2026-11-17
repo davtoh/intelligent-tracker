@@ -11,6 +11,15 @@
 
   let keyNavBound = false;
 
+  const FEATURE_TOGGLES = [
+    { key: 'bboxes', label: 'BBoxes', title: 'Toggle bounding boxes' },
+    { key: 'track_ids', label: 'IDs', title: 'Toggle track IDs & labels' },
+    { key: 'dwell_timers', label: 'Dwell', title: 'Toggle dwell timers' },
+    { key: 'velocity', label: 'Velocity', title: 'Toggle velocity vectors' },
+    { key: 'zones', label: 'Zones', title: 'Toggle zone polygons' },
+    { key: 'tripwires', label: 'Tripwires', title: 'Toggle tripwire lines' },
+  ];
+
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
@@ -80,7 +89,38 @@
     `;
   }
 
-  function renderToolbar({ descriptors, activeRunIds, hasLiveJob, onToggle, onSetAll }) {
+  function renderFeaturePillsHtml(featureVisibility) {
+    const vis = featureVisibility
+      || window.ScrubberOverlay?.getFeatureVisibility?.()
+      || window.UnifiedCanvasOverlay?.DEFAULT_VISIBILITY
+      || { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true };
+    const pills = FEATURE_TOGGLES.map((f) => {
+      const pressed = vis[f.key] ? 'true' : 'false';
+      return `<button type="button" class="overlay-feature-pill" data-feature-key="${f.key}" aria-pressed="${pressed}" title="${escapeHtml(f.title)}">${escapeHtml(f.label)}</button>`;
+    }).join('');
+    return `<span role="separator" aria-orientation="vertical" class="overlay-layers-separator"></span><div role="group" aria-label="Overlay feature toggles" class="overlay-feature-pills">${pills}</div>`;
+  }
+
+  function bindToolbarEvents(container, { onToggle, onSetAll, onToggleFeature }) {
+    container.querySelectorAll('.overlay-layer-chip[data-run-id]').forEach((btn) => {
+      btn.addEventListener('click', () => onToggle?.(btn.getAttribute('data-run-id')));
+    });
+    container.querySelectorAll('.overlay-layer-action-btn').forEach((btn) => {
+      btn.addEventListener('click', () => onSetAll?.(btn.getAttribute('data-layer-action') === 'all'));
+    });
+    container.querySelectorAll('.overlay-feature-pill').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-feature-key');
+        const next = btn.getAttribute('aria-pressed') !== 'true';
+        btn.setAttribute('aria-pressed', next ? 'true' : 'false');
+        if (typeof onToggleFeature === 'function') onToggleFeature(key, next);
+        else window.ScrubberOverlay?.setFeatureVisibility?.(key, next);
+        announceStatus(`${btn.textContent.trim()} ${next ? 'enabled' : 'disabled'}`);
+      });
+    });
+  }
+
+  function renderToolbar({ descriptors, activeRunIds, hasLiveJob, featureVisibility, onToggle, onSetAll, onToggleFeature }) {
     const container = document.getElementById('scrubber-overlay-layers');
     if (!container) return;
 
@@ -108,16 +148,11 @@
       <span class="overlay-layers-label">👁️ Layers:</span>
       <div role="group" aria-label="Detection run layers" class="overlay-layers-chips">${chipsHtml}${liveHtml}</div>
       ${bulkHtml}
+      ${renderFeaturePillsHtml(featureVisibility)}
     `;
     container.hidden = false;
 
-    container.querySelectorAll('.overlay-layer-chip').forEach((btn) => {
-      btn.addEventListener('click', () => onToggle?.(btn.getAttribute('data-run-id')));
-    });
-    container.querySelectorAll('.overlay-layer-action-btn').forEach((btn) => {
-      btn.addEventListener('click', () => onSetAll?.(btn.getAttribute('data-layer-action') === 'all'));
-    });
-
+    bindToolbarEvents(container, { onToggle, onSetAll, onToggleFeature });
     setupToolbarKeyboardFallback(container);
     syncToolbarTabIndices(container);
   }
@@ -125,13 +160,14 @@
   function updateChipStates(activeRunIds) {
     const container = document.getElementById('scrubber-overlay-layers');
     if (!container) return;
-    container.querySelectorAll('.overlay-layer-chip').forEach((btn) => {
+    container.querySelectorAll('.overlay-layer-chip[data-run-id]').forEach((btn) => {
       const rid = btn.getAttribute('data-run-id');
       btn.setAttribute('aria-pressed', activeRunIds.has(rid) ? 'true' : 'false');
     });
   }
 
   window.OverlayLayerToolbar = {
+    FEATURE_TOGGLES,
     announceStatus,
     renderToolbar,
     updateChipStates,

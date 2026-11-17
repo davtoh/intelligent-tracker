@@ -23,6 +23,7 @@
         ? `<div class="transit-connector"><span>⏱️ Transit: +${hop.transit_time_from_prev}s</span></div>`
         : '';
       const thumbUrl = hop.snapshot_path ? `/crops/${hop.snapshot_path.split(/[\\/]/).pop()}` : '';
+      const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(hop.video_filename, hop.media_offset_sec) || '';
 
       return `
         ${transitBadge}
@@ -37,6 +38,7 @@
               <span>Zone: ${escapeHtml(hop.zone_id || 'General Area')}</span> •
               <span>Dwell: ${hop.duration_seconds}s</span> •
               <span>Sightings: ${hop.sightings_count}</span>
+              ${seekBtn}
             </div>
           </div>
           ${thumbUrl ? `<div class="hop-thumb"><img src="${thumbUrl}" alt="Snapshot" /></div>` : ''}

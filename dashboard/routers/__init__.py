@@ -23,6 +23,7 @@ from dashboard.routers.rsac import router as rsac_router
 from dashboard.routers.scenarios import router as scenarios_router
 from dashboard.routers.streaming import router as streaming_router
 from dashboard.routers.system import router as system_router
+from dashboard.routers.tagging import router as tagging_router
 from dashboard.routers.topology import router as topology_router
 from dashboard.routers.videos import router as videos_router
 from dashboard.routers.world import router as world_router
@@ -36,6 +37,7 @@ __all__ = [
     "scenarios_router",
     "streaming_router",
     "system_router",
+    "tagging_router",
     "topology_router",
     "videos_router",
     "world_router",

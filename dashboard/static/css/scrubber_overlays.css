@@ -75,7 +75,8 @@
   flex-shrink: 0;
 }
 
-.overlay-layer-chip {
+.overlay-layer-chip,
+.overlay-feature-pill {
   --layer-accent: #06b6d4;
   --layer-bg-active: rgba(6, 182, 212, 0.2);
   --layer-border-active: rgba(6, 182, 212, 0.75);
@@ -136,7 +137,8 @@
   white-space: nowrap;
 }
 
-.overlay-layer-chip[aria-pressed="true"] {
+.overlay-layer-chip[aria-pressed="true"],
+.overlay-feature-pill[aria-pressed="true"] {
   background: var(--layer-bg-active);
   border-color: var(--layer-border-active);
   color: var(--text-main);
@@ -149,6 +151,7 @@
 }
 
 .overlay-layer-chip:focus-visible,
+.overlay-feature-pill:focus-visible,
 .overlay-layer-action-btn:focus-visible,
 .batch-report-actions .btn-xs:focus-visible {
   outline: 2px solid var(--layer-accent, var(--cyan));
@@ -274,20 +277,23 @@
 }
 
 @media (hover: hover) {
-  .overlay-layer-chip:hover {
+  .overlay-layer-chip:hover,
+  .overlay-feature-pill:hover {
     background: rgba(51, 65, 85, 0.85);
     color: var(--text-main);
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .overlay-layer-chip {
+  .overlay-layer-chip,
+  .overlay-feature-pill {
     transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 }
 
 @media (pointer: coarse) {
   .overlay-layer-chip,
+  .overlay-feature-pill,
   .overlay-layer-action-btn,
   .batch-report-actions .btn-xs,
   .batch-history-select {
@@ -297,10 +303,23 @@
 }
 
 @media (forced-colors: active) {
-  .overlay-layer-chip[aria-pressed="true"] {
+  .overlay-layer-chip[aria-pressed="true"],
+.overlay-feature-pill[aria-pressed="true"] {
     background: Highlight;
     color: HighlightText;
     border-color: Highlight;
   }
 }
+
+.scrubber-slider-track-wrap { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.scrubber-slider-track-wrap input[type="range"] { width: 100%; }
+.scrubber-timeline-ticks { position: relative; height: 10px; margin-top: 2px; }
+.scrubber-tick {
+  position: absolute; top: 0; width: 6px; height: 10px; transform: translateX(-50%);
+  border: none; border-radius: 2px; padding: 0; cursor: pointer; background: var(--cyan, #06b6d4);
+}
+.scrubber-tick-alert { background: #ef4444; }
+.scrubber-tick-review { background: #f59e0b; }
+.btn-seek-studio { margin-left: 6px; white-space: nowrap; }
+
 

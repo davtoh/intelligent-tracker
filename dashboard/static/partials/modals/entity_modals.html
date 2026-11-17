@@ -8,8 +8,21 @@
       <form id="tag-entity-form">
         <input type="hidden" id="tag-track-id" />
         <input type="hidden" id="tag-bbox-val" />
+        <input type="hidden" id="tag-entity-id" />
+        <input type="hidden" id="tag-source-type" />
+        <input type="hidden" id="tag-video-filename" />
+        <input type="hidden" id="tag-timestamp-sec" />
+        <input type="hidden" id="tag-crop-base64" />
 
         <div class="modal-body-scroll">
+          <div id="tag-roi-preview-panel" style="display: none; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding: 10px; border-radius: 8px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(6, 182, 212, 0.35);">
+            <img id="tag-roi-crop-img" src="" alt="Selected ROI crop" style="width: 72px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #06b6d4; background: #0b0f19; flex-shrink: 0;" />
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
+              <span id="tag-ai-class-badge" class="badge" style="align-self: flex-start; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(6, 182, 212, 0.2); color: #67e8f9; border: 1px solid rgba(6, 182, 212, 0.4);">AI: Analyzing...</span>
+              <div id="tag-identity-candidates" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+            </div>
+          </div>
+
           <div class="form-group">
             <label for="tag-name-input">Full Name / Label *</label>
             <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. John Doe (VIP), Guard #1" required />
@@ -22,6 +35,8 @@
               <option value="staff">Staff Member</option>
               <option value="vip">VIP Guest</option>
               <option value="restricted">Restricted / Blacklisted Entity</option>
+              <option value="vehicle">Vehicle</option>
+              <option value="object">Object / Artifact</option>
             </select>
           </div>
 

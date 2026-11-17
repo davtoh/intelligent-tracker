@@ -1,143 +1,143 @@
 # Changelog
 
-## [2026-11-14] feat: Dashboard Live MP4 Recording UI
-- **Type**: feat
-- **Summary**: Added dedicated Jinja2 partial, responsive CSS without !important, CameraRecording JS controller with per-camera mismatch guards and Video Studio handoff, multi-grid tile recording actions, and Node vm mock-DOM + live CDP layout verification.
-- **Files** (11):
-  - `dashboard/app.py`
-  - `dashboard/dependencies.py`
-  - `dashboard/services/camera_pool_queries.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/camera_grid.js`
-  - `dashboard/static/js/telemetry.js`
-  - `dashboard/static/partials/tabs/live.html`
-  - `dashboard/static/css/camera_recording.css`
-  - ... (+3 more)
-- **Verification**: python -m unittest discover tests (550 passed) & diagnose.py audit (PASS)
+## [2026-11-15] fix: Fix CI failures in camera config healing and journey_segmenter modularity budget
+- **Type**: fix
+- **Summary**: Guard test_repo_cameras_json_has_no_non_synthetic_mock_or_docker_notice with skipTest when gitignored configs/cameras.json is absent, and extract JourneyHop/EntityJourney dataclasses into intelligent_tracker/journey_models.py so journey_segmenter.py is 137 lines (< 160 budget).
+- **Files** (5):
+  - `.TODO/performance_and_processing_modes_master_roadmap.md`
+  - `.TODO/step_1_event_loop_and_on_demand_encoding.md`
+  - `intelligent_tracker/journey_segmenter.py`
+  - `tests/test_step1_camera_config_healing.py`
+  - `intelligent_tracker/journey_models.py`
+- **Verification**: python -m unittest discover -s tests -p test_*.py
 
-## [2026-11-14] docs: Step 6 Milestone 3: Sphinx Docs Sync, Dead Import Cleanup & Packaging Polish
-- **Type**: docs
-- **Summary**: Updated Sphinx docs for pipeline/world/memory/cli/recording/models APIs, synced README.rst and pyproject.toml readme field, removed 28 unused imports across 21 modules while preserving availability probes, and verified 541/541 tests + Sphinx -W build.
-- **Files** (31):
-  - `README.rst`
-  - `dashboard/routers/videos.py`
-  - `dashboard/services/frame_overlay.py`
-  - `dashboard/services/shutdown_handler.py`
-  - `documentation/dashboard.rst`
-  - `documentation/deployment.rst`
-  - `documentation/index.rst`
-  - `documentation/intelligent_tracker.rst`
-  - ... (+23 more)
-- **Verification**: python -m unittest discover tests && python -m sphinx -a -W --keep-going documentation/ documentation/_build/html/
+## [2026-11-15] test: Step 5 Milestone 4: End-to-End Closed-Loop Video Ecosystem Verification
+- **Type**: test
+- **Summary**: Added E2E integration tests covering FrameProcessor.step() offline indexing, 4-endpoint API parity (/sightings, /events, /api/active-learning/queue, /api/journey/search), and non-mocked fallback branches.
+- **Files** (1):
+  - `tests/test_step5_e2e_closed_loop_ecosystem.py`
+- **Verification**: python -m unittest discover -s tests -p test_step5_*.py
 
-## [2026-11-14] feat: Step 6 Milestone 2: CLI Benchmarking, Model Verification & WorldGraph Parity
+## [2026-11-15] feat: Step 5 M3: Timeline Tick-Marks & Seek in Studio Deep-Links
 - **Type**: feat
-- **Summary**: Added BenchmarkCollector (--benchmark/--benchmark-output/--check-models), GET/POST /api/system/models*, GET /api/world/snapshot|entities, and intelligent-tracker-ctl world|models subcommands.
+- **Summary**: Added VideoTimelineLinks tick-mark rendering, video-seek-request bridge, JourneyHop media fields, and 1-click Seek in Studio buttons across #timeline, #alerts, #journey, and #review.
 - **Files** (12):
-  - `.TODO/step_6_cli_dashboard_operator_parity.md`
-  - `dashboard/routers/system.py`
-  - `dashboard/routers/world.py`
-  - `intelligent_tracker/cli/__init__.py`
-  - `intelligent_tracker/cli/arguments.py`
-  - `intelligent_tracker/cli/ctl.py`
-  - `intelligent_tracker/cli/pipeline_builder.py`
-  - `intelligent_tracker/cli/runner.py`
-  - ... (+4 more)
-- **Verification**: python -m unittest tests/test_cli_operator_parity.py tests/test_cli_runner.py tests/test_cli_ask.py tests/test_world_query_api.py tests/test_entrypoints.py tests/test_modernization.py tests/test_camera_recording.py
-
-## [2026-11-13] feat: Step 5 Milestone 4: World Query API, CLI ask Parity & Sphinx Docs
-- **Type**: feat
-- **Summary**: Added /api/world/query, /api/world/confidence/{entity_id}, /api/world/timeline FastAPI routes, get_world_query_engine DI, intelligent-tracker ask and intelligent-tracker-ctl ask CLI parity, Sphinx documentation, and API/CLI parity tests.
-- **Files** (14):
-  - `dashboard/routers/world.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/dependencies.py`
-  - `dashboard/schemas.py`
-  - `dashboard/app.py`
-  - `intelligent_tracker/cli/ask.py`
-  - `intelligent_tracker/cli/runner.py`
-  - `intelligent_tracker/cli/ctl.py`
-  - ... (+6 more)
-- **Verification**: 522/522 unittest pass + Sphinx -W clean + arch-map compliant
-
-## [2026-11-13] feat: Step 4 Milestone 4: Multi-Camera Handoff, FOV Deduplication & Tactical World Minimap
-- **Type**: feat
-- **Summary**: Implemented MultiCameraHandoffCoordinator, WorldTacticalMinimap, GET /api/topology/world-map, and golden two-camera handoff tests.
-- **Files** (7):
-  - `intelligent_tracker/world/handoff.py`
-  - `intelligent_tracker/world/_handoff_helpers.py`
-  - `intelligent_tracker/world/minimap.py`
-  - `intelligent_tracker/world/_minimap_render.py`
-  - `intelligent_tracker/world/__init__.py`
-  - `dashboard/routers/topology.py`
-  - `tests/test_multi_camera_handoff.py`
-- **Verification**: 495/495 unittest pass + Sphinx -W clean + arch-map compliant
-
-## [2026-11-13] refactor: Step 3 Milestone 4: index.html Partial Decomposition & Step 3 Sign-Off
-- **Type**: refactor
-- **Summary**: Decomposed dashboard/static/index.html into 9 tab partials and 4 modal partials rendered via Jinja2 on GET /, and added Step 3 architecture budget verification tests.
-- **Files** (4):
-  - `dashboard/app.py`
+  - `dashboard/static/css/scrubber_overlays.css`
   - `dashboard/static/index.html`
-  - `dashboard/static/partials/`
-  - `tests/test_step3_architecture_budgets.py`
-- **Verification**: python -m unittest discover tests (471 passed)
+  - `dashboard/static/js/analytics_view.js`
+  - `dashboard/static/js/gallery_timeline.js`
+  - `dashboard/static/js/journey_search.js`
+  - `dashboard/static/js/scrubber_library_bridge.js`
+  - `dashboard/static/partials/tabs/videos.html`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+4 more)
+- **Verification**: python -m unittest discover -s tests -p test_step5_timeline_ticks_and_deeplinks.py
 
-## [2026-11-13] feat: Step 2 Milestone 4: Dead Import Cleanup, Legacy Compatibility & Final Sign-Off
+## [2026-11-15] feat: Step 5 M2: Offline Video Spatial Profile, RSAC Alerts & Active Learning
 - **Type**: feat
-- **Summary**: Removed dead high_objects/unused imports from scenarios.py and topology.py, added optional WorldGraph sync hooks in ScenarioManager, documented legacy compatibility boundaries in spaces.py and high_objects.py, guarded closed DB fallback in video_analytics_service.py, and verified all 450 unit/integration tests and Sphinx docs build.
-- **Files** (8):
-  - `dashboard/app.py`
+- **Summary**: Added scenario_camera_id to VideoAnalyzeRequest, wired ScenarioManager/AnalyticsEngine/RSACManager/ActiveLearningManager/EventBus into VideoIndexer offline analysis with media_offset_sec event tagging, added #batch-scenario-select modal control, and wired #studio-camera-select in Scenario Studio.
+- **Files** (6):
+  - `dashboard/schemas.py`
   - `dashboard/services/video_analytics_service.py`
-  - `intelligent_tracker/core/spaces.py`
-  - `intelligent_tracker/high_objects.py`
-  - `intelligent_tracker/scenarios.py`
-  - `intelligent_tracker/topology.py`
-  - `tests/test_scenario_api.py`
-  - `tests/test_world_legacy_compat.py`
+  - `dashboard/static/js/video_batch.js`
+  - `dashboard/static/partials/modals/video_modals.html`
+  - `dashboard/static/studio.js`
+  - `tests/test_step5_video_spatial_and_rsac.py`
+- **Verification**: python -m unittest discover -s tests -p test_step5_video_spatial_and_rsac.py
+
+## [2026-11-14] feat: Step 5 M1: FrameProcessor Batch Unification & Media Offset Persistence
+- **Type**: feat
+- **Summary**: Decomposed batch.py via batch_reporting.py and FrameProcessor.step(), added review_queue media offset columns, and persisted video_filename/media_offset_sec across sightings and active learning.
+- **Files** (11):
+  - `.TODO/step_5_closed_loop_video_ecosystem.md`
+  - `.agents/rules/pipeline_and_db_invariants.md`
+  - `intelligent_tracker/active_learning.py`
+  - `intelligent_tracker/active_learning_triage.py`
+  - `intelligent_tracker/batch.py`
+  - `intelligent_tracker/matching/_gallery_signals.py`
+  - `intelligent_tracker/repositories/analytics_repo.py`
+  - `intelligent_tracker/repositories/learning_repo.py`
+  - ... (+3 more)
+- **Verification**: python -m unittest discover -s tests -p test_step5_batch_frame_processor.py
+
+## [2026-11-14] feat: Step 4 Milestone 4: E2E Video SSOT, Backup/Restore & Live Handoff Sign-Off
+- **Type**: feat
+- **Summary**: Added E2E integration tests for live-record-to-Studio handoff, single-file SQLite TrackerDB backup/restore, and non-mocked fallback branches; exposed report_run_id in CameraRecordStatusResponse; verified 628/628 tests green.
+- **Files** (2):
+  - `dashboard/schemas.py`
+  - `tests/test_step4_e2e_video_ssot.py`
 - **Verification**: python -m unittest discover tests
 
-## [2026-11-13] feat: Step 1 Milestone 4: pyproject.toml & Package Entrypoints
+## [2026-11-14] feat: Step 4 M3: Live-Record FrameStepResult Handoff & Export UI
 - **Type**: feat
-- **Summary**: Extracted intelligent_tracker/cli/ctl.py and dashboard/server.py from scripts/, converted scripts/stream_ctl.py and scripts/run_dashboard.py to thin wrappers, added PEP 621 pyproject.toml with console_scripts, and added tests/test_entrypoints.py.
+- **Summary**: Buffered time-indexed tracks in StreamRecordingController for instant live_capture TrackerDB persistence on stop(), wired step_res and db_getter in StreamWorker/StreamManager, and added Export JSON button and Live Capture badge to video_batch_reports.js.
+- **Files** (5):
+  - `dashboard/services/stream_recording.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/static/js/video_batch_reports.js`
+  - `dashboard/stream_manager.py`
+  - `tests/test_step4_live_recording_handoff.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_*.py
+
+## [2026-11-14] feat: Step 4 M2: TrackerDB Video Report SSOT & Export API
+- **Type**: feat
+- **Summary**: Refactored video_report_store.py to persist runs and detection streams in TrackerDB with transparent legacy JSON auto-migration (video_report_migration.py) and added GET /api/videos/{filename}/reports/{run_id}/export.
+- **Files** (4):
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/services/video_report_store.py`
+  - `dashboard/services/video_report_migration.py`
+  - `tests/test_step4_report_ssot_and_export.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_report_ssot_and_export.py
+
+## [2026-11-14] feat: Step 4 M1: TrackerDB Video Run Schema & VideoRunRepositoryMixin
+- **Type**: feat
+- **Summary**: Added video_runs table, media offset migrations on sightings/world_timeline_events, VideoRunRepositoryMixin, and compacted schema_manager.py below 240L
 - **Files** (7):
-  - `intelligent_tracker/cli/ctl.py`
-  - `scripts/stream_ctl.py`
-  - `dashboard/server.py`
-  - `scripts/run_dashboard.py`
-  - `pyproject.toml`
-  - `tests/test_entrypoints.py`
-  - `tests/test_pipeline_config.py`
-- **Verification**: 427/427 unit tests passed (unittest discover tests); arch-map verified zero new modularity warnings
+  - `.TODO/step_4_trackerdb_video_ssot_and_live_handoff.md`
+  - `intelligent_tracker/database.py`
+  - `intelligent_tracker/repositories/__init__.py`
+  - `intelligent_tracker/repositories/schema_manager.py`
+  - `intelligent_tracker/repositories/video_run_repo.py`
+  - `intelligent_tracker/repositories/video_schema.py`
+  - `tests/test_step4_video_run_repo.py`
+- **Verification**: python -m unittest discover -s tests -p test_step4_video_run_repo.py
 
-## [2026-11-12] feat: CaptureReadGuard Concurrency & COM Hardening
-- **Type**: feat
-- **Summary**: Hardened VideoSource and CameraPool against Windows COM DirectShow deadlocks and race conditions. Initialized COM on reader and safe driver unbind worker threads, removed unguarded reads during video looping, and made CameraPool remove_camera and update_camera lock-free during stream teardown.
-- **Files** (4):
-  - `intelligent_tracker/video/capture_guard.py`
-  - `intelligent_tracker/video/capture_worker.py`
-  - `dashboard/camera_pool.py`
-  - `tests/test_capture_circuit_breaker.py`
-- **Verification**: Ran 409 tests in 50.7s: 100% passed
-
-## [2026-11-11] feat: Milestone 3: Layer-Isolated Scaling & Policy-Governed Scrubber Timeline Persistence
-- **Type**: feat
-- **Summary**: Removed primary-layer sourceResolution cross-contamination in ScrubberOverlay.render(), extracted ScrubberPlaybackState & ScrubberLibraryBridge to keep VideoScrubber modular (<390L), persisted per-stem playback timestamps across original/_h264 pairs & recordings honoring #scrubber-tab-policy, and verified 372/372 unit tests plus headless CDP.
-- **Files** (6):
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/js/scrubber_playback_state.js`
-  - `dashboard/static/js/scrubber_library_bridge.js`
-  - `dashboard/static/video_scrubber.js`
-  - `dashboard/static/index.html`
-  - `tests/test_scrubber_ux_fixes.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (372 passed); headless CDP audit passed (0 warnings, 3 concurrent layers, slider persistence across keep-paused/auto-resume/reset)
-
-## [2026-11-11] test: Video Studio Automated Verification & Multi-Layer JS Runtime Suite
+## [2026-11-14] test: Step 3 Milestone 4: End-to-End ROI Tagging Verification & Sign-Off
 - **Type**: test
-- **Summary**: Added Node VM runtime tests for 2688x1520 vs 1920x1086 resolution-aware overlay scaling, reactive parent/_h264 cache invalidation, concurrent multi-layer compositing, and paired H.264 UI switching; split progressive stream and unified report store tests under modularity budgets and synced documentation/vms.rst.
-- **Files** (4):
-  - `documentation/vms.rst`
-  - `tests/test_video_pairing_and_layers.py`
-  - `tests/test_progressive_stream.py`
-  - `tests/test_video_report_store.py`
-- **Verification**: python -m unittest discover tests (352 passed); python -m sphinx -W --keep-going documentation/ documentation/_build/html/ (0 warnings)
+- **Summary**: Added E2E ROI tagging integration tests covering live camera, recorded video timestamp seek, gallery reload, and single-stream/detector fallback branches; verified 610/610 repository tests pass.
+- **Files** (1):
+  - `tests/test_step3_e2e_tagging_flow.py`
+- **Verification**: python -m unittest discover tests
+
+## [2026-11-14] feat: Step 3 Milestone 3: ROI Tag Modal Preview, AI Auto-Select & Scrubber Wiring
+- **Type**: feat
+- **Summary**: Upgraded #modal-tag-entity with live ROI crop preview, AI class badge, and 1-click Re-ID candidate chips; wired InteractiveCanvas and ScrubberOverlay to RoiDrawTagger.openWithRecognition() and POST /api/tag/commit with gallery refresh.
+- **Files** (6):
+  - `dashboard/static/css/scrubber.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/interactive_canvas.js`
+  - `dashboard/static/js/scrubber_overlay.js`
+  - `dashboard/static/partials/modals/entity_modals.html`
+  - `tests/test_step3_tag_modal_integration.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_*.py
+
+## [2026-11-14] feat: Step 3 Milestone 2: Unified RoiDrawTagger Canvas Controller
+- **Type**: feat
+- **Summary**: Added dashboard/static/js/roi_draw_tagger.js (233L) for pointer click-to-tag (<6px) and freehand drag-to-draw (>=6px) ROI selection mapped via UnifiedCanvasOverlay.computeContainBox, registered in index.html, and verified with 6 Node VM unit tests.
+- **Files** (3):
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/roi_draw_tagger.js`
+  - `tests/test_step3_roi_draw_tagger.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_roi_draw_tagger.py
+
+## [2026-11-14] feat: Step 3 Milestone 1: On-Demand ROI Recognition & Tag Commit Backend
+- **Type**: feat
+- **Summary**: Added RoiRecognitionService and /api/tag/recognize-roi + /api/tag/commit endpoints with isolated unit tests
+- **Files** (6):
+  - `.agents/rules/pipeline_and_db_invariants.md`
+  - `dashboard/app.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/routers/tagging.py`
+  - `dashboard/services/roi_recognition_service.py`
+  - `tests/test_step3_roi_recognition_api.py`
+- **Verification**: python -m unittest discover -s tests -p test_step3_roi_recognition_api.py

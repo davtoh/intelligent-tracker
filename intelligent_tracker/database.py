@@ -34,6 +34,7 @@ from intelligent_tracker.repositories import (
     WhitelistMixin,
     TelemetryMixin,
     MemoryMixin,
+    VideoRunRepositoryMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class TrackerDB(
     WhitelistMixin,
     TelemetryMixin,
     MemoryMixin,
+    VideoRunRepositoryMixin,
 ):
     """
     Thread-safe SQLite database manager for entities, Re-ID signatures, and sightings.

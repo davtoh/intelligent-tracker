@@ -13,6 +13,24 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List, Union, Tuple
 
 
+def _format_sighting_timestamp(timestamp: Optional[Union[float, str, datetime]]) -> str:
+    """Normalize sighting timestamps into SQLite UTC string format."""
+    if timestamp is None:
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    if isinstance(timestamp, (int, float)):
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(timestamp))
+    if isinstance(timestamp, datetime):
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    return str(timestamp)
+
+
+def _format_sighting_bbox(bbox: Union[str, Tuple[int, int, int, int], List[int]]) -> str:
+    """Serialize bounding box tuple/list as JSON string."""
+    if isinstance(bbox, (list, tuple)):
+        return json.dumps([int(v) for v in bbox])
+    return str(bbox)
+
+
 class AnalyticsMixin:
     """Provides sighting audit trail logging, analytics, and export utilities."""
 
@@ -26,44 +44,26 @@ class AnalyticsMixin:
         bbox: Union[str, Tuple[int, int, int, int], List[int]] = "",
         confidence: float = 1.0,
         snapshot_path: str = "",
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
     ) -> int:
-        """
-        Log an entity sighting to the audit trail.
-
-        :return: Created sighting ID.
-        """
-        if timestamp is None:
-            ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-        elif isinstance(timestamp, (int, float)):
-            ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(timestamp))
-        elif isinstance(timestamp, datetime):
-            ts_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            ts_str = str(timestamp)
-
-        if isinstance(bbox, (list, tuple)):
-            bbox_str = json.dumps([int(v) for v in bbox])
-        else:
-            bbox_str = str(bbox)
-
+        """Log an entity sighting to the audit trail and return its ID."""
+        ts_str = _format_sighting_timestamp(timestamp)
+        bbox_str = _format_sighting_bbox(bbox)
         with self._lock:
             cursor = self._conn.cursor()
             try:
                 cursor.execute(
                     """
                     INSERT INTO sightings (
-                        entity_id, track_id, source, timestamp, zone_id, bbox, confidence, snapshot_path
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        entity_id, track_id, source, timestamp, zone_id, bbox,
+                        confidence, snapshot_path, video_filename, media_offset_sec
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        entity_id,
-                        track_id,
-                        source.strip(),
-                        ts_str,
-                        zone_id.strip(),
-                        bbox_str,
-                        float(confidence),
-                        snapshot_path.strip(),
+                        entity_id, track_id, source.strip(), ts_str, zone_id.strip(),
+                        bbox_str, float(confidence), snapshot_path.strip(),
+                        str(video_filename or "").strip(), float(media_offset_sec or 0.0),
                     ),
                 )
                 self._conn.commit()
