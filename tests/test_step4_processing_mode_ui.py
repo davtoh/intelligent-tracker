@@ -160,13 +160,27 @@ class TestProcessingModeUIVM(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_init_restores_localstorage_mode_via_post(self) -> None:
         res = _run_node(
-            "await Promise.resolve();\n"
+            "els['active-camera-select'].value = '';\n"
+            "fetchCalls.length = 0;\n"
+            "await windowObj.ProcessingModeUI.init();\n"
             "return { calls: fetchCalls, selectVal: els['processing-mode-select'].value };",
             saved_mode="capture_only",
         )
         self.assertEqual(res["calls"][0]["method"], "POST")
         self.assertEqual(res["calls"][0]["body"]["mode"], "capture_only")
         self.assertEqual(res["selectVal"], "capture_only")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
+    def test_sync_camera_focus_persists_and_init_restores_camera(self) -> None:
+        res = _run_node(
+            "await windowObj.ProcessingModeUI.syncCameraFocus('vid_02');\n"
+            "const saved = store['it_focused_camera_id'];\n"
+            "await windowObj.ProcessingModeUI.init();\n"
+            "return { saved, lastBody: fetchCalls[fetchCalls.length - 1].body };",
+            saved_mode="focus_only",
+        )
+        self.assertEqual(res["saved"], "vid_02")
+        self.assertEqual(res["lastBody"]["focused_camera_id"], "vid_02")
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_set_mode_persists_localstorage_and_updates_dot(self) -> None:

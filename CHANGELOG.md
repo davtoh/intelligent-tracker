@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
+- **Type**: fix
+- **Summary**: Initialize state.focusedCameraId from localStorage (it_focused_camera_id) instead of hardcoded cam_01 in processing_mode.js, omit focused_camera_id from init() when unset, and restore the last focused camera in CameraAIConfig.resolveInitialCameraId().
+- **Files** (3):
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation
+
 ## [2026-11-17] fix: Stop init() from clobbering focused_camera_id and add no-cache for /static
 - **Type**: fix
 - **Summary**: Omit default cam_01 focused_camera_id from processing_mode.js init() POST so page load never overwrites the resolved camera, remove ?v=2 from index.html, and set Cache-Control: no-cache on /static/* in dashboard/app.py.
@@ -132,13 +141,3 @@
   - `tests/test_dashboard_di.py`
   - `tests/test_step3_capture_only_deferred_queue.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-15] feat: Step 3 Milestone 2: StreamWorker & StreamPoolCoordinator Hibernation and Tab-Scoped AI Gating
-- **Type**: feat
-- **Summary**: Integrated ProcessingModeService hibernation and vision-step gating into StreamWorker, StreamPoolCoordinator, and StreamManager with 9 unit tests.
-- **Files** (4):
-  - `dashboard/services/stream_pool_coordinator.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/stream_manager.py`
-  - `tests/test_step3_worker_hibernation_and_ai_gating.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_worker_hibernation_and_ai_gating.py

@@ -8,12 +8,21 @@
   'use strict';
 
   const STORAGE_KEY = 'it_processing_mode';
+  const CAM_STORAGE_KEY = 'it_focused_camera_id';
   const API_URL = '/api/system/processing-mode';
   const VALID_MODES = ['focus_only', 'full_realtime', 'capture_only', 'paused'];
 
+  function readStorage(key) {
+    try { return window.localStorage?.getItem(key) || null; } catch (_) { return null; }
+  }
+
+  function writeStorage(key, val) {
+    try { if (val) window.localStorage?.setItem(key, val); } catch (_) {}
+  }
+
   const state = {
     mode: 'focus_only',
-    focusedCameraId: 'cam_01',
+    focusedCameraId: readStorage(CAM_STORAGE_KEY),
     activeTab: 'live',
     deferredCount: 0,
     initialized: false,
@@ -24,22 +33,12 @@
   }
 
   function readStoredMode() {
-    try {
-      const val = window.localStorage?.getItem(STORAGE_KEY);
-      return VALID_MODES.includes(val) ? val : null;
-    } catch (_) {
-      return null;
-    }
+    const val = readStorage(STORAGE_KEY);
+    return VALID_MODES.includes(val) ? val : null;
   }
 
   function writeStoredMode(mode) {
-    try {
-      if (VALID_MODES.includes(mode)) {
-        window.localStorage?.setItem(STORAGE_KEY, mode);
-      }
-    } catch (_) {
-      // Ignore storage quota / privacy mode errors
-    }
+    if (VALID_MODES.includes(mode)) writeStorage(STORAGE_KEY, mode);
   }
 
   function normalizeTabName(tabId) {
@@ -137,6 +136,7 @@
     if (!trimmed) return Promise.resolve(null);
     const effectiveTab = getEffectiveActiveTab();
     state.focusedCameraId = trimmed;
+    writeStorage(CAM_STORAGE_KEY, trimmed);
     const payload = effectiveTab !== 'hidden'
       ? { focused_camera_id: trimmed, active_tab: effectiveTab }
       : { focused_camera_id: trimmed };
@@ -188,10 +188,9 @@
       state.mode = savedMode;
       renderUI();
       state.initialized = true;
-      return postModeUpdate({
-        mode: savedMode,
-        active_tab: getEffectiveActiveTab(),
-      });
+      const payload = { mode: savedMode, active_tab: getEffectiveActiveTab() };
+      if (state.focusedCameraId) payload.focused_camera_id = state.focusedCameraId;
+      return postModeUpdate(payload);
     }
     state.initialized = true;
     renderUI();
