@@ -70,11 +70,8 @@
 
   function applyServerState(data) {
     if (!data || typeof data !== 'object') return;
-    if (VALID_MODES.includes(data.mode)) {
-      state.mode = data.mode;
-      writeStoredMode(data.mode);
-    }
-    if (typeof data.focused_camera_id === 'string' && data.focused_camera_id) state.focusedCameraId = data.focused_camera_id;
+    if (VALID_MODES.includes(data.mode)) { state.mode = data.mode; writeStoredMode(data.mode); }
+    if (typeof data.focused_camera_id === 'string' && data.focused_camera_id && isValidCameraId(data.focused_camera_id)) state.focusedCameraId = data.focused_camera_id;
     if (typeof data.active_tab === 'string' && data.active_tab && data.active_tab !== 'hidden') state.activeTab = data.active_tab;
     if (Array.isArray(data.deferred_jobs)) state.deferredCount = data.deferred_jobs.length;
     renderUI();
@@ -130,10 +127,22 @@
     return postModeUpdate({ active_tab: getEffectiveActiveTab() });
   }
 
+  let availableCameras = null;
+
+  function setAvailableCameras(ids) {
+    if (!Array.isArray(ids)) return;
+    availableCameras = new Set(ids.filter(id => typeof id === 'string' && id.trim()).map(id => id.trim()));
+    if (state.focusedCameraId && !availableCameras.has(state.focusedCameraId)) state.focusedCameraId = null;
+  }
+
+  function isValidCameraId(id) {
+    if (!id || typeof id !== 'string' || !id.trim()) return false;
+    return !(availableCameras instanceof Set) || availableCameras.has(id.trim());
+  }
+
   function syncCameraFocus(cameraId) {
-    if (!cameraId || typeof cameraId !== 'string') return Promise.resolve(null);
+    if (!isValidCameraId(cameraId)) return Promise.resolve(null);
     const trimmed = cameraId.trim();
-    if (!trimmed) return Promise.resolve(null);
     const effectiveTab = getEffectiveActiveTab();
     state.focusedCameraId = trimmed;
     writeStorage(CAM_STORAGE_KEY, trimmed);
@@ -148,36 +157,20 @@
   }
 
   function bindEvents() {
-    const select = document.getElementById('processing-mode-select');
-    if (select && !select.dataset.pmBound) {
-      select.dataset.pmBound = '1';
-      select.addEventListener('change', (e) => setMode(e.target.value));
-    }
-
-    const resumeBtn = document.getElementById('btn-resume-processing-mode');
-    if (resumeBtn && !resumeBtn.dataset.pmBound) {
-      resumeBtn.dataset.pmBound = '1';
-      resumeBtn.addEventListener('click', () => setMode('focus_only'));
-    }
-
-    const camSelect = document.getElementById('active-camera-select');
-    if (camSelect && !camSelect.dataset.pmBound) {
-      camSelect.dataset.pmBound = '1';
-      if (camSelect.value) state.focusedCameraId = camSelect.value;
-      camSelect.addEventListener('change', (e) => syncCameraFocus(e.target.value));
-    }
+    const bindOnce = (id, ev, fn) => {
+      const el = document.getElementById(id);
+      if (el && !el.dataset.pmBound) { el.dataset.pmBound = '1'; el.addEventListener(ev, fn); return el; }
+      return null;
+    };
+    bindOnce('processing-mode-select', 'change', (e) => setMode(e.target.value));
+    bindOnce('btn-resume-processing-mode', 'click', () => setMode('focus_only'));
+    const camSel = bindOnce('active-camera-select', 'change', (e) => syncCameraFocus(e.target.value));
+    if (camSel?.value && isValidCameraId(camSel.value)) state.focusedCameraId = camSel.value;
 
     if (!state.initialized) {
-      window.addEventListener('tab-changed', (e) => {
-        const nextTab = e?.detail?.activeTab;
-        if (nextTab) syncTabChange(nextTab);
-      });
-      document.addEventListener('visibilitychange', () => {
-        syncVisibility();
-      });
-      window.addEventListener('focus', () => {
-        if (typeof document === 'undefined' || !document.hidden) syncVisibility();
-      });
+      window.addEventListener('tab-changed', (e) => { if (e?.detail?.activeTab) syncTabChange(e.detail.activeTab); });
+      document.addEventListener('visibilitychange', () => { syncVisibility(); });
+      window.addEventListener('focus', () => { if (typeof document === 'undefined' || !document.hidden) syncVisibility(); });
     }
   }
 
@@ -202,6 +195,7 @@
     VALID_MODES,
     init,
     setMode,
+    setAvailableCameras,
     syncTabChange,
     syncCameraFocus,
     syncVisibility,

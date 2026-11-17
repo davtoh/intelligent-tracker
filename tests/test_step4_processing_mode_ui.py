@@ -171,6 +171,20 @@ class TestProcessingModeUIVM(unittest.TestCase):
         self.assertEqual(res["selectVal"], "capture_only")
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
+    def test_set_available_cameras_rejects_stub_camera_id(self) -> None:
+        res = _run_node(
+            "windowObj.ProcessingModeUI.setAvailableCameras(['vid_01', 'vid_02']);\n"
+            "await windowObj.ProcessingModeUI.syncCameraFocus('vid_02');\n"
+            "const callsBefore = fetchCalls.length;\n"
+            "const rejected = await windowObj.ProcessingModeUI.syncCameraFocus('cam_01');\n"
+            "return { rejected, saved: store['it_focused_camera_id'], addedCalls: fetchCalls.length - callsBefore };",
+            saved_mode="focus_only",
+        )
+        self.assertIsNone(res["rejected"])
+        self.assertEqual(res["saved"], "vid_02")
+        self.assertEqual(res["addedCalls"], 0)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_sync_camera_focus_persists_and_init_restores_camera(self) -> None:
         res = _run_node(
             "await windowObj.ProcessingModeUI.syncCameraFocus('vid_02');\n"

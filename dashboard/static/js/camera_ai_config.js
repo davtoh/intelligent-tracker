@@ -195,17 +195,17 @@
     document.querySelectorAll('.btn-tag-preset').forEach(btn => btn.classList.remove('active'));
   }
 
-  function resolveInitialCameraId(activeCameras, currentId = 'cam_01') {
+  function resolveInitialCameraId(activeCameras, currentId = null) {
     if (!Array.isArray(activeCameras) || activeCameras.length === 0) return currentId || 'cam_01';
     let storedId = null;
     try { storedId = window.localStorage?.getItem('it_focused_camera_id') || null; } catch (_) {}
     const storedMatch = storedId ? activeCameras.find(c => c && c.id === storedId && c.enabled !== false) : null;
-    const existing = activeCameras.find(c => c && c.id === currentId);
+    const existing = currentId ? activeCameras.find(c => c && c.id === currentId) : null;
     const targetCam = storedMatch || existing || activeCameras.find(c => c && c.enabled !== false && c.id) || activeCameras.find(c => c && c.id);
     if (!targetCam) return currentId || 'cam_01';
     const resolvedId = targetCam.id;
     const appActiveId = window.App?.getActiveCameraId?.();
-    if (resolvedId !== currentId || (appActiveId && appActiveId !== resolvedId)) {
+    if (resolvedId !== currentId || appActiveId !== resolvedId) {
       const streamImg = document.getElementById('live-stream-img');
       if (streamImg) streamImg.src = `/stream/${encodeURIComponent(resolvedId)}?annotated=false`;
       window.ProcessingModeUI?.syncCameraFocus?.(resolvedId);

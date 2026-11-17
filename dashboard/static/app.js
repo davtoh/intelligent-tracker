@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     hoveredTrack: null,
   };
 
-  let activeCameraId = 'cam_01';
+  let activeCameraId = (() => { try { return window.localStorage?.getItem('it_focused_camera_id') || null; } catch (_) { return null; } })();
   const videoImg = document.getElementById('live-stream-img');
   const canvas = document.getElementById('interactive-canvas');
   const ctx = canvas?.getContext('2d');
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function attachLiveStream(forceReconnect = false) {
-    window.LivePlayer?.attachLiveStream(videoImg, activeCameraId, forceReconnect);
+    if (activeCameraId) window.LivePlayer?.attachLiveStream(videoImg, activeCameraId, forceReconnect);
   }
 
   function escapeHtml(str) {
@@ -351,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.GalleryTimeline?.initSnapshotModal();
   window.AnalyticsView?.initHeatmap();
 
-  window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
+  if (activeCameraId) window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
   if (window.location.hash) handleHashRoute();
 
   // Global interfaces

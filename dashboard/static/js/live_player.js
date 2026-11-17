@@ -73,8 +73,9 @@
       clearTimeout(streamRetryTimer);
       streamRetryTimer = null;
     }
-    const cleanBase = activeCameraId
-      ? `/stream/${encodeURIComponent(activeCameraId)}`
+    const resolvedCam = activeCameraId || window.App?.getActiveCameraId?.() || null;
+    const cleanBase = resolvedCam
+      ? `/stream/${encodeURIComponent(resolvedCam)}`
       : (videoImg.dataset?.activeStreamSrc || '/stream/cam_01').split('?')[0];
     if (videoImg.dataset) {
       videoImg.dataset.activeStreamSrc = cleanBase;
@@ -93,8 +94,8 @@
     videoImg.src = `${cleanBase}?annotated=false&t=${Date.now()}`;
     window.MjpegReconnect?.attach?.(videoImg);
     setStreamStatus('online');
-    if (activeCameraId) {
-      window.ProcessingModeUI?.syncCameraFocus?.(activeCameraId);
+    if (resolvedCam) {
+      window.ProcessingModeUI?.syncCameraFocus?.(resolvedCam);
     }
   }
 
@@ -132,7 +133,7 @@
       detachStudioStream(studioImg);
     }
     if (targetTabId === 'tab-live' && !streamPaused) {
-      const camId = window.App?.getActiveCameraId?.() || 'cam_01';
+      const camId = window.App?.getActiveCameraId?.() || null;
       attachLiveStream(liveImg, camId, false);
     } else if (targetTabId === 'tab-studio') {
       const studioCam = document.getElementById('studio-camera-select')?.value

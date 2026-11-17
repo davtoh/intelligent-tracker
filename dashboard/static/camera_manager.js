@@ -13,7 +13,7 @@
 
   let activeCameras = [];
   let cameraPresets = [];
-  let focusedCameraId = 'cam_01';
+  let focusedCameraId = null;
   let editingCameraId = null;
   let selectedDeviceName = null;
 
@@ -167,6 +167,7 @@
       const resp = await fetch('/api/cameras');
       if (resp.ok) {
         activeCameras = await resp.json();
+        window.ProcessingModeUI?.setAvailableCameras?.(activeCameras.map(c => c.id));
         focusedCameraId = window.CameraAIConfig?.resolveInitialCameraId?.(activeCameras, focusedCameraId) || focusedCameraId;
         renderActiveCamerasTable();
         updateCameraDropdown();
