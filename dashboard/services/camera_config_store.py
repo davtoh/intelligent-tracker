@@ -14,26 +14,38 @@ import threading
 import time
 from typing import Any
 
+from intelligent_tracker.camera_resolver import CameraPathResolver
 from intelligent_tracker.pipeline.config import is_synthetic_source
 
 logger = logging.getLogger("intelligent_tracker.camera_config_store")
 
 
+def _normalize_cfg_source(source: Any) -> Any:
+    """Normalize local file source paths for cross-platform config portability."""
+    if not isinstance(source, str):
+        return source
+    cleaned = source.strip()
+    if not cleaned or cleaned.lower().startswith(("rtsp://", "rtsps://", "http://", "https://")):
+        return cleaned
+    return CameraPathResolver.normalize_source_path(cleaned) if ("/" in cleaned or "\\" in cleaned) else cleaned
+
+
 def heal_non_synthetic_mock_cameras(configs: dict[str, dict[str, Any]]) -> bool:
-    """Upgrade non-synthetic ``detector='mock'`` entries to ``'yolov8'`` and drop stale ``docker_notice``."""
+    """Upgrade non-synthetic ``detector='mock'`` entries and normalize portable source paths."""
     changed = False
     notice = configs.get("docker_notice")
     if isinstance(notice, dict) and is_synthetic_source(notice.get("source"), notice.get("type")):
         configs.pop("docker_notice", None)
         changed = True
-
     for entry in configs.values():
         if not isinstance(entry, dict):
             continue
+        norm_src = _normalize_cfg_source(entry.get("source"))
+        if norm_src != entry.get("source"):
+            entry["source"], changed = norm_src, True
         det = str(entry.get("detector", "")).strip().lower()
         if det == "mock" and not is_synthetic_source(entry.get("source"), entry.get("type")):
-            entry["detector"] = "yolov8"
-            changed = True
+            entry["detector"], changed = "yolov8", True
     return changed
 
 
@@ -119,22 +131,16 @@ class CameraConfigStore:
     ) -> dict[str, Any]:
         """Create or replace a camera config entry in memory under lock."""
         resolved_device_name = device_name or (details.get("device_name") if details else None)
-        is_synth = str(cam_type).lower() in ("synthetic", "mock") or str(source).lower() in ("synthetic", "mock")
+        norm_source = _normalize_cfg_source(source)
+        is_synth = str(cam_type).lower() in ("synthetic", "mock") or str(norm_source).lower() in ("synthetic", "mock")
         det_default = "mock" if is_synth else "yolov8"
         entry = {
-            "id": camera_id,
-            "name": name,
-            "source": source,
-            "type": cam_type,
-            "enabled": enabled,
-            "armed": bool(armed),
-            "detector": detector or det_default,
-            "tracker": tracker or "centroid",
+            "id": camera_id, "name": name, "source": norm_source, "type": cam_type,
+            "enabled": enabled, "armed": bool(armed),
+            "detector": detector or det_default, "tracker": tracker or "centroid",
             "confidence": float(confidence) if confidence is not None else 0.40,
-            "classes": classes,
-            "details": details or {},
-            "device_name": resolved_device_name,
-            "created_at": time.time(),
+            "classes": classes, "details": details or {},
+            "device_name": resolved_device_name, "created_at": time.time(),
         }
         with self._lock:
             self.camera_configs[camera_id] = entry
@@ -147,6 +153,8 @@ class CameraConfigStore:
                 return False, False, None
 
             cfg = self.camera_configs[camera_id]
+            if updates.get("source") is not None:
+                updates["source"] = _normalize_cfg_source(updates["source"])
             restart_keys = ("source", "enabled", "device_name", "detector", "tracker", "confidence", "classes")
             needs_restart = any(updates.get(k) is not None and updates[k] != cfg.get(k) for k in restart_keys)
 

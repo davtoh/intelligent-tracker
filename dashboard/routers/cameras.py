@@ -269,6 +269,15 @@ async def toggle_camera_stream(
     return {"status": "success", "camera_id": camera_id, "enabled": new_state}
 
 
+@router.post("/api/cameras/{camera_id}/retry")
+async def retry_camera_stream(camera_id: str, pool: Optional[CameraPool] = Depends(get_camera_pool)):
+    """Re-probe an offline or failed camera source and restart its stream if ready."""
+    from dashboard.services.camera_source_bootstrap import retry_camera_connection
+    if not pool or camera_id not in pool.camera_configs:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
+    return retry_camera_connection(pool, camera_id)
+
+
 @router.get("/api/cameras/{camera_id}/overlays")
 async def get_camera_overlays(
     camera_id: str,

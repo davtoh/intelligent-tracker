@@ -118,7 +118,7 @@ def build_stream_telemetry(
         "fps": round(measured_fps, 1),
         "resolution": f"{shape[1]}x{shape[0]}",
         "frame_count": frame_count,
-        "homography_calibrated": manager.homography.is_calibrated,
+        "homography_calibrated": bool(getattr(manager, "homography", None) and manager.homography.is_calibrated),
         "overlays": dict(manager.overlays),
         "active_tracks": _extract_track_telemetry(tracks, manager.homography),
         "zones": _build_zones_data(manager.analytics),

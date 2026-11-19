@@ -19,6 +19,7 @@ from dashboard.services.stream_telemetry import (
     _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
     _extract_track_telemetry, _resolve_detector_telemetry, build_stream_telemetry,
 )
+from dashboard.services.stream_worker_recovery import handle_worker_exception, publish_error_placeholders
 from intelligent_tracker.pipeline import FrameProcessor, FrameStepResult, PipelineBundle, PipelineConfig
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
@@ -111,36 +112,37 @@ class StreamWorker:
         """Continuous pipeline loop executing FrameProcessor, overlays, and telemetry."""
         if not self.manager.video_source:
             return
-
         processor = self._get_processor()
         async_worker = AsyncInferenceWorker(processor)
         async_worker.start()
-        consecutive_empty = 0
-        frame_seq = 0
-
+        consecutive_empty, consecutive_errors, frame_seq = 0, 0, 0
         try:
-            with self.manager.video_source as vs:
-                while self.manager._running and not self.manager._stop_event.is_set():
-                    if self._handle_hibernation(vs, max(processor.frame_count, frame_seq)):
-                        continue
-
-                    ret, frame = vs.read(timeout=1.0)
-                    if not ret or frame is None:
-                        consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
-                        if should_skip:
-                            continue
-
-                    consecutive_empty = 0
-                    frame_seq += 1
-                    now = time.time()
-                    is_rec = bool(getattr(self.manager, "is_recording", False))
-                    step_res = build_live_step_result(
-                        async_worker, frame, now, frame_seq, self._should_run_vision_step(is_rec)
-                    )
-                    if step_res.frame_count % 30 == 1:
-                        CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
-
-                    self._process_single_frame(step_res)
+            while self.manager._running and not self.manager._stop_event.is_set():
+                try:
+                    with self.manager.video_source as vs:
+                        while self.manager._running and not self.manager._stop_event.is_set():
+                            hib_frames = 0 if consecutive_errors > 0 else max(int(getattr(processor, "frame_count", 0) or 0), frame_seq)
+                            if self._handle_hibernation(vs, hib_frames):
+                                continue
+                            try:
+                                ret, frame = vs.read(timeout=1.0)
+                                if not ret or frame is None:
+                                    consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
+                                    if should_skip:
+                                        continue
+                                consecutive_empty, frame_seq = 0, frame_seq + 1
+                                is_rec = bool(getattr(self.manager, "is_recording", False))
+                                step_res = build_live_step_result(
+                                    async_worker, frame, time.time(), frame_seq, self._should_run_vision_step(is_rec)
+                                )
+                                if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
+                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
+                                self._process_single_frame(step_res)
+                                consecutive_errors = 0
+                            except Exception as exc:
+                                consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="frame_step")
+                except Exception as exc:
+                    consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="source_enter")
         finally:
             async_worker.stop()
 
@@ -205,21 +207,7 @@ class StreamWorker:
         if consecutive_empty >= 4:
             err_code, err_msg = _diagnose_source_error(vs)
             CameraHealthManager().set_error(self.manager.camera_id, err_msg, error_code=err_code)
-            with self.manager._lock:
-                if self.manager._latest_jpeg is None or (
-                    self.manager._latest_telemetry and self.manager._latest_telemetry.get("status") != "error"
-                ):
-                    self.manager._latest_jpeg = CameraHealthManager().create_error_placeholder_jpeg(
-                        self.manager.camera_id,
-                        name=self.manager.name,
-                        width=self.manager.width,
-                        height=self.manager.height,
-                    )
-                if self.manager._latest_telemetry:
-                    self.manager._latest_telemetry["status"] = "error"
-                    self.manager._latest_telemetry["fps"] = 0.0
-                    self.manager._latest_telemetry["error_code"] = err_code
-                    self.manager._latest_telemetry["error_msg"] = err_msg
+            publish_error_placeholders(self.manager, err_code, err_msg)
             self.manager._stop_event.wait(timeout=0.5)
             return consecutive_empty, True
 

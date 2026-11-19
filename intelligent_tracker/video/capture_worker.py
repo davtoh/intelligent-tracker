@@ -18,6 +18,22 @@ from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 logger = logging.getLogger(__name__)
 
 
+def _rewind_or_reopen_loop_video(worker: Any, consecutive_empty: int) -> Tuple[bool, int]:
+    """Rewind looping video files and reopen after repeated empty reads."""
+    if worker._cap:
+        try:
+            worker._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        except Exception as e:
+            logger.debug("Failed to rewind looping video: %s", e)
+    consecutive_empty += 1
+    if consecutive_empty > 5:
+        CameraDeviceHandler.safe_release(worker._cap, settle_delay=0.0)
+        worker._cap = None
+        worker._open_capture()
+        consecutive_empty = 0
+    return not worker._stop_event.wait(timeout=0.02), consecutive_empty
+
+
 class CaptureWorkerMixin:
     """Acquisition lifecycle, backend initialization, and polling worker loop mixin."""
 
@@ -195,25 +211,10 @@ class CaptureWorkerMixin:
     ) -> Tuple[bool, int, int]:
         """Process empty frame conditions: video rewind, transient webcam retries, and reconnects."""
         if self.is_file and self.loop_video:
-            if self._cap:
-                try:
-                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                except Exception as e:
-                    logger.debug("Failed to rewind looping video: %s", e)
-            consecutive_empty += 1
-            if consecutive_empty > 5:
-                if self._cap:
-                    try:
-                        self._cap.release()
-                    except Exception:
-                        pass
-                    self._cap = None
-                self._open_capture()
-                consecutive_empty = 0
-            should_exit = self._stop_event.wait(timeout=0.02)
-            return not should_exit, consecutive_empty, reconnect_attempts
+            keep_going, consecutive_empty = _rewind_or_reopen_loop_video(self, consecutive_empty)
+            return keep_going, consecutive_empty, reconnect_attempts
 
-        elif self.is_webcam:
+        if self.is_webcam:
             consecutive_empty += 1
             if consecutive_empty < 15:
                 should_exit = self._stop_event.wait(timeout=0.02)
@@ -281,60 +282,57 @@ class CaptureWorkerMixin:
                 return False
         return True
 
+    def _handle_read_failure(
+        self, guard: Any, consecutive_empty: int, reconnect_attempts: int
+    ) -> Tuple[bool, int, int]:
+        """Handle failed/timed-out frame read with driver severing or empty-frame fallback."""
+        if not self._running:
+            return False, consecutive_empty, reconnect_attempts
+        is_severed = getattr(guard, "last_read_timed_out", False)
+        if is_severed or (guard.is_reconnecting and self.auto_reconnect and not self.is_file):
+            logger.warning("VideoSource '%s': Driver timed out or breaker tripped. Severing driver.", self.source)
+            guard.safe_driver_unbind(self._cap)
+            self._cap = None
+            self._is_connected = False
+            if self.auto_reconnect and not self.is_file:
+                should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
+                if not should_continue:
+                    return False, consecutive_empty, reconnect_attempts
+                guard.reset()
+                return True, consecutive_empty, reconnect_attempts
+            return False, consecutive_empty, reconnect_attempts
+        return self._handle_empty_frame(consecutive_empty, reconnect_attempts)
+
     def _capture_worker(self) -> None:
         """Worker thread that continuously polls frames, buffers them, and safely owns cleanup."""
-        reconnect_attempts = 0
-        consecutive_empty = 0
+        reconnect_attempts, consecutive_empty = 0, 0
         effective_fps = self.fps_limit or (self.source_fps if self.source_fps > 0 else 30.0)
         min_frame_time = (1.0 / effective_fps) if (self.is_file or self.fps_limit) else 0.0
         guard = self._get_read_guard()
-
         try:
             while self._running:
                 if self._is_paused:
                     self._pause_event.wait(timeout=0.25)
                     continue
-
                 loop_start = time.time()
                 if not self._cap or not self._cap.isOpened():
+                    if self.is_file:
+                        logger.warning("VideoSource '%s': File source failed to open; failing fast.", self.source)
+                        break
                     should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
                     if not should_continue:
                         break
                     continue
 
-                needs_warmup = getattr(self, "_needs_warmup", True)
-                timeout = getattr(self, "warmup_timeout", 5.0) if needs_warmup else getattr(self, "read_timeout", 2.0)
+                timeout = getattr(self, "warmup_timeout", 5.0) if getattr(self, "_needs_warmup", True) else getattr(self, "read_timeout", 2.0)
                 ret, frame = guard.read(self._cap, timeout=timeout, stop_event=self._stop_event)
                 if not ret or frame is None:
-                    if not self._running:
-                        break
-                    is_severed = getattr(guard, "last_read_timed_out", False)
-                    if is_severed or (guard.is_reconnecting and self.auto_reconnect and not self.is_file):
-                        logger.warning(
-                            "VideoSource '%s': Driver timed out or breaker tripped. Severing driver.",
-                            self.source,
-                        )
-                        guard.safe_driver_unbind(self._cap)
-                        self._cap = None
-                        self._is_connected = False
-                        if self.auto_reconnect and not self.is_file:
-                            should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                            if not should_continue:
-                                break
-                            guard.reset()
-                            continue
-                        break
-
-                    keep_going, consecutive_empty, reconnect_attempts = self._handle_empty_frame(
-                        consecutive_empty, reconnect_attempts
-                    )
+                    keep_going, consecutive_empty, reconnect_attempts = self._handle_read_failure(guard, consecutive_empty, reconnect_attempts)
                     if not keep_going:
                         break
                     continue
 
-                self._needs_warmup = False
-                consecutive_empty = 0
-                reconnect_attempts = 0
+                self._needs_warmup, consecutive_empty, reconnect_attempts = False, 0, 0
                 if not self._enqueue_frame(frame, loop_start, min_frame_time):
                     break
         finally:
@@ -344,6 +342,7 @@ class CaptureWorkerMixin:
                     CameraDeviceHandler.safe_release(self._cap, settle_delay=0.0)
                     self._cap = None
                 self._is_connected = False
+                self._ready_event.set()
 
 
 __all__ = ["CaptureWorkerMixin"]

@@ -239,7 +239,8 @@ class TestVideoJobAPI(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        get_video_job_manager().shutdown()
+        from dashboard.services.video_jobs_service import reset_video_job_manager
+        reset_video_job_manager()
         if os.path.exists(cls.test_path):
             try:
                 os.remove(cls.test_path)

@@ -64,7 +64,8 @@ class CaptureLifecycleMixin:
         """Wait until stream delivers its first valid frame, unblocking immediately when ready."""
         if not self._running:
             self.start(wait_for_ready=False)
-        return self._ready_event.wait(timeout=timeout)
+        self._ready_event.wait(timeout=timeout)
+        return bool(getattr(self, "_first_frame_read", False))
 
     def signal_stop(self) -> None:
         """Signal background worker to terminate immediately without waiting for join."""

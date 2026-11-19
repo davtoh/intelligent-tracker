@@ -35,6 +35,14 @@ logger = logging.getLogger("intelligent_tracker.dashboard.routers.video_jobs")
 router = APIRouter(tags=["Video Jobs & Analytics"])
 
 
+def _require_active_job_manager():
+    """Return active VideoJobManager or raise HTTP 503 if shut down."""
+    job_mgr = get_video_job_manager()
+    if getattr(job_mgr, "is_shutdown", False) or getattr(job_mgr, "_is_shutdown", False):
+        raise HTTPException(status_code=503, detail="Video job manager is shut down")
+    return job_mgr
+
+
 def _submit_async_transcode(
     job_mgr, safe_name: str, path: str, output_path: str, output_filename: str, target_resolution: Optional[str]
 ) -> JSONResponse:
@@ -145,12 +153,15 @@ async def transcode_video(
 
     pair = VideoTranscodeService.get_h264_pair_info(path)
     output_filename, output_path = pair["output_filename"], pair["output_path"]
-    job_mgr = get_video_job_manager()
+    job_mgr = _require_active_job_manager()
     early_resp = _transcode_conflict_or_cached(job_mgr, safe_name, output_filename, output_path, force)
     if early_resp is not None:
         return early_resp
     if async_mode:
-        return _submit_async_transcode(job_mgr, safe_name, path, output_path, output_filename, target_resolution)
+        try:
+            return _submit_async_transcode(job_mgr, safe_name, path, output_path, output_filename, target_resolution)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     return await asyncio.to_thread(
         _run_sync_transcode, safe_name, path, output_path, output_filename, target_resolution
     )
@@ -204,7 +215,7 @@ async def analyze_video(
         raise HTTPException(status_code=404, detail="Video file not found")
 
     opts = parse_analyze_options(sample_rate, detector, confidence, classes, async_mode, req)
-    job_mgr = get_video_job_manager()
+    job_mgr = _require_active_job_manager()
     active_job = job_mgr.get_active_job_for_file(safe_name)
     if active_job is not None:
         return JSONResponse(
@@ -217,7 +228,10 @@ async def analyze_video(
         )
 
     if opts["is_async"]:
-        job = submit_async_analytics_job(job_mgr, safe_name, path, opts)
+        try:
+            job = submit_async_analytics_job(job_mgr, safe_name, path, opts)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return JSONResponse(
             status_code=202,
             content={"status": "accepted", "job_id": job.job_id, "job": job.to_dict()},

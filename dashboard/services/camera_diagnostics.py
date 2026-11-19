@@ -131,51 +131,41 @@ class CameraHealthManager:
         """Produce helpful troubleshooting guidance based on error code."""
         if error_code == "FILE_NOT_FOUND":
             return "Video file missing on host. Ensure the file is placed in data/videos/ or update the path in Cameras Manager."
-        elif error_code == "DEVICE_LOCKED":
+        if error_code == "DEVICE_UNAVAILABLE":
+            return "Camera hardware index is unavailable or disconnected. Connect the camera and click Retry."
+        if error_code == "DEVICE_LOCKED":
             return "Camera hardware is locked by another process. Click 'Release Blocked' or select an available device."
-        elif error_code == "RTSP_TIMEOUT":
+        if error_code == "RTSP_TIMEOUT":
             return "Network RTSP connection timed out. Verify camera IP, credentials, port 554, and RTSP stream URL."
-        elif error_code == "NO_FRAMES_DECODED":
+        if error_code == "NO_FRAMES_DECODED":
             return "Video source connected but no valid frames received. Verify video codec or physical sensor connection."
+        if error_code == "INIT_FAILED":
+            return "Stream pipeline failed to initialize. Check model/database configuration and click Retry."
         return "Check camera configuration in Cameras Manager (#modal-camera-manager)."
 
     def create_error_placeholder_jpeg(
-        self,
-        camera_id: str,
-        name: str = "Camera",
-        width: int = 640,
-        height: int = 480,
+        self, camera_id: str, name: str = "Camera", width: int = 640, height: int = 480
     ) -> bytes:
         """Render a dark glass-styled diagnostic error frame displaying error details."""
         report = self.get_health(camera_id)
         img = np.zeros((height, width, 3), dtype=np.uint8)
-        img[:] = (22, 26, 35)  # Dark slate background
-
-        # Red accent top banner
+        img[:] = (22, 26, 35)
         cv2.rectangle(img, (0, 0), (width, 8), (0, 70, 230), -1)
 
-        # Warning icon and status
         err_code = report.error_code if report.error_code != "OK" else "OFFLINE"
         cv2.putText(img, f"[!] {err_code}", (40, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 90, 255), 2)
+        cv2.putText(img, f"{name} ({camera_id})"[:45], (40, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (240, 240, 240), 2)
 
-        # Camera identifier & label
-        display_name = f"{name} ({camera_id})"
-        cv2.putText(img, display_name[:45], (40, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (240, 240, 240), 2)
-
-        # Error details
         err_msg = report.last_error or "Source unavailable or configuration mismatch"
         cv2.putText(img, err_msg[:50], (40, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 175, 200), 1)
         if len(err_msg) > 50:
             cv2.putText(img, err_msg[50:100], (40, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (160, 175, 200), 1)
 
-        # Actionable hint
         hint = report.suggested_action or "Click 'Diagnose' or check Cameras Manager."
         cv2.putText(img, "Action:", (40, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 215, 255), 1)
         cv2.putText(img, hint[:60], (40, 310), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 215, 230), 1)
         if len(hint) > 60:
             cv2.putText(img, hint[60:120], (40, 335), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 215, 230), 1)
-
-        # Footer badge
         cv2.putText(img, "Intelligent Tracker VMS Diagnostics", (40, height - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 115, 130), 1)
 
         ret, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
@@ -194,52 +184,53 @@ class CameraHealthManager:
             return {"status": "skipped", "message": f"Source '{source}' is not a local DirectShow index."}
 
 
+def _find_active_pool_snapshot(pool: Any, target_source: Union[str, int]) -> Optional[Dict[str, Any]]:
+    """Reuse snapshot and telemetry from a running pool stream matching ``target_source``."""
+    import base64
+
+    if not pool or not pool.streams:
+        return None
+    for cam_id, stream_mgr in pool.streams.items():
+        if not stream_mgr or not stream_mgr.is_running:
+            continue
+        cfg = pool.camera_configs.get(cam_id, {})
+        if str(cfg.get("source")).strip() != str(target_source).strip():
+            continue
+        jpeg_bytes = stream_mgr.get_latest_frame_jpeg()
+        if not jpeg_bytes:
+            continue
+        telemetry = stream_mgr.get_latest_telemetry()
+        w, h = telemetry.get("width") or 640, telemetry.get("height") or 480
+        return {
+            "success": True, "source": str(target_source), "resolution": f"{w}x{h}",
+            "width": w, "height": h, "fps": round(float(telemetry.get("fps") or 30.0), 1),
+            "backend": "Active StreamManager",
+            "snapshot_base64": base64.b64encode(jpeg_bytes).decode("ascii"),
+            "resolved_source": str(target_source), "active_stream_id": cam_id,
+            "note": f"Camera is already streaming live in channel '{cam_id}'",
+        }
+    return None
+
+
 def probe_camera_test_request(req: Any, pool: Any = None) -> Dict[str, Any]:
     """Probe a candidate camera source or reuse an active pool stream snapshot."""
-    import base64
     from intelligent_tracker.discovery import build_preset_rtsp_url, test_camera_connection
 
     target_source = req.source
     if req.preset and req.ip:
         target_source = build_preset_rtsp_url(
-            preset=req.preset,
-            ip=req.ip,
-            port=req.port or 554,
-            username=req.username or "",
-            password=req.password or "",
-            channel=req.channel or 1,
-            stream=req.stream or "main",
+            preset=req.preset, ip=req.ip, port=req.port or 554,
+            username=req.username or "", password=req.password or "",
+            channel=req.channel or 1, stream=req.stream or "main",
         )
     if not target_source:
         target_source = "synthetic"
     if isinstance(target_source, str) and target_source.isdigit():
         target_source = int(target_source)
 
-    if pool and pool.streams:
-        for cam_id, stream_mgr in pool.streams.items():
-            if stream_mgr and stream_mgr.is_running:
-                cfg = pool.camera_configs.get(cam_id, {})
-                if str(cfg.get("source")).strip() == str(target_source).strip():
-                    jpeg_bytes = stream_mgr.get_latest_frame_jpeg()
-                    if jpeg_bytes:
-                        telemetry = stream_mgr.get_latest_telemetry()
-                        w = telemetry.get("width") or 640
-                        h = telemetry.get("height") or 480
-                        fps = telemetry.get("fps") or 30.0
-                        return {
-                            "success": True,
-                            "source": str(target_source),
-                            "resolution": f"{w}x{h}",
-                            "width": w,
-                            "height": h,
-                            "fps": round(float(fps), 1),
-                            "backend": "Active StreamManager",
-                            "snapshot_base64": base64.b64encode(jpeg_bytes).decode("ascii"),
-                            "resolved_source": str(target_source),
-                            "active_stream_id": cam_id,
-                            "note": f"Camera is already streaming live in channel '{cam_id}'",
-                        }
-
+    active = _find_active_pool_snapshot(pool, target_source)
+    if active is not None:
+        return active
     res = test_camera_connection(target_source)
     res["resolved_source"] = str(target_source)
     return res

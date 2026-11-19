@@ -13,7 +13,7 @@ import logging
 import threading
 from typing import Any
 
-from dashboard.services.camera_diagnostics import CameraHealthManager
+from dashboard.services.camera_source_bootstrap import bootstrap_camera_stream
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.camera_resolver import CameraPathResolver
 from intelligent_tracker.world import WorldGraph
@@ -115,37 +115,24 @@ class StreamPoolCoordinator:
 
     def create_and_register_stream(
         self, camera_id: str, cfg: dict[str, Any], start: bool = True,
-    ) -> StreamManager:
-        """Instantiate and register a StreamManager for ``camera_id``."""
-        raw_source = cfg.get("source", "synthetic")
-        device_name = cfg.get("device_name") or (cfg.get("details") or {}).get("device_name")
-        name = cfg.get("name", f"Camera {camera_id.upper()}")
-        resolved_source, meta = CameraPathResolver.resolve_camera_source(raw_source, device_name=device_name)
-        mgr = StreamManager(
-            config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
-            name=name, source_override=resolved_source,
-            custom_cfg=_build_custom_cfg(cfg), world_graph=self.world_graph,
+    ) -> StreamManager | None:
+        """Probe source readiness and safely instantiate/register a StreamManager."""
+        return bootstrap_camera_stream(
+            self,
+            camera_id,
+            cfg,
+            start=start,
+            resolver=CameraPathResolver,
+            stream_manager_cls=StreamManager,
+            custom_cfg_builder=_build_custom_cfg,
+            start_stream_fn=_start_stream_if_ready,
         )
-        mgr._resolved_source, mgr._source_error = resolved_source, meta.get("status") == "error"
-        mgr._processing_mode_service, mgr._in_camera_pool = self.processing_mode_service, True
-        mgr.is_armed = bool(cfg.get("armed", False))
-        with self._lock:
-            self.streams[camera_id] = mgr
-        if mgr._source_error:
-            CameraHealthManager().set_error(
-                camera_id, f"Source not found: {raw_source}",
-                error_code=meta.get("error_code", "FILE_NOT_FOUND"), attempted_paths=meta.get("attempted_paths"),
-            )
-            logger.warning("Camera stream [%s] '%s' registered offline: source not found (%s)", camera_id, name, raw_source)
-        elif start:
-            _start_stream_if_ready(mgr, camera_id, name, raw_source)
-        return mgr
 
     def restore_enabled_streams(self, camera_configs: dict[str, dict[str, Any]], autostart: bool = True) -> None:
         """Instantiate streams for all enabled camera entries."""
         _start_enabled_streams(self, camera_configs, autostart=autostart, reuse_existing=False)
 
-    def register_camera_stream(self, camera_id: str, cam_entry: dict[str, Any], enabled: bool = True, autostart: bool = True) -> StreamManager:
+    def register_camera_stream(self, camera_id: str, cam_entry: dict[str, Any], enabled: bool = True, autostart: bool = True) -> StreamManager | None:
         """Replace any existing stream for ``camera_id`` and start if enabled."""
         with self._lock:
             old_mgr = self.streams.pop(camera_id, None)
@@ -161,7 +148,7 @@ class StreamPoolCoordinator:
                 self.streams[camera_id] = mgr
         if old_mgr:
             _stop_manager_safely(old_mgr, "add_camera")
-        if enabled and autostart:
+        if enabled and autostart and mgr is not None:
             _start_stream_if_ready(mgr, camera_id, cam_entry.get("name", f"Camera {camera_id.upper()}"), cam_entry.get("source", ""))
         return mgr
 
