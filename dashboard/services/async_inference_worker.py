@@ -63,11 +63,12 @@ class AsyncInferenceWorker:
             thread.join(timeout=timeout)
         self._thread = None
 
-    def submit(self, frame: np.ndarray, timestamp: float, frame_seq: int = 0) -> None:
+    def submit(self, frame: np.ndarray, timestamp: float | None = None, frame_seq: int = 0) -> None:
         """Queue the latest frame for inference, overwriting any unconsumed frame."""
+        ts = time.monotonic() if timestamp is None else float(timestamp)
         frame_copy = frame.copy()
         with self._lock:
-            self._pending = (frame_copy, timestamp, int(frame_seq))
+            self._pending = (frame_copy, ts, int(frame_seq))
         self._work_event.set()
 
     def clear_latest_result(self) -> None:
@@ -108,13 +109,13 @@ class AsyncInferenceWorker:
             finally:
                 if self._scheduler is not None:
                     self._scheduler.record_inference_end(
-                        self._camera_id, (time.perf_counter() - t0) * 1000.0, now=time.time()
+                        self._camera_id, (time.perf_counter() - t0) * 1000.0, now=ts
                     )
             if result is None:
                 continue
             if self._scheduler is not None and self._is_armed:
                 if getattr(result, "tracks", None) or (getattr(result, "analytics", None) or {}).get("new_events"):
-                    self._scheduler.promote_alarm(self._camera_id, now=time.time())
+                    self._scheduler.promote_alarm(self._camera_id, now=ts)
 
             setattr(result, "inference_frame_seq", int(seq))
             setattr(result, "inference_timestamp", float(ts))
@@ -182,25 +183,26 @@ def _merge_cached_step_result(
 
 
 def build_live_step_result(
-    async_worker: AsyncInferenceWorker, frame: np.ndarray, now: float, frame_seq: int,
-    run_vision: bool, replay_provider: Any = None, *, scheduler: Any = None,
+    async_worker: AsyncInferenceWorker, frame: np.ndarray, now: float | None = None, frame_seq: int = 0,
+    run_vision: bool = True, replay_provider: Any = None, *, scheduler: Any = None,
     camera_id: str | None = None, mode: str = "focus_only", is_focused: bool = False,
     is_recording: bool = False, is_armed: bool = False, active_tab: str = "live",
 ) -> FrameStepResult:
     """Submit frame to async AI (or replay provider) when scheduled and stamp provenance."""
+    ts = time.monotonic() if now is None else float(now)
     if not run_vision:
         _clear_worker_cache(async_worker)
         return _stamp_step_provenance(
-            FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq), frame_seq, now, 0.0
+            FrameStepResult(frame=frame, timestamp=ts, fps=0.0, frame_count=frame_seq), frame_seq, ts, 0.0
         )
     provider = replay_provider if replay_provider is not None else getattr(async_worker, "replay_provider", None)
     if provider is not None and hasattr(provider, "build_step_result"):
-        replayed = provider.build_step_result(frame, now, frame_seq)
+        replayed = provider.build_step_result(frame, ts, frame_seq)
         if replayed is not None:
             return replayed
     decision = (
         scheduler.should_schedule_frame(
-            camera_id, frame, now, mode=mode, is_focused=is_focused,
+            camera_id, frame, ts, mode=mode, is_focused=is_focused,
             is_recording=is_recording, is_armed=is_armed, active_tab=active_tab,
         )
         if (scheduler is not None and camera_id)
@@ -208,10 +210,10 @@ def build_live_step_result(
     )
     if decision is None or decision.should_run:
         try:
-            async_worker.submit(frame, now, frame_seq=frame_seq)
+            async_worker.submit(frame, ts, frame_seq=frame_seq)
         except TypeError:
-            async_worker.submit(frame, now)
-    return _merge_cached_step_result(async_worker, frame, now, frame_seq, decision, scheduler, camera_id, is_armed)
+            async_worker.submit(frame, ts)
+    return _merge_cached_step_result(async_worker, frame, ts, frame_seq, decision, scheduler, camera_id, is_armed)
 
 
 def build_worker_step_result(
@@ -224,7 +226,7 @@ def build_worker_step_result(
     step_fn: Any = build_live_step_result,
 ) -> FrameStepResult:
     """Invoke step_fn with AnalyticsScheduler context from StreamManager."""
-    now = time.time()
+    now = time.monotonic()
     if step_fn is not build_live_step_result:
         return step_fn(async_worker, frame, now, frame_seq, run_vision)
     svc = getattr(manager, "_processing_mode_service", None)

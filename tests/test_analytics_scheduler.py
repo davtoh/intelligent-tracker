@@ -120,18 +120,26 @@ class TestMotionGateAndScheduler(unittest.TestCase):
         self.assertEqual(d_crit_p0.target_fps, 8.0)
 
         d_crit_p1 = sched.should_schedule_frame("cam_armed", fg, now=3.5, mode="focus_only", is_armed=True)
-        self.assertGreaterEqual(d_crit_p1.target_fps, 1.0)
+        self.assertEqual(d_crit_p1.target_fps, 1.0)
+        self.assertLess(d_crit_p1.target_fps, d_elev_p1.target_fps)
         self.assertTrue(len(deferred) >= 1)
 
     def test_idle_refinement_hook_under_spare_budget(self) -> None:
         hook = _FakeIdleHook()
-        sched = AnalyticsScheduler(global_fps_budget=30.0, idle_refinement_hook=hook)
-        self.assertTrue(sched.maybe_run_idle_refinement(now=5.0))
-        self.assertEqual(len(hook.calls), 1)
+        sched = AnalyticsScheduler(max_concurrent_inferences=0, global_fps_budget=0.0, idle_refinement_hook=hook)
+        self.assertEqual(sched.max_concurrent_inferences, 1)
+        self.assertEqual(sched.global_fps_budget, 1.0)
+        self.assertIsNone(sched._last_refinement_at)
+        self.assertTrue(sched.maybe_run_idle_refinement(now=0.2))
+        self.assertFalse(sched.maybe_run_idle_refinement(now=0.5))
+        self.assertTrue(sched.maybe_run_idle_refinement(now=1.5))
+        self.assertEqual(len(hook.calls), 2)
 
-        sched.record_inference_start("cam_1", now=6.0)
-        sched.record_inference_end("cam_1", latency_ms=180.0, now=6.1)
-        self.assertFalse(sched.maybe_run_idle_refinement(now=6.2))
+        sched.record_inference_start("cam_1", now=2.0)
+        sched.record_inference_end("cam_1", latency_ms=180.0, now=2.1)
+        self.assertFalse(sched.maybe_run_idle_refinement(now=3.2))
+        sched.reset()
+        self.assertIsNone(sched._last_refinement_at)
 
 
 class TestTimeSlicedTrackersAndModeService(unittest.TestCase):

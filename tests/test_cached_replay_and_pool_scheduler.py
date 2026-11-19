@@ -3,13 +3,18 @@
 import os
 import tempfile
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock
 
 import numpy as np
 
-from dashboard.services.async_inference_worker import AsyncInferenceWorker, build_live_step_result
+from dashboard.services.async_inference_worker import (
+    AsyncInferenceWorker,
+    build_live_step_result,
+    build_worker_step_result,
+)
 from dashboard.services.cached_replay_provider import CachedReplayProvider
 from dashboard.services.camera_pool_queries import build_camera_status_row
 from dashboard.services.processing_mode_service import ProcessingModeService
@@ -185,6 +190,42 @@ class TestCachedReplayAndPoolScheduler(unittest.TestCase):
         self.assertTrue(telem["motion_active"])
         row = build_camera_status_row("cam_01", {"armed": True}, mgr)
         self.assertTrue(row["armed"])
+
+    def test_real_clock_worker_step_prunes_fps_window_and_bounds_alarm_hold(self) -> None:
+        """Unmocked build_worker_step_result + ProcessingModeService.get_state share monotonic clock."""
+        svc = ProcessingModeService(mode="focus_only", focused_camera_id="cam_01", active_tab="live")
+        svc.scheduler.record_inference_start("cam_02", now=time.monotonic() - 3.0)
+        svc.scheduler.record_inference_end("cam_02", latency_ms=15.0)
+        mgr = SimpleNamespace(
+            camera_id="cam_02", is_armed=True, is_running=True, _is_hibernating=False,
+            is_recording=False, subscriber_count=1, _processing_mode_service=svc,
+        )
+        pool = SimpleNamespace(streams={"cam_02": mgr})
+        proc = SimpleNamespace(
+            step=lambda f, timestamp, max_dim=1280: FrameStepResult(
+                frame=f, tracks={1: SimpleNamespace(id=1, centroid=(10, 10))}, timestamp=timestamp
+            )
+        )
+        async_w = AsyncInferenceWorker(proc, scheduler=svc.scheduler, camera_id="cam_02", is_armed=True)
+        async_w.start()
+        self.addCleanup(async_w.stop)
+
+        frame = np.full((72, 128, 3), 180, dtype=np.uint8)
+        build_worker_step_result(mgr, async_w, frame, frame_seq=1, run_vision=True, is_rec=False)
+        for _ in range(30):
+            if async_w.get_latest_result() is not None:
+                break
+            threading.Event().wait(0.02)
+
+        state = svc.get_state(pool)
+        cam_state = state["camera_states"]["cam_02"]
+        self.assertEqual(cam_state["priority_tier"], "P0")
+        self.assertGreater(cam_state["alarm_hold_s"], 0.0)
+        self.assertLessEqual(cam_state["alarm_hold_s"], 15.0)
+        self.assertEqual(len(svc.scheduler._inference_timestamps), 1)
+        future_summary = svc.scheduler.get_summary(now=time.monotonic() + 2.5)
+        self.assertEqual(future_summary["rolling_fps"], 0.0)
+        self.assertEqual(len(svc.scheduler._inference_timestamps), 0)
 
 
 if __name__ == "__main__":

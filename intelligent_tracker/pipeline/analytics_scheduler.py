@@ -70,14 +70,8 @@ def _compute_load_shed_stage(ewma_latency_ms: float, utilization: float) -> Load
 
 
 def _compute_tier_and_fps(
-    mode: str,
-    is_focused: bool,
-    is_recording: bool,
-    is_armed: bool,
-    active_tab: str,
-    alarm_hold_s: float,
-    motion_active: bool,
-    stage: LoadShedStage,
+    mode: str, is_focused: bool, is_recording: bool, is_armed: bool,
+    active_tab: str, alarm_hold_s: float, motion_active: bool, stage: LoadShedStage,
 ) -> tuple[PriorityTier, float, str]:
     """Resolve priority tier and target FPS for the current camera state."""
     if is_recording or alarm_hold_s > 0.0 or (is_focused and active_tab == "live"):
@@ -88,7 +82,7 @@ def _compute_tier_and_fps(
     if is_armed:
         if not motion_active:
             return PriorityTier.P1, 1.0, "armed_idle_floor"
-        fps = 8.0 if stage == LoadShedStage.NORMAL else 4.0
+        fps = 8.0 if stage == LoadShedStage.NORMAL else (4.0 if stage == LoadShedStage.ELEVATED else 1.0)
         return PriorityTier.P1, max(1.0, fps), "armed_motion_burst"
 
     if mode == "full_realtime" and stage == LoadShedStage.NORMAL:
@@ -105,13 +99,8 @@ def _prune_fps_window(window: deque[float], now: float, horizon_s: float = 2.0) 
 
 
 def _can_grant_slot(
-    state: _CameraScheduleState,
-    tier: PriorityTier,
-    target_fps: float,
-    first_trigger: bool,
-    active_inferences: int,
-    max_concurrent: int,
-    ts: float,
+    state: _CameraScheduleState, tier: PriorityTier, target_fps: float,
+    first_trigger: bool, active_inferences: int, max_concurrent: int, ts: float,
 ) -> bool:
     """Return True when concurrency and cadence allow scheduling this frame."""
     if target_fps <= 0.0 or active_inferences >= max_concurrent:
@@ -134,11 +123,13 @@ class AnalyticsScheduler:
         deferred_indexing_cb: Callable[[str, str], None] | None = None,
         idle_refinement_hook: IdleRefinementHook | None = None,
     ) -> None:
-        self.motion_gate = motion_gate or MotionGate()
+        self.motion_gate = motion_gate if motion_gate is not None else MotionGate()
         env_conc = int(os.getenv("SCHEDULER_MAX_CONCURRENT_INFERENCES", "2"))
         env_fps = float(os.getenv("SCHEDULER_GLOBAL_FPS_BUDGET", "30.0"))
-        self.max_concurrent_inferences = max(1, int(max_concurrent_inferences or env_conc))
-        self.global_fps_budget = max(1.0, float(global_fps_budget or env_fps))
+        raw_conc = env_conc if max_concurrent_inferences is None else max_concurrent_inferences
+        raw_fps = env_fps if global_fps_budget is None else global_fps_budget
+        self.max_concurrent_inferences = max(1, int(raw_conc))
+        self.global_fps_budget = max(1.0, float(raw_fps))
         self._deferred_indexing_cb = deferred_indexing_cb
         self._idle_refinement_hook = idle_refinement_hook
 
@@ -147,7 +138,7 @@ class AnalyticsScheduler:
         self._inference_timestamps: deque[float] = deque()
         self._active_inferences: int = 0
         self._ewma_latency_ms: float = 0.0
-        self._last_refinement_at: float = 0.0
+        self._last_refinement_at: float | None = None
 
     def promote_alarm(self, camera_id: str, duration_s: float = 15.0, now: float | None = None) -> float:
         """Promote camera to P0 follow-up cadence for duration_s seconds."""
@@ -156,6 +147,8 @@ class AnalyticsScheduler:
         with self._lock:
             state = self._cameras.setdefault(camera_id, _CameraScheduleState())
             state.alarm_until = max(state.alarm_until, until)
+            if state.alarm_until > ts:
+                state.last_tier = PriorityTier.P0
             return state.alarm_until - ts
 
     def should_schedule_frame(
@@ -258,7 +251,8 @@ class AnalyticsScheduler:
             rolling_fps = _prune_fps_window(self._inference_timestamps, ts)
             util = max(rolling_fps / self.global_fps_budget, self._active_inferences / self.max_concurrent_inferences)
             stage = _compute_load_shed_stage(self._ewma_latency_ms, util)
-            if stage != LoadShedStage.NORMAL or util >= 0.40 or (ts - self._last_refinement_at) < 1.0:
+            too_soon = self._last_refinement_at is not None and (ts - self._last_refinement_at) < 1.0
+            if stage != LoadShedStage.NORMAL or util >= 0.40 or too_soon:
                 return False
             self._last_refinement_at = ts
         self._idle_refinement_hook.run_idle_refinement(util, ts)
@@ -271,7 +265,7 @@ class AnalyticsScheduler:
             if camera_id is None:
                 self._cameras.clear()
                 self._inference_timestamps.clear()
-                self._active_inferences, self._ewma_latency_ms, self._last_refinement_at = 0, 0.0, 0.0
+                self._active_inferences, self._ewma_latency_ms, self._last_refinement_at = 0, 0.0, None
             else:
                 self._cameras.pop(camera_id, None)
 
