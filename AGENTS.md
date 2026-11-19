@@ -81,7 +81,8 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   - Tests must never cover only the "happy path" `if` condition. When introducing branching logic with fallback dependencies, conditional coordinators, or error branches, add explicit unit tests exercising every `elif` and `else` branch.
   - Specifically test fallback configurations (e.g., primary pool absent $\rightarrow$ single-stream fallback branch executed).
 - **Global Test Fixture & Import Hygiene**:
-  - Reset global FastAPI `app_module` test overrides in `tearDownClass` and guard `_conn is not None` in DB resolvers so closed test DBs cannot leak across `unittest discover` order.
+  - Reset global FastAPI `app_module` test overrides and call `set_shutting_down(False)` in WebSocket router `TestClient` `setUp`/`addCleanup`, and guard `_conn is not None` in DB resolvers so closed test DBs or shutdown flags cannot leak across `unittest discover` order.
+  - Mount static WebSocket/HTTP routers (`/ws/multiview`) before wildcard routers (`/ws/{camera_id}`) in `dashboard/app.py` and verify router wiring against the assembled `dashboard.app.app` (not only isolated `FastAPI()` instances).
   - Preserve `try/except ImportError` optional-dependency availability probes (`zlib`, `scipy`, `picamera`) when cleaning `arch-map` unused-import alerts, and keep `.. automodule::` directives in one canonical `.rst` file so `sphinx -W` stays warning-free.
 - **Pre-Commit Static Symbol Verification (AST Check)**:
   - Whenever code is added or modified, verify that all symbols, modules, and type references are explicitly imported at the top of the file.
@@ -121,7 +122,7 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   - Shared `fetch` deduplication helpers (e.g., in-flight request maps) MUST return `resp.clone()` before callers invoke `.json()` or `.text()` to avoid `"body stream already read"` errors across concurrent consumers.
   - Node VM tests exercising `dashboard/static/js/studio.js` incremental/delta list rendering must stub DOM creation/diff hooks (`document.createElement` with `children: []` and `appendChild`, `innerHTML`, row element stubs, and `StudioOverlays.renderScenarioListUI`/`renderTopologyLinksUI`) cleanly in small (`<= 40L`) focused test helpers, and measure BEV minimap timer activity via delta renders across `_tickIntervals()` rather than absolute count (since `initStudio` performs one initial render).
   - When testing async `fetch().then(r => r.json())` flows in Node VM without timers, flush multiple microtask ticks (or await the returned init promise) so `resp.json()` resolves before asserting DOM updates.
-- **Per-File Budget Note**: `intelligent_tracker/journey_segmenter.py` has a `< 160` line cap enforced by `tests/test_step4_preflight_budgets.py` (resolved at `137L` via `intelligent_tracker/journey_models.py`). Verify strict custom file line budgets with `diagnose.py audit --max-lines <N>` immediately after writing new services.
+- **Per-File Budget Note**: `intelligent_tracker/journey_segmenter.py` has a `< 160` line cap (`tests/test_step4_preflight_budgets.py`), `StreamPoolCoordinator` has a `< 240` line cap (`tests/test_dashboard_di.py`), and `dashboard/services/stream_worker.py` has a `<= 285` line cap (`tests/test_step3_architecture_budgets.py`). Verify custom line budgets with `diagnose.py audit --max-lines <N>` immediately after editing constrained modules.
 - **Processing Mode DI & Sign-Off Invariants**:
   - Import `get_processing_mode_service` lazily inside `StreamManager.__init__` and `StreamPoolCoordinator.__init__` rather than at module top-level, because `processing_mode_service.py` imports `video_analytics_service`/`dependencies` which transitively imports `CameraPool` -> `StreamManager`.
   - Inject `mode_service_getter` into `StreamRecordingController` so standalone unit tests remain isolated while `StreamManager` shares its `ProcessingModeService`.
@@ -131,6 +132,7 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   - Each SPA tab uses at most `1` `/ws/multiview` socket + `1` 1x1 MJPEG `/stream/{id}` (or `<= 4` MJPEG sockets on `2x2` pages during 3-failure degraded fallback), sending `unsubscribe_all` when leaving the grid and closing after 30 s idle or on `pagehide`.
   - Grid `/ws/multiview` subscriptions wake capture via `annotated=False` subscriber leases and share encoded `ThumbnailCache` tiers per camera/width, without ever altering `ProcessingModeService.should_run_vision_step()` (`armed` cameras stay awake except under `paused`).
   - Keep `dashboard/static/index.html < 180` lines, `dashboard/static/partials/tabs/live.html < 220` lines, and `dashboard/static/js/processing_mode.js < 220` lines.
+  - Wrap native WebIDL timer methods (`window.setTimeout`, `window.clearTimeout`) in arrow functions (`(fn, ms) => setTimeout(fn, ms)`) rather than storing bare function references on class instances (`TypeError: Illegal invocation` in V8).
 
 ## 13. Async Pipeline, Warmup & Test Synchronization Invariants
 - **Standalone `StreamManager` Hibernation (`focus_only`)**: `ProcessingModeService.should_hibernate_camera()` must return `True` when `not in_camera_pool` and `subscriber_count <= 0` in `focus_only` mode; in `StreamWorker._should_hibernate()`, distinguish `frame_count` from `subscriber_count`.

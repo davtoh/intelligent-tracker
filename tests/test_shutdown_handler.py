@@ -50,7 +50,18 @@ class TestShutdownHandler(unittest.TestCase):
 
     def test_install_shutdown_handlers(self):
         """Verify signal handlers wrap existing handlers and invoke set_shutting_down."""
-        with patch("dashboard.dependencies.set_shutting_down") as mock_set_shutting_down, \
+        import dashboard.services.shutdown_handler as sh
+
+        saved = {
+            sig: signal.getsignal(sig)
+            for sig in (getattr(signal, n, None) for n in ("SIGINT", "SIGTERM", "SIGBREAK"))
+            if sig is not None
+        }
+        for sig, prev in saved.items():
+            self.addCleanup(signal.signal, sig, prev)
+
+        with patch.object(sh, "_HANDLERS_INSTALLED", False), \
+             patch("dashboard.dependencies.set_shutting_down") as mock_set_shutting_down, \
              patch("dashboard.services.shutdown_handler.start_watchdog_guard"):
             install_shutdown_handlers()
             handler = signal.getsignal(signal.SIGINT)

@@ -115,13 +115,14 @@ def install_shutdown_handlers() -> None:
     immediate stream cancellation upon the first CTRL+C or SIGTERM event.
     """
     global _HANDLERS_INSTALLED
-    if _HANDLERS_INSTALLED:
+    if _HANDLERS_INSTALLED or threading.current_thread() is not threading.main_thread():
         return
 
     target_signals = ["SIGINT", "SIGTERM"]
     if sys.platform == "win32":
         target_signals.append("SIGBREAK")
 
+    attached = 0
     for sig_name in target_signals:
         sig = getattr(signal, sig_name, None)
         if sig is None:
@@ -141,11 +142,13 @@ def install_shutdown_handlers() -> None:
                     return _sig_handler
 
                 signal.signal(sig, _create_handler(prev_handler, sig_name))
+                attached += 1
         except (ValueError, OSError) as exc:
             logger.debug("Could not attach signal handler for %s: %s", sig_name, exc)
 
-    _HANDLERS_INSTALLED = True
-    logger.debug("Installed graceful shutdown signal hooks.")
+    if attached > 0:
+        _HANDLERS_INSTALLED = True
+        logger.debug("Installed graceful shutdown signal hooks.")
 
 
 async def async_shutdown_pool(camera_pool, timeout: float = 3.0) -> None:

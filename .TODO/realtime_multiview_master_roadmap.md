@@ -15,7 +15,10 @@
 ### Milestone 1: Multiview WebSocket Streaming & Grid Scalability
 - [x] **.TODO/multiview_ws_streaming_plan.md**: Grid stabilization + pagination, WebSocket security, `/ws/multiview` binary multiplexer with shared thumbnail cache, `armed` flag, client `FrameSurface`, automatic MJPEG fallback, diagnostics log bridge, Hub/HTTP2 docs.
 
-### Milestone 2: Resource-Aware Analytics Scheduler *(Deferred — design via /grill-me after Milestone 1)*
+### Milestone 2: Step 1.5 — Cross-Platform Pipeline Hardening & Live/Studio Sync
+- [ ] **.TODO/step_1_5_cross_platform_pipeline_hardening.md**: Cross-platform video path normalization, fast-fail missing files & unavailable USB probes, `StreamWorker` loop fault isolation, open trace catalog fixes (`TRC-001/004/007`), and Live Monitor vs Video Studio overlay synchronization (`frame_seq` provenance, pre-indexed file replay, `#live-stream-img` tagger fix, and opt-in `annotated=true` toggle).
+
+### Milestone 3: Step 2 — Resource-Aware Analytics Scheduler *(Deferred — design via /grill-me after Step 1.5)*
 - [ ] **.TODO/resource_aware_analytics_scheduler.md**: P0/P1/P2 inference priorities, motion-gated cadence, CPU/GPU budget, load shedding, alarm-latency SLA.
 
 ## Decision Log (from `/grill-me`, 2026-11-16)
