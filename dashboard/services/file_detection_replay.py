@@ -227,6 +227,15 @@ class FileDetectionReplayProvider:
         self._source_fps = db_fps if db_fps > 0 else (vs_fps if vs_fps > 0 else 30.0)
         return bool(self._records)
 
+    def resolve_media_time(self, frame_seq: int, *, media_time_s: float | None = None) -> float:
+        """Resolve wrapped media timestamp in seconds for a 1-based frame_seq."""
+        if media_time_s is not None:
+            return float(media_time_s)
+        total_records_last_t = float(self._records[-1].get("time", 0.0)) if self._records else 0.0
+        fps = max(1.0, self._source_fps)
+        raw_t = max(0, int(frame_seq) - 1) / fps
+        return (raw_t % (total_records_last_t + (1.0 / fps))) if total_records_last_t > 0 else raw_t
+
     def lookup_tracks(
         self,
         frame_seq: int,
@@ -237,14 +246,11 @@ class FileDetectionReplayProvider:
         """Return frame-aligned ReplayTrack dict if a pre-indexed run exists, else None."""
         if not self.ensure_loaded():
             return None
-        total_records_last_t = float(self._records[-1].get("time", 0.0)) if self._records else 0.0
         fps = max(1.0, self._source_fps)
         zero_based = max(0, int(frame_seq) - 1)
-        if media_time_s is None:
-            raw_t = zero_based / fps
-            media_time_s = (raw_t % (total_records_last_t + (1.0 / fps))) if total_records_last_t > 0 else raw_t
+        resolved_t = self.resolve_media_time(frame_seq, media_time_s=media_time_s)
         rec = _find_closest_record(
-            self._records, target_frame=zero_based, target_time_s=media_time_s,
+            self._records, target_frame=zero_based, target_time_s=resolved_t,
             fps=fps, tolerance_s=self.tolerance_s,
         )
         if rec is None:

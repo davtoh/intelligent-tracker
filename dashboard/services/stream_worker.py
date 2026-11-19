@@ -12,9 +12,13 @@ from typing import Any
 import cv2
 import numpy as np
 
-from dashboard.services.async_inference_worker import AsyncInferenceWorker, build_live_step_result
+from dashboard.services.async_inference_worker import (
+    AsyncInferenceWorker,
+    build_live_step_result,
+    build_worker_step_result,
+)
+from dashboard.services.cached_replay_provider import CachedReplayProvider
 from dashboard.services.camera_diagnostics import CameraHealthManager
-from dashboard.services.file_detection_replay import FileDetectionReplayProvider
 from dashboard.services.multiview.thumbnail_cache import maybe_update_manager_thumbnail
 from dashboard.services.stream_telemetry import (
     _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
@@ -88,7 +92,8 @@ class StreamWorker:
         svc = getattr(self.manager, "_processing_mode_service", None)
         if svc is None:
             return True
-        return bool(svc.should_run_vision_step(self.manager.camera_id, is_recording=is_recording))
+        is_armed = bool(getattr(self.manager, "is_armed", False))
+        return bool(svc.should_run_vision_step(self.manager.camera_id, is_recording=is_recording, is_armed=is_armed))
 
     def _should_hibernate(self, is_recording: bool, frame_count: int) -> bool:
         """Evaluate subscriber-count and ProcessingModeService hibernation rules."""
@@ -114,8 +119,12 @@ class StreamWorker:
         if not self.manager.video_source:
             return
         processor = self._get_processor()
-        replay = FileDetectionReplayProvider(getattr(self.manager, "db", None), self.manager.video_source)
-        async_worker = AsyncInferenceWorker(processor, replay_provider=replay)
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        replay = CachedReplayProvider(getattr(self.manager, "db", None), self.manager.video_source, processor=processor)
+        async_worker = AsyncInferenceWorker(
+            processor, replay_provider=replay, scheduler=getattr(svc, "scheduler", None),
+            camera_id=self.manager.camera_id, is_armed=bool(getattr(self.manager, "is_armed", False)),
+        )
         async_worker.start()
         consecutive_empty, consecutive_errors, frame_seq = 0, 0, 0
         try:
@@ -134,9 +143,7 @@ class StreamWorker:
                                         continue
                                 consecutive_empty, frame_seq = 0, frame_seq + 1
                                 is_rec = bool(getattr(self.manager, "is_recording", False))
-                                step_res = build_live_step_result(
-                                    async_worker, frame, time.time(), frame_seq, self._should_run_vision_step(is_rec)
-                                )
+                                step_res = build_worker_step_result(self.manager, async_worker, frame, frame_seq, self._should_run_vision_step(is_rec), is_rec, step_fn=build_live_step_result)
                                 if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
                                     CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
                                 self._process_single_frame(step_res)

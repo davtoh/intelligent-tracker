@@ -63,25 +63,25 @@
 - [x] **tests/test_analytics_scheduler.py** *(New)*: Unit tests (`<= 40 L` per test method) verifying `MotionGate` `< 1 ms` luma delta and immediate first-frame trigger, P0/P1/P2 cadence decisions across `focus_only` and `full_realtime`, 15 s P1->P0 alarm promotion, `motion -> alarm <= 2.0 s` SLA bound, 3-stage load shedding cascade (P2 shed first, P1 floor never starved to 0), `SortTracker`/`CentroidTracker` `dt`-aware persistence across `1.0 FPS` intervals, `IdleRefinementHook` invocation under spare budget, and `ProcessingModeService.should_run_vision_step(..., is_armed=True)`.
 - [x] **CHANGELOG.md**: Record milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
 
-### Milestone 2: Zero-GPU `CachedReplayProvider` with Live Rule Governance & Runtime Pool Wiring *(Deferred to Next Turn / Milestone)*
+### Milestone 2: Zero-GPU `CachedReplayProvider` with Live Rule Governance & Runtime Pool Wiring
 
-- [ ] **intelligent_tracker/pipeline/post_detection_governance.py** *(New)* + **intelligent_tracker/pipeline/frame_processor.py#L61-L339**: Extract post-detection governance (`evaluate_tracks_governance(bundle, frame, tracks, timestamp)` running `AnalyticsEngine.update` for zones/tripwires/RSAC/pet whitelist, topology zone exits, Re-ID `_publish_id_events`, and `WorldEntityBridge` sync) into `post_detection_governance.py` (`< 180 L`, functions `<= 40 L`), reducing `FrameProcessor` from 14 methods to `<= 12` methods and eliminating the 54-line `_publish_id_events` audit overrun.
-- [ ] **dashboard/services/cached_replay_provider.py** *(New)* + **dashboard/services/file_detection_replay.py#L174-L285**: Implement zero-GPU `CachedReplayProvider` (`< 220 L`, `<= 8` methods) wrapping `FileDetectionReplayProvider` and `bundle` governance:
-  - When a `video_file` camera has a completed `TrackerDB` detection stream (`video_runs`), bypass `AnalyticsScheduler` GPU/YOLO budget completely (`0` inference slots consumed, `priority_tier="REPLAY"`).
-  - Detect video loop wrap-around (`media_time_s` regression or `frame_idx == 0` wrap) and reset per-track zone dwell / tripwire crossing state cleanly so looping clips do not corrupt dwell timers or trigger duplicate wrap-around alert storms.
-  - Execute `evaluate_tracks_governance()` on hydrated `ReplayTrack`s at live cadence so zones, tripwires, RSAC rules, pet whitelist, `EventBus` alerts, and `WorldEntityBridge` fire live without loading or running YOLO.
-  - When no completed `TrackerDB` indexing run exists for the file, return `None` so the camera falls back seamlessly to standard P0/P1/P2 scheduled live inference.
-- [ ] **dashboard/services/async_inference_worker.py#L19-L163** + **dashboard/services/stream_worker.py#L86-L149** + **dashboard/services/camera_source_bootstrap.py** + **dashboard/services/stream_pool_coordinator.py** + **dashboard/services/stream_telemetry.py** + **dashboard/camera_pool_queries.py#L46-L66**:
-  - Update `StreamWorker._should_run_vision_step()` to pass `is_armed=bool(getattr(self.manager, "is_armed", False))`.
-  - Wire shared `AnalyticsScheduler` and per-stream `CachedReplayProvider` into `AsyncInferenceWorker` / `build_live_step_result()`: if `CachedReplayProvider` is active, return zero-GPU governed `FrameStepResult`; otherwise consult `AnalyticsScheduler.should_schedule_frame(camera_id, frame, now, ...)` before `async_worker.submit()`, and automatically call `scheduler.promote_alarm(camera_id)` for `15.0 s` whenever detections or rule violations occur on an armed camera.
-  - Expose `"armed": bool(getattr(stream, "is_armed", cfg.get("armed", False)))` in `build_camera_status_row()` and add `priority_tier`, `target_fps`, `motion_active`, `load_shed_stage`, and `replay_active` to `build_stream_telemetry()`.
-  - Keep `stream_worker.py <= 285 L` (`<= 12` methods) and `stream_pool_coordinator.py < 240 L`.
-- [ ] **tests/test_cached_replay_and_pool_scheduler.py** *(New)*: Unit & integration tests (`<= 40 L` per test method) verifying:
-  - Pre-indexed `video_file` camera with `CachedReplayProvider` emits live `ZoneEvent`, `TripwireCrossEvent`, and `RSACViolationEvent` on `EventBus` with `0` calls to `detector.detect()` and `0` scheduler budget slots used.
-  - Video loop wrap-around resets zone/tripwire state cleanly.
-  - Unindexed `video_file` camera falls back to P0/P1/P2 `AnalyticsScheduler` live inference.
-  - Multi-camera `CameraPool` in `focus_only` runs P0 on focused camera and motion-gated P1 on unfocused `armed=True` camera, promoting P1->P0 on intrusion within `<= 2.0 s`.
-- [ ] **CHANGELOG.md**: Record milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
+- [x] **intelligent_tracker/pipeline/post_detection_governance.py** *(New)* + **intelligent_tracker/pipeline/frame_processor.py#L61-L339**: Extract post-detection governance (`evaluate_tracks_governance(bundle, frame, tracks, timestamp)` running `AnalyticsEngine.update` for zones/tripwires/RSAC/pet whitelist, topology zone exits, Re-ID `_publish_id_events`, and `WorldEntityBridge` sync) into `post_detection_governance.py` (`< 180 L`, functions `<= 40 L`), reducing `FrameProcessor` from 14 methods to `<= 12` methods and eliminating the 54-line `_publish_id_events` audit overrun.
+- [x] **dashboard/services/cached_replay_provider.py** *(New)* + **dashboard/services/file_detection_replay.py#L174-L285**: Implement zero-GPU `CachedReplayProvider` (`< 220 L`, `<= 8` methods) wrapping `FileDetectionReplayProvider` and `bundle` governance:
+  - [x] When a `video_file` camera has a completed `TrackerDB` detection stream (`video_runs`), bypass `AnalyticsScheduler` GPU/YOLO budget completely (`0` inference slots consumed, `priority_tier="REPLAY"`).
+  - [x] Detect video loop wrap-around (`media_time_s` regression or `frame_idx == 0` wrap) and reset per-track zone dwell / tripwire crossing state cleanly so looping clips do not corrupt dwell timers or trigger duplicate wrap-around alert storms.
+  - [x] Execute `evaluate_tracks_governance()` on hydrated `ReplayTrack`s at live cadence so zones, tripwires, RSAC rules, pet whitelist, `EventBus` alerts, and `WorldEntityBridge` fire live without loading or running YOLO.
+  - [x] When no completed `TrackerDB` indexing run exists for the file, return `None` so the camera falls back seamlessly to standard P0/P1/P2 scheduled live inference.
+- [x] **dashboard/services/async_inference_worker.py#L19-L163** + **dashboard/services/stream_worker.py#L86-L149** + **dashboard/services/camera_source_bootstrap.py** + **dashboard/services/stream_pool_coordinator.py** + **dashboard/services/stream_telemetry.py** + **dashboard/camera_pool_queries.py#L46-L66**:
+  - [x] Update `StreamWorker._should_run_vision_step()` to pass `is_armed=bool(getattr(self.manager, "is_armed", False))`.
+  - [x] Wire shared `AnalyticsScheduler` and per-stream `CachedReplayProvider` into `AsyncInferenceWorker` / `build_live_step_result()`: if `CachedReplayProvider` is active, return zero-GPU governed `FrameStepResult`; otherwise consult `AnalyticsScheduler.should_schedule_frame(camera_id, frame, now, ...)` before `async_worker.submit()`, and automatically call `scheduler.promote_alarm(camera_id)` for `15.0 s` whenever detections or rule violations occur on an armed camera.
+  - [x] Expose `"armed": bool(getattr(stream, "is_armed", cfg.get("armed", False)))` in `build_camera_status_row()` and add `priority_tier`, `target_fps`, `motion_active`, `load_shed_stage`, and `replay_active` to `build_stream_telemetry()`.
+  - [x] Keep `stream_worker.py <= 285 L` (`<= 12` methods) and `stream_pool_coordinator.py < 240 L`.
+- [x] **tests/test_cached_replay_and_pool_scheduler.py** *(New)*: Unit & integration tests (`<= 40 L` per test method) verifying:
+  - [x] Pre-indexed `video_file` camera with `CachedReplayProvider` emits live `ZoneEvent`, `TripwireCrossEvent`, and `RSACViolationEvent` on `EventBus` with `0` calls to `detector.detect()` and `0` scheduler budget slots used.
+  - [x] Video loop wrap-around resets zone/tripwire state cleanly.
+  - [x] Unindexed `video_file` camera falls back to P0/P1/P2 `AnalyticsScheduler` live inference.
+  - [x] Multi-camera `CameraPool` in `focus_only` runs P0 on focused camera and motion-gated P1 on unfocused `armed=True` camera, promoting P1->P0 on intrusion within `<= 2.0 s`.
+- [x] **CHANGELOG.md**: Record milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
 
 ### Milestone 3: Scheduler HUD, Schema/API Telemetry, Documentation & Final Sign-Off *(Deferred to Next Turn / Milestone)*
 

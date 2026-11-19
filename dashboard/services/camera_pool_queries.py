@@ -63,6 +63,7 @@ def build_camera_status_row(
         "active_tracks_count": len(telemetry.get("active_tracks", [])),
         "source_type": "synthetic" if is_synth else "physical",
         "recording": rec_state,
+        "armed": bool(getattr(mgr, "is_armed", cfg.get("armed", False))),
     }
 
 

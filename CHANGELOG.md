@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-19] feat: Step 2 Milestone 2: Zero-GPU CachedReplayProvider & Runtime Pool Scheduler Wiring
+- **Type**: feat
+- **Summary**: Extracted shared post_detection_governance.py (FrameProcessor 14->7 methods), implemented zero-GPU CachedReplayProvider with live zone/tripwire/RSAC governance and loop wrap-around resets, wired AnalyticsScheduler & armed P1 gating into StreamWorker/AsyncInferenceWorker, and exposed scheduler/armed telemetry.
+- **Files** (9):
+  - `dashboard/services/async_inference_worker.py`
+  - `dashboard/services/cached_replay_provider.py`
+  - `dashboard/services/camera_pool_queries.py`
+  - `dashboard/services/file_detection_replay.py`
+  - `dashboard/services/stream_telemetry.py`
+  - `dashboard/services/stream_worker.py`
+  - `intelligent_tracker/pipeline/frame_processor.py`
+  - `intelligent_tracker/pipeline/post_detection_governance.py`
+  - ... (+1 more)
+- **Verification**: python -m unittest tests.test_cached_replay_and_pool_scheduler tests.test_live_studio_sync tests.test_step3_worker_hibernation_and_ai_gating tests.test_dashboard_di tests.test_step3_architecture_budgets tests.test_cross_platform_pipeline_hardening tests.test_analytics_scheduler
+
 ## [2026-11-19] feat: Step 2 Milestone 1: Core AnalyticsScheduler, 64x36 MotionGate, dt-Aware Trackers & Armed P1
 - **Type**: feat
 - **Summary**: Implemented 64x36 luma MotionGate, P0/P1/P2 AnalyticsScheduler with 3-stage load shedding and IdleRefinementHook, dt-aware persistence in SortTracker/CentroidTracker, and armed P1 vision gating in ProcessingModeService.
@@ -121,21 +136,6 @@
   - `dashboard/static/js/grid_pagination.js`
   - ... (+5 more)
 - **Verification**: python -m unittest tests.test_grid_pagination tests.test_camera_grid_teardown tests.test_processing_mode tests.test_step2_live_canvas_delegation tests.test_refactor_contract
-
-## [2026-11-16] fix: Detach Multi-Grid MJPEG Streams on Tab Leave and Refresh on Mode Change
-- **Type**: fix
-- **Summary**: Added detachGridStreams/attachGridStreams in live_player.js so 2x2/3x3 grid tiles detach on tab leave and #live-stream-img stays detached in grid mode; refreshed active streams in processing_mode.js setMode().
-- **Files** (11):
-  - `.TODO/performance_and_processing_modes_master_roadma_followups.md`
-  - `.TODO/step_4_frontend_reliability_and_verification.md`
-  - `AGENTS.md`
-  - `CHANGELOG.md`
-  - `dashboard/static/css/processing_mode.css`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/camera_recording.js`
-  - `dashboard/static/js/live_player.js`
-  - ... (+3 more)
-- **Verification**: python -m unittest tests/test_step2_tab_scoped_streams.py tests/test_step2_tab_scoped_perf_integration.py tests/test_step2_live_canvas_delegation.py tests/test_step4_processing_mode_ui.py
 
 ## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
 - **Type**: fix

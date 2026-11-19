@@ -109,6 +109,9 @@ def build_stream_telemetry(
     src_h = int(shape[0]) if len(shape) >= 1 else 0
     inf_seq = int(getattr(step_res, "inference_frame_seq", frame_count) if step_res is not None else frame_count)
     inf_lag = round(max(0.0, float(getattr(step_res, "inference_lag_ms", 0.0) if step_res is not None else 0.0)), 1)
+    svc = getattr(manager, "_processing_mode_service", None)
+    sched = getattr(svc, "scheduler", None) if svc is not None else None
+    cam_sched = sched.get_camera_summary(manager.camera_id) if sched is not None else {}
     return {
         "camera_id": manager.camera_id, "status": "online",
         "detector_model": detector_model, "detector_status": detector_status,
@@ -123,4 +126,9 @@ def build_stream_telemetry(
         "tripwires": _build_tripwires_data(manager.analytics),
         "recent_alerts": _extract_recent_alerts(manager.event_bus),
         "recording": rec_status,
+        "priority_tier": getattr(step_res, "priority_tier", cam_sched.get("priority_tier", "P2")),
+        "target_fps": getattr(step_res, "target_fps", cam_sched.get("target_fps", 0.0)),
+        "motion_active": bool(getattr(step_res, "motion_active", cam_sched.get("motion_active", False))),
+        "load_shed_stage": getattr(step_res, "load_shed_stage", cam_sched.get("load_shed_stage", "normal")),
+        "replay_active": bool(getattr(step_res, "replay_active", False)),
     }
