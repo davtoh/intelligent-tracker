@@ -114,6 +114,7 @@ class StreamWorker:
             subscriber_count=sub_count,
             is_recording=is_recording,
             in_camera_pool=in_pool,
+            is_armed=bool(getattr(self.manager, "is_armed", False)),
         )
         return bool(should_hib and (frame_count > 0 or mode == "paused" or is_unfocused))
 

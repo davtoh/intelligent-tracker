@@ -19,6 +19,7 @@ from dashboard.dependencies import (
     get_shutdown_event,
     is_shutting_down,
 )
+from dashboard.services.security_config import authorize_websocket
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.streaming")
 
@@ -133,6 +134,10 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, camera_id: str):
     WebSocket endpoint pushing real-time tracking, occupancy, and sighting telemetry.
     Supports client commands (e.g. toggle heatmap, ping).
     """
+    allowed, reason = authorize_websocket(websocket)
+    if not allowed:
+        await websocket.close(code=1008, reason=reason)
+        return
     await websocket.accept()
     mgr = get_active_stream_manager(camera_id, conn=websocket)
     if not mgr:

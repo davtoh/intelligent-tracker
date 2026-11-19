@@ -56,6 +56,7 @@ class CameraAddRequest(BaseModel):
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold (0.01 - 1.0)")
     classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list (e.g. ['person', 'car'])")
     enabled: Optional[bool] = True
+    armed: Optional[bool] = False
     details: Optional[Dict[str, Any]] = None
 
     @field_validator("classes", mode="before")
@@ -69,6 +70,7 @@ class CameraUpdateRequest(BaseModel):
     source: Optional[str] = None
     type: Optional[str] = None
     enabled: Optional[bool] = None
+    armed: Optional[bool] = None
     detector: Optional[str] = None
     tracker: Optional[str] = None
     confidence: Optional[float] = Field(None, ge=0.01, le=1.0, description="Updated confidence threshold")

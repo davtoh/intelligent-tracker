@@ -99,6 +99,7 @@ async def add_camera(
         enabled=req.enabled if req.enabled is not None else True,
         autostart=True,
         details=req.details,
+        armed=bool(req.armed),
     )
     return {"status": "success", "camera": pool.camera_configs.get(req.id)}
 
@@ -233,6 +234,7 @@ async def update_camera(
         tracker=req.tracker,
         confidence=req.confidence,
         classes=req.classes,
+        armed=req.armed,
     )
     return {
         "status": "success" if success else "failed",

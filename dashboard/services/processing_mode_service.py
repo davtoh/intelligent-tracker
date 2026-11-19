@@ -71,7 +71,12 @@ class ProcessingModeService:
             return self.get_state()
 
     def should_hibernate_camera(
-        self, camera_id: str, subscriber_count: int = 0, is_recording: bool = False, in_camera_pool: bool = True
+        self,
+        camera_id: str,
+        subscriber_count: int = 0,
+        is_recording: bool = False,
+        in_camera_pool: bool = True,
+        is_armed: bool = False,
     ) -> bool:
         """Return True when a camera worker should pause frame capture."""
         if is_recording:
@@ -80,6 +85,8 @@ class ProcessingModeService:
             mode, focused, tab = self._mode, self._focused_camera_id, self._active_tab
         if mode == "paused":
             return True
+        if is_armed:
+            return False
         if mode == "full_realtime":
             return not in_camera_pool and subscriber_count <= 0
         if mode == "capture_only":
@@ -113,13 +120,15 @@ class ProcessingModeService:
         for cam_id, sm in streams.items():
             sub_count = int(getattr(sm, "subscriber_count", 0))
             is_rec = bool(getattr(sm, "is_recording", False))
+            is_armed = bool(getattr(sm, "is_armed", False))
             states[cam_id] = {
                 "is_running": bool(getattr(sm, "is_running", False)),
                 "is_hibernating": bool(getattr(sm, "_is_hibernating", False)),
                 "is_recording": is_rec,
+                "is_armed": is_armed,
                 "subscriber_count": sub_count,
                 "should_hibernate": self.should_hibernate_camera(
-                    cam_id, subscriber_count=sub_count, is_recording=is_rec, in_camera_pool=True
+                    cam_id, subscriber_count=sub_count, is_recording=is_rec, in_camera_pool=True, is_armed=is_armed
                 ),
                 "should_run_vision": self.should_run_vision_step(cam_id, is_recording=is_rec),
             }
@@ -135,8 +144,9 @@ class ProcessingModeService:
             for cam_id, sm in (getattr(pool, "streams", {}) or {}).items():
                 sub_count = int(getattr(sm, "subscriber_count", 0))
                 is_rec = bool(getattr(sm, "is_recording", False))
+                is_armed = bool(getattr(sm, "is_armed", False))
                 should_hib = self.should_hibernate_camera(
-                    cam_id, subscriber_count=sub_count, is_recording=is_rec, in_camera_pool=True
+                    cam_id, subscriber_count=sub_count, is_recording=is_rec, in_camera_pool=True, is_armed=is_armed
                 )
                 if not should_hib and getattr(sm, "_is_hibernating", False):
                     sm._is_hibernating = False

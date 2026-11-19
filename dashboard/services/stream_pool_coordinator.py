@@ -128,6 +128,7 @@ class StreamPoolCoordinator:
         )
         mgr._resolved_source, mgr._source_error = resolved_source, meta.get("status") == "error"
         mgr._processing_mode_service, mgr._in_camera_pool = self.processing_mode_service, True
+        mgr.is_armed = bool(cfg.get("armed", False))
         with self._lock:
             self.streams[camera_id] = mgr
         if mgr._source_error:
@@ -144,9 +145,7 @@ class StreamPoolCoordinator:
         """Instantiate streams for all enabled camera entries."""
         _start_enabled_streams(self, camera_configs, autostart=autostart, reuse_existing=False)
 
-    def register_camera_stream(
-        self, camera_id: str, cam_entry: dict[str, Any], enabled: bool = True, autostart: bool = True,
-    ) -> StreamManager:
+    def register_camera_stream(self, camera_id: str, cam_entry: dict[str, Any], enabled: bool = True, autostart: bool = True) -> StreamManager:
         """Replace any existing stream for ``camera_id`` and start if enabled."""
         with self._lock:
             old_mgr = self.streams.pop(camera_id, None)
@@ -155,8 +154,7 @@ class StreamPoolCoordinator:
             else:
                 mgr = StreamManager(
                     config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
-                    name=cam_entry.get("name", f"Camera {camera_id.upper()}"),
-                    source_override=cam_entry.get("source", "synthetic"),
+                    name=cam_entry.get("name", f"Camera {camera_id.upper()}"), source_override=cam_entry.get("source", "synthetic"),
                     world_graph=self.world_graph, processing_mode_service=self.processing_mode_service,
                 )
                 mgr._in_camera_pool = True
@@ -172,10 +170,8 @@ class StreamPoolCoordinator:
         with self._lock:
             old_mgr = self.streams.pop(camera_id, None)
             new_mgr = self.create_and_register_stream(camera_id, cfg, start=False) if cfg.get("enabled", True) else None
-
         if old_mgr:
             _stop_manager_safely(old_mgr, "update_camera")
-
         if cfg.get("enabled", True) and new_mgr:
             _start_stream_if_ready(new_mgr, camera_id, cfg.get("name", f"Camera {camera_id.upper()}"), cfg.get("source", ""))
 
@@ -234,5 +230,8 @@ class StreamPoolCoordinator:
             mgr._processing_mode_service = svc
             mgr._in_camera_pool = True
             should_hib = svc.should_hibernate_camera(
-                cam_id, subscriber_count=int(getattr(mgr, "subscriber_count", 0)), is_recording=bool(getattr(mgr, "is_recording", False)), in_camera_pool=True)
+                cam_id, subscriber_count=int(getattr(mgr, "subscriber_count", 0)),
+                is_recording=bool(getattr(mgr, "is_recording", False)), in_camera_pool=True,
+                is_armed=bool(getattr(mgr, "is_armed", False)),
+            )
             _sync_manager_hibernation(mgr, should_hib)

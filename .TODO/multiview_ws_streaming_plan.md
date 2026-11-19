@@ -114,12 +114,12 @@ Ships the immediate fix for the black-screen bug. The MJPEG budget logic built h
 - [x] **Definition of Done**: CDP repro `1x1→2x2→1x1` restores 1x1 at 640x360 and `fetch` < 2 s; with 6 cameras, 3x3 holds ≤ 4 MJPEG sockets; full suite green; `diagnose.py audit` passes on all touched files.
 
 ### Milestone 2: WebSocket Security, Protocol Contract & `armed` Policy *(Deferred)*
-- [ ] **dashboard/services/security_config.py**: `parse_allowed_origins()`, `is_origin_allowed(origin, host_header, allowlist)`, `sign_token()/verify_token()` (HMAC-SHA256, `exp`), all from env with empty-string defaults.
-- [ ] **dashboard/routers/streaming.py**: Origin/token check before `accept()` on `/ws/{camera_id}` (close `1008`).
-- [ ] **dashboard/app.py** + **dashboard/server.py**: CORS `allow_origins` from the allowlist (same-origin by default); `proxy_headers=True`, `forwarded_allow_ips` from `FORWARDED_ALLOW_IPS`.
-- [ ] **dashboard/services/multiview/protocol.py** + **limits.py**: Pure pack/unpack of the v1 header, control-message validation, layout caps parsing/clamping.
-- [ ] **dashboard/services/camera_config_store.py** + **dashboard/services/processing_mode_service.py** + callers (`stream_worker.py#L112`, `stream_pool_coordinator.py#L234`, `processing_mode_service.py#L121,L138`): `armed: bool = False` in the camera schema; `should_hibernate_camera(..., is_armed=False)`: armed never hibernates except in `paused` (E6).
-- [ ] **tests/test_security_config.py**, **tests/test_multiview_protocol.py**, **tests/test_processing_mode_invariants.py** (E4/E5/E6 across all 4 modes; every branch).
+- [x] **dashboard/services/security_config.py**: `parse_allowed_origins()`, `is_origin_allowed(origin, host_header, allowlist)`, `sign_token()/verify_token()` (HMAC-SHA256, `exp`), all from env with empty-string defaults.
+- [x] **dashboard/routers/streaming.py**: Origin/token check before `accept()` on `/ws/{camera_id}` (close `1008`).
+- [x] **dashboard/app.py** + **dashboard/server.py**: CORS `allow_origins` from the allowlist (same-origin by default); `proxy_headers=True`, `forwarded_allow_ips` from `FORWARDED_ALLOW_IPS`.
+- [x] **dashboard/services/multiview/protocol.py** + **limits.py**: Pure pack/unpack of the v1 header, control-message validation, layout caps parsing/clamping.
+- [x] **dashboard/services/camera_config_store.py** + **dashboard/services/processing_mode_service.py** + callers (`stream_worker.py#L112`, `stream_pool_coordinator.py#L234`, `processing_mode_service.py#L121,L138`): `armed: bool = False` in the camera schema; `should_hibernate_camera(..., is_armed=False)`: armed never hibernates except in `paused` (E6).
+- [x] **tests/test_security_config.py**, **tests/test_multiview_protocol.py**, **tests/test_processing_mode_invariants.py** (E4/E5/E6 across all 4 modes; every branch).
 
 ### Milestone 3: Backend `/ws/multiview` Engine (Thumbnail Cache + Sessions) *(Deferred)*
 - [ ] **dashboard/services/multiview/thumbnail_cache.py**: Per-camera `ThumbnailCache` with tier leases (640/480/320), FPS gate, `(seq, ts_ms, bytes)` slots; worker hook in `stream_worker.py` (≤ 6 added lines) after the existing encode step; annotated-if-available source (E9).

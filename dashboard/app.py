@@ -100,6 +100,7 @@ from dashboard.services.diagnostic_log_handler import (
     install_diagnostic_log_handler,
     remove_diagnostic_log_handler,
 )
+from dashboard.services.security_config import parse_allowed_origins
 from dashboard.services.process_supervisor import (
     set_parent_death_signal,
     start_parent_watchdog,
@@ -219,7 +220,7 @@ def create_app() -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=parse_allowed_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

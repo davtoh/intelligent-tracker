@@ -48,6 +48,7 @@ def _seed_default_camera() -> dict[str, Any]:
         "source": source,
         "type": cam_type,
         "enabled": True,
+        "armed": False,
         "detector": "mock" if is_synth else "yolov8",
         "tracker": "centroid",
     }
@@ -114,6 +115,7 @@ class CameraConfigStore:
         enabled: bool = True,
         details: dict[str, Any] | None = None,
         device_name: str | None = None,
+        armed: bool = False,
     ) -> dict[str, Any]:
         """Create or replace a camera config entry in memory under lock."""
         resolved_device_name = device_name or (details.get("device_name") if details else None)
@@ -125,6 +127,7 @@ class CameraConfigStore:
             "source": source,
             "type": cam_type,
             "enabled": enabled,
+            "armed": bool(armed),
             "detector": detector or det_default,
             "tracker": tracker or "centroid",
             "confidence": float(confidence) if confidence is not None else 0.40,
