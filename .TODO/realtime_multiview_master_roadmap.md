@@ -35,3 +35,7 @@
 | Q7 | WS failure fallback | After 3 failed upgrades → capped MJPEG grid (≤4 live sockets) + "Degraded transport" badge, background WS retry (exp. backoff ≤60s), auto-restore |
 | Q8 | 1x1 + lifecycle | 1x1 stays MJPEG; protocol carries `profile: thumb|full` from v1 + generic `FrameSurface` for later migration; one lazy client per tab, `unsubscribe_all` outside grid, idle close 30s / `pagehide`, pause on `document.hidden` |
 | Q9 | Diagnostics + HTTP/2 | Rate-limited `DiagnosticLogHandler` → `.diagnostics/traces/`; `source_status` control frames; HTTP/2 = docs-only reverse-proxy recipe |
+| Q10 | Scheduler mode integration | Tier 2 Frontier SOTA in existing modes: focus_only runs focused/alarm at P0 and armed cameras at motion-gated P1; full_realtime runs P0/P1/P2 under shared budget |
+| Q11 | P1 motion gate & alarm SLA | 64x36 luma MotionGate (<0.2ms, 1 FPS floor -> 8 FPS burst), immediate first-motion frame, 15s P1->P0 alarm hold, dt-aware tracker persistence (motion -> alarm <= 2.0s) |
+| Q12 | video_file CachedReplayProvider | Zero-GPU replay (0 scheduler slots) + live post-detection governance (zones/tripwires/RSAC/whitelist/EventBus/WorldEntityBridge) with loop wrap-around reset; fallback to live scheduling if unindexed; IdleRefinementHook for future Pass-2/3 descriptor refinement |
+| Q13 | Shared budget & load shedding | Per-camera AsyncInferenceWorker facade backed by central AnalyticsScheduler with 3-stage shedding (P2->0 FPS first, P1 burst 8->4 FPS, P1 >=1 FPS floor protected) + scheduler_hud.js telemetry |
