@@ -12,8 +12,8 @@
 
 ## Steps
 
-### Milestone 1: Multiview WebSocket Streaming & Grid Scalability *(Active Execution Target)*
-- [ ] **.TODO/multiview_ws_streaming_plan.md**: Grid stabilization + pagination, WebSocket security, `/ws/multiview` binary multiplexer with shared thumbnail cache, `armed` flag, client `FrameSurface`, automatic MJPEG fallback, diagnostics log bridge, Hub/HTTP2 docs.
+### Milestone 1: Multiview WebSocket Streaming & Grid Scalability
+- [x] **.TODO/multiview_ws_streaming_plan.md**: Grid stabilization + pagination, WebSocket security, `/ws/multiview` binary multiplexer with shared thumbnail cache, `armed` flag, client `FrameSurface`, automatic MJPEG fallback, diagnostics log bridge, Hub/HTTP2 docs.
 
 ### Milestone 2: Resource-Aware Analytics Scheduler *(Deferred — design via /grill-me after Milestone 1)*
 - [ ] **.TODO/resource_aware_analytics_scheduler.md**: P0/P1/P2 inference priorities, motion-gated cadence, CPU/GPU budget, load shedding, alarm-latency SLA.

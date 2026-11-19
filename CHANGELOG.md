@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-19] feat: Multi-View WebSocket Streaming & Grid Scalability (Milestone 4)
+- **Type**: feat
+- **Summary**: Added /ws/multiview frontend protocol/FrameSurface/client with canvas grid tiles, 3-failure MJPEG fallback with auto-restore, armed-paused overlay counter, static-before-wildcard WS router ordering fix, Hub/HTTP2 Sphinx docs, and Node VM + headless CDP E2E tests
+- **Files** (15):
+  - `AGENTS.md`
+  - `dashboard/app.py`
+  - `dashboard/static/css/grid_pagination.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/camera_grid.js`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `dashboard/static/partials/tabs/live.html`
+  - ... (+7 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-17] fix: Cold-Boot cam_01 SSOT & Focus Reconciliation
 - **Type**: fix
 - **Summary**: Removed remaining hardcoded cam_01 fallbacks and eager stream attributes across Studio, Recording, Enrollment, Interactive Canvas, Gallery Timeline, Scenario Modals, and StreamPoolCoordinator. Seeded initial focused_camera_id from the first enabled camera on StreamPoolCoordinator start/restore, delegated CameraAIConfig.resolveInitialCameraId to LivePlayer.attachLiveStream(), and reconciled null server focus in ProcessingModeUI.setAvailableCameras().
@@ -130,17 +145,3 @@
   - `tests/test_camera_discovery_and_guard.py`
   - `intelligent_tracker/video/capture_helpers.py`
 - **Verification**: python -m unittest tests/test_camera_discovery_and_guard.py tests/test_capture_circuit_breaker.py tests/test_camera_device.py tests/test_discovery.py
-
-## [2026-11-16] refactor: Step 2 Milestone 2: Event-Driven MJPEG Wakeup & StreamManager Waiter Lifecycle
-- **Type**: refactor
-- **Summary**: Replaced 40ms polling in _stream_frame_generator with event-driven asyncio.wait on frame_event and shutdown_evt (1.5s heartbeat safety timeout), added thread-safe frame-ready waiter registry on StreamMediaMixin, notified waiters on frame encode and StreamManager.signal_stop(), and extracted build_live_step_result to keep stream_worker.py within 285L.
-- **Files** (1):
-  - `dashboard/services/stream_media.py,dashboard/stream_manager.py,dashboard/routers/streaming.py,dashboard/services/stream_worker.py,dashboard/services/async_inference_worker.py,tests/test_stream_manager.py`
-
-## [2026-11-15] test: Step 4 Milestone 2: E2E Processing Mode Verification, StreamWorker __all__ & Master Sign-Off
-- **Type**: test
-- **Summary**: Added explicit __all__ exports in stream_worker.py (0 arch-map unused imports) and end-to-end tests in tests/test_step4_e2e_performance_and_modes.py covering mode lifecycle, worker parity, capture_only deferred badge propagation, <200ms latency, and Step 1-4 modularity budgets.
-- **Files** (2):
-  - `dashboard/services/stream_worker.py`
-  - `tests/test_step4_e2e_performance_and_modes.py`
-- **Verification**: python -m unittest discover tests

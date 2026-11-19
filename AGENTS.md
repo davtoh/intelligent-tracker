@@ -63,7 +63,7 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
 1. **New Web Routes & API Endpoints**: Do **NOT** add new endpoints directly into `dashboard/app.py`. Place new route handlers in `dashboard/routers/<domain>.py` (using FastAPI `APIRouter`) and business logic in `dashboard/services/<domain>_service.py`, then mount the router in `dashboard/app.py`.
 2. **New Database Queries & Tables**: Do **NOT** add new methods directly into `TrackerDB` inside `intelligent_tracker/database.py`. Create focused domain repositories or query mixins in `intelligent_tracker/repositories/<domain>_repo.py` ($\le$ 10–12 methods per class) and compose or re-export them via `TrackerDB` so existing callers remain unbroken.
 3. **New Stream / Pipeline Logic**: Do **NOT** expand `dashboard/stream_manager.py`. Extract focused collaborator classes (e.g. `dashboard/services/stream_lifecycle.py`, `dashboard/services/frame_Overlay.py`).
-4. **New Frontend Scripts & Styles**: Do **NOT** append new feature blocks to `dashboard/static/app.js` or `dashboard/static/styles.css`. Place new frontend modules in `dashboard/static/js/<feature>.js` and component styles in `dashboard/static/css/<component>.css`.
+4. **New Frontend Scripts & Styles**: Do **NOT** append new feature blocks to `dashboard/static/app.js` or `dashboard/static/styles.css`. Place new frontend modules in `dashboard/static/js/<feature>.js` (with multiview WebSocket transport/canvas logic under `dashboard/static/js/multiview/`, backend multiview services under `dashboard/services/multiview/`, and thin routes under `dashboard/routers/multiview.py`) and component styles in `dashboard/static/css/<component>.css`.
 5. **Decomposing Existing Monoliths**: When executing a dedicated refactoring milestone, use the `/refactor-monolith` skill and preserve 100% of existing public imports via `__init__.py` or facade re-exports.
 
 ## 8. Thread Safety & Task Shutdown Invariants
@@ -127,6 +127,10 @@ Most prior monoliths (`styles.css`, `database.py`, `app.py`, `geometry.py`, `det
   - Inject `mode_service_getter` into `StreamRecordingController` so standalone unit tests remain isolated while `StreamManager` shares its `ProcessingModeService`.
   - When seeding `CameraPool` in isolated tests with stubbed streams, mark cameras `enabled=False` in the temp `cameras.json` so `load_cameras()` does not open real `TrackerDB` SQLite handles that block Windows `TemporaryDirectory` cleanup.
   - Always run the full `python -m unittest discover tests` suite at child-plan sign-off to catch cross-step modularity budget tests such as `tests/test_dashboard_di.py`.
+- **Multiview Socket Budget, Viewing ≠ Analytics & HTML Shell Ceilings**:
+  - Each SPA tab uses at most `1` `/ws/multiview` socket + `1` 1x1 MJPEG `/stream/{id}` (or `<= 4` MJPEG sockets on `2x2` pages during 3-failure degraded fallback), sending `unsubscribe_all` when leaving the grid and closing after 30 s idle or on `pagehide`.
+  - Grid `/ws/multiview` subscriptions wake capture via `annotated=False` subscriber leases and share encoded `ThumbnailCache` tiers per camera/width, without ever altering `ProcessingModeService.should_run_vision_step()` (`armed` cameras stay awake except under `paused`).
+  - Keep `dashboard/static/index.html < 180` lines, `dashboard/static/partials/tabs/live.html < 220` lines, and `dashboard/static/js/processing_mode.js < 220` lines.
 
 ## 13. Async Pipeline, Warmup & Test Synchronization Invariants
 - **Standalone `StreamManager` Hibernation (`focus_only`)**: `ProcessingModeService.should_hibernate_camera()` must return `True` when `not in_camera_pool` and `subscriber_count <= 0` in `focus_only` mode; in `StreamWorker._should_hibernate()`, distinguish `frame_count` from `subscriber_count`.

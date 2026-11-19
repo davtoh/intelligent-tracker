@@ -237,8 +237,8 @@ def create_app() -> FastAPI:
     # Mount domain APIRouters
     for router in (
         system_router, cameras_router, camera_diagnostics_router,
-        camera_recording_router, processing_mode_router, streaming_router,
-        multiview_router, scenarios_router, rsac_router, analytics_router,
+        camera_recording_router, processing_mode_router, multiview_router,
+        streaming_router, scenarios_router, rsac_router, analytics_router,
         tagging_router, videos_router, topology_router, world_router,
     ):
         application.include_router(router)

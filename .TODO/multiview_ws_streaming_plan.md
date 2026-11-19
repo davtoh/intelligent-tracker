@@ -128,11 +128,11 @@ Ships the immediate fix for the black-screen bug. The MJPEG budget logic built h
 - [x] **tests/test_thumbnail_cache.py**, **tests/test_multiview_session.py**, **tests/test_multiview_router.py** (synthetic frames / mock detector only; `TestClient` WebSocket; temp `cameras.json` with `enabled=False` seeds).
 
 ### Milestone 4: Frontend Client, Canvas Tiles, Fallback, Docs & E2E *(Deferred)*
-- [ ] **dashboard/static/js/multiview/protocol.js** + **frame_surface.js** + **multiview_client.js**: Header parsing; `FrameSurface` (seq gating, `bitmap.close()` in `finally`, DPR-aware `ResizeObserver`, status posters); `MultiviewWsClient` (lazy connect, replace-set subscribe, `unsubscribe_all` outside the grid, 30 s idle close, `pagehide` close, visibility pause/resume, exponential backoff, 3-failure fallback + auto-restore, `1013` treated as retryable).
-- [ ] **dashboard/static/js/camera_grid.js** + **live_player.js**: WS mode renders `<canvas>` tiles via `FrameSurface`; fallback mode reuses the Milestone 1 MJPEG budget (forced 2x2 pages); "Degraded transport" badge; tab sync calls `unsubscribe_all`.
-- [ ] **documentation/enterprise_hub_integration.rst** + **documentation/multiview_streaming.rst**: `/ws/multiview` v1 contract, Origin/token config, reverse-proxy recipe (Caddy/Nginx TLS → HTTP/2 + WebSocket `Upgrade` forwarding), socket budget table; `sphinx -W` clean.
-- [ ] **tests/test_frame_surface.py**, **tests/test_multiview_client.py** (Node VM, ≤ 40 L per method) + CDP E2E: `1x1↔2x2↔3x3↔4x4↔Video Studio`, pagination, forced WS failure → fallback → restore.
-- [ ] **CHANGELOG.md** via `diagnose.py changelog add`; **AGENTS.md** §7/§12: add the multiview invariants (socket budget, viewing ≠ analytics).
+- [x] **dashboard/static/js/multiview/protocol.js** + **frame_surface.js** + **multiview_client.js**: Header parsing; `FrameSurface` (seq gating, `bitmap.close()` in `finally`, DPR-aware `ResizeObserver`, status posters); `MultiviewWsClient` (lazy connect, replace-set subscribe, `unsubscribe_all` outside the grid, 30 s idle close, `pagehide` close, visibility pause/resume, exponential backoff, 3-failure fallback + auto-restore, `1013` treated as retryable).
+- [x] **dashboard/static/js/camera_grid.js** + **live_player.js**: WS mode renders `<canvas>` tiles via `FrameSurface`; fallback mode reuses the Milestone 1 MJPEG budget (forced 2x2 pages); "Degraded transport" badge; tab sync calls `unsubscribe_all`.
+- [x] **documentation/enterprise_hub_integration.rst** + **documentation/multiview_streaming.rst**: `/ws/multiview` v1 contract, Origin/token config, reverse-proxy recipe (Caddy/Nginx TLS → HTTP/2 + WebSocket `Upgrade` forwarding), socket budget table; `sphinx -W` clean.
+- [x] **tests/test_frame_surface.py**, **tests/test_multiview_client.py** (Node VM, ≤ 40 L per method) + CDP E2E: `1x1↔2x2↔3x3↔4x4↔Video Studio`, pagination, forced WS failure → fallback → restore.
+- [x] **CHANGELOG.md** via `diagnose.py changelog add`; **AGENTS.md** §7/§12: add the multiview invariants (socket budget, viewing ≠ analytics).
 
 ## 6. Scenario Combinations Matrix
 

@@ -26,19 +26,24 @@
     }
   }
 
-  function detachGridStreams() {
+  function detachGridStreams(options = {}) {
     const grid = document.getElementById('multi-grid-container');
-    if (!grid || typeof grid.querySelectorAll !== 'function') return;
-    grid.querySelectorAll('img').forEach(img => {
-      if (img.src && !img.src.startsWith('data:image/svg+xml')) {
-        if (img.dataset) img.dataset.activeStreamSrc = img.src.split('?')[0];
-      }
-      window.MjpegReconnect?.detach?.(img);
-      img.src = STANDBY_POSTER_SVG;
-    });
+    if (grid && typeof grid.querySelectorAll === 'function') {
+      grid.querySelectorAll('img').forEach(img => {
+        if (img.src && !img.src.startsWith('data:image/svg+xml')) {
+          if (img.dataset) img.dataset.activeStreamSrc = img.src.split('?')[0];
+        }
+        window.MjpegReconnect?.detach?.(img);
+        img.src = STANDBY_POSTER_SVG;
+      });
+    }
+    if (!options?.keepWsSubscription) {
+      window.MultiviewWsClient?.unsubscribeAll?.();
+    }
   }
 
   function attachGridStreams() {
+    if (window.CameraGrid?.resubscribeActiveGrid?.()) return;
     const grid = document.getElementById('multi-grid-container');
     if (!grid || typeof grid.querySelectorAll !== 'function') return;
     grid.querySelectorAll('img').forEach(img => {
@@ -49,8 +54,8 @@
     });
   }
 
-  function detachLiveStream(videoImg) {
-    detachGridStreams();
+  function detachLiveStream(videoImg, options = {}) {
+    if (!options?.keepGrid) detachGridStreams();
     if (!videoImg) return;
     window.MjpegReconnect?.detach?.(videoImg);
     if (videoImg.src && !videoImg.src.startsWith('data:image/svg+xml')) {
@@ -61,14 +66,15 @@
   }
 
   function attachLiveStream(videoImg, activeCameraId, forceReconnect = false) {
-    if (!videoImg || streamPaused) return;
+    if (streamPaused) return;
     const gridMode = window.CameraGrid?.getGridMode?.();
     if (gridMode && gridMode !== '1x1') {
-      detachLiveStream(videoImg);
+      detachLiveStream(videoImg, { keepGrid: true });
       attachGridStreams();
       setStreamStatus('online');
       return;
     }
+    if (!videoImg) return;
     if (streamRetryTimer) {
       clearTimeout(streamRetryTimer);
       streamRetryTimer = null;
@@ -132,7 +138,10 @@
     const heatmapImg = document.getElementById('static-heatmap-img');
     if (previousTabId === 'tab-live' && targetTabId !== 'tab-live') {
       detachLiveStream(liveImg);
-    } else if (previousTabId === 'tab-studio' && targetTabId !== 'tab-studio') {
+    } else if (targetTabId !== 'tab-live') {
+      window.MultiviewWsClient?.unsubscribeAll?.();
+    }
+    if (previousTabId === 'tab-studio' && targetTabId !== 'tab-studio') {
       detachStudioStream(studioImg);
     }
     if (targetTabId === 'tab-live' && !streamPaused) {
@@ -212,6 +221,8 @@
 
   window.LivePlayer = {
     STANDBY_POSTER_SVG: STANDBY_POSTER_SVG,
+    detachGridStreams: detachGridStreams,
+    attachGridStreams: attachGridStreams,
     detachLiveStream: detachLiveStream,
     attachLiveStream: attachLiveStream,
     detachStudioStream: detachStudioStream,

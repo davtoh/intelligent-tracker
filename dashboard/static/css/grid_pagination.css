@@ -78,3 +78,53 @@
   min-width: 72px;
   padding: 4px 10px;
 }
+
+.tile-video-container canvas.tile-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.grid-transport-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-transport-badge[hidden] {
+  display: none;
+}
+
+.grid-transport-badge.degraded {
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.tile-status-badge.hibernating {
+  background: rgba(100, 116, 139, 0.25);
+  color: #cbd5e1;
+}
+
+.tile-status-badge.reconnecting {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+}
+
+.tile-status-badge.error {
+  background: rgba(239, 68, 68, 0.22);
+  color: var(--crimson);
+}
+
+.tile-status-badge.disabled {
+  background: rgba(71, 85, 105, 0.25);
+  color: #94a3b8;
+}

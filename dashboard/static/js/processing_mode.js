@@ -25,6 +25,7 @@
     focusedCameraId: readStorage(CAM_STORAGE_KEY),
     activeTab: 'live',
     deferredCount: 0,
+    armedPausedCount: 0,
     initialized: false,
   };
 
@@ -51,13 +52,8 @@
     const select = document.getElementById('processing-mode-select');
     const dot = document.getElementById('processing-mode-dot');
     const badge = document.getElementById('processing-mode-deferred-badge');
-
-    if (select && select.value !== state.mode) {
-      select.value = state.mode;
-    }
-    if (dot) {
-      dot.className = `processing-mode-dot mode-${state.mode}`;
-    }
+    if (select && select.value !== state.mode) select.value = state.mode;
+    if (dot) dot.className = `processing-mode-dot mode-${state.mode}`;
     if (badge) {
       const count = Math.max(0, Number(state.deferredCount) || 0);
       badge.textContent = String(count);
@@ -66,6 +62,13 @@
     }
     const pausedOverlay = document.getElementById('live-paused-overlay');
     if (pausedOverlay) pausedOverlay.hidden = state.mode !== 'paused';
+    const pausedSub = document.getElementById('live-paused-subtitle');
+    if (pausedSub) {
+      const n = state.armedPausedCount;
+      pausedSub.textContent = state.mode === 'paused' && n > 0
+        ? `${n} armed camera${n === 1 ? '' : 's'} paused — all camera pipelines are hibernating to save CPU/GPU.`
+        : 'All camera pipelines are hibernating to save CPU/GPU.';
+    }
   }
 
   let serverFocusedCameraId = null;
@@ -77,6 +80,9 @@
     if (serverFocusedCameraId && isValidCameraId(serverFocusedCameraId)) state.focusedCameraId = serverFocusedCameraId;
     if (typeof data.active_tab === 'string' && data.active_tab && data.active_tab !== 'hidden') state.activeTab = data.active_tab;
     if (Array.isArray(data.deferred_jobs)) state.deferredCount = data.deferred_jobs.length;
+    if (data.cameras && typeof data.cameras === 'object') {
+      state.armedPausedCount = Object.values(data.cameras).filter(c => c?.is_armed && c?.should_hibernate).length;
+    }
     renderUI();
   }
 

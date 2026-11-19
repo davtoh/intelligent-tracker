@@ -48,7 +48,7 @@
             <div id="live-paused-overlay" class="live-paused-overlay" hidden>
               <div class="live-paused-card glass-panel">
                 <span class="live-paused-title">Processing Mode: Paused</span>
-                <span class="live-paused-subtitle">All camera pipelines are hibernating to save CPU/GPU.</span>
+                <span class="live-paused-subtitle" id="live-paused-subtitle">All camera pipelines are hibernating to save CPU/GPU.</span>
                 <button type="button" class="btn btn-sm btn-primary" id="btn-resume-processing-mode">▶ Resume Live Feed</button>
               </div>
             </div>
@@ -66,6 +66,7 @@
             <button type="button" class="btn btn-sm btn-outline grid-page-btn" id="btn-grid-prev" title="Previous Grid Page">‹ Prev</button>
             <span class="grid-page-indicator" id="grid-page-indicator">Page 1 of 1</span>
             <button type="button" class="btn btn-sm btn-outline grid-page-btn" id="btn-grid-next" title="Next Grid Page">Next ›</button>
+            <span class="grid-transport-badge degraded" id="grid-degraded-badge" hidden title="WebSocket multiview unavailable; using capped 2x2 MJPEG fallback">⚠ Degraded transport</span>
           </div>
 
           <!-- Live Player HUD Toolbar (Milestone 10) -->

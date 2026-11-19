@@ -86,6 +86,20 @@ class TestMultiviewRouter(unittest.TestCase):
             self.assertEqual(frame.seq, 42)
         self.assertEqual(get_active_session_count(), 0)
 
+    def test_assembled_dashboard_app_routes_multiview_before_wildcard_ws(self) -> None:
+        from dashboard.app import app as dashboard_app
+
+        bind_app_state(dashboard_app, camera_pool=self.pool)
+        self.addCleanup(clear_app_state, dashboard_app)
+        client = TestClient(dashboard_app)
+        self.addCleanup(client.close)
+        with client.websocket_connect("/ws/multiview") as ws:
+            hello = ws.receive_json()
+            self.assertEqual(hello["type"], "hello")
+            ws.send_json({"v": 1, "action": "ping"})
+            self.assertEqual(ws.receive_json()["type"], "pong")
+        self.assertEqual(get_active_session_count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
