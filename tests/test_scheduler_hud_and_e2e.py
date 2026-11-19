@@ -70,18 +70,21 @@ class TestSchedulerHudAndApi(unittest.TestCase):
         self.assertEqual(payload.scheduler["load_shed_stage"], "normal")
 
     def test_processing_mode_endpoint_returns_scheduler_and_camera_states(self) -> None:
+        import threading
         set_shutting_down(False)
         app.dependency_overrides[get_camera_pool] = lambda: None
         self.addCleanup(lambda: (app.dependency_overrides.clear(), set_shutting_down(False)))
         svc = ProcessingModeService(mode="focus_only", focused_camera_id="cam_01", active_tab="live")
-        with patch("dashboard.routers.processing_mode.get_processing_mode_service", return_value=svc), \
-             TestClient(app) as client:
-            resp = client.get("/api/system/processing-mode")
+        before_workers = {t.ident for t in threading.enumerate() if t.name == "StreamManagerWorker"}
+        with patch("dashboard.routers.processing_mode.get_processing_mode_service", return_value=svc):
+            resp = TestClient(app).get("/api/system/processing-mode")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertIn("scheduler", body)
         self.assertIn("load_shed_stage", body["scheduler"])
         self.assertIn("camera_states", body)
+        after_workers = {t.ident for t in threading.enumerate() if t.name == "StreamManagerWorker"}
+        self.assertFalse(after_workers - before_workers)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_processing_mode_js_reads_camera_states_for_armed_paused_count(self) -> None:
