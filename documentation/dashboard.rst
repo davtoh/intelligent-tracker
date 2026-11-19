@@ -35,7 +35,15 @@ Key Capabilities
    Zero-client-dependency streaming over HTTP standard multipart boundary. The primary 1x1 Live Monitor viewport defaults to ``?annotated=false`` (un-burned video frames with crisp client-side ``UnifiedCanvasOverlay`` bounding boxes and ROI click-to-tag hit-testing) and includes an opt-in HUD toggle (`🎯 Canvas Boxes` vs `🔥 Burned Boxes`, persisted in ``localStorage``) to switch to ``?annotated=true`` server-burned overlays while automatically suppressing duplicate client canvas boxes.
 
 2. **Live Monitor vs. Video Studio Synchronization & Pre-Indexed File Replay**:
-   ``AsyncInferenceWorker`` stamps ``inference_frame_seq``, ``inference_timestamp``, and ``inference_lag_ms`` onto live step results and clears cached detections whenever ``run_vision`` is disabled. When a camera is backed by a local video file with a completed ``TrackerDB`` ``video_runs`` detection stream, ``FileDetectionReplayProvider`` replays frame-aligned detections directly with ``0.0 ms`` inference lag without redundant live YOLOv8 inference.
+   ``AsyncInferenceWorker`` stamps ``inference_frame_seq``, ``inference_timestamp``, and ``inference_lag_ms`` onto live step results and clears cached detections whenever ``run_vision`` is disabled. When a camera is backed by a local video file with a completed ``TrackerDB`` ``video_runs`` detection stream, ``CachedReplayProvider`` (wrapping ``FileDetectionReplayProvider``) replays frame-aligned detections with ``0.0 ms`` inference lag and **0 GPU/scheduler slots** while running full live rule/alarm evaluation via ``evaluate_tracks_governance()`` (zones, tripwires, RSAC, pet whitelist, ``EventBus``, and ``WorldEntityBridge``) with automatic video-loop wrap-around state reset.
+
+3. **Resource-Aware Analytics Scheduler (``P0/P1/P2``, ``MotionGate`` & 3-Stage Load Shedding)**:
+   ``AnalyticsScheduler`` arbitrates CPU/GPU inference budgets across all pooled cameras to guarantee ``motion -> alarm <= 2.0 s`` on every ``armed`` camera:
+
+   - **P0 (12–15 FPS)**: Focused live camera, actively recording cameras, and any armed camera inside its ``15.0 s`` active-alarm follow-up hold.
+   - **P1 (1.0 FPS idle floor -> 8.0 FPS motion burst)**: Unfocused ``armed`` cameras gated by a ``< 0.2 ms`` ``64x36`` luma ``MotionGate`` with immediate first-frame slot submission and ``dt``-aware tracker persistence.
+   - **P2 (1.0 FPS in ``full_realtime``, 0 FPS in ``focus_only``)**: Unarmed background cameras.
+   - **3-Stage Load Shedding**: Under ``ELEVATED`` pressure (``> 100 ms`` EWMA latency or ``> 80%`` budget utilization), P2 sheds to ``0 FPS`` and P1 burst steps down to ``4.0 FPS``; under ``CRITICAL`` pressure (``> 250 ms``), P0 caps at ``8.0 FPS`` while protecting the ``P1 >= 1.0 FPS`` armed floor. ``scheduler_hud.js`` surfaces live tier pills (``P0 LIVE``, ``P1 MOTION``, ``P1 IDLE 1FPS``, ``P2 BG``, ``ZERO-GPU REPLAY``) and load-shedding warnings in the Live Monitor HUD.
 
 3. **Interactive Click-to-Tag Enrollment**:
    Hovering over any active track on the live video highlights the entity bounding box.

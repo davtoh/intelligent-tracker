@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-19] feat: Step 2 Milestone 3: Scheduler HUD, Schema Telemetry & Docs
+- **Type**: feat
+- **Summary**: Extended ProcessingModeStatusResponse with scheduler telemetry, fixed data.camera_states lookup in processing_mode.js, added scheduler_hud.js tier and load-shed pills, documented scheduler and CachedReplayProvider in dashboard.rst and AGENTS.md, and verified 858 tests plus Sphinx -W.
+- **Files** (10):
+  - `AGENTS.md`
+  - `dashboard/schemas.py`
+  - `dashboard/services/processing_mode_service.py`
+  - `dashboard/static/css/processing_mode.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `documentation/dashboard.rst`
+  - ... (+2 more)
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-19] feat: Step 2 Milestone 2: Zero-GPU CachedReplayProvider & Runtime Pool Scheduler Wiring
 - **Type**: feat
 - **Summary**: Extracted shared post_detection_governance.py (FrameProcessor 14->7 methods), implemented zero-GPU CachedReplayProvider with live zone/tripwire/RSAC governance and loop wrap-around resets, wired AnalyticsScheduler & armed P1 gating into StreamWorker/AsyncInferenceWorker, and exposed scheduler/armed telemetry.
@@ -121,21 +136,6 @@
 - **Files** (1):
   - `dashboard/static/js/processing_mode.js`
 - **Verification**: python -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode
-
-## [2026-11-17] fix: Fix 1x1 camera mismatch, black stream recovery, and 4x4 grid CSS
-- **Type**: fix
-- **Summary**: Prioritize activeCameraId over stale dataset.activeStreamSrc in LivePlayer.attachLiveStream, attach MjpegReconnect to #live-stream-img, and enforce 4x4 grid minmax(0, 1fr) rules in grid_pagination.css.
-- **Files** (13):
-  - `.TODO/multiview_ws_streaming_plan.md`
-  - `dashboard/app.py`
-  - `dashboard/services/diagnostic_log_handler.py`
-  - `dashboard/static/css/grid_pagination.css`
-  - `dashboard/static/css/vms_grid.css`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/camera_grid.js`
-  - `dashboard/static/js/grid_pagination.js`
-  - ... (+5 more)
-- **Verification**: python -m unittest tests.test_grid_pagination tests.test_camera_grid_teardown tests.test_processing_mode tests.test_step2_live_canvas_delegation tests.test_refactor_contract
 
 ## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
 - **Type**: fix

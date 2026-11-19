@@ -45,6 +45,7 @@
     const resStr = telemetryData.resolution || '640x480';
     const fpsStr = typeof telemetryData.fps === 'number' ? telemetryData.fps.toFixed(1) : '0.0';
     if (hud) hud.textContent = `${camLabel} • ${resStr} • ${fpsStr} FPS`;
+    window.SchedulerHUD?.updateCamera?.(telemetryData);
     if (!lagBadge) return;
     const lagMs = Number(telemetryData.inference_lag_ms || 0);
     const frameSeq = Number(telemetryData.frame_seq ?? telemetryData.frame_count ?? 0);

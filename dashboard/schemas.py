@@ -294,6 +294,7 @@ class ProcessingModeStatusResponse(BaseModel):
     valid_modes: List[str] = Field(default_factory=list)
     deferred_jobs: List[Dict[str, Any]] = Field(default_factory=list)
     camera_states: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    scheduler: Optional[Dict[str, Any]] = None
     updated_at: float
 
 

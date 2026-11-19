@@ -168,21 +168,14 @@ class ProcessingModeService:
         return self._build_camera_states(pool)
 
     def enqueue_deferred_indexing(
-        self,
-        filename: str,
-        camera_id: str = "",
-        recording_id: str = "",
-        job_mgr: Any = None,
-        opts: dict[str, Any] | None = None,
+        self, filename: str, camera_id: str = "", recording_id: str = "",
+        job_mgr: Any = None, opts: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Submit a deferred VideoIndexer job for a capture-only recording."""
         resolved_mgr = job_mgr if job_mgr is not None else get_video_job_manager()
         resolved_opts = {
-            "detector": "yolov8n",
-            "sample_rate": 2,
-            "confidence": 0.4,
-            "classes": [0],
-            "scenario_camera_id": camera_id or None,
+            "detector": "yolov8n", "sample_rate": 2, "confidence": 0.4,
+            "classes": [0], "scenario_camera_id": camera_id or None,
         }
         if opts:
             resolved_opts.update(opts)

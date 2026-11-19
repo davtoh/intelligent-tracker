@@ -83,15 +83,15 @@
   - [x] Multi-camera `CameraPool` in `focus_only` runs P0 on focused camera and motion-gated P1 on unfocused `armed=True` camera, promoting P1->P0 on intrusion within `<= 2.0 s`.
 - [x] **CHANGELOG.md**: Record milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
 
-### Milestone 3: Scheduler HUD, Schema/API Telemetry, Documentation & Final Sign-Off *(Deferred to Next Turn / Milestone)*
+### Milestone 3: Scheduler HUD, Schema/API Telemetry, Documentation & Final Sign-Off
 
-- [ ] **dashboard/schemas.py#L284-L300** + **dashboard/static/js/scheduler_hud.js** *(New, `< 180 L`)* + **dashboard/static/js/processing_mode.js#L75-L185** (`< 220 L`) + **dashboard/static/partials/tabs/live.html** (`< 220 L`) + **dashboard/static/index.html** (`< 180 L`):
-  - Extend `ProcessingModeStatusResponse` in `dashboard/schemas.py` with optional `scheduler: dict[str, Any] | None = None`.
-  - Fix `dashboard/static/js/processing_mode.js#L83` (`data.camera_states` fallback alongside `data.cameras`) so `armedPausedCount` and per-camera states resolve accurately, keeping `processing_mode.js < 220 L`.
-  - Create `dashboard/static/js/scheduler_hud.js` rendering the live scheduler tier pill (`P0 LIVE`, `P1 MOTION`, `P1 IDLE 1FPS`, `P2 BG`, `ZERO-GPU REPLAY`) and load-shedding backpressure warning indicator into `#stream-telemetry-hud` without breaching `live.html < 220 L` or `index.html < 180 L`.
-- [ ] **tests/test_scheduler_hud_and_e2e.py** *(New, Python + Node VM `<= 40 L` per method)*: Verify `processing_mode.js` `data.camera_states` armed count fix, `scheduler_hud.js` DOM badge states across P0/P1/P2/REPLAY and load-shed stages, `/api/system/processing-mode` scheduler payload contract, and HTML/JS file line budgets (`index.html < 180 L`, `live.html < 220 L`, `processing_mode.js < 220 L`).
-- [ ] **documentation/** + **AGENTS.md**: Document the Resource-Aware Analytics Scheduler (`P0/P1/P2`, `MotionGate`, 3-stage load shedding, `<= 2.0 s` alarm SLA) and zero-GPU `CachedReplayProvider` in `documentation/` (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/` with 0 warnings) and update `AGENTS.md` invariants.
-- [ ] **CHANGELOG.md**: Record final milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
+- [x] **dashboard/schemas.py#L284-L300** + **dashboard/static/js/scheduler_hud.js** *(New, `< 180 L`)* + **dashboard/static/js/processing_mode.js#L75-L185** (`< 220 L`) + **dashboard/static/partials/tabs/live.html** (`< 220 L`) + **dashboard/static/index.html** (`< 180 L`):
+  - [x] Extend `ProcessingModeStatusResponse` in `dashboard/schemas.py` with optional `scheduler: dict[str, Any] | None = None`.
+  - [x] Fix `dashboard/static/js/processing_mode.js#L83` (`data.camera_states` fallback alongside `data.cameras`) so `armedPausedCount` and per-camera states resolve accurately, keeping `processing_mode.js < 220 L`.
+  - [x] Create `dashboard/static/js/scheduler_hud.js` rendering the live scheduler tier pill (`P0 LIVE`, `P1 MOTION`, `P1 IDLE 1FPS`, `P2 BG`, `ZERO-GPU REPLAY`) and load-shedding backpressure warning indicator into `#stream-telemetry-hud` without breaching `live.html < 220 L` or `index.html < 180 L`.
+- [x] **tests/test_scheduler_hud_and_e2e.py** *(New, Python + Node VM `<= 40 L` per method)*: Verify `processing_mode.js` `data.camera_states` armed count fix, `scheduler_hud.js` DOM badge states across P0/P1/P2/REPLAY and load-shed stages, `/api/system/processing-mode` scheduler payload contract, and HTML/JS file line budgets (`index.html < 180 L`, `live.html < 220 L`, `processing_mode.js < 220 L`).
+- [x] **documentation/** + **AGENTS.md**: Document the Resource-Aware Analytics Scheduler (`P0/P1/P2`, `MotionGate`, 3-stage load shedding, `<= 2.0 s` alarm SLA) and zero-GPU `CachedReplayProvider` in `documentation/` (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/` with 0 warnings) and update `AGENTS.md` invariants.
+- [x] **CHANGELOG.md**: Record final milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
 
 ---
 

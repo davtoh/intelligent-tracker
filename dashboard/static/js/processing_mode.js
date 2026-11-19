@@ -80,9 +80,9 @@
     if (serverFocusedCameraId && isValidCameraId(serverFocusedCameraId)) state.focusedCameraId = serverFocusedCameraId;
     if (typeof data.active_tab === 'string' && data.active_tab && data.active_tab !== 'hidden') state.activeTab = data.active_tab;
     if (Array.isArray(data.deferred_jobs)) state.deferredCount = data.deferred_jobs.length;
-    if (data.cameras && typeof data.cameras === 'object') {
-      state.armedPausedCount = Object.values(data.cameras).filter(c => c?.is_armed && c?.should_hibernate).length;
-    }
+    const camStates = (data.camera_states && typeof data.camera_states === 'object') ? data.camera_states : data.cameras;
+    if (camStates && typeof camStates === 'object') state.armedPausedCount = Object.values(camStates).filter(c => c?.is_armed && c?.should_hibernate).length;
+    window.SchedulerHUD?.updateGlobal?.(data);
     renderUI();
   }
 

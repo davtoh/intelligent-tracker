@@ -122,3 +122,18 @@
 }
 .live-paused-title { font-size: 0.98rem; font-weight: 600; color: var(--text-main); }
 .live-paused-subtitle { font-size: 0.82rem; color: var(--text-muted); }
+
+/* Resource-Aware Analytics Scheduler HUD Pills */
+.scheduler-tier-pill, .scheduler-shed-badge {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px;
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.03em;
+  white-space: nowrap; flex-shrink: 0; border: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.8); color: var(--text-muted);
+}
+.scheduler-tier-pill.tier-p0 { color: var(--emerald); border-color: rgba(16, 185, 129, 0.45); background: rgba(16, 185, 129, 0.14); }
+.scheduler-tier-pill.tier-p1-motion { color: var(--amber); border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.16); }
+.scheduler-tier-pill.tier-p1-idle { color: var(--cyan); border-color: rgba(6, 182, 212, 0.4); background: rgba(6, 182, 212, 0.12); }
+.scheduler-tier-pill.tier-replay { color: #a78bfa; border-color: rgba(167, 139, 250, 0.45); background: rgba(167, 139, 250, 0.14); }
+.scheduler-shed-badge[hidden] { display: none; }
+.scheduler-shed-badge.shed-elevated { color: var(--amber); border-color: rgba(245, 158, 11, 0.55); background: rgba(245, 158, 11, 0.18); }
+.scheduler-shed-badge.shed-critical { color: #f87171; border-color: rgba(248, 113, 113, 0.6); background: rgba(248, 113, 113, 0.2); }
