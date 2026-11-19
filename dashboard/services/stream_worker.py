@@ -12,25 +12,14 @@ from typing import Any
 import cv2
 import numpy as np
 
-from dashboard.services.async_inference_worker import (
-    AsyncInferenceWorker,
-    build_live_step_result,
-)
+from dashboard.services.async_inference_worker import AsyncInferenceWorker, build_live_step_result
 from dashboard.services.camera_diagnostics import CameraHealthManager
+from dashboard.services.multiview.thumbnail_cache import maybe_update_manager_thumbnail
 from dashboard.services.stream_telemetry import (
-    _build_tripwires_data,
-    _build_zones_data,
-    _extract_recent_alerts,
-    _extract_track_telemetry,
-    _resolve_detector_telemetry,
-    build_stream_telemetry,
+    _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
+    _extract_track_telemetry, _resolve_detector_telemetry, build_stream_telemetry,
 )
-from intelligent_tracker.pipeline import (
-    FrameProcessor,
-    FrameStepResult,
-    PipelineBundle,
-    PipelineConfig,
-)
+from intelligent_tracker.pipeline import FrameProcessor, FrameStepResult, PipelineBundle, PipelineConfig
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
 
@@ -167,21 +156,23 @@ class StreamWorker:
 
         recorder = getattr(self.manager, "_recording_controller", None)
         is_rec = bool(recorder is not None and recorder.is_recording)
+        annotated = None
         if getattr(self.manager, "has_annotated_subscribers", True) or is_rec or ann_missing:
             annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
             if is_rec:
                 recorder.write_frame(step_res.frame, annotated, step_res=step_res)
 
+        thumb_src = annotated if annotated is not None else step_res.frame
+        maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp)
+
         telemetry = self._build_telemetry(
-            step_res.tracks, step_res.timestamp, step_res.fps,
-            step_res.frame.shape, step_res.frame_count,
+            step_res.tracks, step_res.timestamp, step_res.fps, step_res.frame.shape, step_res.frame_count,
         )
         with self.manager._lock:
             self.manager._latest_telemetry = telemetry
 
         self.manager._broadcast_telemetry(telemetry)
-        notify = getattr(self.manager, "notify_frame_ready", None)
-        if callable(notify):
+        if callable(notify := getattr(self.manager, "notify_frame_ready", None)):
             notify()
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:

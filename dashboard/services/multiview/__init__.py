@@ -18,6 +18,19 @@ from dashboard.services.multiview.protocol import (
     parse_control_message,
     unpack_frame,
 )
+from dashboard.services.multiview.session import (
+    MultiviewSession,
+    get_active_session_count,
+    release_session_slot,
+    resolve_camera_status,
+    try_acquire_session_slot,
+)
+from dashboard.services.multiview.thumbnail_cache import (
+    THUMB_TIERS,
+    ThumbnailCache,
+    ThumbnailSlot,
+    normalize_tier,
+)
 
 __all__ = [
     "DEFAULT_LAYOUT_CAPS_RAW",
@@ -26,12 +39,21 @@ __all__ = [
     "KIND_JPEG",
     "MultiviewFrame",
     "MultiviewLimits",
+    "MultiviewSession",
     "PROTOCOL_VERSION",
     "ProtocolError",
+    "THUMB_TIERS",
+    "ThumbnailCache",
+    "ThumbnailSlot",
     "clamp_subscription_params",
+    "get_active_session_count",
     "get_multiview_limits",
+    "normalize_tier",
     "pack_frame",
     "parse_control_message",
     "parse_layout_caps",
+    "release_session_slot",
+    "resolve_camera_status",
+    "try_acquire_session_slot",
     "unpack_frame",
 ]

@@ -58,6 +58,7 @@ from dashboard.routers import (
     cameras_router,
     camera_diagnostics_router,
     camera_recording_router,
+    multiview_router,
     processing_mode_router,
     rsac_router,
     scenarios_router,
@@ -234,19 +235,13 @@ def create_app() -> FastAPI:
     application.mount("/crops", StaticFiles(directory=CROPS_DIR), name="crops")
 
     # Mount domain APIRouters
-    application.include_router(system_router)
-    application.include_router(cameras_router)
-    application.include_router(camera_diagnostics_router)
-    application.include_router(camera_recording_router)
-    application.include_router(processing_mode_router)
-    application.include_router(streaming_router)
-    application.include_router(scenarios_router)
-    application.include_router(rsac_router)
-    application.include_router(analytics_router)
-    application.include_router(tagging_router)
-    application.include_router(videos_router)
-    application.include_router(topology_router)
-    application.include_router(world_router)
+    for router in (
+        system_router, cameras_router, camera_diagnostics_router,
+        camera_recording_router, processing_mode_router, streaming_router,
+        multiview_router, scenarios_router, rsac_router, analytics_router,
+        tagging_router, videos_router, topology_router, world_router,
+    ):
+        application.include_router(router)
 
     return application
 

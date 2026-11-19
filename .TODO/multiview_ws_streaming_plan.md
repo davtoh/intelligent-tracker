@@ -122,10 +122,10 @@ Ships the immediate fix for the black-screen bug. The MJPEG budget logic built h
 - [x] **tests/test_security_config.py**, **tests/test_multiview_protocol.py**, **tests/test_processing_mode_invariants.py** (E4/E5/E6 across all 4 modes; every branch).
 
 ### Milestone 3: Backend `/ws/multiview` Engine (Thumbnail Cache + Sessions) *(Deferred)*
-- [ ] **dashboard/services/multiview/thumbnail_cache.py**: Per-camera `ThumbnailCache` with tier leases (640/480/320), FPS gate, `(seq, ts_ms, bytes)` slots; worker hook in `stream_worker.py` (≤ 6 added lines) after the existing encode step; annotated-if-available source (E9).
-- [ ] **dashboard/services/multiview/session.py**: `MultiviewSession`: replace-set subscriptions, `mgr.add_subscriber`/`heartbeat`/`remove_subscriber` leases, frame-waiter wakeups, latest-frame-wins sender with `SEND_TIMEOUT`, `source_status` change detection, pause/resume, shutdown-event teardown (E1, E2, E7, E8, E12).
-- [ ] **dashboard/routers/multiview.py**: Thin handler (≤ 25 L): security check → session cap → `session.run()`; mounted in `dashboard/app.py`.
-- [ ] **tests/test_thumbnail_cache.py**, **tests/test_multiview_session.py**, **tests/test_multiview_router.py** (synthetic frames / mock detector only; `TestClient` WebSocket; temp `cameras.json` with `enabled=False` seeds).
+- [x] **dashboard/services/multiview/thumbnail_cache.py**: Per-camera `ThumbnailCache` with tier leases (640/480/320), FPS gate, `(seq, ts_ms, bytes)` slots; worker hook in `stream_worker.py` (≤ 6 added lines) after the existing encode step; annotated-if-available source (E9).
+- [x] **dashboard/services/multiview/session.py**: `MultiviewSession`: replace-set subscriptions, `mgr.add_subscriber`/`heartbeat`/`remove_subscriber` leases, frame-waiter wakeups, latest-frame-wins sender with `SEND_TIMEOUT`, `source_status` change detection, pause/resume, shutdown-event teardown (E1, E2, E7, E8, E12).
+- [x] **dashboard/routers/multiview.py**: Thin handler (≤ 25 L): security check → session cap → `session.run()`; mounted in `dashboard/app.py`.
+- [x] **tests/test_thumbnail_cache.py**, **tests/test_multiview_session.py**, **tests/test_multiview_router.py** (synthetic frames / mock detector only; `TestClient` WebSocket; temp `cameras.json` with `enabled=False` seeds).
 
 ### Milestone 4: Frontend Client, Canvas Tiles, Fallback, Docs & E2E *(Deferred)*
 - [ ] **dashboard/static/js/multiview/protocol.js** + **frame_surface.js** + **multiview_client.js**: Header parsing; `FrameSurface` (seq gating, `bitmap.close()` in `finally`, DPR-aware `ResizeObserver`, status posters); `MultiviewWsClient` (lazy connect, replace-set subscribe, `unsubscribe_all` outside the grid, 30 s idle close, `pagehide` close, visibility pause/resume, exponential backoff, 3-failure fallback + auto-restore, `1013` treated as retryable).

@@ -20,6 +20,7 @@ from dashboard.services.stream_media import StreamMediaMixin
 from dashboard.services.stream_recording import StreamRecordingController, StreamRecordingMixin
 from dashboard.services.stream_worker import StreamWorker
 from dashboard.services.pipeline_factory import StreamPipelineFactory, load_stream_config
+from dashboard.services.multiview.thumbnail_cache import ThumbnailCache
 
 from intelligent_tracker.homography import GroundPlaneHomography
 from intelligent_tracker.world import WorldGraph
@@ -106,6 +107,7 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
         lease_ttl=3.0,
     )
     manager._overlay_renderer = FrameOverlayRenderer()
+    manager.thumbnail_cache = ThumbnailCache(manager.camera_id)
     rec_cfg = manager.cfg.get("recording", {}) if isinstance(manager.cfg, dict) else {}
     rec_dir = rec_cfg.get("output_dir") if isinstance(rec_cfg, dict) else None
     manager._recording_controller = StreamRecordingController(
