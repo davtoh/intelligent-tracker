@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     zones: [],
     tripwires: [],
     heatmap: null,
+    sourceRes: null,
     hoveredTrack: null,
   };
 
@@ -181,6 +182,12 @@ document.addEventListener('DOMContentLoaded', () => {
     state.zones = data.zones || state.zones;
     state.tripwires = data.tripwires || state.tripwires;
     if (data.heatmap !== undefined) state.heatmap = data.heatmap;
+    if (Array.isArray(data.source_resolution) && data.source_resolution.length >= 2) {
+      state.sourceRes = data.source_resolution;
+    } else if (typeof data.resolution === 'string' && data.resolution.includes('x')) {
+      const [rw, rh] = data.resolution.split('x').map(Number);
+      if (rw > 0 && rh > 0) state.sourceRes = [rw, rh];
+    }
     let totalCrossed = 0;
     if (data.tripwires) {
       data.tripwires.forEach(tw => { totalCrossed += (tw.in_count + tw.out_count); });
@@ -224,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
       zones: state.zones,
       tripwires: state.tripwires,
       heatmap: state.heatmap,
+      sourceRes: state.sourceRes,
     });
   }
 

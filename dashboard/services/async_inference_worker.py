@@ -19,13 +19,19 @@ logger = logging.getLogger("intelligent_tracker.dashboard.async_inference")
 class AsyncInferenceWorker:
     """Single-slot latest-frame background worker for FrameProcessor.step()."""
 
-    def __init__(self, processor: Any, max_dim: int = 1280) -> None:
+    def __init__(
+        self,
+        processor: Any,
+        max_dim: int = 1280,
+        replay_provider: Any = None,
+    ) -> None:
         self._processor = processor
         self._max_dim = max_dim
+        self.replay_provider = replay_provider
         self._lock = threading.Lock()
         self._work_event = threading.Event()
         self._stop_event = threading.Event()
-        self._pending: tuple[np.ndarray, float] | None = None
+        self._pending: tuple[np.ndarray, float, int] | None = None
         self._latest_result: FrameStepResult | None = None
         self._thread: threading.Thread | None = None
 
@@ -50,12 +56,18 @@ class AsyncInferenceWorker:
             thread.join(timeout=timeout)
         self._thread = None
 
-    def submit(self, frame: np.ndarray, timestamp: float) -> None:
+    def submit(self, frame: np.ndarray, timestamp: float, frame_seq: int = 0) -> None:
         """Queue the latest frame for inference, overwriting any unconsumed frame."""
         frame_copy = frame.copy()
         with self._lock:
-            self._pending = (frame_copy, timestamp)
+            self._pending = (frame_copy, timestamp, int(frame_seq))
         self._work_event.set()
+
+    def clear_latest_result(self) -> None:
+        """Clear any cached inference result and pending frame when vision is disabled."""
+        with self._lock:
+            self._pending = None
+            self._latest_result = None
 
     def get_latest_result(self) -> FrameStepResult | None:
         """Return the most recent completed FrameStepResult, or None."""
@@ -77,7 +89,7 @@ class AsyncInferenceWorker:
             if item is None:
                 continue
 
-            frame, ts = item
+            frame, ts, seq = item if len(item) == 3 else (item[0], item[1], 0)
             try:
                 result = self._processor.step(
                     frame, timestamp=ts, max_dim=self._max_dim
@@ -86,8 +98,32 @@ class AsyncInferenceWorker:
                 logger.exception("AsyncInferenceWorker failed during processor.step")
                 continue
 
+            setattr(result, "inference_frame_seq", int(seq))
+            setattr(result, "inference_timestamp", float(ts))
             with self._lock:
                 self._latest_result = result
+
+
+def _stamp_step_provenance(
+    res: FrameStepResult,
+    inf_seq: int,
+    inf_ts: float,
+    lag_ms: float,
+) -> FrameStepResult:
+    """Attach inference sequence, timestamp, and lag metadata to a FrameStepResult."""
+    setattr(res, "inference_frame_seq", int(inf_seq))
+    setattr(res, "inference_timestamp", float(inf_ts))
+    setattr(res, "inference_lag_ms", round(max(0.0, float(lag_ms)), 1))
+    return res
+
+
+def _clear_worker_cache(async_worker: Any) -> None:
+    """Clear cached inference results when vision stepping is disabled."""
+    if hasattr(async_worker, "clear_latest_result"):
+        async_worker.clear_latest_result()
+    else:
+        with getattr(async_worker, "_lock", threading.Lock()):
+            async_worker._latest_result = None
 
 
 def build_live_step_result(
@@ -96,19 +132,32 @@ def build_live_step_result(
     now: float,
     frame_seq: int,
     run_vision: bool,
+    replay_provider: Any = None,
 ) -> FrameStepResult:
-    """Submit frame to async AI when enabled and merge latest cached detections."""
-    if run_vision:
+    """Submit frame to async AI (or replay provider) when enabled and stamp lag provenance."""
+    if not run_vision:
+        _clear_worker_cache(async_worker)
+        empty = FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq)
+        return _stamp_step_provenance(empty, frame_seq, now, 0.0)
+
+    provider = replay_provider if replay_provider is not None else getattr(async_worker, "replay_provider", None)
+    if provider is not None and hasattr(provider, "build_step_result"):
+        replayed = provider.build_step_result(frame, now, frame_seq)
+        if replayed is not None:
+            return replayed
+
+    try:
+        async_worker.submit(frame, now, frame_seq=frame_seq)
+    except TypeError:
         async_worker.submit(frame, now)
-        cached = async_worker.get_latest_result()
-        if cached is not None:
-            return FrameStepResult(
-                frame=frame,
-                tracks=cached.tracks,
-                analytics=cached.analytics,
-                identifications=cached.identifications,
-                timestamp=now,
-                fps=cached.fps,
-                frame_count=frame_seq,
-            )
-    return FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq)
+    cached = async_worker.get_latest_result()
+    if cached is not None:
+        inf_seq = int(getattr(cached, "inference_frame_seq", getattr(cached, "frame_count", frame_seq)) or frame_seq)
+        inf_ts = float(getattr(cached, "inference_timestamp", getattr(cached, "timestamp", now)) or now)
+        merged = FrameStepResult(
+            frame=frame, tracks=cached.tracks, analytics=cached.analytics,
+            identifications=cached.identifications, timestamp=now, fps=cached.fps, frame_count=frame_seq,
+        )
+        return _stamp_step_provenance(merged, inf_seq, inf_ts, (now - inf_ts) * 1000.0)
+    cold = FrameStepResult(frame=frame, timestamp=now, fps=0.0, frame_count=frame_seq)
+    return _stamp_step_provenance(cold, 0, now, 0.0)

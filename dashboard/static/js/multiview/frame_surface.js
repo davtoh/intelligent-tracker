@@ -93,6 +93,10 @@
         this.hasFrame = true;
         this.status = 'online';
         this.statusReason = '';
+        if (this.canvas?.dataset) {
+          this.canvas.dataset.frameSeq = String(seq ?? '');
+          this.canvas.dataset.captureTsMs = String(captureTsMs ?? 0);
+        }
         return true;
       } catch (_) {
         return false;
@@ -159,6 +163,14 @@
 
     resetSeq() {
       this.lastDrawnSeq = null;
+      if (this.canvas?.dataset) {
+        delete this.canvas.dataset.frameSeq;
+        delete this.canvas.dataset.captureTsMs;
+      }
+    }
+
+    getFrameSeq() {
+      return this.lastDrawnSeq;
     }
 
     destroy() {

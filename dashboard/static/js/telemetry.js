@@ -172,6 +172,7 @@
     if (data.recording) {
       window.CameraRecording?.onTelemetryUpdate?.(data.recording, data.camera_id);
     }
+    window.LivePlayer?.updateInferenceLagHud?.(data);
   }
 
   window.TelemetryGateway = {

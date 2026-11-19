@@ -31,26 +31,29 @@ Architecture Overview
 Key Capabilities
 ----------------
 
-1. **Live MJPEG Video Stream**:
-   Zero-client-dependency streaming over HTTP standard multipart boundary. Accessible directly in any modern browser.
+1. **Live MJPEG Video Stream & Annotation Mode Toggle**:
+   Zero-client-dependency streaming over HTTP standard multipart boundary. The primary 1x1 Live Monitor viewport defaults to ``?annotated=false`` (un-burned video frames with crisp client-side ``UnifiedCanvasOverlay`` bounding boxes and ROI click-to-tag hit-testing) and includes an opt-in HUD toggle (`🎯 Canvas Boxes` vs `🔥 Burned Boxes`, persisted in ``localStorage``) to switch to ``?annotated=true`` server-burned overlays while automatically suppressing duplicate client canvas boxes.
 
-2. **Interactive Click-to-Tag Enrollment**:
+2. **Live Monitor vs. Video Studio Synchronization & Pre-Indexed File Replay**:
+   ``AsyncInferenceWorker`` stamps ``inference_frame_seq``, ``inference_timestamp``, and ``inference_lag_ms`` onto live step results and clears cached detections whenever ``run_vision`` is disabled. When a camera is backed by a local video file with a completed ``TrackerDB`` ``video_runs`` detection stream, ``FileDetectionReplayProvider`` replays frame-aligned detections directly with ``0.0 ms`` inference lag without redundant live YOLOv8 inference.
+
+3. **Interactive Click-to-Tag Enrollment**:
    Hovering over any active track on the live video highlights the entity bounding box.
    Clicking directly on the box opens a quick enrollment modal to register their name, category (`staff`, `vip`, `restricted`, `customer`),
    and security notes. A crop snapshot is saved, the Re-ID embedding vector is computed, and the identity is instantly recognized.
 
-3. **Entity Gallery View**:
+4. **Entity Gallery View**:
    Browse all registered people, vehicles, or assets with category badges, total appearance counts,
    associated feature signatures, and thumbnail photos. Supports category filtering and full-text search.
 
-4. **Sighting Timeline Player**:
+5. **Sighting Timeline Player**:
    Filter sighting records across time ranges, camera sources, and spatial zones.
    Each entry features high-resolution thumbnail evidence, timestamp, match confidence score, and zone dwell info.
 
-5. **Spatial Density Heatmap**:
+6. **Spatial Density Heatmap**:
    Toggle real-time false-color density overlay directly on the live camera stream or inspect accumulated pedestrian hotspots.
 
-6. **Real-time Security Alerts Log**:
+7. **Real-time Security Alerts Log**:
    Instant toast notifications for critical events (`IntrusionAlert`, `RestrictedEntityAlert`, `OccupancyThresholdEvent`).
 
 REST & WebSocket API Reference
@@ -71,7 +74,12 @@ Streaming Endpoints
         "camera_id": "cam_01",
         "status": "online",
         "fps": 28.4,
+        "resolution": "1280x720",
+        "source_resolution": [1280, 720],
         "frame_count": 1420,
+        "frame_seq": 1420,
+        "inference_frame_seq": 1419,
+        "inference_lag_ms": 18.5,
         "active_tracks": [
           {
             "id": 12,
@@ -120,6 +128,7 @@ REST API Endpoints
 - ``POST /api/cameras/{camera_id}/record/start``: Start live MP4 recording for a camera stream via ``PipelineVideoWriter`` (prevents idle hibernation while recording).
 - ``POST /api/cameras/{camera_id}/record/stop``: Stop and flush an active camera MP4 recording.
 - ``GET /api/cameras/{camera_id}/record/status``: Retrieve active or finalized camera recording status and byte/frame counters.
+- ``POST /api/cameras/{camera_id}/retry``: Re-probe an offline camera source (missing video file or disconnected USB device) and restart its ``StreamManager`` on demand without restarting the server.
 - ``GET /api/system/models``: Inspect registered ONNX model weights presence and SHA-256 verification status.
 - ``POST /api/system/models/verify``: Run SHA-256 integrity checks across registered ONNX model weights.
 - ``POST /api/world/query``: Natural-language and structured semantic Q&A over FTS5 timelines, confidence state, and ``WorldGraph``.

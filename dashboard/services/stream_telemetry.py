@@ -95,12 +95,8 @@ def _resolve_detector_telemetry(manager: Any) -> tuple[str, str]:
 
 
 def build_stream_telemetry(
-    manager: Any,
-    tracks: dict[int, Any],
-    curr_t: float,
-    measured_fps: float,
-    shape: tuple[int, ...],
-    frame_count: int,
+    manager: Any, tracks: dict[int, Any], curr_t: float,
+    measured_fps: float, shape: tuple[int, ...], frame_count: int, *, step_res: Any = None,
 ) -> dict[str, Any]:
     """Construct comprehensive telemetry payload with ground plane projections."""
     rec_status = (
@@ -109,15 +105,17 @@ def build_stream_telemetry(
         else {"is_recording": False}
     )
     detector_model, detector_status = _resolve_detector_telemetry(manager)
+    src_w = int(shape[1]) if len(shape) >= 2 else 0
+    src_h = int(shape[0]) if len(shape) >= 1 else 0
+    inf_seq = int(getattr(step_res, "inference_frame_seq", frame_count) if step_res is not None else frame_count)
+    inf_lag = round(max(0.0, float(getattr(step_res, "inference_lag_ms", 0.0) if step_res is not None else 0.0)), 1)
     return {
-        "camera_id": manager.camera_id,
-        "status": "online",
-        "detector_model": detector_model,
-        "detector_status": detector_status,
-        "timestamp": curr_t,
-        "fps": round(measured_fps, 1),
-        "resolution": f"{shape[1]}x{shape[0]}",
-        "frame_count": frame_count,
+        "camera_id": manager.camera_id, "status": "online",
+        "detector_model": detector_model, "detector_status": detector_status,
+        "timestamp": curr_t, "fps": round(measured_fps, 1),
+        "resolution": f"{src_w}x{src_h}", "source_resolution": [src_w, src_h],
+        "frame_count": frame_count, "frame_seq": frame_count,
+        "inference_frame_seq": inf_seq, "inference_lag_ms": inf_lag,
         "homography_calibrated": bool(getattr(manager, "homography", None) and manager.homography.is_calibrated),
         "overlays": dict(manager.overlays),
         "active_tracks": _extract_track_telemetry(tracks, manager.homography),

@@ -86,8 +86,11 @@
             </div>
             <div class="hud-center">
               <span class="stream-telemetry-text" id="stream-telemetry-hud">CAM_01 • 640x480 • 0.0 FPS</span>
+              <span class="stream-lag-badge" id="stream-lag-badge" hidden title="Asynchronous AI inference lag relative to displayed frame"></span>
             </div>
             <div class="hud-right">
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-live-annotation-mode" data-annotated="false"
+                title="Toggle Interactive Canvas (annotated=false) vs Burned Server Annotations (annotated=true)">🎯 Canvas Boxes</button>
               <button class="btn btn-sm btn-primary hud-btn" id="btn-quick-tag"
                 title="Click-to-Tag detected track directly on feed">
                 🏷️ Click-to-Tag

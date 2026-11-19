@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-19] feat: Step 1.5 Milestone 2: Live Monitor vs Video Studio Synchronization & Diagnostic Clarity
+- **Type**: feat
+- **Summary**: Add AsyncInferenceWorker frame_seq/lag provenance, FileDetectionReplayProvider for pre-indexed video_file cameras, #live-stream-img ROI tagger fix, source_resolution scaling, and opt-in burned annotation toggle.
+- **Files** (14):
+  - `.TODO/realtime_multiview_master_roadmap.md`
+  - `.TODO/step_1_5_cross_platform_pipeline_hardening.md`
+  - `dashboard/services/async_inference_worker.py`
+  - `dashboard/services/stream_telemetry.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/static/app.js`
+  - `dashboard/static/js/interactive_canvas.js`
+  - `dashboard/static/js/live_player.js`
+  - ... (+6 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (839 passed)
+
 ## [2026-11-19] feat: Multi-View WebSocket Streaming & Grid Scalability (Milestone 4)
 - **Type**: feat
 - **Summary**: Added /ws/multiview frontend protocol/FrameSurface/client with canvas grid tiles, 3-failure MJPEG fallback with auto-restore, armed-paused overlay counter, static-before-wildcard WS router ordering fix, Hub/HTTP2 Sphinx docs, and Node VM + headless CDP E2E tests
@@ -132,16 +147,3 @@
   - `dashboard/services/processing_mode_service.py`
   - `tests/test_step5_batch_frame_processor.py`
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-16] feat: Step 3 Milestone 2: DirectShow Warmup Grace & Exponential-Backoff Auto-Reopen
-- **Type**: feat
-- **Summary**: Added 5.0s warmup grace timeout (proportional when read_timeout is overridden), pure capture_helpers.py, and interruptible exponential backoff reconnection in CaptureReadGuard/CaptureWorkerMixin/VideoSource.
-- **Files** (7):
-  - `.TODO/performance_and_processing_modes_master_roadma_followups.md`
-  - `.TODO/step_3_pool_discovery_and_driver_resilience.md`
-  - `intelligent_tracker/video/capture_guard.py`
-  - `intelligent_tracker/video/capture_worker.py`
-  - `intelligent_tracker/video/source.py`
-  - `tests/test_camera_discovery_and_guard.py`
-  - `intelligent_tracker/video/capture_helpers.py`
-- **Verification**: python -m unittest tests/test_camera_discovery_and_guard.py tests/test_capture_circuit_breaker.py tests/test_camera_device.py tests/test_discovery.py

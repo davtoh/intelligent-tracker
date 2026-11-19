@@ -7,9 +7,57 @@
   'use strict';
 
   const STANDBY_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="40" fill="%231e293b" stroke="%23334155" stroke-width="2"/><polygon points="-10,-18 20,0 -10,18" fill="%2306b6d4"/><text y="70" fill="%2394a3b8" font-family="Inter,sans-serif" font-size="14" font-weight="500">Live Stream Paused &bull; Hibernating</text><text y="92" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Click Resume Feed to reconnect camera</text></g></svg>';
+  const ANNOTATION_MODE_STORAGE_KEY = 'it_live_annotated_mode';
+  const LAG_THRESHOLD_MS = 120;
 
   let streamPaused = false;
   let streamRetryTimer = null;
+  let burnedAnnotationMode = (() => {
+    try { return window.localStorage?.getItem(ANNOTATION_MODE_STORAGE_KEY) === 'true'; } catch (e) { console.debug('localStorage read skipped:', e); return false; }
+  })();
+
+  function isBurnedAnnotationMode() {
+    return Boolean(burnedAnnotationMode);
+  }
+
+  function syncAnnotationToggleUi() {
+    const btn = document.getElementById('btn-live-annotation-mode');
+    if (!btn) return;
+    if (btn.dataset) btn.dataset.annotated = burnedAnnotationMode ? 'true' : 'false';
+    btn.textContent = burnedAnnotationMode ? '🔥 Burned Boxes' : '🎯 Canvas Boxes';
+    btn.classList?.toggle?.('active', burnedAnnotationMode);
+  }
+
+  function setBurnedAnnotationMode(enabled, videoImg, activeCameraId) {
+    burnedAnnotationMode = Boolean(enabled);
+    try { window.localStorage?.setItem(ANNOTATION_MODE_STORAGE_KEY, burnedAnnotationMode ? 'true' : 'false'); } catch (e) { console.debug('localStorage write skipped:', e); }
+    syncAnnotationToggleUi();
+    const targetImg = videoImg || document.getElementById('live-stream-img');
+    const resolvedCam = activeCameraId || window.App?.getActiveCameraId?.() || null;
+    if (targetImg && !streamPaused) attachLiveStream(targetImg, resolvedCam, true);
+    window.dispatchEvent?.(new Event('resize'));
+  }
+
+  function updateInferenceLagHud(telemetryData = {}) {
+    const hud = document.getElementById('stream-telemetry-hud');
+    const lagBadge = document.getElementById('stream-lag-badge');
+    const camLabel = String(telemetryData.camera_id || window.App?.getActiveCameraId?.() || 'CAM').toUpperCase();
+    const resStr = telemetryData.resolution || '640x480';
+    const fpsStr = typeof telemetryData.fps === 'number' ? telemetryData.fps.toFixed(1) : '0.0';
+    if (hud) hud.textContent = `${camLabel} • ${resStr} • ${fpsStr} FPS`;
+    if (!lagBadge) return;
+    const lagMs = Number(telemetryData.inference_lag_ms || 0);
+    const frameSeq = Number(telemetryData.frame_seq ?? telemetryData.frame_count ?? 0);
+    const infSeq = Number(telemetryData.inference_frame_seq ?? frameSeq);
+    if (!burnedAnnotationMode && lagMs >= LAG_THRESHOLD_MS) {
+      lagBadge.hidden = false;
+      lagBadge.textContent = `AI Lag: ${Math.round(lagMs)}ms`;
+      lagBadge.dataset.seqDelta = String(Math.max(0, frameSeq - infSeq));
+    } else {
+      lagBadge.hidden = true;
+      lagBadge.textContent = '';
+    }
+  }
 
   function setStreamStatus(status) {
     const badge = document.getElementById('live-stream-status-badge');
@@ -88,10 +136,12 @@
     if (videoImg.dataset) {
       videoImg.dataset.activeStreamSrc = cleanBase;
     }
+    const annotatedParam = burnedAnnotationMode ? 'true' : 'false';
     const isHealthySameStream = (
       !forceReconnect
       && videoImg.src
       && videoImg.src.includes(cleanBase)
+      && videoImg.src.includes(`annotated=${annotatedParam}`)
       && !videoImg.src.startsWith('data:image/svg+xml')
       && (videoImg.naturalWidth === undefined || videoImg.naturalWidth > 0)
     );
@@ -99,7 +149,7 @@
       setStreamStatus('online');
       return;
     }
-    videoImg.src = `${cleanBase}?annotated=false&t=${Date.now()}`;
+    videoImg.src = `${cleanBase}?annotated=${annotatedParam}&t=${Date.now()}`;
     window.MjpegReconnect?.attach?.(videoImg);
     setStreamStatus('online');
     if (resolvedCam) {
@@ -176,6 +226,13 @@
     const streamPauseText = document.getElementById('stream-pause-text');
     const btnStreamReconnect = document.getElementById('btn-stream-reconnect');
     const btnFullscreenToggle = document.getElementById('btn-fullscreen-toggle');
+    const btnAnnotationMode = document.getElementById('btn-live-annotation-mode');
+    syncAnnotationToggleUi();
+    if (btnAnnotationMode) {
+      btnAnnotationMode.addEventListener('click', () => {
+        setBurnedAnnotationMode(!burnedAnnotationMode, videoImg, getActiveCameraId?.());
+      });
+    }
 
     if (btnStreamPause) {
       btnStreamPause.addEventListener('click', () => {
@@ -233,6 +290,9 @@
     toggleFullscreen: toggleFullscreen,
     bindHudButtons: bindPlayerHudButtons,
     isPaused: () => streamPaused,
+    isBurnedAnnotationMode: isBurnedAnnotationMode,
+    setBurnedAnnotationMode: setBurnedAnnotationMode,
+    updateInferenceLagHud: updateInferenceLagHud,
   };
 })();
 

@@ -14,6 +14,7 @@ import numpy as np
 
 from dashboard.services.async_inference_worker import AsyncInferenceWorker, build_live_step_result
 from dashboard.services.camera_diagnostics import CameraHealthManager
+from dashboard.services.file_detection_replay import FileDetectionReplayProvider
 from dashboard.services.multiview.thumbnail_cache import maybe_update_manager_thumbnail
 from dashboard.services.stream_telemetry import (
     _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
@@ -113,7 +114,8 @@ class StreamWorker:
         if not self.manager.video_source:
             return
         processor = self._get_processor()
-        async_worker = AsyncInferenceWorker(processor)
+        replay = FileDetectionReplayProvider(getattr(self.manager, "db", None), self.manager.video_source)
+        async_worker = AsyncInferenceWorker(processor, replay_provider=replay)
         async_worker.start()
         consecutive_empty, consecutive_errors, frame_seq = 0, 0, 0
         try:
@@ -169,6 +171,7 @@ class StreamWorker:
 
         telemetry = self._build_telemetry(
             step_res.tracks, step_res.timestamp, step_res.fps, step_res.frame.shape, step_res.frame_count,
+            step_res=step_res,
         )
         with self.manager._lock:
             self.manager._latest_telemetry = telemetry
@@ -257,8 +260,10 @@ class StreamWorker:
         measured_fps: float,
         shape: tuple[int, ...],
         frame_count: int,
+        *,
+        step_res: Any = None,
     ) -> dict[str, Any]:
         """Construct comprehensive telemetry payload with ground plane projections."""
         return build_stream_telemetry(
-            self.manager, tracks, curr_t, measured_fps, shape, frame_count
+            self.manager, tracks, curr_t, measured_fps, shape, frame_count, step_res=step_res
         )
