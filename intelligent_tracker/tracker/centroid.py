@@ -38,12 +38,17 @@ class CentroidTracker:
         max_distance: float = 120.0,
         iou_threshold: float = 0.2,
         coast_frames: int = 0,
+        max_age_seconds: float = 2.5,
+        time_slice_dt_threshold: float = 0.4,
     ):
         self.max_disappeared = int(max_disappeared)
         self.min_hits = int(min_hits)
         self.max_distance = float(max_distance)
         self.iou_threshold = float(iou_threshold)
         self.coast_frames = max(0, int(coast_frames))
+        self.max_age_seconds = float(max_age_seconds)
+        self.time_slice_dt_threshold = float(time_slice_dt_threshold)
+        self._last_update_time: Optional[float] = None
 
         self.next_track_id = 1
         self.tracks: Dict[int, Track] = {}
@@ -54,6 +59,7 @@ class CentroidTracker:
         self.next_track_id = 1
         self.tracks.clear()
         self.dormant_tracks.clear()
+        self._last_update_time = None
 
     def _parse_detections(self, detections: List[Any]) -> Tuple[list, list, list, list]:
         """Extract bounding boxes, classes, confidence scores, and labels."""
@@ -69,12 +75,21 @@ class CentroidTracker:
                 det_labels.append(getattr(d, "label", "object"))
         return det_bboxes, det_classes, det_scores, det_labels
 
-    def _coast_empty_frame(self, now: float) -> None:
+    def _should_retire_track(self, trk: Track, now: float, is_time_sliced: bool) -> bool:
+        """Return True if track exceeded frame-count or elapsed-time age budget."""
+        dt = now - trk.last_seen
+        if is_time_sliced and self.max_age_seconds > 0:
+            return dt > self.max_age_seconds
+        if trk.missed_frames > self.max_disappeared:
+            return True
+        return self.max_age_seconds > 0 and dt > self.max_age_seconds
+
+    def _coast_empty_frame(self, now: float, is_time_sliced: bool = False) -> None:
         """Coast or retire active tracks when no detections are observed in the frame."""
         to_remove = []
         for tid, trk in self.tracks.items():
             trk.mark_missed()
-            if trk.missed_frames > self.max_disappeared:
+            if self._should_retire_track(trk, now, is_time_sliced):
                 trk.state = "dormant"
                 trk.exit_point = trk.centroid
                 trk.exit_time = now
@@ -153,14 +168,16 @@ class CentroidTracker:
                 matched_tracks.add(ar)
                 matched_dets.add(ac)
 
-    def _update_stale_tracks(self, track_ids: List[int], matched_tracks: Set[int], now: float) -> None:
+    def _update_stale_tracks(
+        self, track_ids: List[int], matched_tracks: Set[int], now: float, is_time_sliced: bool = False
+    ) -> None:
         """Update track states, predictively coast misses, and deregister stale tracks."""
         to_remove = []
         for r, tid in enumerate(track_ids):
             trk = self.tracks[tid]
             if r not in matched_tracks:
                 trk.mark_missed()
-                if trk.missed_frames > self.max_disappeared:
+                if self._should_retire_track(trk, now, is_time_sliced):
                     trk.state = "dormant"
                     trk.exit_point = trk.centroid
                     trk.exit_time = now
@@ -168,7 +185,7 @@ class CentroidTracker:
                     to_remove.append(tid)
                 elif self.coast_frames > 0 and trk.missed_frames <= self.coast_frames:
                     trk.predict(timestamp=now)
-            elif trk.hits >= self.min_hits:
+            elif trk.hits >= self.min_hits or is_time_sliced:
                 trk.state = "confirmed"
 
         for tid in to_remove:
@@ -182,6 +199,7 @@ class CentroidTracker:
         det_labels: list,
         matched_dets: Set[int],
         now: float,
+        is_time_sliced: bool = False,
     ) -> None:
         """Instantiate new tracks for unassociated detections."""
         for c in range(len(det_bboxes)):
@@ -192,6 +210,7 @@ class CentroidTracker:
                     det_scores[c],
                     det_labels[c],
                     now,
+                    is_time_sliced=is_time_sliced,
                 )
 
     def _register_track(
@@ -201,6 +220,7 @@ class CentroidTracker:
         confidence: float,
         label: str,
         timestamp: float,
+        is_time_sliced: bool = False,
     ) -> Track:
         """Create and register a single Track instance."""
         tid = self.next_track_id
@@ -213,7 +233,7 @@ class CentroidTracker:
             confidence=confidence,
             timestamp=timestamp,
         )
-        if self.min_hits <= 1:
+        if self.min_hits <= 1 or is_time_sliced:
             track.state = "confirmed"
         self.tracks[tid] = track
         return track
@@ -240,22 +260,26 @@ class CentroidTracker:
     ) -> Dict[int, Track]:
         """Update tracker with detections from current frame."""
         now = timestamp if timestamp is not None else time.time()
+        step_dt = (now - self._last_update_time) if self._last_update_time is not None else 0.0
+        self._last_update_time = now
+        is_time_sliced = step_dt >= self.time_slice_dt_threshold
+
         bboxes, classes, scores, labels = self._parse_detections(detections)
 
         if len(self.tracks) == 0:
             for i in range(len(bboxes)):
-                self._register_track(bboxes[i], classes[i], scores[i], labels[i], now)
+                self._register_track(bboxes[i], classes[i], scores[i], labels[i], now, is_time_sliced=is_time_sliced)
             return self._get_active_tracks(confirmed_only)
 
         if len(bboxes) == 0:
-            self._coast_empty_frame(now)
+            self._coast_empty_frame(now, is_time_sliced=is_time_sliced)
             return self._get_active_tracks(confirmed_only)
 
         track_ids = list(self.tracks.keys())
         matched_trks, matched_dets = self._match_iou(track_ids, bboxes, scores, labels, classes, now)
         self._match_distance(track_ids, bboxes, scores, labels, classes, matched_trks, matched_dets, now)
-        self._update_stale_tracks(track_ids, matched_trks, now)
-        self._register_new_detections(bboxes, classes, scores, labels, matched_dets, now)
+        self._update_stale_tracks(track_ids, matched_trks, now, is_time_sliced=is_time_sliced)
+        self._register_new_detections(bboxes, classes, scores, labels, matched_dets, now, is_time_sliced=is_time_sliced)
 
         return self._get_active_tracks(confirmed_only)
 

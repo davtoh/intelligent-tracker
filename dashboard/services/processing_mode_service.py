@@ -9,6 +9,7 @@ from typing import Any
 from dashboard.dependencies import VIDEOS_DIR
 from dashboard.services.video_analytics_service import submit_async_analytics_job
 from dashboard.services.video_jobs_service import get_video_job_manager
+from intelligent_tracker.pipeline.analytics_scheduler import AnalyticsScheduler
 
 logger = logging.getLogger("intelligent_tracker.dashboard.processing_mode")
 
@@ -37,6 +38,11 @@ class ProcessingModeService:
         self._active_tab: str = active_tab or "live"
         self._deferred_jobs: list[dict[str, Any]] = []
         self._updated_at: float = time.time()
+        self._scheduler = AnalyticsScheduler()
+
+    @property
+    def scheduler(self) -> AnalyticsScheduler:
+        return self._scheduler
 
     @property
     def mode(self) -> str:
@@ -99,13 +105,15 @@ class ProcessingModeService:
             return True
         return bool(focused and camera_id != focused)
 
-    def should_run_vision_step(self, camera_id: str, is_recording: bool = False) -> bool:
+    def should_run_vision_step(
+        self, camera_id: str, is_recording: bool = False, is_armed: bool = False
+    ) -> bool:
         """Return True when FrameProcessor.step() AI inference should execute."""
         with self._lock:
             mode, focused, tab = self._mode, self._focused_camera_id, self._active_tab
         if mode in ("paused", "capture_only"):
             return False
-        if mode == "full_realtime":
+        if mode == "full_realtime" or is_armed:
             return True
         if tab != "live" and not is_recording:
             return False
@@ -121,6 +129,7 @@ class ProcessingModeService:
             sub_count = int(getattr(sm, "subscriber_count", 0))
             is_rec = bool(getattr(sm, "is_recording", False))
             is_armed = bool(getattr(sm, "is_armed", False))
+            sched = self._scheduler.get_camera_summary(cam_id)
             states[cam_id] = {
                 "is_running": bool(getattr(sm, "is_running", False)),
                 "is_hibernating": bool(getattr(sm, "_is_hibernating", False)),
@@ -130,7 +139,10 @@ class ProcessingModeService:
                 "should_hibernate": self.should_hibernate_camera(
                     cam_id, subscriber_count=sub_count, is_recording=is_rec, in_camera_pool=True, is_armed=is_armed
                 ),
-                "should_run_vision": self.should_run_vision_step(cam_id, is_recording=is_rec),
+                "should_run_vision": self.should_run_vision_step(
+                    cam_id, is_recording=is_rec, is_armed=is_armed
+                ),
+                **sched,
             }
         return states
 
@@ -191,7 +203,9 @@ class ProcessingModeService:
                 "mode": self._mode, "focused_camera_id": self._focused_camera_id,
                 "active_tab": self._active_tab, "valid_modes": list(VALID_PROCESSING_MODES),
                 "deferred_jobs": list(self._deferred_jobs),
-                "camera_states": self._build_camera_states(pool), "updated_at": self._updated_at,
+                "camera_states": self._build_camera_states(pool),
+                "scheduler": self._scheduler.get_summary(),
+                "updated_at": self._updated_at,
             }
 
 

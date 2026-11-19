@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-11-19] feat: Step 2 Milestone 1: Core AnalyticsScheduler, 64x36 MotionGate, dt-Aware Trackers & Armed P1
+- **Type**: feat
+- **Summary**: Implemented 64x36 luma MotionGate, P0/P1/P2 AnalyticsScheduler with 3-stage load shedding and IdleRefinementHook, dt-aware persistence in SortTracker/CentroidTracker, and armed P1 vision gating in ProcessingModeService.
+- **Files** (6):
+  - `dashboard/services/processing_mode_service.py`
+  - `intelligent_tracker/tracker/centroid.py`
+  - `intelligent_tracker/tracker/sort.py`
+  - `intelligent_tracker/pipeline/analytics_scheduler.py`
+  - `intelligent_tracker/pipeline/motion_gate.py`
+  - `tests/test_analytics_scheduler.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest tests.test_analytics_scheduler tests.test_tracker tests.test_processing_mode tests.test_processing_mode_invariants tests.test_step3_processing_mode_api tests.test_modernization
+
 ## [2026-11-19] feat: Step 1.5 Milestone 2: Live Monitor vs Video Studio Synchronization & Diagnostic Clarity
 - **Type**: feat
 - **Summary**: Add AsyncInferenceWorker frame_seq/lag provenance, FileDetectionReplayProvider for pre-indexed video_file cameras, #live-stream-img ROI tagger fix, source_resolution scaling, and opt-in burned annotation toggle.
@@ -124,21 +136,6 @@
   - `dashboard/static/js/live_player.js`
   - ... (+3 more)
 - **Verification**: python -m unittest tests/test_step2_tab_scoped_streams.py tests/test_step2_tab_scoped_perf_integration.py tests/test_step2_live_canvas_delegation.py tests/test_step4_processing_mode_ui.py
-
-## [2026-11-16] fix: Fix Live Monitor Paused Black Screen, Boot cam_01 404, and Video Studio Preload
-- **Type**: fix
-- **Summary**: Added #live-paused-overlay with 1-click Resume in live.html/processing_mode.js/css, synced initial camera focus in camera_ai_config.js, skipped placeholder cam_01 recording status poll in camera_recording.js, and set preload=auto on #scrubber-video-player in videos.html.
-- **Files** (9):
-  - `.TODO/performance_and_processing_modes_master_roadma_followups.md`
-  - `.TODO/step_4_frontend_reliability_and_verification.md`
-  - `AGENTS.md`
-  - `dashboard/static/css/processing_mode.css`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/camera_recording.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `dashboard/static/partials/tabs/live.html`
-  - ... (+1 more)
-- **Verification**: python -m unittest discover tests
 
 ## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
 - **Type**: fix
