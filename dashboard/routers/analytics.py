@@ -14,12 +14,13 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 import numpy as np
 
-from dashboard.dependencies import CROPS_DIR, get_active_stream_manager
+from dashboard.dependencies import get_active_stream_manager, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
+from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.analytics")
 
@@ -86,13 +87,25 @@ def _fetch_entities_summary(db, category: Optional[str]) -> list[dict]:
     return result
 
 
-@router.get("/entities")
-async def list_entities(request: Request, category: Optional[str] = None):
-    """List enrolled gallery identities with appearance counters and sample thumbnails."""
+def _resolve_analytics_db(request: Request, db: Optional[TrackerDB]) -> Optional[TrackerDB]:
+    """Prefer active stream DB (for test stubs), falling back to injected TrackerDB."""
     mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.db:
+    if mgr is not None and getattr(mgr, "db", None) is not None:
+        return mgr.db
+    return db
+
+
+@router.get("/entities")
+async def list_entities(
+    request: Request,
+    category: Optional[str] = None,
+    db: TrackerDB = Depends(get_db),
+):
+    """List enrolled gallery identities with appearance counters and sample thumbnails."""
+    resolved_db = _resolve_analytics_db(request, db)
+    if resolved_db is None:
         return []
-    return await asyncio.to_thread(_fetch_entities_summary, mgr.db, category)
+    return await asyncio.to_thread(_fetch_entities_summary, resolved_db, category)
 
 
 def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
@@ -108,12 +121,11 @@ def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
 
 
 @router.post("/entities")
-async def create_entity(req: EntityCreateRequest, request: Request):
+async def create_entity(req: EntityCreateRequest, db: TrackerDB = Depends(get_db)):
     """Enroll a new identity into the persistent Re-ID gallery database."""
-    mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.db:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_create_entity_sync, mgr.db, req)
+    return await asyncio.to_thread(_create_entity_sync, db, req)
 
 
 def _fetch_entity_details(db, entity_id: int) -> dict:
@@ -128,30 +140,33 @@ def _fetch_entity_details(db, entity_id: int) -> dict:
 
 
 @router.get("/entities/{entity_id}")
-async def get_entity_details(entity_id: int, request: Request):
+async def get_entity_details(entity_id: int, db: TrackerDB = Depends(get_db)):
     """Get single enrolled entity details with signatures and recent sightings."""
-    mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.db:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_fetch_entity_details, mgr.db, entity_id)
+    return await asyncio.to_thread(_fetch_entity_details, db, entity_id)
 
 
-def _delete_entity_sync(mgr, entity_id: int) -> dict:
+def _delete_entity_sync(db, mgr, entity_id: int) -> dict:
     """Delete entity from SQLite and refresh in-memory gallery matcher."""
-    if not mgr.db.delete_entity(entity_id):
+    if not db.delete_entity(entity_id):
         raise HTTPException(status_code=404, detail="Entity not found")
-    if mgr.gallery_matcher:
+    if mgr and mgr.gallery_matcher:
         mgr.gallery_matcher.refresh_gallery()
     return {"deleted": True, "entity_id": entity_id}
 
 
 @router.delete("/entities/{entity_id}")
-async def delete_entity(entity_id: int, request: Request):
+async def delete_entity(
+    entity_id: int,
+    request: Request,
+    db: TrackerDB = Depends(get_db),
+):
     """Remove entity and its signatures from the gallery."""
-    mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.db:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_delete_entity_sync, mgr, entity_id)
+    mgr = get_active_stream_manager(conn=request)
+    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id)
 
 
 def _enrich_sighting(s: dict, db) -> dict:
@@ -199,21 +214,20 @@ def _fetch_sightings_sync(
 
 @router.get("/sightings")
 async def query_sightings(
-    request: Request,
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
     zone_id: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     limit: int = 50,
+    db: TrackerDB = Depends(get_db),
 ):
     """Search historical sighting timeline records with entity, zone, and time filters."""
-    mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.db:
+    if db is None:
         return []
     return await asyncio.to_thread(
         _fetch_sightings_sync,
-        mgr.db,
+        db,
         entity_id,
         entity_name,
         zone_id,
@@ -223,23 +237,35 @@ async def query_sightings(
     )
 
 
-@router.get("/events")
-async def list_recent_events(request: Request, limit: int = 50):
-    """Get recent security and tracking alerts from EventBus ring buffer."""
-    mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.event_bus:
-        return []
+def _merge_recent_events(mgr, db: Optional[TrackerDB], limit: int) -> list[dict]:
+    """Merge live EventBus alerts with persisted timeline events ordered newest-first."""
+    out: list[dict] = []
+    seen: set[tuple[Any, Any, Any]] = set()
+    if mgr and getattr(mgr, "event_bus", None):
+        for ev in mgr.event_bus.get_recent_events(limit=limit):
+            item = ev.to_dict() if hasattr(ev, "to_dict") else (asdict(ev) if hasattr(ev, "__dataclass_fields__") else {"event_type": getattr(ev, "event_type", "event")})
+            key = (item.get("event_type"), item.get("camera_id"), round(float(item.get("timestamp") or 0.0), 3))
+            seen.add(key)
+            out.append(item)
+    if db is not None and hasattr(db, "search_timeline_events"):
+        for row in db.search_timeline_events(limit=limit):
+            key = (row.get("event_type"), row.get("camera_id"), round(float(row.get("timestamp") or 0.0), 3))
+            if key not in seen:
+                seen.add(key)
+                out.append(row)
+    out.sort(key=lambda e: float(e.get("timestamp") or 0.0), reverse=True)
+    return out[:max(1, int(limit))]
 
-    events = mgr.event_bus.get_recent_events(limit=limit)
-    out = []
-    for ev in events:
-        if hasattr(ev, "to_dict"):
-            out.append(ev.to_dict())
-        elif hasattr(ev, "__dataclass_fields__"):
-            out.append(asdict(ev))
-        else:
-            out.append({"event_type": getattr(ev, "event_type", "event")})
-    return out
+
+@router.get("/events")
+async def list_recent_events(
+    request: Request,
+    limit: int = 50,
+    db: TrackerDB = Depends(get_db),
+):
+    """Get recent security and tracking alerts merged from EventBus and TrackerDB."""
+    mgr = get_active_stream_manager(conn=request)
+    return await asyncio.to_thread(_merge_recent_events, mgr, db, limit)
 
 
 @router.post("/tag")
@@ -266,12 +292,3 @@ async def tag_bounding_box(req: TagRequest, request: Request):
     except Exception as e:
         logger.error("Tagging failed: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/crops/{filename}")
-async def serve_crop_image(filename: str):
-    """Serve crop thumbnail images."""
-    file_path = os.path.join(CROPS_DIR, filename)
-    if os.path.exists(file_path):
-        return FileResponse(file_path, media_type="image/jpeg")
-    raise HTTPException(status_code=404, detail="Crop image not found")

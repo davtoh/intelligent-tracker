@@ -110,7 +110,8 @@ def _check_replay_bridge_and_ttl(tmp: Path, video_path: Path, failures: list[str
         crp = CachedReplayProvider(db, vs, bundle=bundle, replay_provider=rep, run_reid=False)
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
         crp.build_step_result(frame, now=100.0, frame_seq=0, media_time_s=0.0)
-        wg_entities = len(getattr(bundle.world_graph, "entities", {}) or {}) if bundle.world_graph else 0
+        snap = bundle.world_graph.snapshot() if bundle.world_graph and hasattr(bundle.world_graph, "snapshot") else {}
+        wg_entities = len(snap.get("entities", {}))
         checks["replay_world_bridge_entities"] = wg_entities
         if wg_entities == 0:
             failures.append("CachedReplayProvider(run_reid=False) skipped WorldEntityBridge sync (0 entities in WorldGraph)")

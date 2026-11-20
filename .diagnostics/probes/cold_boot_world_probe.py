@@ -24,7 +24,7 @@ def _seed_isolated_env(tmp: Path) -> tuple[Path, Path, Path]:
     from intelligent_tracker.database import TrackerDB
 
     cfg_path = tmp / "cameras.json"
-    cfg_path.write_text(json.dumps({"cameras": []}), encoding="utf-8")
+    cfg_path.write_text(json.dumps({"cameras": {}}), encoding="utf-8")
     scen_path = tmp / "scenarios.yaml"
     scen_path.write_text("zones: {}\ntripwires: {}\n", encoding="utf-8")
     db_path = tmp / "tracker.db"
@@ -62,8 +62,9 @@ def run_probe() -> dict[str, Any]:
                 wg = getattr(app.state, "world_graph", None)
                 if scen_mgr is not None and wg is None:
                     wg = getattr(scen_mgr, "world_graph", None)
-                zones_in_wg = len(getattr(wg, "zones", {}) or {}) if wg else 0
-                tw_in_wg = len(getattr(wg, "tripwires", {}) or {}) if wg else 0
+                snap = wg.snapshot() if wg and hasattr(wg, "snapshot") else {}
+                zones_in_wg = len(snap.get("zones", {}))
+                tw_in_wg = len(snap.get("tripwires", {}))
                 checks["world_graph_zones"] = zones_in_wg
                 checks["world_graph_tripwires"] = tw_in_wg
                 if zones_in_wg == 0 or tw_in_wg == 0:

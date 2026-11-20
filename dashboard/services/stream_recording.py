@@ -272,7 +272,11 @@ class StreamRecordingMixin:
 
     def start_recording(self, **kwargs: Any) -> dict[str, Any]:
         """Start MP4 recording and wake a hibernating video source if needed."""
-        src_fps = getattr(self.video_source, "fps", None)
+        src_fps = (
+            getattr(self.video_source, "source_fps", None)
+            or getattr(self.video_source, "measured_fps", None)
+            or getattr(self.video_source, "fps", None)
+        )
         cfg_fps = self.cfg.get("video", {}).get("framerate", 20.0)
         if kwargs.get("fps") is None:
             kwargs["fps"] = float(src_fps if src_fps and src_fps > 0 else cfg_fps)

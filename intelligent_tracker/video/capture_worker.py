@@ -12,6 +12,7 @@ from intelligent_tracker.camera_device import CameraDeviceHandler
 from intelligent_tracker.video.capture_helpers import (
     compute_reconnect_backoff,
     probe_capture_dimensions,
+    rewind_or_reopen_loop_video,
 )
 from intelligent_tracker.video.frame_timing import advance_frame_deadline, read_media_time_s, resolve_effective_fps
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
@@ -19,20 +20,28 @@ from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 logger = logging.getLogger(__name__)
 
 
-def _rewind_or_reopen_loop_video(worker: Any, consecutive_empty: int) -> Tuple[bool, int]:
-    """Rewind looping video files and reopen after repeated empty reads."""
-    if worker._cap:
-        try:
-            worker._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        except Exception as e:
-            logger.debug("Failed to rewind looping video: %s", e)
-    consecutive_empty += 1
-    if consecutive_empty > 5:
-        CameraDeviceHandler.safe_release(worker._cap, settle_delay=0.0)
-        worker._cap = None
-        worker._open_capture()
-        consecutive_empty = 0
-    return not worker._stop_event.wait(timeout=0.02), consecutive_empty
+def _step_capture_iteration(
+    worker: Any, guard: Any, effective_fps: float, min_frame_time: float,
+    next_deadline: float, consecutive_empty: int, reconnect_attempts: int,
+) -> Tuple[bool, float, int, int]:
+    """Execute a single capture read, failure recovery, or frame enqueue step."""
+    loop_start = time.monotonic()
+    if not worker._cap or not worker._cap.isOpened():
+        if worker.is_file:
+            return False, next_deadline, consecutive_empty, reconnect_attempts
+        ok, reconnect_attempts = worker._handle_reconnection(reconnect_attempts)
+        return ok, next_deadline, consecutive_empty, reconnect_attempts
+    timeout = getattr(worker, "warmup_timeout", 5.0) if getattr(worker, "_needs_warmup", True) else getattr(worker, "read_timeout", 2.0)
+    ret, frame = guard.read(worker._cap, timeout=timeout, stop_event=worker._stop_event)
+    if not ret or frame is None:
+        keep, consecutive_empty, reconnect_attempts = worker._handle_read_failure(guard, consecutive_empty, reconnect_attempts)
+        return keep, next_deadline, consecutive_empty, reconnect_attempts
+    worker._needs_warmup, consecutive_empty, reconnect_attempts = False, 0, 0
+    media_t = read_media_time_s(worker._cap, worker.is_file, effective_fps)
+    deadline = advance_frame_deadline(next_deadline, min_frame_time)
+    next_deadline = deadline if deadline is not None else next_deadline
+    ok = worker._enqueue_frame(frame, loop_start, min_frame_time, media_time_s=media_t, deadline=deadline)
+    return ok, next_deadline, consecutive_empty, reconnect_attempts
 
 
 class CaptureWorkerMixin:
@@ -212,7 +221,9 @@ class CaptureWorkerMixin:
     ) -> Tuple[bool, int, int]:
         """Process empty frame conditions: video rewind, transient webcam retries, and reconnects."""
         if self.is_file and self.loop_video:
-            keep_going, consecutive_empty = _rewind_or_reopen_loop_video(self, consecutive_empty)
+            keep_going, consecutive_empty = rewind_or_reopen_loop_video(
+                self, consecutive_empty, CameraDeviceHandler.safe_release
+            )
             return keep_going, consecutive_empty, reconnect_attempts
 
         if self.is_webcam:
@@ -265,7 +276,7 @@ class CaptureWorkerMixin:
             self._first_frame_read = True
             self._ready_event.set()
 
-        self._record_fps_telemetry(time.time())
+        self._record_fps_telemetry(time.monotonic())
 
         if self._queue.full():
             try:
@@ -281,7 +292,7 @@ class CaptureWorkerMixin:
             self._frames_dropped += 1
 
         if min_frame_time > 0:
-            sleep_dur = (deadline - time.monotonic()) if deadline is not None else (min_frame_time - (time.time() - loop_start))
+            sleep_dur = (deadline - time.monotonic()) if deadline is not None else (min_frame_time - (time.monotonic() - loop_start))
             if sleep_dur > 0 and self._stop_event.wait(timeout=sleep_dur):
                 return False
         return True
@@ -319,26 +330,10 @@ class CaptureWorkerMixin:
                     self._pause_event.wait(timeout=0.25)
                     next_deadline = time.monotonic()
                     continue
-                loop_start = time.time()
-                if not self._cap or not self._cap.isOpened():
-                    if self.is_file:
-                        break
-                    ok, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                    if not ok:
-                        break
-                    continue
-                timeout = getattr(self, "warmup_timeout", 5.0) if getattr(self, "_needs_warmup", True) else getattr(self, "read_timeout", 2.0)
-                ret, frame = guard.read(self._cap, timeout=timeout, stop_event=self._stop_event)
-                if not ret or frame is None:
-                    keep, consecutive_empty, reconnect_attempts = self._handle_read_failure(guard, consecutive_empty, reconnect_attempts)
-                    if not keep:
-                        break
-                    continue
-                self._needs_warmup, consecutive_empty, reconnect_attempts = False, 0, 0
-                media_t = read_media_time_s(self._cap, self.is_file, effective_fps)
-                deadline = advance_frame_deadline(next_deadline, min_frame_time)
-                next_deadline = deadline if deadline is not None else next_deadline
-                if not self._enqueue_frame(frame, loop_start, min_frame_time, media_time_s=media_t, deadline=deadline):
+                ok, next_deadline, consecutive_empty, reconnect_attempts = _step_capture_iteration(
+                    self, guard, effective_fps, min_frame_time, next_deadline, consecutive_empty, reconnect_attempts,
+                )
+                if not ok:
                     break
         finally:
             with self._lock:

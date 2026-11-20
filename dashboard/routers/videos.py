@@ -216,7 +216,8 @@ async def add_video_as_camera(
     return {"status": "success", "camera_id": cam_id, "name": cam_name, "detector": det, "confidence": conf, "classes": target_classes}
 
 
-@router.api_route("/videos/{filename}", methods=["GET", "HEAD"])
+@router.get("/videos/{filename}")
+@router.head("/videos/{filename}", include_in_schema=False)
 async def serve_video_stream(filename: str, request: Request):
     """Serve local video recording supporting HTML5 video scrubber seeking."""
     safe_name = os.path.basename(filename)

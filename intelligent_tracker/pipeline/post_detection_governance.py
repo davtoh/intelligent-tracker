@@ -71,13 +71,14 @@ def sync_world_bridge(
     timestamp: float,
     *,
     world_bridge: Any = None,
+    run_reid: bool = True,
 ) -> None:
     """Push throttled track/zone state and stale prunes into WorldEntityBridge."""
     bridge = world_bridge if world_bridge is not None else getattr(bundle, "world_bridge", None)
     if bridge is None:
         return
     matcher = bundle.gallery_matcher
-    if matcher is not None and tracks and getattr(matcher, "world_bridge", None) is bridge:
+    if run_reid and matcher is not None and tracks and getattr(matcher, "world_bridge", None) is bridge:
         return
     camera_id = resolve_camera_id(bundle)
     try:
@@ -166,5 +167,5 @@ def evaluate_tracks_governance(
             publish_id_events(bundle, frame, tracks, identifications, timestamp)
         except Exception as exc:
             logger.debug("Re-ID matching error: %s", exc)
-    sync_world_bridge(bundle, tracks, zone_lookup, timestamp, world_bridge=bridge)
+    sync_world_bridge(bundle, tracks, zone_lookup, timestamp, world_bridge=bridge, run_reid=run_reid)
     return analytics_res, identifications

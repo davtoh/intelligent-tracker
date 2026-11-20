@@ -182,6 +182,28 @@ def _merge_cached_step_result(
     )
 
 
+def _try_replay_step(
+    async_worker: AsyncInferenceWorker, replay_provider: Any, frame: np.ndarray, ts: float,
+    frame_seq: int, fps: float, media_time_s: float | None, scheduler: Any,
+    camera_id: str | None, mode: str, is_focused: bool, is_recording: bool,
+    is_armed: bool, active_tab: str,
+) -> FrameStepResult | None:
+    """Invoke active replay provider and record PriorityTier.REPLAY in scheduler."""
+    provider = replay_provider if replay_provider is not None else getattr(async_worker, "replay_provider", None)
+    if provider is None or not hasattr(provider, "build_step_result"):
+        return None
+    try:
+        replayed = provider.build_step_result(frame, ts, frame_seq, fps=fps, media_time_s=media_time_s)
+    except TypeError:
+        replayed = provider.build_step_result(frame, ts, frame_seq)
+    if replayed is not None and scheduler is not None and camera_id:
+        scheduler.should_schedule_frame(
+            camera_id, frame, ts, mode=mode, is_focused=is_focused,
+            is_recording=is_recording, is_armed=is_armed, active_tab=active_tab, is_replay=True,
+        )
+    return replayed
+
+
 def build_live_step_result(
     async_worker: AsyncInferenceWorker, frame: np.ndarray, now: float | None = None, frame_seq: int = 0,
     run_vision: bool = True, replay_provider: Any = None, *, scheduler: Any = None,
@@ -196,14 +218,12 @@ def build_live_step_result(
         return _stamp_step_provenance(
             FrameStepResult(frame=frame, timestamp=ts, fps=0.0, frame_count=frame_seq), frame_seq, ts, 0.0
         )
-    provider = replay_provider if replay_provider is not None else getattr(async_worker, "replay_provider", None)
-    if provider is not None and hasattr(provider, "build_step_result"):
-        try:
-            replayed = provider.build_step_result(frame, ts, frame_seq, fps=fps, media_time_s=media_time_s)
-        except TypeError:
-            replayed = provider.build_step_result(frame, ts, frame_seq)
-        if replayed is not None:
-            return replayed
+    replayed = _try_replay_step(
+        async_worker, replay_provider, frame, ts, frame_seq, fps, media_time_s,
+        scheduler, camera_id, mode, is_focused, is_recording, is_armed, active_tab,
+    )
+    if replayed is not None:
+        return replayed
     decision = (
         scheduler.should_schedule_frame(
             camera_id, frame, ts, mode=mode, is_focused=is_focused,

@@ -59,8 +59,25 @@ def probe_capture_dimensions(
     return (w if w > 0 else None), (h if h > 0 else None), valid_fps
 
 
+def rewind_or_reopen_loop_video(worker: Any, consecutive_empty: int, safe_release_cb: Any) -> tuple[bool, int]:
+    """Rewind looping video files and reopen after repeated empty reads."""
+    if worker._cap:
+        try:
+            worker._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        except Exception:
+            pass
+    consecutive_empty += 1
+    if consecutive_empty > 5:
+        safe_release_cb(worker._cap, settle_delay=0.0)
+        worker._cap = None
+        worker._open_capture()
+        consecutive_empty = 0
+    return not worker._stop_event.wait(timeout=0.02), consecutive_empty
+
+
 __all__ = [
     "compute_aspect_bounds",
     "compute_reconnect_backoff",
     "probe_capture_dimensions",
+    "rewind_or_reopen_loop_video",
 ]

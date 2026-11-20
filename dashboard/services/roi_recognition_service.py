@@ -19,6 +19,7 @@ import cv2
 import numpy as np
 
 from dashboard.services.entity_tagger import EntityTaggerService
+from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.reid import batch_cosine_similarity
 from intelligent_tracker.reid.factory import ReIDExtractorFactory
 
@@ -31,6 +32,31 @@ class RoiNotFoundError(LookupError):
 
 class RoiUnavailableError(RuntimeError):
     """Raised when a live camera stream has no frame buffered yet."""
+
+
+def _resolve_roi_models(stream_manager: Any, camera_pool: Any) -> tuple[Any, Any]:
+    """Resolve configured detector and Re-ID extractor from stream, pool, or factories."""
+    det = getattr(stream_manager, "detector", None) if stream_manager else None
+    reid = getattr(stream_manager, "reid_extractor", None) if stream_manager else None
+    if (det is None or reid is None) and camera_pool is not None:
+        for mgr in (getattr(camera_pool, "streams", None) or {}).values():
+            det = det or getattr(mgr, "detector", None)
+            reid = reid or getattr(mgr, "reid_extractor", None)
+            if det is not None and reid is not None:
+                break
+    if det is None:
+        try:
+            det = DetectorFactory.create("yolov8")
+        except Exception:
+            det = None
+    if reid is None:
+        for model_name in ("osnet", "color"):
+            try:
+                reid = ReIDExtractorFactory.create(model_name)
+                break
+            except Exception:
+                continue
+    return det, reid
 
 
 class RoiRecognitionService:
@@ -180,7 +206,7 @@ class RoiRecognitionService:
     ) -> dict[str, Any]:
         """Compute crop embedding and return top-K cosine similarity gallery matches."""
         if reid_extractor is None:
-            reid_extractor = ReIDExtractorFactory.create("color")
+            _, reid_extractor = _resolve_roi_models(self.stream_manager, self.camera_pool)
         emb = EntityTaggerService._compute_deterministic_embedding(crop, reid_extractor)
         mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=int(emb.shape[0]))
         if mat.size == 0 or not ids:
@@ -218,8 +244,7 @@ class RoiRecognitionService:
         """Run end-to-end on-demand ROI crop extraction, classification, and Re-ID."""
         frame, is_direct = self.resolve_roi_frame(camera_id, video_filename, timestamp_sec, crop_base64)
         crop, box = self.extract_roi_crop(frame, bbox, is_direct_crop=is_direct)
-        detector = getattr(self.stream_manager, "detector", None) if self.stream_manager else None
-        reid_ext = getattr(self.stream_manager, "reid_extractor", None) if self.stream_manager else None
+        detector, reid_ext = _resolve_roi_models(self.stream_manager, self.camera_pool)
         classification = self.classify_roi_crop(crop, detector=detector)
         matching = self.match_crop_to_gallery(crop, top_k=top_k, reid_extractor=reid_ext)
         return {
@@ -233,15 +258,9 @@ class RoiRecognitionService:
 
     def _persist_roi_tag(
         self,
-        entity_name: str,
-        category: str,
-        entity_id: int | None,
-        notes: str,
-        crop: np.ndarray,
-        emb: np.ndarray,
-        box: tuple[int, int, int, int],
-        source: str,
-        track_id: int | None,
+        entity_name: str, category: str, entity_id: int | None, notes: str,
+        crop: np.ndarray, emb: np.ndarray, box: tuple[int, int, int, int],
+        source: str, track_id: int | None, *, video_filename: str = "", media_offset_sec: float = 0.0,
     ) -> dict[str, Any]:
         """Upsert entity, write crop thumbnail, and record signature and sighting."""
         target = self.db.get_entity(entity_id) if entity_id is not None else self.db.get_entity_by_name(entity_name)
@@ -261,7 +280,8 @@ class RoiRecognitionService:
         sighting_id = int(
             self.db.record_sighting(
                 entity_id=resolved_id, track_id=track_id or 0, source=source,
-                zone_id="manual_roi", bbox=f"{bx},{by},{bw},{bh}", confidence=1.0, snapshot_path=crop_path,
+                zone_id="manual_roi", bbox=f"{bx},{by},{bw},{bh}", confidence=1.0,
+                snapshot_path=crop_path, video_filename=video_filename, media_offset_sec=media_offset_sec,
             )
         )
         return {
@@ -285,7 +305,10 @@ class RoiRecognitionService:
         """Persist ROI crop, signature, entity record, and sighting into TrackerDB."""
         frame, is_direct = self.resolve_roi_frame(camera_id, video_filename, timestamp_sec, crop_base64)
         crop, box = self.extract_roi_crop(frame, bbox, is_direct_crop=is_direct)
-        reid_ext = getattr(self.stream_manager, "reid_extractor", None) if self.stream_manager else None
+        _, reid_ext = _resolve_roi_models(self.stream_manager, self.camera_pool)
         emb = EntityTaggerService._compute_deterministic_embedding(crop, reid_ext)
         source = video_filename or camera_id or "manual_roi"
-        return self._persist_roi_tag(entity_name, category, entity_id, notes, crop, emb, box, source, track_id)
+        return self._persist_roi_tag(
+            entity_name, category, entity_id, notes, crop, emb, box, source, track_id,
+            video_filename=str(video_filename or "").strip(), media_offset_sec=float(timestamp_sec or 0.0),
+        )

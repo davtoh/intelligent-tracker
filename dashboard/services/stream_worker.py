@@ -145,7 +145,7 @@ class StreamWorker:
                                 is_rec = bool(getattr(self.manager, "is_recording", False))
                                 step_res = build_worker_step_result(self.manager, async_worker, frame, frame_seq, self._should_run_vision_step(is_rec), is_rec, step_fn=build_live_step_result)
                                 if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
-                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
+                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps if step_res.fps and step_res.fps > 0 else float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0))
                                 self._process_single_frame(step_res)
                                 consecutive_errors = 0
                             except Exception as exc:
@@ -165,19 +165,24 @@ class StreamWorker:
         if getattr(self.manager, "has_raw_subscribers", True) or raw_missing:
             self._encode_raw_frame(step_res.frame)
 
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        is_capture_only = getattr(svc, "mode", None) == "capture_only"
         recorder = getattr(self.manager, "_recording_controller", None)
         is_rec = bool(recorder is not None and recorder.is_recording)
         annotated = None
-        if getattr(self.manager, "has_annotated_subscribers", True) or is_rec or ann_missing:
+        if not is_capture_only and (getattr(self.manager, "has_annotated_subscribers", True) or is_rec or ann_missing):
             annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
-            if is_rec:
-                recorder.write_frame(step_res.frame, annotated, step_res=step_res)
+        if is_rec:
+            recorder.write_frame(step_res.frame, annotated, step_res=step_res)
 
         thumb_src = annotated if annotated is not None else step_res.frame
         maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp)
 
+        vs = getattr(self.manager, "video_source", None)
+        vs_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)
+        tel_fps = step_res.fps if step_res.fps and step_res.fps > 0 else vs_fps
         telemetry = self._build_telemetry(
-            step_res.tracks, step_res.timestamp, step_res.fps, step_res.frame.shape, step_res.frame_count,
+            step_res.tracks, step_res.timestamp, tel_fps, step_res.frame.shape, step_res.frame_count,
             step_res=step_res,
         )
         with self.manager._lock:

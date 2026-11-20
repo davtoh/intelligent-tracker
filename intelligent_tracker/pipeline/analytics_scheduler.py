@@ -159,6 +159,8 @@ class AnalyticsScheduler:
         """Decide whether a camera frame should enter AI inference now."""
         ts = time.monotonic() if now is None else float(now)
         if is_replay:
+            with self._lock:
+                self._cameras.setdefault(camera_id, _CameraScheduleState()).last_tier = PriorityTier.REPLAY
             return ScheduleDecision(True, PriorityTier.REPLAY, 0.0, self.get_load_shed_stage(), False, False, 0.0, "zero_gpu_replay")
         if mode in ("paused", "capture_only"):
             return ScheduleDecision(False, PriorityTier.P2, 0.0, self.get_load_shed_stage(), False, False, 0.0, f"mode_{mode}")
@@ -182,10 +184,8 @@ class AnalyticsScheduler:
             )
             if should_run:
                 state.last_scheduled_at = ts
-            if stage == LoadShedStage.CRITICAL and tier == PriorityTier.P1 and motion.motion_active:
-                if self._deferred_indexing_cb is not None and (
-                    state.last_shed_notify_at is None or (ts - state.last_shed_notify_at) >= 10.0
-                ):
+            if stage == LoadShedStage.CRITICAL and tier == PriorityTier.P1 and motion.motion_active and self._deferred_indexing_cb is not None:
+                if state.last_shed_notify_at is None or (ts - state.last_shed_notify_at) >= 10.0:
                     state.last_shed_notify_at, deferred_reason = ts, "critical_p1_motion_shed"
             state.last_tier, state.last_target_fps, state.last_motion_active = tier, target_fps, motion.motion_active
         if deferred_reason is not None and self._deferred_indexing_cb is not None:

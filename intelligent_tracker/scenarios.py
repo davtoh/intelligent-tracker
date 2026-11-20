@@ -26,7 +26,7 @@ from intelligent_tracker.scenario_storage import (
 )
 from intelligent_tracker.topology import CrossCameraTopology
 from intelligent_tracker.world import GlobalCoordinateMapper, WorldGraph, WorldTransitionRegistry
-from intelligent_tracker.world.coordinates import sync_homography_to_world
+from intelligent_tracker.world.coordinates import sync_homography_to_world, sync_loaded_scenarios_to_world
 
 logger = logging.getLogger("intelligent_tracker.scenarios")
 
@@ -216,7 +216,7 @@ class ScenarioManager(ScenarioStorageMixin):
             for tw in cam_entry["tripwires"].values():
                 mgr.analytics.add_tripwire(tw)
         mgr.topology = self.topology
-        sync_homography_to_world(self.world_graph, self.coordinate_mapper, cam_id, cam_entry["homography"])
+        sync_loaded_scenarios_to_world(self.world_graph, self.coordinate_mapper, {cam_id: cam_entry})
         logger.info(
             "Applied scenario for '%s': %d zones, %d tripwires, calibrated=%s",
             cam_id,

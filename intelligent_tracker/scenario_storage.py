@@ -18,7 +18,7 @@ from intelligent_tracker.homography import GroundPlaneHomography
 from intelligent_tracker.repositories.spatial_repo import list_homography_camera_ids
 from intelligent_tracker.topology import CrossCameraTopology, SpatialTransitionLink
 from intelligent_tracker.world import TripwireNode, WorldGraph, ZoneNode
-from intelligent_tracker.world.coordinates import sync_loaded_homographies_to_world
+from intelligent_tracker.world.coordinates import sync_loaded_scenarios_to_world
 
 logger = logging.getLogger("intelligent_tracker.scenarios")
 
@@ -224,12 +224,12 @@ class ScenarioStorageMixin:
             if os.path.exists(self.config_path):
                 self.load_from_yaml(self.config_path)
                 return
-        sync_loaded_homographies_to_world(getattr(self, "world_graph", None), getattr(self, "coordinate_mapper", None), self.cameras)
+        sync_loaded_scenarios_to_world(getattr(self, "world_graph", None), getattr(self, "coordinate_mapper", None), self.cameras)
 
     def load_from_yaml(self, path: str) -> None:
         """Parse scenarios from a YAML file."""
         load_scenarios_from_yaml(path, self._ensure_camera_entry, self.db, self.topology)
-        sync_loaded_homographies_to_world(getattr(self, "world_graph", None), getattr(self, "coordinate_mapper", None), self.cameras)
+        sync_loaded_scenarios_to_world(getattr(self, "world_graph", None), getattr(self, "coordinate_mapper", None), self.cameras)
 
     def save_to_yaml(self, path: str | None = None) -> None:
         """Serialize current in-memory scenarios to YAML."""

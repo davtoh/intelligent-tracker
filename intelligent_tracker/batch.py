@@ -29,11 +29,13 @@ from intelligent_tracker.batch_reporting import (
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.matcher import GalleryMatcher
+from intelligent_tracker.memory import ConfidenceEngine
 from intelligent_tracker.pipeline.bundle import PipelineBundle
 from intelligent_tracker.pipeline.config import PipelineConfig
 from intelligent_tracker.pipeline.frame_processor import FrameProcessor, FrameStepResult
 from intelligent_tracker.reid import ReIDExtractorFactory
 from intelligent_tracker.tracker import TrackerFactory
+from intelligent_tracker.world import WorldGraph
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +147,8 @@ class VideoIndexer:
         event_bus: Any = None,
         frame_processor: FrameProcessor | None = None,
         video_filename: str = "",
+        world_graph: Any = None,
+        confidence_engine: Any = None,
     ) -> None:
         self.db = db if db is not None else TrackerDB(db_path)
         self.sample_rate = max(1, int(sample_rate))
@@ -152,12 +156,15 @@ class VideoIndexer:
         self.rsac_manager, self.active_learning = rsac_manager, active_learning
         self.event_bus, self.frame_processor = event_bus, frame_processor
         self.video_filename = str(video_filename or "").strip()
+        self.world_graph = world_graph if world_graph is not None else WorldGraph()
+        self.confidence_engine = confidence_engine if confidence_engine is not None else ConfidenceEngine(db=self.db)
         self.detector = _create_batch_detector(detector_name, conf_threshold, classes)
         self.tracker = TrackerFactory.create(tracker_type)
         self.extractor = ReIDExtractorFactory.create(reid_name)
         self.matcher = GalleryMatcher(
             db=self.db, extractor=self.extractor, reid_threshold=reid_threshold,
             sighting_interval=1.0, active_learning=active_learning,
+            confidence_engine=self.confidence_engine,
         )
         self.analytics = analytics
 
@@ -183,6 +190,7 @@ class VideoIndexer:
             config=cfg, db=self.db, detector=self.detector, tracker=self.tracker,
             analytics=self.analytics, reid_extractor=self.extractor, gallery_matcher=self.matcher,
             rsac_manager=self.rsac_manager, active_learning=self.active_learning, event_bus=self.event_bus,
+            world_graph=self.world_graph, confidence_engine=self.confidence_engine,
         )
         return FrameProcessor(bundle=bundle)
 

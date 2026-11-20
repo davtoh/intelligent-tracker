@@ -234,6 +234,27 @@ def sync_loaded_homographies_to_world(
             sync_homography_to_world(world_graph, coordinate_mapper, cam_id, homo)
 
 
+def sync_loaded_scenarios_to_world(
+    world_graph: Any, coordinate_mapper: GlobalCoordinateMapper | None, cameras: dict[str, dict[str, Any]],
+) -> None:
+    """Sync all loaded homographies, zones, and tripwires into WorldGraph."""
+    sync_loaded_homographies_to_world(world_graph, coordinate_mapper, cameras)
+    if world_graph is None:
+        return
+    from intelligent_tracker.world.nodes import TripwireNode, ZoneNode
+
+    for cam_id, cam_entry in cameras.items():
+        for z_name, z in cam_entry.get("zones", {}).items():
+            poly = z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon)
+            if len(poly) >= 3:
+                pts = [(float(pt[0]), float(pt[1])) for pt in poly]
+                world_graph.register_zone(ZoneNode(zone_id=z_name, camera_id=cam_id, name=z_name, points=pts, max_occupancy=getattr(z, "capacity_limit", None)))
+        for tw_name, tw in cam_entry.get("tripwires", {}).items():
+            seg = tw.line_segment
+            if len(seg) >= 2:
+                world_graph.register_tripwire(TripwireNode(tripwire_id=tw_name, camera_id=cam_id, name=tw_name, pt1=(float(seg[0][0]), float(seg[0][1])), pt2=(float(seg[1][0]), float(seg[1][1])), direction="both" if getattr(tw, "bidirectional", True) else "in"))
+
+
 def compute_hop_global_path(
     camera_id: str, sightings: list[dict[str, Any]], coordinate_mapper: Any = None, homographies: dict[str, Any] | None = None,
 ) -> list[tuple[float, float]]:

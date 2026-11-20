@@ -38,8 +38,9 @@ ON CONFLICT(entity_id) DO UPDATE SET
 _INSERT_TIMELINE_SQL = """
 INSERT INTO world_timeline_events (
     event_type, entity_id, entity_name, category, camera_id, zone_id,
-    timestamp, confidence, title, summary, tags, metadata_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    timestamp, confidence, title, summary, tags, metadata_json,
+    video_filename, media_offset_sec
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -186,13 +187,18 @@ class MemoryMixin:
         entity_name: str = "", category: str = "", camera_id: str = "", zone_id: str = "",
         timestamp: float | None = None, confidence: float = 1.0, title: str = "",
         tags: str = "", metadata: dict[str, Any] | None = None,
+        video_filename: str = "", media_offset_sec: float | None = None,
     ) -> int:
         """Insert a timeline event and automatically index it into ``world_timeline_fts``."""
         ts = float(timestamp) if timestamp is not None else time.time()
+        meta = dict(metadata or {})
+        v_fn = str(video_filename or meta.get("video_filename") or "").strip()
+        m_off = float(media_offset_sec if media_offset_sec is not None else (meta.get("media_offset_sec") or 0.0))
         values = (
             event_type.strip(), entity_id, entity_name.strip(), category.strip(),
             camera_id.strip(), zone_id.strip(), ts, float(confidence),
-            title.strip(), summary.strip(), tags.strip(), json.dumps(metadata or {}, sort_keys=True),
+            title.strip(), summary.strip(), tags.strip(), json.dumps(meta, sort_keys=True),
+            v_fn, m_off,
         )
         with self._lock:
             cur = self._conn.cursor()
