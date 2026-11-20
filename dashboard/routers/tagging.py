@@ -8,6 +8,8 @@ tag commitment (`POST /api/tag/commit`) for both live streams and recorded
 Video Studio playback.
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -75,7 +77,8 @@ async def recognize_roi_endpoint(req: RoiRecognizeRequest, request: Request):
     """Classify an ROI crop and return top-K Re-ID gallery candidates."""
     svc = _build_service(request, req.camera_id)
     try:
-        data = svc.recognize_roi(
+        data = await asyncio.to_thread(
+            svc.recognize_roi,
             camera_id=req.camera_id,
             video_filename=req.video_filename,
             timestamp_sec=req.timestamp_sec,
@@ -97,7 +100,8 @@ async def commit_roi_tag_endpoint(req: TagCommitRequest, request: Request):
     """Commit an ROI tag, persist crop/signature/sighting, and reload galleries."""
     svc = _build_service(request, req.camera_id)
     try:
-        data = svc.commit_roi_tag(
+        data = await asyncio.to_thread(
+            svc.commit_roi_tag,
             entity_name=req.entity_name,
             category=req.category,
             entity_id=req.entity_id,
@@ -115,5 +119,5 @@ async def commit_roi_tag_endpoint(req: TagCommitRequest, request: Request):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RoiUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "data": data}

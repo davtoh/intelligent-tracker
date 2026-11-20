@@ -108,7 +108,11 @@ def main(argv: list[str] | None = None) -> None:
         "port": port,
         "reload": reload,
         "log_level": "info",
+        "proxy_headers": True,
     }
+    forwarded_allow_ips = os.getenv("FORWARDED_ALLOW_IPS", "").strip()
+    if forwarded_allow_ips:
+        uvicorn_kwargs["forwarded_allow_ips"] = forwarded_allow_ips
     if reload:
         uvicorn_kwargs["reload_dirs"] = ["dashboard", "intelligent_tracker"]
         uvicorn_kwargs["reload_excludes"] = ["data/*", "logs/*", "*.db*", "*.sqlite*", ".diagnostics/*"]

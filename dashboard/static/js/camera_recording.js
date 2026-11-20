@@ -19,7 +19,7 @@
       if (select.value) return select.value;
     }
     const barCam = document.getElementById('camera-recording-bar')?.getAttribute('data-camera-id');
-    return appCam || select?.value || barCam || 'cam_01';
+    return appCam || select?.value || barCam || null;
   }
 
   function formatBytes(bytes) {
@@ -86,7 +86,7 @@
   function renderActiveBar(status) {
     const bar = document.getElementById('camera-recording-bar');
     if (!bar) return;
-    bar.setAttribute('data-camera-id', status.camera_id);
+    bar.setAttribute('data-camera-id', status.camera_id || '');
     const camBadge = document.getElementById('rec-camera-badge');
     const pill = document.getElementById('rec-status-pill');
     const statusText = document.getElementById('rec-status-text');
@@ -97,7 +97,7 @@
     const startBtn = document.getElementById('btn-record-start');
     const stopBtn = document.getElementById('btn-record-stop');
     const studioBtn = document.getElementById('btn-record-open-studio');
-    if (camBadge) camBadge.textContent = String(status.camera_id).toUpperCase();
+    if (camBadge) camBadge.textContent = status.camera_id ? String(status.camera_id).toUpperCase() : '—';
     if (pill) pill.className = `rec-status-pill ${status.status}`;
     if (statusText) statusText.textContent = String(status.status).toUpperCase();
     if (elapsedEl) elapsedEl.textContent = formatElapsed(status.elapsed_s);
@@ -144,7 +144,8 @@
   }
 
   function pollActiveRecordings() {
-    const targets = new Set([getActiveCameraId()]);
+    const activeCam = getActiveCameraId();
+    const targets = new Set(activeCam ? [activeCam] : []);
     recordingByCamera.forEach((st, id) => {
       if (st && st.is_recording) targets.add(id);
     });
@@ -197,6 +198,7 @@
 
   async function startRecording(cameraId, overrideOpts) {
     const camId = cameraId || getActiveCameraId();
+    if (!camId) return null;
     const startBtn = document.getElementById('btn-record-start');
     if (startBtn && camId === getActiveCameraId()) startBtn.disabled = true;
     try {
@@ -224,6 +226,7 @@
 
   async function stopRecording(cameraId) {
     const camId = cameraId || getActiveCameraId();
+    if (!camId) return null;
     const stopBtn = document.getElementById('btn-record-stop');
     if (stopBtn && camId === getActiveCameraId()) stopBtn.disabled = true;
     try {
@@ -272,6 +275,7 @@
 
   function onCameraFocused(cameraId) {
     const camId = cameraId || getActiveCameraId();
+    if (!camId) return Promise.resolve(null);
     const bar = document.getElementById('camera-recording-bar');
     if (bar) bar.setAttribute('data-camera-id', camId);
     renderActiveBar(recordingByCamera.get(camId) || normalizeStatus({}, camId));
@@ -310,7 +314,13 @@
 
   function init() {
     bindEvents();
-    syncStatus(getActiveCameraId());
+    const select = document.getElementById('active-camera-select');
+    const isPlaceholderOnly = Boolean(
+      select && select.options && select.options.length === 1 && !select.options[0].value
+    );
+    if (!isPlaceholderOnly) {
+      syncStatus(getActiveCameraId());
+    }
   }
 
   window.CameraRecording = {

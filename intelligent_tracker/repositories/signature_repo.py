@@ -46,6 +46,8 @@ class SignatureMixin:
         now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cursor = self._conn.cursor()
             try:
                 cursor.execute(
@@ -93,6 +95,8 @@ class SignatureMixin:
         vec = feature_vector if feature_vector is not None else embedding
         now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 updates = ["created_at = ?"]
@@ -144,6 +148,8 @@ class SignatureMixin:
         query += " ORDER BY id ASC"
 
         with self._lock:
+            if self._conn is None:
+                return []
             cursor = self._conn.cursor()
             try:
                 cursor.execute(query, params)
@@ -157,43 +163,12 @@ class SignatureMixin:
             finally:
                 cursor.close()
 
-    def get_gallery_embeddings(
-        self, expected_dim: Optional[int] = None
+    def _build_gallery_matrix(
+        self, rows: List[Any], expected_dim: Optional[int]
     ) -> Tuple[np.ndarray, List[int], List[str], List[str]]:
-        """
-        Fetch all gallery signatures as a unified 2D matrix for vectorized matching.
-
-        :param expected_dim: Optional dimension filter to only load compatible embeddings.
-        :return: Tuple of:
-            - `embeddings_matrix`: np.ndarray of shape (N, D) float32 (empty (0, 0) if no signatures)
-            - `entity_ids`: List[int] of length N
-            - `names`: List[str] of length N
-            - `categories`: List[str] of length N
-        """
-        query = """
-            SELECT s.embedding, e.id AS entity_id, e.name, e.category
-            FROM entity_signatures s
-            JOIN entities e ON s.entity_id = e.id
-            WHERE e.status = 'active'
-            ORDER BY s.id ASC
-        """
-        with self._lock:
-            cursor = self._conn.cursor()
-            try:
-                cursor.execute(query)
-                rows = cursor.fetchall()
-            finally:
-                cursor.close()
-
-        if not rows:
-            return np.empty((0, 0), dtype=np.float32), [], [], []
-
-        vectors = []
-        entity_ids = []
-        names = []
-        categories = []
+        """Assemble normalized 2D float32 embedding matrix from raw DB rows."""
+        vectors, entity_ids, names, categories = [], [], [], []
         target_dim = expected_dim
-
         for row in rows:
             vec = self.deserialize_embedding(row["embedding"])
             if vec is None or vec.size == 0:
@@ -207,10 +182,33 @@ class SignatureMixin:
             entity_ids.append(row["entity_id"])
             names.append(row["name"])
             categories.append(row["category"])
-
         if not vectors:
             out_dim = expected_dim if expected_dim is not None else 0
             return np.empty((0, out_dim), dtype=np.float32), [], [], []
+        return np.vstack(vectors).astype(np.float32), entity_ids, names, categories
 
-        embeddings_matrix = np.vstack(vectors).astype(np.float32)
-        return embeddings_matrix, entity_ids, names, categories
+    def get_gallery_embeddings(
+        self, expected_dim: Optional[int] = None
+    ) -> Tuple[np.ndarray, List[int], List[str], List[str]]:
+        """Fetch all gallery signatures as a unified 2D matrix for vectorized matching."""
+        query = """
+            SELECT s.embedding, e.id AS entity_id, e.name, e.category
+            FROM entity_signatures s
+            JOIN entities e ON s.entity_id = e.id
+            WHERE e.status = 'active'
+            ORDER BY s.id ASC
+        """
+        with self._lock:
+            if self._conn is None:
+                out_dim = expected_dim if expected_dim is not None else 0
+                return np.empty((0, out_dim), dtype=np.float32), [], [], []
+            cursor = self._conn.cursor()
+            try:
+                cursor.execute(query)
+                rows = cursor.fetchall()
+            finally:
+                cursor.close()
+
+        if not rows:
+            return np.empty((0, 0), dtype=np.float32), [], [], []
+        return self._build_gallery_matrix(rows, expected_dim)

@@ -9,9 +9,30 @@ import cv2
 import numpy as np
 
 from intelligent_tracker.camera_device import CameraDeviceHandler
+from intelligent_tracker.video.capture_helpers import (
+    compute_reconnect_backoff,
+    probe_capture_dimensions,
+)
+from intelligent_tracker.video.frame_timing import advance_frame_deadline, read_media_time_s, resolve_effective_fps
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 
 logger = logging.getLogger(__name__)
+
+
+def _rewind_or_reopen_loop_video(worker: Any, consecutive_empty: int) -> Tuple[bool, int]:
+    """Rewind looping video files and reopen after repeated empty reads."""
+    if worker._cap:
+        try:
+            worker._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        except Exception as e:
+            logger.debug("Failed to rewind looping video: %s", e)
+    consecutive_empty += 1
+    if consecutive_empty > 5:
+        CameraDeviceHandler.safe_release(worker._cap, settle_delay=0.0)
+        worker._cap = None
+        worker._open_capture()
+        consecutive_empty = 0
+    return not worker._stop_event.wait(timeout=0.02), consecutive_empty
 
 
 class CaptureWorkerMixin:
@@ -43,6 +64,7 @@ class CaptureWorkerMixin:
 
             self._read_guard = CaptureReadGuard(
                 timeout=getattr(self, "read_timeout", 2.0),
+                warmup_timeout=getattr(self, "warmup_timeout", 5.0),
                 safe_unbind_cb=lambda cap: CameraDeviceHandler.safe_release(cap, settle_delay=0.1),
             )
         return self._read_guard
@@ -113,34 +135,16 @@ class CaptureWorkerMixin:
 
     def _configure_capture_dimensions(self) -> None:
         """Probe frame dimensions, compute aspect ratio, and configure target bounds."""
-        if self.target_width and self.target_height:
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(self.target_width))
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(self.target_height))
-
-        w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = float(self._cap.get(cv2.CAP_PROP_FPS))
-
-        if w > 0 and h > 0:
+        w, h, fps = probe_capture_dimensions(self._cap, self.target_width, self.target_height)
+        if w is not None and h is not None:
             self.width, self.height = w, h
             if self.target_width and self.target_height:
-                src_ratio = w / float(h)
-                target_ratio = self.target_width / float(self.target_height)
-                if src_ratio >= target_ratio:
-                    adj_w = self.target_width
-                    adj_h = int(round(self.target_width / src_ratio))
-                else:
-                    adj_h = self.target_height
-                    adj_w = int(round(self.target_height * src_ratio))
-                self.target_width = adj_w if adj_w % 2 == 0 else adj_w - 1
-                self.target_height = adj_h if adj_h % 2 == 0 else adj_h - 1
-                self.width, self.height = self.target_width, self.target_height
-        elif w > 0:
+                self.target_width, self.target_height = w, h
+        elif w is not None:
             self.width = w
-        elif h > 0:
+        elif h is not None:
             self.height = h
-
-        if fps > 0 and not np.isnan(fps):
+        if fps is not None:
             self.source_fps = fps
 
     def _open_capture(self) -> bool:
@@ -154,6 +158,7 @@ class CaptureWorkerMixin:
             self.width, self.height = self._cap.width, self._cap.height
             self.source_fps = float(self._cap.fps)
             self._is_connected = True
+            self._needs_warmup = True
             return True
 
         try:
@@ -163,6 +168,7 @@ class CaptureWorkerMixin:
                 return False
             self._configure_capture_dimensions()
             self._is_connected = True
+            self._needs_warmup = True
             return True
         except Exception as e:
             logger.warning("Error opening video capture '%s': %s", self.source, e)
@@ -181,13 +187,18 @@ class CaptureWorkerMixin:
 
         reconnect_attempts += 1
         self._reconnections += 1
+        delay = compute_reconnect_backoff(
+            reconnect_attempts,
+            base_delay=self.reconnect_delay,
+            max_backoff=getattr(self, "max_reconnect_backoff", 30.0),
+        )
         logger.info(
             "VideoSource '%s': Attempting reconnect #%d in %.1fs...",
             self.source,
             reconnect_attempts,
-            self.reconnect_delay,
+            delay,
         )
-        if self._stop_event.wait(timeout=self.reconnect_delay):
+        if self._stop_event.wait(timeout=delay):
             return False, reconnect_attempts
         if self._open_capture():
             logger.info("VideoSource '%s': Successfully reconnected.", self.source)
@@ -201,25 +212,10 @@ class CaptureWorkerMixin:
     ) -> Tuple[bool, int, int]:
         """Process empty frame conditions: video rewind, transient webcam retries, and reconnects."""
         if self.is_file and self.loop_video:
-            if self._cap:
-                try:
-                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                except Exception as e:
-                    logger.debug("Failed to rewind looping video: %s", e)
-            consecutive_empty += 1
-            if consecutive_empty > 5:
-                if self._cap:
-                    try:
-                        self._cap.release()
-                    except Exception:
-                        pass
-                    self._cap = None
-                self._open_capture()
-                consecutive_empty = 0
-            should_exit = self._stop_event.wait(timeout=0.02)
-            return not should_exit, consecutive_empty, reconnect_attempts
+            keep_going, consecutive_empty = _rewind_or_reopen_loop_video(self, consecutive_empty)
+            return keep_going, consecutive_empty, reconnect_attempts
 
-        elif self.is_webcam:
+        if self.is_webcam:
             consecutive_empty += 1
             if consecutive_empty < 15:
                 should_exit = self._stop_event.wait(timeout=0.02)
@@ -229,7 +225,12 @@ class CaptureWorkerMixin:
         if self.auto_reconnect and not self.is_file:
             reconnect_attempts += 1
             self._reconnections += 1
-            if self._stop_event.wait(timeout=self.reconnect_delay):
+            delay = compute_reconnect_backoff(
+                reconnect_attempts,
+                base_delay=self.reconnect_delay,
+                max_backoff=getattr(self, "max_reconnect_backoff", 30.0),
+            )
+            if self._stop_event.wait(timeout=delay):
                 return False, consecutive_empty, reconnect_attempts
             if self._cap:
                 CameraDeviceHandler.safe_release(self._cap, settle_delay=0.25)
@@ -251,7 +252,10 @@ class CaptureWorkerMixin:
                 self._measured_fps = 1.0 / avg_dt if avg_dt > 0 else 0.0
         self._last_frame_time = now
 
-    def _enqueue_frame(self, frame: np.ndarray, loop_start: float, min_frame_time: float) -> bool:
+    def _enqueue_frame(
+        self, frame: np.ndarray, loop_start: float, min_frame_time: float,
+        media_time_s: Optional[float] = None, deadline: Optional[float] = None,
+    ) -> bool:
         """Resize, update telemetry metrics, push frame to buffer, and throttle rate."""
         if self.target_width and self.target_height and frame is not None:
             if frame.shape[1] != self.target_width or frame.shape[0] != self.target_height:
@@ -270,70 +274,71 @@ class CaptureWorkerMixin:
             except queue.Empty:
                 pass
 
+        payload: Any = (frame, media_time_s) if media_time_s is not None else frame
         try:
-            self._queue.put(frame, timeout=0.01)
+            self._queue.put(payload, timeout=0.01)
         except queue.Full:
             self._frames_dropped += 1
 
         if min_frame_time > 0:
-            elapsed = time.time() - loop_start
-            sleep_dur = min_frame_time - elapsed
+            sleep_dur = (deadline - time.monotonic()) if deadline is not None else (min_frame_time - (time.time() - loop_start))
             if sleep_dur > 0 and self._stop_event.wait(timeout=sleep_dur):
                 return False
         return True
 
+    def _handle_read_failure(
+        self, guard: Any, consecutive_empty: int, reconnect_attempts: int
+    ) -> Tuple[bool, int, int]:
+        """Handle failed/timed-out frame read with driver severing or empty-frame fallback."""
+        if not self._running:
+            return False, consecutive_empty, reconnect_attempts
+        is_severed = getattr(guard, "last_read_timed_out", False)
+        if is_severed or (guard.is_reconnecting and self.auto_reconnect and not self.is_file):
+            logger.warning("VideoSource '%s': Driver timed out or breaker tripped. Severing driver.", self.source)
+            guard.safe_driver_unbind(self._cap)
+            self._cap = None
+            self._is_connected = False
+            if self.auto_reconnect and not self.is_file:
+                should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
+                if not should_continue:
+                    return False, consecutive_empty, reconnect_attempts
+                guard.reset()
+                return True, consecutive_empty, reconnect_attempts
+            return False, consecutive_empty, reconnect_attempts
+        return self._handle_empty_frame(consecutive_empty, reconnect_attempts)
+
     def _capture_worker(self) -> None:
         """Worker thread that continuously polls frames, buffers them, and safely owns cleanup."""
-        reconnect_attempts = 0
-        consecutive_empty = 0
-        effective_fps = self.fps_limit or (self.source_fps if self.source_fps > 0 else 30.0)
+        reconnect_attempts, consecutive_empty = 0, 0
+        effective_fps = resolve_effective_fps(self.is_file, self.source_fps, self.fps_limit)
         min_frame_time = (1.0 / effective_fps) if (self.is_file or self.fps_limit) else 0.0
-        guard = self._get_read_guard()
-
+        guard, next_deadline = self._get_read_guard(), time.monotonic()
         try:
             while self._running:
                 if self._is_paused:
                     self._pause_event.wait(timeout=0.25)
+                    next_deadline = time.monotonic()
                     continue
-
                 loop_start = time.time()
                 if not self._cap or not self._cap.isOpened():
-                    should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                    if not should_continue:
+                    if self.is_file:
+                        break
+                    ok, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
+                    if not ok:
                         break
                     continue
-
-                timeout = getattr(self, "read_timeout", 2.0)
+                timeout = getattr(self, "warmup_timeout", 5.0) if getattr(self, "_needs_warmup", True) else getattr(self, "read_timeout", 2.0)
                 ret, frame = guard.read(self._cap, timeout=timeout, stop_event=self._stop_event)
                 if not ret or frame is None:
-                    if not self._running:
-                        break
-                    is_severed = getattr(guard, "last_read_timed_out", False)
-                    if is_severed or (guard.is_reconnecting and self.auto_reconnect and not self.is_file):
-                        logger.warning(
-                            "VideoSource '%s': Driver timed out or breaker tripped. Severing driver.",
-                            self.source,
-                        )
-                        guard.safe_driver_unbind(self._cap)
-                        self._cap = None
-                        self._is_connected = False
-                        if self.auto_reconnect and not self.is_file:
-                            should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                            if not should_continue:
-                                break
-                            guard.reset()
-                            continue
-                        break
-
-                    keep_going, consecutive_empty, reconnect_attempts = self._handle_empty_frame(
-                        consecutive_empty, reconnect_attempts
-                    )
-                    if not keep_going:
+                    keep, consecutive_empty, reconnect_attempts = self._handle_read_failure(guard, consecutive_empty, reconnect_attempts)
+                    if not keep:
                         break
                     continue
-
-                consecutive_empty = 0
-                if not self._enqueue_frame(frame, loop_start, min_frame_time):
+                self._needs_warmup, consecutive_empty, reconnect_attempts = False, 0, 0
+                media_t = read_media_time_s(self._cap, self.is_file, effective_fps)
+                deadline = advance_frame_deadline(next_deadline, min_frame_time)
+                next_deadline = deadline if deadline is not None else next_deadline
+                if not self._enqueue_frame(frame, loop_start, min_frame_time, media_time_s=media_t, deadline=deadline):
                     break
         finally:
             with self._lock:
@@ -342,6 +347,7 @@ class CaptureWorkerMixin:
                     CameraDeviceHandler.safe_release(self._cap, settle_delay=0.0)
                     self._cap = None
                 self._is_connected = False
+                self._ready_event.set()
 
 
 __all__ = ["CaptureWorkerMixin"]

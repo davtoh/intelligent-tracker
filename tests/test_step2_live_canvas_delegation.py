@@ -61,9 +61,8 @@ class TestLiveCanvasDelegation(unittest.TestCase):
 
     def test_live_html_uses_unburned_primary_stream(self) -> None:
         html = LIVE_HTML.read_text(encoding="utf-8")
-        match = re.search(r'<img[^>]*id="live-stream-img"[^>]*src="([^"]+)"', html)
-        self.assertIsNotNone(match, "Missing #live-stream-img src in live.html")
-        self.assertEqual(match.group(1), "/stream/cam_01?annotated=false")
+        self.assertIn('id="live-stream-img"', html)
+        self.assertNotIn('src="/stream/cam_01', html)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_camera_grid_focus_vs_multigrid_stream_urls(self) -> None:
@@ -109,7 +108,7 @@ class TestLiveCanvasDelegation(unittest.TestCase):
         )
         out = _run_node(script)
         self.assertTrue(out["reconnectedSrc"].startswith("/stream/cam_01?annotated=false&t="))
-        self.assertEqual(out["resolvedSrc"], "/stream/cam_07?annotated=false")
+        self.assertTrue(out["resolvedSrc"].startswith("/stream/cam_07?annotated=false&t="))
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
     def test_interactive_canvas_hidpi_sync_and_render_delegation(self) -> None:

@@ -13,34 +13,24 @@
   const el = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null);
 
   function getCssDimensions(canvas) {
-    return {
-      width: parseFloat(canvas?.style?.width) || canvas?.clientWidth || canvas?.width || 0,
-      height: parseFloat(canvas?.style?.height) || canvas?.clientHeight || canvas?.height || 0,
-    };
+    return { width: parseFloat(canvas?.style?.width) || canvas?.clientWidth || canvas?.width || 0, height: parseFloat(canvas?.style?.height) || canvas?.clientHeight || canvas?.height || 0 };
   }
-
   function readLiveOverlayVisibility() {
-    const defaults = window.UnifiedCanvasOverlay?.DEFAULT_VISIBILITY || {
-      bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true, heatmap: false,
-    };
+    const defaults = window.UnifiedCanvasOverlay?.DEFAULT_VISIBILITY || { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true, heatmap: false };
     const vis = {};
     Object.keys(defaults).forEach((k) => { const n = el(`overlay-toggle-${k}`); vis[k] = n ? Boolean(n.checked) : defaults[k]; });
+    if (window.LivePlayer?.isBurnedAnnotationMode?.()) { vis.bboxes = false; vis.track_ids = false; vis.dwell_timers = false; vis.velocity = false; }
     return vis;
   }
-
   function syncCanvasSize(videoImg, canvas) {
     if (!videoImg || !canvas || !videoImg.clientWidth || !videoImg.clientHeight) return;
     const overlay = window.UnifiedCanvasOverlay;
-    const elemRect = typeof videoImg.getBoundingClientRect === 'function'
-      ? videoImg.getBoundingClientRect() : { left: videoImg.offsetLeft || 0, top: videoImg.offsetTop || 0, width: videoImg.clientWidth, height: videoImg.clientHeight };
-    const containerRect = typeof videoImg.parentElement?.getBoundingClientRect === 'function'
-      ? videoImg.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
+    const elemRect = typeof videoImg.getBoundingClientRect === 'function' ? videoImg.getBoundingClientRect() : { left: videoImg.offsetLeft || 0, top: videoImg.offsetTop || 0, width: videoImg.clientWidth, height: videoImg.clientHeight };
+    const containerRect = typeof videoImg.parentElement?.getBoundingClientRect === 'function' ? videoImg.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
     const box = overlay.computeContainBox(elemRect, containerRect, videoImg.naturalWidth || 640, videoImg.naturalHeight || 480);
     overlay.syncCanvasDpr(canvas, typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null, box.renderW, box.renderH);
-    canvas.style.left = `${box.offsetX}px`;
-    canvas.style.top = `${box.offsetY}px`;
+    canvas.style.left = `${box.offsetX}px`; canvas.style.top = `${box.offsetY}px`;
   }
-
   function drawInteractiveOverlay(ctx, canvas, videoImg, tracks, hoveredTrack, sceneExtras = {}) {
     latestState = { ctx, canvas, videoImg, tracks: tracks || [], hoveredTrack: hoveredTrack || null, sceneExtras: sceneExtras || {} };
     if (!ctx || !canvas) return;
@@ -57,11 +47,17 @@
     });
   }
 
+  function getActiveScales(cssW, cssH, videoImg, sourceRes) {
+    const u = window.UnifiedCanvasOverlay;
+    return u?.resolveScaleFactors
+      ? u.resolveScaleFactors(cssW, cssH, sourceRes, videoImg.naturalWidth, videoImg.naturalHeight)
+      : { scaleX: cssW / videoImg.naturalWidth, scaleY: cssH / videoImg.naturalHeight };
+  }
+
   function findHoveredTrack(mx, my, canvas, videoImg, tracks) {
     if (!videoImg?.naturalWidth) return null;
     const { width: cssW, height: cssH } = getCssDimensions(canvas);
-    const sx = cssW / videoImg.naturalWidth;
-    const sy = cssH / videoImg.naturalHeight;
+    const { scaleX: sx, scaleY: sy } = getActiveScales(cssW, cssH, videoImg, latestState.sceneExtras?.sourceRes);
     for (const trk of (tracks || [])) {
       const [bx, by, bw, bh] = trk.bbox;
       if (mx >= bx * sx && mx <= (bx + bw) * sx && my >= by * sy && my <= (by + bh) * sy) return trk;
@@ -73,15 +69,15 @@
     const tooltip = el('track-tooltip');
     if (!tooltip || !track || !videoImg?.naturalWidth) return;
     const { width: cssW, height: cssH } = getCssDimensions(canvas);
+    const { scaleX: sx, scaleY: sy } = getActiveScales(cssW, cssH, videoImg, latestState.sceneExtras?.sourceRes);
     const cLeft = parseFloat(canvas.style.left) || canvas.offsetLeft || 0;
     const cTop = parseFloat(canvas.style.top) || canvas.offsetTop || 0;
     tooltip.style.display = 'block';
-    tooltip.style.left = `${Math.min(cLeft + cssW - 180, Math.max(cLeft + 10, cLeft + track.bbox[0] * (cssW / videoImg.naturalWidth)))}px`;
-    tooltip.style.top = `${Math.max(cTop + 10, cTop + track.bbox[1] * (cssH / videoImg.naturalHeight) - 70)}px`;
+    tooltip.style.left = `${Math.min(cLeft + cssW - 180, Math.max(cLeft + 10, cLeft + track.bbox[0] * sx))}px`;
+    tooltip.style.top = `${Math.max(cTop + 10, cTop + track.bbox[1] * sy - 70)}px`;
     if (el('tooltip-title')) el('tooltip-title').textContent = track.entity_name || `Track #${track.id}`;
     if (el('tooltip-body')) el('tooltip-body').textContent = `Conf: ${(track.confidence * 100).toFixed(0)}% | Dwell: ${track.dwell_time}s | State: ${track.state}`;
   }
-
   function mapClassToCategory(label) {
     const norm = String(label || '').trim().toLowerCase();
     if (!norm) return null;
@@ -89,7 +85,6 @@
     const select = el('tag-category-select');
     return (select && Array.from(select.options || []).some((o) => o.value === norm)) ? norm : 'object';
   }
-
   function renderCandidateChips(candidates) {
     const box = el('tag-identity-candidates');
     if (!box) return;
@@ -128,7 +123,7 @@
       const res = await fetch('/api/tag/recognize-roi', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          camera_id: payload?.sourceType === 'video' ? null : (payload?.cameraId || activeCameraGetter?.() || 'cam_01'),
+          camera_id: payload?.sourceType === 'video' ? null : (payload?.cameraId || activeCameraGetter?.() || null),
           video_filename: payload?.videoFilename || null, timestamp_sec: payload?.timestampSec ?? null,
           bbox: payload?.bbox || payload?.track?.bbox || null, crop_base64: payload?.cropBase64 || null, top_k: 3,
         }),
@@ -164,7 +159,7 @@
     Object.entries(fields).forEach(([id, val]) => { if (el(id)) el(id).value = val; });
     if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${track.id}` : '🏷️ Enroll New Identity');
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
-    if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || 'cam_01', track, bbox });
+    if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, track, bbox });
     el('tag-name-input')?.focus();
   }
 
@@ -194,7 +189,7 @@
       track_id: el('tag-track-id')?.value ? parseInt(el('tag-track-id').value, 10) : null,
       bbox: el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null,
       crop_base64: el('tag-crop-base64')?.value || null, notes: (el('tag-notes-input')?.value || '').trim(),
-      camera_id: sourceType === 'video' ? null : (activeCameraGetter?.() || 'cam_01'),
+      camera_id: sourceType === 'video' ? null : (activeCameraGetter?.() || null),
       video_filename: sourceType === 'video' ? ((el('tag-video-filename')?.value || '').trim() || null) : null,
       timestamp_sec: sourceType === 'video' && tsVal !== '' ? parseFloat(tsVal) : null,
     };
@@ -211,12 +206,12 @@
     activeCameraGetter = getActiveCameraId;
     window.RoiDrawTagger?.setRecognitionHandler?.(handleRoiRecognition);
     const liveCanvas = el('interactive-canvas');
-    const liveVideo = el('video-stream');
+    const liveVideo = el('live-stream-img') || el('video-stream');
     if (liveCanvas && window.RoiDrawTagger?.attach) {
       window.RoiDrawTagger.attach({
         canvas: liveCanvas, mediaEl: liveVideo, containerEl: liveCanvas.parentElement,
         getTracks: () => latestState.tracks,
-        getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || 'cam_01', sourceWidth: liveVideo?.naturalWidth || 0, sourceHeight: liveVideo?.naturalHeight || 0 }),
+        getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, sourceWidth: liveVideo?.naturalWidth || 0, sourceHeight: liveVideo?.naturalHeight || 0 }),
         onRenderOverlay: () => drawInteractiveOverlay(latestState.ctx, latestState.canvas, latestState.videoImg, latestState.tracks, latestState.hoveredTrack, latestState.sceneExtras),
         onTrackClick: ({ track, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, bbox: track.bbox }),
         onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),

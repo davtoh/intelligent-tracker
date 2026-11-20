@@ -90,6 +90,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         autostart: bool = True,
         details: dict[str, Any] | None = None,
         device_name: str | None = None,
+        armed: bool = False,
     ) -> StreamManager:
         """Hot-add a new camera feed dynamically without server restarts."""
         with self._lock:
@@ -105,6 +106,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
                 enabled=enabled,
                 details=details,
                 device_name=device_name,
+                armed=armed,
             )
             self.save_cameras()
         return self._coordinator.register_camera_stream(
@@ -127,26 +129,22 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         classes: list[str] | None = None,
         device_name: str | None = None,
         details: dict[str, Any] | None = None,
+        armed: bool | None = None,
     ) -> bool:
         """Update an existing camera configuration and hot-reload its stream if needed."""
         with self._lock:
             found, needs_restart, cfg = self._config_store.update_entry(
-                camera_id,
-                name=name,
-                source=source,
-                cam_type=cam_type,
-                enabled=enabled,
-                detector=detector,
-                tracker=tracker,
-                confidence=confidence,
-                classes=classes,
-                device_name=device_name,
-                details=details,
+                camera_id, name=name, source=source, cam_type=cam_type, enabled=enabled,
+                detector=detector, tracker=tracker, confidence=confidence, classes=classes,
+                device_name=device_name, details=details, armed=armed,
             )
             if not found or cfg is None:
                 return False
             self.save_cameras()
 
+        if armed is not None and camera_id in self._coordinator.streams:
+            self._coordinator.streams[camera_id].is_armed = bool(armed)
+            self._coordinator.sync_processing_mode()
         if needs_restart:
             self._coordinator.restart_stream(camera_id, cfg)
         return True

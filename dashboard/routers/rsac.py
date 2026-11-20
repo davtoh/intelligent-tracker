@@ -8,6 +8,7 @@ Learning Review Queue, RSAC custom categories and zone policies, pet alarm white
 and visual descriptor version history and rollbacks.
 """
 
+import asyncio
 import base64
 import logging
 import os
@@ -87,23 +88,20 @@ async def enroll_entity_route(
     crop_img = None
 
     if req.crop_base64:
-        crop_img = _extract_crop_from_base64(req.crop_base64)
+        crop_img = await asyncio.to_thread(_extract_crop_from_base64, req.crop_base64)
     elif req.bbox:
         if not mgr:
             raise HTTPException(status_code=404, detail=f"Camera '{req.camera_id}' not found")
-        crop_img = _extract_crop_from_frame(mgr, req.bbox)
+        crop_img = await asyncio.to_thread(_extract_crop_from_frame, mgr, req.bbox)
     else:
         raise HTTPException(status_code=400, detail="Either bbox or crop_base64 must be provided")
 
-    res = enrollment_mgr.enroll(
-        name=req.name,
-        category=req.category or "person",
-        crop=crop_img,
-        notes=req.notes or "",
-        security_role=req.security_role or "",
+    res = await asyncio.to_thread(
+        enrollment_mgr.enroll, name=req.name, category=req.category or "person",
+        crop=crop_img, notes=req.notes or "", security_role=req.security_role or "",
         is_anchor=req.is_anchor if req.is_anchor is not None else True,
     )
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
 
@@ -114,7 +112,7 @@ async def list_active_learning_queue(
     db: TrackerDB = Depends(get_db),
 ):
     """Retrieve items from the Human-in-the-Loop Active Learning Review Queue."""
-    items = db.list_review_items(status=status, limit=limit)
+    items = await asyncio.to_thread(db.list_review_items, status=status, limit=limit)
     return {"status": "success", "count": len(items), "items": items}
 
 
@@ -124,7 +122,7 @@ async def get_active_learning_item(
     db: TrackerDB = Depends(get_db),
 ):
     """Retrieve details for a single active learning review candidate."""
-    item = db.get_review_item(item_id)
+    item = await asyncio.to_thread(db.get_review_item, item_id)
     if not item:
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
     return item
@@ -138,10 +136,10 @@ async def confirm_active_learning_item(
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
 ):
     """Operator Confirm (Ground Truth): promote candidate crop as a Locked Anchor for the entity."""
-    res = al_mgr.confirm_candidate(item_id=item_id, notes=req.notes)
+    res = await asyncio.to_thread(al_mgr.confirm_candidate, item_id=item_id, notes=req.notes)
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
 
@@ -153,10 +151,12 @@ async def reassign_active_learning_item(
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
 ):
     """Operator Reassign: assign candidate crop as a Locked Anchor for a different entity."""
-    res = al_mgr.reassign_candidate(item_id=item_id, target_entity_id=req.target_entity_id, notes=req.notes)
+    res = await asyncio.to_thread(
+        al_mgr.reassign_candidate, item_id=item_id, target_entity_id=req.target_entity_id, notes=req.notes,
+    )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
 
@@ -168,16 +168,13 @@ async def enroll_new_from_active_learning(
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
 ):
     """Operator Enroll New: register candidate crop as a newly created entity."""
-    res = al_mgr.enroll_as_new(
-        item_id=item_id,
-        name=req.name,
-        category=req.category or "person",
-        security_role=req.security_role or "",
-        notes=req.notes or "",
+    res = await asyncio.to_thread(
+        al_mgr.enroll_as_new, item_id=item_id, name=req.name,
+        category=req.category or "person", security_role=req.security_role or "", notes=req.notes or "",
     )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
 
@@ -188,7 +185,7 @@ async def dismiss_active_learning_item(
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
 ):
     """Operator Dismiss: reject candidate crop without modifying Re-ID gallery."""
-    res = al_mgr.dismiss_candidate(item_id=item_id, notes=req.notes)
+    res = await asyncio.to_thread(al_mgr.dismiss_candidate, item_id=item_id, notes=req.notes)
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
     return res
@@ -197,7 +194,7 @@ async def dismiss_active_learning_item(
 @router.get("/api/rsac/categories")
 async def list_custom_categories(rsac: RSACManager = Depends(get_rsac_mgr)):
     """List custom semantic categories and display badges."""
-    return rsac.list_categories()
+    return await asyncio.to_thread(rsac.list_categories)
 
 
 @router.post("/api/rsac/categories")
@@ -207,14 +204,15 @@ async def create_custom_category(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Register or update custom category badge."""
-    cat = rsac.register_category(
+    cat = await asyncio.to_thread(
+        rsac.register_category,
         cat_id=req.id,
         name=req.name,
         color=req.color or "#3B82F6",
         badge_icon=req.badge_icon or "",
         description=req.description or "",
     )
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "category": cat.to_dict()}
 
 
@@ -225,8 +223,8 @@ async def delete_custom_category(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Delete a custom category."""
-    deleted = rsac.delete_category(category_id)
-    reload_all_galleries(conn=request)
+    deleted = await asyncio.to_thread(rsac.delete_category, category_id)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success" if deleted else "not_found", "deleted": category_id}
 
 
@@ -236,7 +234,7 @@ async def list_rsac_rules(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """List Role-Based Spatial Access Control zone rules."""
-    return rsac.list_rules(camera_id=camera_id)
+    return await asyncio.to_thread(rsac.list_rules, camera_id=camera_id)
 
 
 @router.post("/api/rsac/rules")
@@ -246,7 +244,8 @@ async def set_rsac_rule(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Create or update Role-Based Spatial Access Control rule for a camera zone."""
-    rule = rsac.set_rule(
+    rule = await asyncio.to_thread(
+        rsac.set_rule,
         camera_id=req.camera_id,
         zone_id=req.zone_id,
         allowed_categories=req.allowed_categories or [],
@@ -255,7 +254,7 @@ async def set_rsac_rule(
         entity_overrides=req.entity_overrides or {},
         alarm_on_breach=req.alarm_on_breach if req.alarm_on_breach is not None else True,
     )
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "rule": rule.to_dict()}
 
 
@@ -267,15 +266,15 @@ async def delete_rsac_rule(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Delete an RSAC zone rule."""
-    deleted = rsac.delete_rule(camera_id, zone_id)
-    reload_all_galleries(conn=request)
+    deleted = await asyncio.to_thread(rsac.delete_rule, camera_id, zone_id)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success" if deleted else "not_found", "camera_id": camera_id, "zone_id": zone_id}
 
 
 @router.get("/api/pets/whitelist")
 async def get_pet_whitelist(rsac: RSACManager = Depends(get_rsac_mgr)):
     """List whitelisted pet labels and categories that suppress perimeter alarms."""
-    return {"whitelist": rsac.get_pet_whitelist()}
+    return {"whitelist": await asyncio.to_thread(rsac.get_pet_whitelist)}
 
 
 @router.post("/api/pets/whitelist")
@@ -285,9 +284,9 @@ async def add_pet_whitelist(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Add label or category to pet alarm suppression whitelist."""
-    rsac.add_pet_whitelist(req.label, notes=req.notes or "")
-    reload_all_galleries(conn=request)
-    return {"status": "success", "whitelist": rsac.get_pet_whitelist()}
+    await asyncio.to_thread(rsac.add_pet_whitelist, req.label, notes=req.notes or "")
+    await asyncio.to_thread(reload_all_galleries, conn=request)
+    return {"status": "success", "whitelist": await asyncio.to_thread(rsac.get_pet_whitelist)}
 
 
 @router.delete("/api/pets/whitelist/{label}")
@@ -297,30 +296,33 @@ async def remove_pet_whitelist(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Remove label or category from pet alarm suppression whitelist."""
-    rsac.remove_pet_whitelist(label)
-    reload_all_galleries(conn=request)
-    return {"status": "success", "whitelist": rsac.get_pet_whitelist()}
+    await asyncio.to_thread(rsac.remove_pet_whitelist, label)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
+    return {"status": "success", "whitelist": await asyncio.to_thread(rsac.get_pet_whitelist)}
 
 
-@router.get("/api/entities/{entity_id}/versions")
-async def get_entity_versions(entity_id: int, db: TrackerDB = Depends(get_db)):
-    """Retrieve complete descriptor version snapshot history for an entity."""
+def _fetch_entity_versions(db: TrackerDB, entity_id: int) -> dict:
+    """Load and serialize entity descriptor version history synchronously."""
     ent = db.get_entity(entity_id)
     if not ent:
         raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
-    versions = db.get_descriptor_versions(entity_id)
     serialized = []
-    for v in versions:
+    for v in db.get_descriptor_versions(entity_id):
         vd = dict(v)
         if "embedding" in vd and hasattr(vd["embedding"], "tolist"):
             vd["embedding"] = vd["embedding"].tolist()
-        if "feature_vector" in vd:
-            del vd["feature_vector"]
+        vd.pop("feature_vector", None)
         vd["version"] = vd.get("version_num")
         if vd.get("crop_path"):
             vd["crop_url"] = f"/crops/{os.path.basename(vd['crop_path'])}"
         serialized.append(vd)
     return {"status": "success", "entity_id": entity_id, "entity_name": ent.get("name"), "versions": serialized}
+
+
+@router.get("/api/entities/{entity_id}/versions")
+async def get_entity_versions(entity_id: int, db: TrackerDB = Depends(get_db)):
+    """Retrieve complete descriptor version snapshot history for an entity."""
+    return await asyncio.to_thread(_fetch_entity_versions, db, entity_id)
 
 
 @router.post("/api/entities/{entity_id}/rollback/{version}")
@@ -332,10 +334,10 @@ async def rollback_entity_descriptor(
     db: TrackerDB = Depends(get_db),
 ):
     """Roll back entity visual descriptor to a prior verified snapshot version."""
-    ok = db.rollback_descriptor(entity_id=entity_id, version=version)
+    ok = await asyncio.to_thread(db.rollback_descriptor, entity_id=entity_id, version=version)
     if not ok:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for entity {entity_id}")
-    reload_all_galleries(conn=request)
+    await asyncio.to_thread(reload_all_galleries, conn=request)
     return {
         "status": "success",
         "entity_id": entity_id,

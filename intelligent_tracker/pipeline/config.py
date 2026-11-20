@@ -99,7 +99,9 @@ def _is_video_file(source: Any) -> bool:
     """Return True if source points to a local file or video extension."""
     if not isinstance(source, str):
         return False
-    return os.path.exists(source) or source.lower().endswith((".mp4", ".avi", ".mkv", ".mov"))
+    lowered = source.strip().lower()
+    exts = (".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".webm", ".m4v")
+    return os.path.exists(source) or lowered.endswith(exts)
 
 
 def _probe_db_reid_model(db_path: str | None) -> str | None:

@@ -78,10 +78,12 @@ To prevent duplicating large MP4 files across WAN links, video clips remain stor
 * **Range Request Support:** Served via Starlette ``FileResponse``, supporting standard HTTP ``Range: bytes=start-end`` headers and returning ``HTTP 206 Partial Content``.
 * **Hub Streaming Reverse Proxy:** The Hub exposes ``GET /api/v1/gallery/stream/<video_id>/`` which transparently proxies Range requests to the edge node, allowing operators on the central web console to scrub and seek through edge recordings without public LAN exposure.
 
-3. Live Stream Proxy & HTTP Telemetry
--------------------------------------
+3. Live Stream Proxy, Multiview WebSocket & HTTP Telemetry
+----------------------------------------------------------
 
-* **MJPEG Live Feed:** ``GET /stream/{camera_id}`` generates continuous ``multipart/x-mixed-replace; boundary=frame`` frames.
+* **MJPEG Live Feed:** ``GET /stream/{camera_id}`` generates continuous ``multipart/x-mixed-replace; boundary=frame`` frames (preserved for 1x1 focus, legacy proxies, and degraded fallback).
+* **Multiview Thumbnail Multiplexer:** ``WS /ws/multiview`` streams FPS-capped downscaled JPEG thumbnails for grid views over a single binary WebSocket per client tab. See :ref:`multiview_streaming` for the 16-byte binary header specification, JSON control frames, reverse-proxy TLS/HTTP/2 recipes, and fallback limits.
+* **WebSocket Origin & Token Security:** Both ``/ws/multiview`` and ``/ws/{camera_id}`` enforce same-origin or ``ALLOWED_ORIGINS`` checks before ``accept()`` (closing unauthorized origins with ``1008``). Set ``MULTIVIEW_TOKEN_SECRET`` to require short-lived HMAC-SHA256 ``?token=`` query credentials (``exp`` <= 300 s) for cross-origin Hub embeds, and configure ``FORWARDED_ALLOW_IPS`` when running behind a reverse proxy.
 * **REST Telemetry Snapshot:** ``GET /api/cameras/{camera_id}/telemetry`` returns the current detection bounding boxes and tracking states for central HTML5 Canvas overlays:
 
 .. code-block:: json

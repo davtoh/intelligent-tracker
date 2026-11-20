@@ -8,17 +8,50 @@ multi-backend fallback (DirectShow -> Media Foundation -> V4L2 -> AVFoundation),
 and safe release with driver cooldowns to prevent COM unbind collisions on Windows.
 """
 
+import logging
 import os
 import sys
-import time
-import logging
 import threading
-from typing import Dict, List, Optional, Tuple, Union, Any
+import time
+from collections.abc import Collection
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
 
+from intelligent_tracker.camera_device_enum import (
+    get_darwin_device_names,
+    get_linux_device_names,
+    get_windows_device_names,
+)
+
 logger = logging.getLogger("intelligent_tracker.camera_device")
+
+
+def _configure_capture_resolution(
+    cap: cv2.VideoCapture, width: Optional[int], height: Optional[int]
+) -> None:
+    """Apply target frame dimensions to capture device if requested."""
+    if width and height and cap and cap.isOpened():
+        try:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(width))
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(height))
+        except Exception:
+            pass
+
+
+def _open_string_source(
+    source: str, width: Optional[int], height: Optional[int], release_fn: Any
+) -> Tuple[Optional[cv2.VideoCapture], str]:
+    """Open a file path or network stream source."""
+    is_net = source.lower().startswith(("rtsp://", "rtsps://", "http://", "https://"))
+    backend = cv2.CAP_FFMPEG if is_net else 0
+    cap = cv2.VideoCapture(source, backend) if backend else cv2.VideoCapture(source)
+    if cap and cap.isOpened():
+        _configure_capture_resolution(cap, width, height)
+        return cap, "FFMPEG" if backend else "DEFAULT"
+    release_fn(cap, settle_delay=0.05)
+    return None, "FAILED"
 
 
 class CameraDeviceHandler:
@@ -102,68 +135,32 @@ class CameraDeviceHandler:
         height: Optional[int] = None,
         test_read: bool = True,
     ) -> Tuple[Optional[cv2.VideoCapture], str]:
-        """
-        Open video capture device with automatic backend fallback and dimension configuration.
-
-        Args:
-            source: Integer device index, numeric string, file path, or RTSP URL.
-            preferred_backend: Optional explicit OpenCV backend (e.g. cv2.CAP_DSHOW).
-            width: Optional requested frame width.
-            height: Optional requested frame height.
-            test_read: If True, tests reading 1 valid frame before returning capture.
-
-        Returns:
-            Tuple of (VideoCapture instance or None, backend_name string)
-        """
+        """Open video capture device with automatic backend fallback and dimension configuration."""
         with cls._device_lock:
             if isinstance(source, str) and source.isdigit():
                 source = int(source)
-
-            # File or network RTSP stream
             if isinstance(source, str):
-                backend = cv2.CAP_FFMPEG if source.startswith("rtsp://") else 0
-                cap = cv2.VideoCapture(source, backend) if backend else cv2.VideoCapture(source)
-                if cap and cap.isOpened():
-                    cls._configure_resolution(cap, width, height)
-                    return cap, "FFMPEG" if backend else "DEFAULT"
-                cls.safe_release(cap, settle_delay=0.05)
-                return None, "FAILED"
+                return _open_string_source(source, width, height, cls.safe_release)
 
-            # Physical device index
             backends = [preferred_backend] if preferred_backend is not None else cls.get_preferred_backends()
-
             for b in backends:
                 try:
                     cap = cv2.VideoCapture(source, b) if b != cv2.CAP_ANY else cv2.VideoCapture(source)
                     if cap and cap.isOpened():
-                        if test_read:
-                            ret, frame = cap.read()
-                            if ret and cls.validate_frame(frame):
-                                cls._configure_resolution(cap, width, height)
-                                b_name = getattr(cap, "getBackendName", lambda: str(b))()
-                                return cap, b_name
-                            cls.safe_release(cap, settle_delay=0.15)
-                        else:
-                            cls._configure_resolution(cap, width, height)
-                            b_name = getattr(cap, "getBackendName", lambda: str(b))()
-                            return cap, b_name
+                        if not test_read:
+                            _configure_capture_resolution(cap, width, height)
+                            return cap, getattr(cap, "getBackendName", lambda: str(b))()
+                        ret, frame = cap.read()
+                        if ret and cls.validate_frame(frame):
+                            _configure_capture_resolution(cap, width, height)
+                            return cap, getattr(cap, "getBackendName", lambda: str(b))()
+                        cls.safe_release(cap, settle_delay=0.15)
                     else:
                         cls.safe_release(cap, settle_delay=0.05)
                 except Exception as e:
                     logger.debug("Backend %s failed for device #%s: %s", b, source, e)
                     cls.safe_release(None, settle_delay=0.05)
-
             return None, "FAILED"
-
-    @classmethod
-    def _configure_resolution(cls, cap: cv2.VideoCapture, width: Optional[int], height: Optional[int]) -> None:
-        """Apply target frame dimensions to capture device if requested."""
-        if width and height and cap and cap.isOpened():
-            try:
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, float(width))
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, float(height))
-            except Exception:
-                pass
 
     @classmethod
     def get_device_names(cls) -> List[str]:
@@ -172,51 +169,12 @@ class CameraDeviceHandler:
         Returns a list of device names in device index order.
         """
         if sys.platform.startswith("win"):
-            return cls._get_windows_device_names()
-        elif sys.platform.startswith("linux"):
-            return cls._get_linux_device_names()
+            return get_windows_device_names()
+        if sys.platform.startswith("linux"):
+            return get_linux_device_names()
+        if sys.platform == "darwin":
+            return get_darwin_device_names()
         return []
-
-    @classmethod
-    def _get_windows_device_names(cls) -> List[str]:
-        names = []
-        clsid = r"CLSID\{860BB310-5D01-11D0-BD3B-00A0C911CE86}\Instance"
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, clsid) as key:
-                i = 0
-                while True:
-                    try:
-                        sub = winreg.EnumKey(key, i)
-                        with winreg.OpenKey(key, sub) as subkey:
-                            try:
-                                fname, _ = winreg.QueryValueEx(subkey, "FriendlyName")
-                                if fname and fname not in names:
-                                    names.append(str(fname))
-                            except OSError:
-                                pass
-                        i += 1
-                    except OSError:
-                        break
-        except Exception as e:
-            logger.debug("Windows DirectShow registry enumeration error: %s", e)
-        return names
-
-    @classmethod
-    def _get_linux_device_names(cls) -> List[str]:
-        names = []
-        try:
-            import glob
-            for v4l_path in sorted(glob.glob("/sys/class/video4linux/video*")):
-                name_file = os.path.join(v4l_path, "name")
-                if os.path.isfile(name_file):
-                    with open(name_file, "r", encoding="utf-8", errors="ignore") as f:
-                        name = f.read().strip()
-                        if name:
-                            names.append(name)
-        except Exception as e:
-            logger.debug("Linux v4l2 device name error: %s", e)
-        return names
 
     @classmethod
     def get_friendly_name(cls, index: int) -> str:
@@ -269,14 +227,34 @@ class CameraDeviceHandler:
                 cls.safe_release(cap, settle_delay=0.25)
 
     @classmethod
-    def discover_usb_cameras(cls, max_devices: int = 6) -> List[Dict[str, Any]]:
-        """
-        Probe connected USB/local cameras sequentially with driver settle delays.
-        Returns list of working device dictionaries.
-        """
+    def discover_usb_cameras(
+        cls,
+        max_devices: int = 6,
+        active_indices: Optional[Collection[int]] = None,
+        active_devices: Optional[Dict[int, Dict[str, Any]]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Probe USB/local cameras sequentially, skipping active indices to avoid COM contention."""
+        skip = set(active_indices or ())
+        if active_devices:
+            skip.update(active_devices.keys())
+        if sys.platform.startswith("win"):
+            backend_default = "DirectShow"
+        elif sys.platform == "darwin":
+            backend_default = "AVFoundation"
+        else:
+            backend_default = "V4L2"
         with cls._device_lock:
             discovered = []
             for idx in range(max_devices):
+                if idx in skip:
+                    meta = dict((active_devices or {}).get(idx) or {})
+                    name = meta.get("name") or cls.get_friendly_name(idx)
+                    discovered.append({
+                        "index": idx, "name": name, "resolution": meta.get("resolution", "640x480"), "width": meta.get("width", 640),
+                        "height": meta.get("height", 480), "fps": meta.get("fps", 30.0), "backend": meta.get("backend", backend_default),
+                        "valid": True, "in_use": True, "is_virtual": meta.get("is_virtual", cls.is_virtual_device(name)),
+                    })
+                    continue
                 dev_info = cls.probe_device(idx)
                 if dev_info:
                     discovered.append(dev_info)

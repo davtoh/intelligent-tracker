@@ -49,7 +49,11 @@
 
   async function captureFreezeFrame(canvas, placeholder) {
     const camSelect = document.getElementById('enroll-camera-select');
-    const camId = camSelect ? camSelect.value : 'cam_01';
+    const camId = camSelect?.value || window.App?.getActiveCameraId?.() || null;
+    if (!camId) {
+      if (placeholder) placeholder.innerHTML = '<span style="color:#ef4444;">No active camera selected.</span>';
+      return;
+    }
 
     if (placeholder) {
       placeholder.style.display = 'block';
@@ -179,9 +183,14 @@
       const category = document.getElementById('enroll-category-select')?.value || 'person';
       const role = (document.getElementById('enroll-role-input')?.value || '').trim();
       const camSelect = document.getElementById('enroll-camera-select');
-      const camId = camSelect ? camSelect.value : 'cam_01';
+      const camId = camSelect?.value || window.App?.getActiveCameraId?.() || null;
       const isAnchor = document.getElementById('enroll-locked-anchor-cb')?.checked ?? true;
       const notes = (document.getElementById('enroll-notes-input')?.value || '').trim();
+
+      if (!camId) {
+        showToast('Camera Required', 'Please select an active camera source.', 'warning');
+        return;
+      }
 
       if (!name) {
         showToast('Validation Required', 'Please enter an entity name.', 'warning');

@@ -12,7 +12,7 @@
               <!-- Active Camera Dropdown -->
               <div class="camera-select-wrapper">
                 <select id="active-camera-select" class="form-select-sm" title="Select Focused Camera">
-                  <option value="cam_01">Main Entrance (cam_01)</option>
+                  <option value="">Loading cameras...</option>
                 </select>
               </div>
 
@@ -24,6 +24,8 @@
                   title="Quad Multi-View (2x2)">2x2</button>
                 <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="3x3"
                   title="Matrix Multi-View (3x3)">3x3</button>
+                <button class="btn btn-sm btn-outline grid-switch-btn" data-grid="4x4"
+                  title="Quad Matrix Multi-View (4x4)">4x4</button>
               </div>
 
               <span class="resolution-badge" id="stream-res-badge">640x480</span>
@@ -39,9 +41,17 @@
           <!-- Single Camera Focused Container (1x1 mode) -->
           <div class="video-container" id="video-wrapper">
             <!-- MJPEG Video Stream (un-burned; overlays rendered client-side on #interactive-canvas) -->
-            <img id="live-stream-img" src="/stream/cam_01?annotated=false" alt="Live Camera Stream" />
+            <img id="live-stream-img" alt="Live Camera Stream" />
             <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
             <canvas id="interactive-canvas"></canvas>
+            <!-- Processing Mode Paused Overlay -->
+            <div id="live-paused-overlay" class="live-paused-overlay" hidden>
+              <div class="live-paused-card glass-panel">
+                <span class="live-paused-title">Processing Mode: Paused</span>
+                <span class="live-paused-subtitle" id="live-paused-subtitle">All camera pipelines are hibernating to save CPU/GPU.</span>
+                <button type="button" class="btn btn-sm btn-primary" id="btn-resume-processing-mode">▶ Resume Live Feed</button>
+              </div>
+            </div>
             <!-- Hover Inspection Tooltip -->
             <div class="track-hover-tooltip" id="track-tooltip" style="display: none;">
               <div class="tooltip-header" id="tooltip-title">Track #--</div>
@@ -50,8 +60,14 @@
             </div>
           </div>
 
-          <!-- Multi-Camera Grid Container (2x2, 3x3 mode) -->
+          <!-- Multi-Camera Grid Container (2x2, 3x3, 4x4 mode) -->
           <div id="multi-grid-container" class="multi-camera-grid" style="display: none;"></div>
+          <div id="grid-pagination-bar" class="grid-pagination-bar" hidden>
+            <button type="button" class="btn btn-sm btn-outline grid-page-btn" id="btn-grid-prev" title="Previous Grid Page">‹ Prev</button>
+            <span class="grid-page-indicator" id="grid-page-indicator">Page 1 of 1</span>
+            <button type="button" class="btn btn-sm btn-outline grid-page-btn" id="btn-grid-next" title="Next Grid Page">Next ›</button>
+            <span class="grid-transport-badge degraded" id="grid-degraded-badge" hidden title="WebSocket multiview unavailable; using capped 2x2 MJPEG fallback">⚠ Degraded transport</span>
+          </div>
 
           <!-- Live Player HUD Toolbar (Milestone 10) -->
           <div class="live-player-hud glass-panel">
@@ -70,8 +86,11 @@
             </div>
             <div class="hud-center">
               <span class="stream-telemetry-text" id="stream-telemetry-hud">CAM_01 • 640x480 • 0.0 FPS</span>
+              <span class="stream-lag-badge" id="stream-lag-badge" hidden title="Asynchronous AI inference lag relative to displayed frame"></span>
             </div>
             <div class="hud-right">
+              <button class="btn btn-sm btn-outline hud-btn" id="btn-live-annotation-mode" data-annotated="false"
+                title="Toggle Interactive Canvas (annotated=false) vs Burned Server Annotations (annotated=true)">🎯 Canvas Boxes</button>
               <button class="btn btn-sm btn-primary hud-btn" id="btn-quick-tag"
                 title="Click-to-Tag detected track directly on feed">
                 🏷️ Click-to-Tag

@@ -7,31 +7,22 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <!-- Chart.js CDN for zero-dependency real-time time-series -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="stylesheet" href="/static/css/responsive_patterns.css">
   <link rel="stylesheet" href="/static/css/camera_diagnostics.css">
   <link rel="stylesheet" href="/static/css/camera_ai_config.css">
   <link rel="stylesheet" href="/static/css/camera_recording.css">
+  <link rel="stylesheet" href="/static/css/processing_mode.css">
+  <link rel="stylesheet" href="/static/css/grid_pagination.css">
 </head>
 <body class="dark-theme">
   <!-- Header & Navigation -->
   <header class="app-header">
     <div class="header-left">
-      <button class="hamburger-btn" id="btn-mobile-menu" aria-label="Toggle navigation menu" title="Toggle Navigation Menu">
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+      <button class="hamburger-btn" id="btn-mobile-menu" aria-label="Toggle navigation menu" title="Toggle Navigation Menu"><span></span><span></span><span></span></button>
       <div class="logo-group">
-        <div class="logo-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
-            <circle cx="12" cy="12" r="3" fill="#06b6d4"></circle>
-            <path d="M12 7v2m0 6v2m-5-5H5m14 0h-2"></path>
-          </svg>
-        </div>
+        <div class="logo-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path><circle cx="12" cy="12" r="3" fill="#06b6d4"></circle><path d="M12 7v2m0 6v2m-5-5H5m14 0h-2"></path></svg></div>
         <div class="logo-text">
           <span class="brand-title">INTELLIGENT TRACKER</span>
           <span class="brand-subtitle">MULTI-CAMERA EDGE AI VMS</span>
@@ -68,10 +59,10 @@
       <button class="btn btn-sm btn-outline header-action-btn" id="btn-manage-cameras" title="Camera Auto-Discovery & Stream Manager"><span>📹</span><span class="btn-text"> Cameras</span></button>
       <button class="btn btn-sm btn-outline header-action-btn" id="btn-backup-manager" title="Export / Import System State Snapshot"><span>💾</span><span class="btn-text"> Backup</span></button>
       <div class="telemetry-pill"><span class="telemetry-label">FPS:</span><span class="telemetry-val" id="header-fps-val">--</span></div>
+      <div class="processing-mode-pill" id="processing-mode-pill" title="Backend AI Processing Mode"><span class="processing-mode-dot mode-focus_only" id="processing-mode-dot"></span><select class="processing-mode-select" id="processing-mode-select" aria-label="AI Processing Mode"><option value="focus_only">Focus Only</option><option value="full_realtime">Full Realtime</option><option value="capture_only">Capture Only</option><option value="paused">Paused</option></select><span class="processing-mode-deferred-badge is-hidden" id="processing-mode-deferred-badge" title="No deferred indexing jobs">0</span></div>
       <div class="connection-status-pill online" id="connection-status-pill"><span class="status-indicator"></span><span id="connection-status-text">Connected</span></div>
     </div>
   </header>
-
   <!-- Main Container -->
   <main class="main-content">
     {% include "partials/tabs/live.html" %}
@@ -84,24 +75,17 @@
     {% include "partials/tabs/journey.html" %}
     {% include "partials/tabs/review.html" %}
   </main>
-
   <!-- MODALS -->
   {% include "partials/modals/entity_modals.html" %}
   {% include "partials/modals/camera_modals.html" %}
   {% include "partials/modals/studio_modals.html" %}
   {% include "partials/modals/video_modals.html" %}
-
   <!-- Mobile Slide-out Drawer (<1024px) (Slice 2) -->
   <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop" style="display: none;"></div>
   <aside class="mobile-nav-drawer" id="mobile-nav-drawer" aria-hidden="true">
     <div class="drawer-header">
       <div class="logo-group">
-        <div class="logo-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
-            <circle cx="12" cy="12" r="3" fill="#06b6d4"></circle>
-          </svg>
-        </div>
+        <div class="logo-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path><circle cx="12" cy="12" r="3" fill="#06b6d4"></circle></svg></div>
         <span class="brand-title">INTELLIGENT TRACKER</span>
       </div>
       <button class="drawer-close-btn" id="btn-close-drawer" aria-label="Close menu">&times;</button>
@@ -132,9 +116,10 @@
 
   <!-- Toast Notification Container (Milestone 9 & 10) -->
   <div id="toast-container" class="toast-container"></div>
-
   <!-- JavaScript Modules -->
   <script src="/static/js/text_truncation_manager.js"></script>
+  <script src="/static/js/scheduler_hud.js"></script>
+  <script src="/static/js/processing_mode.js"></script>
   <script src="/static/js/backup_manager.js"></script>
   <script src="/static/js/live_player.js"></script>
   <script src="/static/js/unified_canvas_overlay.js"></script>
@@ -145,6 +130,11 @@
   <script src="/static/js/analytics_view.js"></script>
   <script src="/static/js/camera_discovery.js"></script>
   <script src="/static/js/camera_ai_config.js"></script>
+  <script src="/static/js/mjpeg_reconnect.js"></script>
+  <script src="/static/js/grid_pagination.js"></script>
+  <script src="/static/js/multiview/protocol.js"></script>
+  <script src="/static/js/multiview/frame_surface.js"></script>
+  <script src="/static/js/multiview/multiview_client.js"></script>
   <script src="/static/js/camera_grid.js"></script>
   <script src="/static/js/video_jobs.js"></script>
   <script src="/static/js/video_batch_reports.js"></script>

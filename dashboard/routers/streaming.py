@@ -19,10 +19,36 @@ from dashboard.dependencies import (
     get_shutdown_event,
     is_shutting_down,
 )
+from dashboard.services.security_config import authorize_websocket
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.streaming")
 
 router = APIRouter(tags=["Streaming"])
+
+
+async def _wait_for_frame_or_shutdown(
+    frame_event: asyncio.Event,
+    shutdown_evt: asyncio.Event,
+    timeout: float = 1.5,
+) -> bool:
+    """Wait for either a new frame notification, shutdown signal, or safety timeout."""
+    frame_task = asyncio.create_task(frame_event.wait())
+    shutdown_task = asyncio.create_task(shutdown_evt.wait())
+    try:
+        done, pending = await asyncio.wait(
+            (frame_task, shutdown_task),
+            timeout=timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        return shutdown_task in done or shutdown_evt.is_set() or is_shutting_down()
+    except BaseException:
+        frame_task.cancel()
+        shutdown_task.cancel()
+        raise
 
 
 async def _stream_frame_generator(
@@ -32,24 +58,30 @@ async def _stream_frame_generator(
     annotated: bool = True,
 ):
     """Yield multipart MJPEG frame chunks while client remains connected."""
-    mgr.add_subscriber(sub_id)
+    mgr.add_subscriber(sub_id, annotated=annotated)
     shutdown_evt = get_shutdown_event()
+    loop = asyncio.get_running_loop()
+    frame_event = asyncio.Event()
+    register_waiter = getattr(mgr, "register_frame_waiter", None)
+    unregister_waiter = getattr(mgr, "unregister_frame_waiter", None)
+    if callable(register_waiter):
+        register_waiter(loop, frame_event)
     try:
         while not is_shutting_down() and not shutdown_evt.is_set():
             if await request.is_disconnected():
                 break
             mgr.heartbeat_subscriber(sub_id)
+            frame_event.clear()
             jpeg_bytes = mgr.get_latest_frame_jpeg(annotated=annotated)
             if jpeg_bytes:
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
-            try:
-                await asyncio.wait_for(shutdown_evt.wait(), timeout=0.04)
+            if await _wait_for_frame_or_shutdown(frame_event, shutdown_evt, timeout=1.5):
                 break
-            except asyncio.TimeoutError:
-                pass
     except (asyncio.CancelledError, GeneratorExit):
         pass
     finally:
+        if callable(unregister_waiter):
+            unregister_waiter(loop, frame_event)
         mgr.remove_subscriber(sub_id)
 
 
@@ -102,6 +134,10 @@ async def websocket_telemetry_endpoint(websocket: WebSocket, camera_id: str):
     WebSocket endpoint pushing real-time tracking, occupancy, and sighting telemetry.
     Supports client commands (e.g. toggle heatmap, ping).
     """
+    allowed, reason = authorize_websocket(websocket)
+    if not allowed:
+        await websocket.close(code=1008, reason=reason)
+        return
     await websocket.accept()
     mgr = get_active_stream_manager(camera_id, conn=websocket)
     if not mgr:

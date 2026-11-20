@@ -23,6 +23,7 @@ from dashboard.routers.video_jobs import router as video_jobs_router
 from dashboard.schemas import VideoAddAsCameraRequest
 from dashboard.services.video_jobs_service import get_video_job_manager
 from dashboard.services.video_transcoder import VideoTranscodeService
+from intelligent_tracker.camera_resolver import CameraPathResolver
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.videos")
 
@@ -125,17 +126,64 @@ async def upload_video(
     }
 
 
+def _release_pool_video_streams(pool: Optional[CameraPool], safe_name: str) -> None:
+    """Stop any active CameraPool streams referencing ``safe_name`` before file deletion."""
+    if not pool or not hasattr(pool, "camera_configs"):
+        return
+    for cid, cfg in list(pool.camera_configs.items()):
+        src = str(cfg.get("source", "")).strip().replace("\\", "/")
+        if os.path.basename(src) == safe_name and cfg.get("enabled", True):
+            pool.toggle_camera(cid, enabled=False)
+    for cid, mgr in list((getattr(pool, "streams", None) or {}).items()):
+        src = str(getattr(mgr, "_resolved_source", getattr(mgr, "source_override", ""))).replace("\\", "/")
+        if os.path.basename(src) == safe_name and hasattr(mgr, "stop"):
+            mgr.stop()
+
+
 @router.delete("/api/videos/{filename}")
-async def delete_video(filename: str):
-    """Delete a recording from data/videos/."""
+async def delete_video(
+    filename: str,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
+    """Delete a recording from data/videos/ after releasing active jobs/streams."""
     safe_name = os.path.basename(filename)
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
-    job_mgr = get_video_job_manager()
-    job_mgr.cancel_active_job_for_file(safe_name, wait_timeout=2.0)
-    os.remove(path)
+    get_video_job_manager().cancel_active_job_for_file(safe_name, wait_timeout=2.0)
+    _release_pool_video_streams(pool, safe_name)
+    try:
+        os.remove(path)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=f"Video file '{safe_name}' is in use: {exc}") from exc
     return {"status": "success", "deleted": safe_name}
+
+
+def _parse_video_camera_params(
+    safe_name: str,
+    camera_id: Optional[str],
+    name: Optional[str],
+    detector: Optional[str],
+    tracker: Optional[str],
+    confidence: Optional[float],
+    classes: Optional[str],
+    req: Optional[VideoAddAsCameraRequest],
+) -> tuple[str, str, str, str, float, list[str] | None]:
+    """Resolve query/body overrides for registering a video file as a camera."""
+    base_id = os.path.splitext(safe_name)[0].replace(" ", "_").replace("-", "_")
+    cam_id = (req.camera_id if req and req.camera_id else None) or camera_id or f"vid_{base_id}"
+    cam_name = (req.name if req and req.name else None) or name or f"Video ({safe_name})"
+    det = (req.detector if req and req.detector else None) or detector or "yolov8"
+    trk = (req.tracker if req and req.tracker else None) or tracker or "centroid"
+    conf = (req.confidence if req and req.confidence is not None else None) or confidence or 0.40
+    raw_classes = (req.classes if req and req.classes is not None else None) or classes
+    if isinstance(raw_classes, str):
+        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
+    elif isinstance(raw_classes, (list, tuple, set)):
+        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
+    else:
+        target_classes = None
+    return cam_id, cam_name, det, trk, float(conf), target_classes
 
 
 @router.post("/api/videos/{filename}/add_as_camera")
@@ -155,44 +203,17 @@ async def add_video_as_camera(
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
-
-    base_id = os.path.splitext(safe_name)[0].replace(" ", "_").replace("-", "_")
-    cam_id = (req.camera_id if req and req.camera_id else None) or camera_id or f"vid_{base_id}"
-    cam_name = (req.name if req and req.name else None) or name or f"Video ({safe_name})"
-    det = (req.detector if req and req.detector else None) or detector or "yolov8"
-    trk = (req.tracker if req and req.tracker else None) or tracker or "centroid"
-    conf = (req.confidence if req and req.confidence is not None else None) or confidence or 0.40
-    raw_classes = (req.classes if req and req.classes is not None else None) or classes
-
-    if isinstance(raw_classes, str):
-        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
-    elif isinstance(raw_classes, (list, tuple, set)):
-        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
-    else:
-        target_classes = None
-
     if not pool:
         raise HTTPException(status_code=503, detail="Camera pool not initialized")
 
-    pool.add_camera(
-        camera_id=cam_id,
-        name=cam_name,
-        source=path,
-        cam_type="video_file",
-        detector=det,
-        tracker=trk,
-        confidence=conf,
-        classes=target_classes,
-        enabled=True,
+    cam_id, cam_name, det, trk, conf, target_classes = _parse_video_camera_params(
+        safe_name, camera_id, name, detector, tracker, confidence, classes, req
     )
-    return {
-        "status": "success",
-        "camera_id": cam_id,
-        "name": cam_name,
-        "detector": det,
-        "confidence": conf,
-        "classes": target_classes,
-    }
+    pool.add_camera(
+        camera_id=cam_id, name=cam_name, source=CameraPathResolver.normalize_source_path(path),
+        cam_type="video_file", detector=det, tracker=trk, confidence=conf, classes=target_classes, enabled=True,
+    )
+    return {"status": "success", "camera_id": cam_id, "name": cam_name, "detector": det, "confidence": conf, "classes": target_classes}
 
 
 @router.api_route("/videos/{filename}", methods=["GET", "HEAD"])

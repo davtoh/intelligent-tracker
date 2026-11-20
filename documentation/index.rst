@@ -52,6 +52,7 @@ Documentation Contents
 
    dashboard
    vms
+   multiview_streaming
    camera_management
    scenario_studio
    artifact_and_face_intelligence

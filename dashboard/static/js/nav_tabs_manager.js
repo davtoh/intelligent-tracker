@@ -10,6 +10,70 @@
 (function () {
   'use strict';
 
+  const BOOT_DEDUP_PATHS = new Set(['/api/cameras', '/api/videos']);
+  const bootFetchCache = new Map();
+
+  function getDedupKey(input, init) {
+    const method = (init?.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
+    if (method !== 'GET') return null;
+    const rawUrl = typeof input === 'string' ? input : (input?.url || '');
+    if (rawUrl.includes('?') || !BOOT_DEDUP_PATHS.has(rawUrl)) return null;
+    return `${method}:${rawUrl}`;
+  }
+
+  function clearFetchDedupCache() { bootFetchCache.clear(); }
+
+  function installBootFetchDeduplicator(win = window, ttlMs = 2000) {
+    if (!win || typeof win.fetch !== 'function' || win.fetch.__bootDedupWrapped) return win?.fetch;
+    const origFetch = win.fetch.bind(win);
+    const wrapped = function (input, init) {
+      const key = getDedupKey(input, init);
+      if (!key) return origFetch(input, init);
+      const now = Date.now();
+      const cached = bootFetchCache.get(key);
+      if (cached && (now - cached.ts) < ttlMs) {
+        return cached.promise.then(r => (typeof r?.clone === 'function' ? r.clone() : r));
+      }
+      const promise = Promise.resolve(origFetch(input, init)).then(
+        (resp) => { if (resp && resp.ok === false) bootFetchCache.delete(key); return resp; },
+        (err) => { bootFetchCache.delete(key); throw err; }
+      );
+      bootFetchCache.set(key, { ts: now, promise });
+      return promise.then(r => (typeof r?.clone === 'function' ? r.clone() : r));
+    };
+    wrapped.__bootDedupWrapped = true;
+    win.fetch = wrapped;
+    win.fetchWithDedup = wrapped;
+    win.clearFetchDedupCache = clearFetchDedupCache;
+    return wrapped;
+  }
+
+  function emitTabLifecycle(prevTab, tabId) {
+    window.LivePlayer?.syncTabStreams?.(prevTab, tabId);
+    window.ProcessingModeUI?.syncTabChange?.(String(tabId || '').replace(/^tab-/, ''));
+    if (typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('tab-changed', {
+        detail: { previousTab: prevTab, activeTab: tabId },
+      }));
+    }
+  }
+
+  function wrapGlobalSwitchTab(manager) {
+    if (typeof window.switchTab !== 'function' || window.switchTab.__navTabsWrapped) return;
+    const origSwitchTab = window.switchTab;
+    const wrapped = function (tabId, updateHash = true) {
+      const prevTab = manager.activeTabId;
+      manager.activeTabId = tabId;
+      const result = origSwitchTab.call(this, tabId, updateHash);
+      if (!manager._inSwitchTab) {
+        emitTabLifecycle(prevTab, tabId);
+      }
+      return result;
+    };
+    wrapped.__navTabsWrapped = true;
+    window.switchTab = wrapped;
+  }
+
   class NavTabsManager {
     constructor() {
       this.container = document.querySelector('.nav-tabs-container');
@@ -19,11 +83,13 @@
       this.nextBtn = document.getElementById('nav-tabs-next');
       this.tabs = [];
       this.activeTabId = 'tab-live';
+      this._inSwitchTab = false;
 
       this.init();
     }
 
     init() {
+      wrapGlobalSwitchTab(this);
       if (!this.wrapper || !this.nav) return;
       this.collectTabs();
       this.setupScrollControls();
@@ -151,6 +217,7 @@
     }
 
     switchTab(tabId) {
+      const prevTab = this.activeTabId;
       this.activeTabId = tabId;
 
       // Update Header nav tabs
@@ -171,11 +238,18 @@
       });
 
       // Delegate to global switchTab in app.js
-      if (typeof window.switchTab === 'function') {
-        window.switchTab(tabId);
-      } else {
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
+      this._inSwitchTab = true;
+      try {
+        if (typeof window.switchTab === 'function') {
+          window.switchTab(tabId);
+        } else {
+          document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
+        }
+      } finally {
+        this._inSwitchTab = false;
       }
+
+      emitTabLifecycle(prevTab, tabId);
 
       // Lock window horizontal scroll to 0
       if (window.scrollX !== 0) {
@@ -196,5 +270,7 @@
     window.navTabsManager = new NavTabsManager();
   }
 
+  installBootFetchDeduplicator(window);
+  window.installBootFetchDeduplicator = installBootFetchDeduplicator;
   window.NavTabsManager = NavTabsManager;
 })();

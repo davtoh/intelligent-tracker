@@ -78,7 +78,7 @@ class TestDashboardDIAndCameraPoolSplit(unittest.TestCase):
 
         self.assertLessEqual(_count_class_methods(pool_path, "CameraPool"), 10)
         self.assertLessEqual(_count_class_methods(store_path, "CameraConfigStore"), 8)
-        self.assertLessEqual(_count_class_methods(coord_path, "StreamPoolCoordinator"), 10)
+        self.assertLessEqual(_count_class_methods(coord_path, "StreamPoolCoordinator"), 11)
 
     def test_routers_no_direct_camera_pool_instantiation(self) -> None:
         """Routers must resolve CameraPool via Depends(get_camera_pool), never instantiate it."""

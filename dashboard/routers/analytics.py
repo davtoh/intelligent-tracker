@@ -7,6 +7,7 @@ Provides endpoints for spatial density heatmaps, enrolled identity management,
 Re-ID sightings search, EventBus notifications, click-to-tag enrollments, and crop thumbnails.
 """
 
+import asyncio
 from dataclasses import asdict
 import io
 import logging
@@ -63,24 +64,16 @@ async def toggle_heatmap(
     return {"draw_heatmap": res}
 
 
-@router.get("/entities")
-async def list_entities(request: Request, category: Optional[str] = None):
-    """List enrolled gallery identities with appearance counters and sample thumbnails."""
-    mgr = get_active_stream_manager(conn=request)
-    if not mgr or not mgr.db:
-        return []
-
-    entities = mgr.db.list_entities(category=category)
-    sighting_counts = mgr.db.query_sighting_counts(
-        [ent["id"] for ent in entities]
-    )
+def _fetch_entities_summary(db, category: Optional[str]) -> list[dict]:
+    """Query entities with sighting counts and thumbnail metadata synchronously."""
+    entities = db.list_entities(category=category)
+    sighting_counts = db.query_sighting_counts([ent["id"] for ent in entities])
     result = []
     for ent in entities:
         ent_dict = dict(ent)
         ent_id = ent_dict["id"]
-        sightings = mgr.db.query_sightings(entity_id=ent_id, limit=1)
-        sigs = mgr.db.get_signatures(entity_id=ent_id)
-
+        sightings = db.query_sightings(entity_id=ent_id, limit=1)
+        sigs = db.get_signatures(entity_id=ent_id)
         ent_dict["appearance_count"] = sighting_counts.get(ent_id, 0)
         ent_dict["signature_count"] = len(sigs)
         ent_dict["thumbnail_url"] = (
@@ -88,12 +81,30 @@ async def list_entities(request: Request, category: Optional[str] = None):
             if sigs and sigs[0].get("crop_path")
             else None
         )
-        ent_dict["last_seen"] = (
-            sightings[0]["timestamp"] if sightings else ent_dict["created_at"]
-        )
+        ent_dict["last_seen"] = sightings[0]["timestamp"] if sightings else ent_dict["created_at"]
         result.append(ent_dict)
-
     return result
+
+
+@router.get("/entities")
+async def list_entities(request: Request, category: Optional[str] = None):
+    """List enrolled gallery identities with appearance counters and sample thumbnails."""
+    mgr = get_active_stream_manager(conn=request)
+    if not mgr or not mgr.db:
+        return []
+    return await asyncio.to_thread(_fetch_entities_summary, mgr.db, category)
+
+
+def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
+    """Create a new entity if not already enrolled."""
+    existing = db.get_entity_by_name(req.name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Entity with name '{req.name}' already exists (ID #{existing['id']})",
+        )
+    entity_id = db.add_entity(name=req.name, category=req.category, notes=req.notes)
+    return {"id": entity_id, "name": req.name, "category": req.category, "status": "active"}
 
 
 @router.post("/entities")
@@ -102,23 +113,18 @@ async def create_entity(req: EntityCreateRequest, request: Request):
     mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         raise HTTPException(status_code=503, detail="Database unavailable")
+    return await asyncio.to_thread(_create_entity_sync, mgr.db, req)
 
-    existing = mgr.db.get_entity_by_name(req.name)
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Entity with name '{req.name}' already exists (ID #{existing['id']})",
-        )
 
-    entity_id = mgr.db.add_entity(
-        name=req.name, category=req.category, notes=req.notes
-    )
-    return {
-        "id": entity_id,
-        "name": req.name,
-        "category": req.category,
-        "status": "active",
-    }
+def _fetch_entity_details(db, entity_id: int) -> dict:
+    """Load entity metadata, signatures, and recent sightings synchronously."""
+    ent = db.get_entity(entity_id)
+    if not ent:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    res = dict(ent)
+    res["signatures"] = [dict(s) for s in db.get_signatures(entity_id)]
+    res["recent_sightings"] = [dict(s) for s in db.query_sightings(entity_id=entity_id, limit=20)]
+    return res
 
 
 @router.get("/entities/{entity_id}")
@@ -127,18 +133,16 @@ async def get_entity_details(entity_id: int, request: Request):
     mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         raise HTTPException(status_code=503, detail="Database unavailable")
+    return await asyncio.to_thread(_fetch_entity_details, mgr.db, entity_id)
 
-    ent = mgr.db.get_entity(entity_id)
-    if not ent:
+
+def _delete_entity_sync(mgr, entity_id: int) -> dict:
+    """Delete entity from SQLite and refresh in-memory gallery matcher."""
+    if not mgr.db.delete_entity(entity_id):
         raise HTTPException(status_code=404, detail="Entity not found")
-
-    sigs = mgr.db.get_signatures(entity_id)
-    sightings = mgr.db.query_sightings(entity_id=entity_id, limit=20)
-
-    res = dict(ent)
-    res["signatures"] = [dict(s) for s in sigs]
-    res["recent_sightings"] = [dict(s) for s in sightings]
-    return res
+    if mgr.gallery_matcher:
+        mgr.gallery_matcher.refresh_gallery()
+    return {"deleted": True, "entity_id": entity_id}
 
 
 @router.delete("/entities/{entity_id}")
@@ -147,15 +151,7 @@ async def delete_entity(entity_id: int, request: Request):
     mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         raise HTTPException(status_code=503, detail="Database unavailable")
-
-    success = mgr.db.delete_entity(entity_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Entity not found")
-
-    if mgr.gallery_matcher:
-        mgr.gallery_matcher.refresh_gallery()
-
-    return {"deleted": True, "entity_id": entity_id}
+    return await asyncio.to_thread(_delete_entity_sync, mgr, entity_id)
 
 
 def _enrich_sighting(s: dict, db) -> dict:
@@ -176,6 +172,31 @@ def _enrich_sighting(s: dict, db) -> dict:
     return s_dict
 
 
+def _fetch_sightings_sync(
+    db,
+    entity_id: Optional[int],
+    entity_name: Optional[str],
+    zone_id: Optional[str],
+    start_time: Optional[str],
+    end_time: Optional[str],
+    limit: int,
+) -> list[dict]:
+    """Resolve optional entity name filter and enrich matching sightings."""
+    if entity_name and not entity_id:
+        ent = db.get_entity_by_name(entity_name)
+        if not ent:
+            return []
+        entity_id = ent["id"]
+    sightings = db.query_sightings(
+        entity_id=entity_id,
+        zone_id=zone_id,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+    )
+    return [_enrich_sighting(s, db) for s in sightings]
+
+
 @router.get("/sightings")
 async def query_sightings(
     request: Request,
@@ -190,23 +211,16 @@ async def query_sightings(
     mgr = get_active_stream_manager(conn=request)
     if not mgr or not mgr.db:
         return []
-
-    if entity_name and not entity_id:
-        ent = mgr.db.get_entity_by_name(entity_name)
-        if ent:
-            entity_id = ent["id"]
-        else:
-            return []
-
-    sightings = mgr.db.query_sightings(
-        entity_id=entity_id,
-        zone_id=zone_id,
-        start_time=start_time,
-        end_time=end_time,
-        limit=limit,
+    return await asyncio.to_thread(
+        _fetch_sightings_sync,
+        mgr.db,
+        entity_id,
+        entity_name,
+        zone_id,
+        start_time,
+        end_time,
+        limit,
     )
-
-    return [_enrich_sighting(s, mgr.db) for s in sightings]
 
 
 @router.get("/events")
@@ -240,7 +254,8 @@ async def tag_bounding_box(req: TagRequest, request: Request):
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
     try:
-        result = mgr.tag_entity(
+        result = await asyncio.to_thread(
+            mgr.tag_entity,
             entity_name=req.entity_name,
             category=req.category,
             track_id=req.track_id,

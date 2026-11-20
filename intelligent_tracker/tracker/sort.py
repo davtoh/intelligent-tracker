@@ -31,7 +31,7 @@ class KalmanBoxTracker:
 
     count = 0
 
-    def __init__(self, bbox: Tuple[int, int, int, int]):
+    def __init__(self, bbox: Tuple[int, int, int, int], timestamp: Optional[float] = None):
         KalmanBoxTracker.count += 1
         self.id = KalmanBoxTracker.count
 
@@ -67,6 +67,7 @@ class KalmanBoxTracker:
         self.hits = 1
         self.hit_streak = 1
         self.age = 0
+        self.last_seen: float = float(timestamp) if timestamp is not None else time.time()
 
     def predict(self) -> Tuple[int, int, int, int]:
         """Advance the state vector and return the predicted bounding box."""
@@ -83,12 +84,13 @@ class KalmanBoxTracker:
 
         return self.get_state()
 
-    def update(self, bbox: Tuple[int, int, int, int]) -> None:
+    def update(self, bbox: Tuple[int, int, int, int], timestamp: Optional[float] = None) -> None:
         """Update the state vector with observed bounding box."""
         self.time_since_update = 0
         self.history = []
         self.hits += 1
         self.hit_streak += 1
+        self.last_seen = float(timestamp) if timestamp is not None else time.time()
 
         cx = bbox[0] + bbox[2] / 2.0
         cy = bbox[1] + bbox[3] / 2.0
@@ -128,6 +130,8 @@ class SortTracker:
         min_hits: int = 3,
         iou_threshold: float = 0.3,
         max_disappeared: Optional[int] = None,
+        max_age_seconds: float = 2.5,
+        time_slice_dt_threshold: float = 0.4,
         **kwargs: Any,
     ):
         if max_disappeared is not None:
@@ -135,6 +139,9 @@ class SortTracker:
         self.max_age = int(max_age)
         self.min_hits = int(min_hits)
         self.iou_threshold = float(iou_threshold)
+        self.max_age_seconds = float(max_age_seconds)
+        self.time_slice_dt_threshold = float(time_slice_dt_threshold)
+        self._last_update_time: Optional[float] = None
         self.trackers: List[KalmanBoxTracker] = []
         self.track_metadata: Dict[int, Dict[str, Any]] = {}
 
@@ -142,6 +149,7 @@ class SortTracker:
         """Clear active Kalman trackers and associated detection metadata."""
         self.trackers.clear()
         self.track_metadata.clear()
+        self._last_update_time = None
 
     def _parse_detections(self, detections: List[Any]) -> Tuple[list, list, list, list]:
         """Parse detections into standardized tuples."""
@@ -178,6 +186,7 @@ class SortTracker:
         det_classes: List[int],
         det_scores: List[float],
         det_labels: List[str],
+        now: Optional[float] = None,
     ) -> Tuple[Set[int], Set[int]]:
         """Associate predictions to detections via IoU matching."""
         matched_trks, matched_dets = set(), set()
@@ -194,7 +203,7 @@ class SortTracker:
 
         for r, c in assignments:
             if iou_mat[r, c] >= self.iou_threshold:
-                self.trackers[r].update(det_bboxes[c])
+                self.trackers[r].update(det_bboxes[c], timestamp=now)
                 trk_id = self.trackers[r].id
                 self.track_metadata[trk_id] = {
                     "class_id": det_classes[c],
@@ -212,11 +221,12 @@ class SortTracker:
         det_scores: list,
         det_labels: list,
         matched_dets: Set[int],
+        now: Optional[float] = None,
     ) -> None:
         """Create new Kalman trackers for unassociated detections."""
         for c in range(len(det_bboxes)):
             if c not in matched_dets:
-                trk = KalmanBoxTracker(det_bboxes[c])
+                trk = KalmanBoxTracker(det_bboxes[c], timestamp=now)
                 self.trackers.append(trk)
                 self.track_metadata[trk.id] = {
                     "class_id": det_classes[c],
@@ -224,11 +234,14 @@ class SortTracker:
                     "label": det_labels[c],
                 }
 
-    def _format_active_tracks(self, now: float, confirmed_only: bool) -> Dict[int, Track]:
+    def _format_active_tracks(
+        self, now: float, confirmed_only: bool, is_time_sliced: bool = False
+    ) -> Dict[int, Track]:
         """Construct active Track dictionary for current frame."""
         active: Dict[int, Track] = {}
         for trk in self.trackers:
-            if trk.time_since_update < 1 and (trk.hit_streak >= self.min_hits or not confirmed_only):
+            confirmed = trk.hit_streak >= self.min_hits or is_time_sliced
+            if trk.time_since_update < 1 and (confirmed or not confirmed_only):
                 meta = self.track_metadata.get(trk.id, {})
                 box = trk.get_state()
                 t = Track(
@@ -240,7 +253,7 @@ class SortTracker:
                     timestamp=now,
                 )
                 t.hits = trk.hits
-                t.state = "confirmed" if trk.hit_streak >= self.min_hits else "tentative"
+                t.state = "confirmed" if confirmed else "tentative"
                 active[trk.id] = t
         return active
 
@@ -252,17 +265,32 @@ class SortTracker:
     ) -> Dict[int, Track]:
         """Update SORT tracker state with current frame detections."""
         now = timestamp if timestamp is not None else time.time()
+        step_dt = (now - self._last_update_time) if self._last_update_time is not None else 0.0
+        self._last_update_time = now
+        is_time_sliced = step_dt >= self.time_slice_dt_threshold
+
         bboxes, classes, scores, labels = self._parse_detections(detections)
         predicted_boxes = self._predict_trackers()
 
         _, matched_dets = self._associate_and_update(
-            predicted_boxes, bboxes, classes, scores, labels
+            predicted_boxes, bboxes, classes, scores, labels, now=now
         )
-        self._register_new_detections(bboxes, classes, scores, labels, matched_dets)
+        self._register_new_detections(bboxes, classes, scores, labels, matched_dets, now=now)
 
-        active = self._format_active_tracks(now, confirmed_only)
-        self.trackers = [t for t in self.trackers if t.time_since_update <= self.max_age]
+        active = self._format_active_tracks(now, confirmed_only, is_time_sliced=is_time_sliced)
+        self.trackers = [
+            t for t in self.trackers if self._keep_tracker(t, now, is_time_sliced)
+        ]
         return active
+
+    def _keep_tracker(self, trk: KalmanBoxTracker, now: float, is_time_sliced: bool) -> bool:
+        """Return True if Kalman tracker is within frame or elapsed-time age budget."""
+        dt = now - trk.last_seen
+        if is_time_sliced and self.max_age_seconds > 0:
+            return dt <= self.max_age_seconds
+        if trk.time_since_update > self.max_age:
+            return False
+        return self.max_age_seconds <= 0 or dt <= self.max_age_seconds
 
 
 __all__ = ["KalmanBoxTracker", "SortTracker"]

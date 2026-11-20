@@ -63,6 +63,7 @@ def build_camera_status_row(
         "active_tracks_count": len(telemetry.get("active_tracks", [])),
         "source_type": "synthetic" if is_synth else "physical",
         "recording": rec_state,
+        "armed": bool(getattr(mgr, "is_armed", cfg.get("armed", False))),
     }
 
 
@@ -158,4 +159,24 @@ class CameraPoolQueryMixin:
                 build_camera_status_row(cam_id, cfg, self.streams.get(cam_id))
                 for cam_id, cfg in self.camera_configs.items()
             ]
+
+    def get_active_usb_indices(self) -> set[int]:
+        """Return hardware USB indices currently owned by running streams."""
+        indices: set[int] = set()
+        with self._lock:
+            for cam_id, mgr in (self.streams or {}).items():
+                if not mgr or not getattr(mgr, "is_running", False):
+                    continue
+                cfg = (self.camera_configs or {}).get(cam_id, {})
+                src = getattr(mgr, "source_override", None)
+                if src is None:
+                    src = cfg.get("source")
+                if src is None and getattr(mgr, "video_source", None) is not None:
+                    src = getattr(mgr.video_source, "source", None)
+                if isinstance(src, int) and not isinstance(src, bool):
+                    indices.add(src)
+                elif isinstance(src, str) and src.strip().isdigit():
+                    if str(cfg.get("type", "")).lower() in ("", "usb", "webcam"):
+                        indices.add(int(src.strip()))
+        return indices
 
