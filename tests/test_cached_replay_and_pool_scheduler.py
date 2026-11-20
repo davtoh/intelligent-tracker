@@ -227,6 +227,36 @@ class TestCachedReplayAndPoolScheduler(unittest.TestCase):
         self.assertEqual(future_summary["rolling_fps"], 0.0)
         self.assertEqual(len(svc.scheduler._inference_timestamps), 0)
 
+    def test_cached_replay_reports_nonzero_fps_and_uses_media_time_s(self) -> None:
+        """CachedReplayProvider falls back to source_fps and honors vs.last_media_time_s."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db = TrackerDB(os.path.join(tmp.name, "sync.db"))
+        self.addCleanup(db.close)
+        bundle, bus, _ = _make_governed_bundle(db)
+        self.addCleanup(bus.stop)
+
+        dets = [
+            {"time": 0.0, "frame": 0, "source_resolution": [640, 360], "tracks": []},
+            {"time": 1.0, "frame": 15, "source_resolution": [640, 360], "tracks": [
+                {"id": 9, "bbox": [50, 60, 40, 80], "centroid": [70, 100], "label": "person"}
+            ]},
+        ]
+        db.save_video_run("sync.mp4", report={"frames_processed": 2}, frame_detections=dets, source_resolution=[640, 360], source_fps=15.0)
+        vs = SimpleNamespace(is_file=True, source="data/videos/sync.mp4", source_fps=15.0, measured_fps=14.8, last_media_time_s=1.0)
+        provider = CachedReplayProvider(db, vs, bundle=bundle)
+        worker = AsyncInferenceWorker(SimpleNamespace(bundle=bundle), replay_provider=provider)
+        mgr = SimpleNamespace(camera_id="vid_sync", is_armed=False, video_source=vs, _processing_mode_service=ProcessingModeService())
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+
+        res_direct = provider.build_step_result(frame, now=1.0, frame_seq=1)
+        res_worker = build_worker_step_result(mgr, worker, frame, frame_seq=9999, run_vision=True, is_rec=False)
+        bus.wait_until_empty(timeout=1.0)
+
+        self.assertAlmostEqual(res_direct.fps, 15.0, places=2)
+        self.assertAlmostEqual(res_worker.fps, 14.8, places=2)
+        self.assertIn(9, res_worker.tracks)
+
 
 if __name__ == "__main__":
     unittest.main()

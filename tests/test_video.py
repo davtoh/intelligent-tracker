@@ -161,6 +161,32 @@ class TestVideoSource(unittest.TestCase):
             self.assertFalse(success)
             mock_vc.assert_not_called()
 
+    def test_video_source_file_tracks_media_time_and_measured_fps(self):
+        """File-backed VideoSource exposes last_media_time_s and measured_fps cleanly."""
+        import os
+        import tempfile
+        import cv2
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        clip_path = os.path.join(tmp.name, "sample.avi")
+        writer = cv2.VideoWriter(clip_path, cv2.VideoWriter_fourcc(*"MJPG"), 20.0, (64, 48))
+        self.assertTrue(writer.isOpened())
+        for _ in range(10):
+            writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+        writer.release()
+
+        vs = VideoSource(source=clip_path, fps_limit=60.0, loop_video=True)
+        self.addCleanup(vs.stop)
+        vs.start()
+        ok1, f1 = vs.read(timeout=1.0)
+        ok2, f2 = vs.read(timeout=1.0)
+        self.assertTrue(ok1 and f1 is not None)
+        self.assertTrue(ok2 and f2 is not None)
+        self.assertIsNotNone(vs.last_media_time_s)
+        self.assertGreaterEqual(vs.last_media_time_s, 0.0)
+        self.assertGreaterEqual(vs.measured_fps, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

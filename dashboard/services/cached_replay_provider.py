@@ -121,10 +121,11 @@ class CachedReplayProvider:
             )
 
         elapsed_ms = max(0.0, (time.perf_counter() - t_start) * 1000.0)
+        resolved_fps = float(fps) if float(fps or 0.0) > 0 else float(getattr(self.replay, "_source_fps", 0.0) or 0.0)
         return _stamp_replay_result(
             FrameStepResult(
                 frame=frame, tracks=tracks, analytics=analytics_res,
-                identifications=identifications, timestamp=now, fps=fps,
+                identifications=identifications, timestamp=now, fps=resolved_fps,
                 frame_count=frame_seq, processing_ms=elapsed_ms,
             ),
             frame_seq=frame_seq,

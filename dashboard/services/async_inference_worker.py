@@ -187,6 +187,7 @@ def build_live_step_result(
     run_vision: bool = True, replay_provider: Any = None, *, scheduler: Any = None,
     camera_id: str | None = None, mode: str = "focus_only", is_focused: bool = False,
     is_recording: bool = False, is_armed: bool = False, active_tab: str = "live",
+    fps: float = 0.0, media_time_s: float | None = None,
 ) -> FrameStepResult:
     """Submit frame to async AI (or replay provider) when scheduled and stamp provenance."""
     ts = time.monotonic() if now is None else float(now)
@@ -197,7 +198,10 @@ def build_live_step_result(
         )
     provider = replay_provider if replay_provider is not None else getattr(async_worker, "replay_provider", None)
     if provider is not None and hasattr(provider, "build_step_result"):
-        replayed = provider.build_step_result(frame, ts, frame_seq)
+        try:
+            replayed = provider.build_step_result(frame, ts, frame_seq, fps=fps, media_time_s=media_time_s)
+        except TypeError:
+            replayed = provider.build_step_result(frame, ts, frame_seq)
         if replayed is not None:
             return replayed
     decision = (
@@ -234,9 +238,13 @@ def build_worker_step_result(
     mode = getattr(svc, "mode", "focus_only") if svc is not None else "focus_only"
     focused = getattr(svc, "focused_camera_id", None) if svc is not None else None
     active_tab = getattr(svc, "active_tab", "live") if svc is not None else "live"
+    vs = getattr(manager, "video_source", None)
+    measured_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)
+    media_time_s = getattr(vs, "last_media_time_s", None)
     return step_fn(
         async_worker, frame, now, frame_seq, run_vision,
         scheduler=scheduler, camera_id=manager.camera_id, mode=mode,
         is_focused=(manager.camera_id == focused), is_recording=is_rec,
         is_armed=bool(getattr(manager, "is_armed", False)), active_tab=active_tab,
+        fps=measured_fps, media_time_s=media_time_s,
     )

@@ -13,6 +13,7 @@ from intelligent_tracker.video.capture_helpers import (
     compute_reconnect_backoff,
     probe_capture_dimensions,
 )
+from intelligent_tracker.video.frame_timing import advance_frame_deadline, read_media_time_s, resolve_effective_fps
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 
 logger = logging.getLogger(__name__)
@@ -251,7 +252,10 @@ class CaptureWorkerMixin:
                 self._measured_fps = 1.0 / avg_dt if avg_dt > 0 else 0.0
         self._last_frame_time = now
 
-    def _enqueue_frame(self, frame: np.ndarray, loop_start: float, min_frame_time: float) -> bool:
+    def _enqueue_frame(
+        self, frame: np.ndarray, loop_start: float, min_frame_time: float,
+        media_time_s: Optional[float] = None, deadline: Optional[float] = None,
+    ) -> bool:
         """Resize, update telemetry metrics, push frame to buffer, and throttle rate."""
         if self.target_width and self.target_height and frame is not None:
             if frame.shape[1] != self.target_width or frame.shape[0] != self.target_height:
@@ -270,14 +274,14 @@ class CaptureWorkerMixin:
             except queue.Empty:
                 pass
 
+        payload: Any = (frame, media_time_s) if media_time_s is not None else frame
         try:
-            self._queue.put(frame, timeout=0.01)
+            self._queue.put(payload, timeout=0.01)
         except queue.Full:
             self._frames_dropped += 1
 
         if min_frame_time > 0:
-            elapsed = time.time() - loop_start
-            sleep_dur = min_frame_time - elapsed
+            sleep_dur = (deadline - time.monotonic()) if deadline is not None else (min_frame_time - (time.time() - loop_start))
             if sleep_dur > 0 and self._stop_event.wait(timeout=sleep_dur):
                 return False
         return True
@@ -306,34 +310,35 @@ class CaptureWorkerMixin:
     def _capture_worker(self) -> None:
         """Worker thread that continuously polls frames, buffers them, and safely owns cleanup."""
         reconnect_attempts, consecutive_empty = 0, 0
-        effective_fps = self.fps_limit or (self.source_fps if self.source_fps > 0 else 30.0)
+        effective_fps = resolve_effective_fps(self.is_file, self.source_fps, self.fps_limit)
         min_frame_time = (1.0 / effective_fps) if (self.is_file or self.fps_limit) else 0.0
-        guard = self._get_read_guard()
+        guard, next_deadline = self._get_read_guard(), time.monotonic()
         try:
             while self._running:
                 if self._is_paused:
                     self._pause_event.wait(timeout=0.25)
+                    next_deadline = time.monotonic()
                     continue
                 loop_start = time.time()
                 if not self._cap or not self._cap.isOpened():
                     if self.is_file:
-                        logger.warning("VideoSource '%s': File source failed to open; failing fast.", self.source)
                         break
-                    should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                    if not should_continue:
+                    ok, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
+                    if not ok:
                         break
                     continue
-
                 timeout = getattr(self, "warmup_timeout", 5.0) if getattr(self, "_needs_warmup", True) else getattr(self, "read_timeout", 2.0)
                 ret, frame = guard.read(self._cap, timeout=timeout, stop_event=self._stop_event)
                 if not ret or frame is None:
-                    keep_going, consecutive_empty, reconnect_attempts = self._handle_read_failure(guard, consecutive_empty, reconnect_attempts)
-                    if not keep_going:
+                    keep, consecutive_empty, reconnect_attempts = self._handle_read_failure(guard, consecutive_empty, reconnect_attempts)
+                    if not keep:
                         break
                     continue
-
                 self._needs_warmup, consecutive_empty, reconnect_attempts = False, 0, 0
-                if not self._enqueue_frame(frame, loop_start, min_frame_time):
+                media_t = read_media_time_s(self._cap, self.is_file, effective_fps)
+                deadline = advance_frame_deadline(next_deadline, min_frame_time)
+                next_deadline = deadline if deadline is not None else next_deadline
+                if not self._enqueue_frame(frame, loop_start, min_frame_time, media_time_s=media_t, deadline=deadline):
                     break
         finally:
             with self._lock:

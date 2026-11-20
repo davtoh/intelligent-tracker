@@ -87,6 +87,7 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self._needs_warmup = True
         self._start_time: Optional[float] = None
         self._last_frame_time: Optional[float] = None
+        self._last_media_time_s: Optional[float] = None
         self._measured_fps = 0.0
         self._frame_interval_samples: list = []
 
@@ -96,9 +97,13 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
             self.start()
 
         try:
-            frame = self._queue.get(block=True, timeout=timeout)
-            if frame is None or not self._running:
+            item = self._queue.get(block=True, timeout=timeout)
+            if item is None or not self._running:
                 return False, None
+            if isinstance(item, tuple) and len(item) == 2:
+                frame, self._last_media_time_s = item
+            else:
+                frame = item
             return True, frame
         except queue.Empty:
             return False, None
@@ -106,7 +111,11 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
     def grab_latest(self) -> Optional[np.ndarray]:
         """Non-blocking fetch of latest available frame, or None if buffer is empty."""
         try:
-            return self._queue.get_nowait()
+            item = self._queue.get_nowait()
+            if isinstance(item, tuple) and len(item) == 2:
+                frame, self._last_media_time_s = item
+                return frame
+            return item
         except queue.Empty:
             return None
 
@@ -133,6 +142,16 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
     def is_connected(self) -> bool:
         """Return True if acquisition backend is actively connected."""
         return bool(getattr(self, "_is_connected", False))
+
+    @property
+    def measured_fps(self) -> float:
+        """Return the measured sliding-window capture FPS."""
+        return float(getattr(self, "_measured_fps", 0.0) or 0.0)
+
+    @property
+    def last_media_time_s(self) -> Optional[float]:
+        """Return media timestamp in seconds for the most recently read frame."""
+        return getattr(self, "_last_media_time_s", None)
 
     @property
     def read_guard(self) -> Any:
