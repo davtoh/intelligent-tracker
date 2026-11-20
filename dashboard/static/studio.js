@@ -64,9 +64,11 @@
     drawOverlay();
   }
 
-  function drawOverlay(cursorPt) {
-    window.StudioCanvas?.drawOverlay(studioState.ctx, studioState.canvas, studioState.mode, studioState.points, cursorPt);
+  function clearStudioLiveImage() {
+    const img = document.getElementById('studio-live-img');
+    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; img.removeAttribute?.('src'); img.src = ''; }
   }
+  function drawOverlay(cursorPt) { window.StudioCanvas?.drawOverlay(studioState.ctx, studioState.canvas, studioState.mode, studioState.points, cursorPt); }
 
   function initStudio() {
     studioState.canvas = document.getElementById('studio-drawing-canvas');
@@ -83,8 +85,10 @@
 
     loadStudioChannels().then(() => {
       if (studioState.activeCamera) {
+        const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
         loadCameraScenario(studioState.activeCamera);
-        window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+        if (isVideo) clearStudioLiveImage();
+        else window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
       }
     });
     loadTopologyLinks();
@@ -286,14 +290,15 @@
       studioState.activeCamera = targetId;
       const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
       const img = document.getElementById('studio-live-img');
-      if (img && !isVideo) {
+      if (isVideo) clearStudioLiveImage();
+      else if (img) {
         const streamBase = `/stream/${encodeURIComponent(targetId)}`;
         if (img.dataset) img.dataset.activeStreamSrc = streamBase;
         if (isStudioTabActive()) img.src = `${streamBase}?t=${Date.now()}`;
       }
       updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
       loadCameraScenario(targetId);
-      window.StudioOverlays?.loadCameraOverlays(targetId);
+      if (!isVideo) window.StudioOverlays?.loadCameraOverlays(targetId);
     });
     document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
       window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);

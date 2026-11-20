@@ -166,7 +166,7 @@ class TestStep2LazyVideoAndFetchDedup(unittest.TestCase):
         self.assertEqual(out["before"]["fetches"], [])
         self.assertEqual(out["afterRestore"], ["clip1.mp4"])
         self.assertEqual(out["afterDet"], ["clip1.mp4"])
-        self.assertIn("/api/videos/clip1.mp4/report", out["afterFetches"])
+        self.assertIn("/api/videos/clip1.mp4/reports", out["afterFetches"])
 
     def test_isolated_dom_without_tab_videos_remains_backward_compatible(self):
         body = """

@@ -28,6 +28,7 @@ class AsyncInferenceWorker:
         scheduler: Any = None,
         camera_id: str = "default",
         is_armed: bool = False,
+        is_armed_getter: Any = None,
     ) -> None:
         self._processor = processor
         self._max_dim = max_dim
@@ -35,12 +36,24 @@ class AsyncInferenceWorker:
         self._scheduler = scheduler
         self._camera_id = camera_id
         self._is_armed = bool(is_armed)
+        self._is_armed_getter = is_armed_getter
         self._lock = threading.Lock()
         self._work_event = threading.Event()
         self._stop_event = threading.Event()
         self._pending: tuple[np.ndarray, float, int] | None = None
         self._latest_result: FrameStepResult | None = None
         self._thread: threading.Thread | None = None
+
+    @property
+    def is_armed(self) -> bool:
+        """Return current armed status dynamically when a getter is bound."""
+        if self._is_armed_getter is not None:
+            return bool(self._is_armed_getter())
+        return bool(self._is_armed)
+
+    def set_armed(self, armed: bool) -> None:
+        """Update cached armed status on the live worker."""
+        self._is_armed = bool(armed)
 
     def start(self) -> None:
         """Start the background inference thread if not already running."""
@@ -113,7 +126,7 @@ class AsyncInferenceWorker:
                     )
             if result is None:
                 continue
-            if self._scheduler is not None and self._is_armed:
+            if self._scheduler is not None and self.is_armed:
                 if getattr(result, "tracks", None) or (getattr(result, "analytics", None) or {}).get("new_events"):
                     self._scheduler.promote_alarm(self._camera_id, now=ts)
 

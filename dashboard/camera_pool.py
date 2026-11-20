@@ -143,7 +143,11 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             self.save_cameras()
 
         if armed is not None and camera_id in self._coordinator.streams:
-            self._coordinator.streams[camera_id].is_armed = bool(armed)
+            stream_mgr = self._coordinator.streams[camera_id]
+            if hasattr(stream_mgr, "set_armed"):
+                stream_mgr.set_armed(bool(armed))
+            else:
+                stream_mgr.is_armed = bool(armed)
             self._coordinator.sync_processing_mode()
         if needs_restart:
             self._coordinator.restart_stream(camera_id, cfg)

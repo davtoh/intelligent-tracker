@@ -205,6 +205,13 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         self._pipeline_bundle = bundle.pipeline_bundle
         self._latest_jpeg = self._create_placeholder_jpeg("Camera Initializing...")
 
+    def set_armed(self, armed: bool) -> None:
+        """Propagate dynamic armed status to manager and active AsyncInferenceWorker."""
+        self.is_armed = bool(armed)
+        async_worker = getattr(getattr(self, "_worker", None), "_async_worker", None)
+        if async_worker is not None and hasattr(async_worker, "set_armed"):
+            async_worker.set_armed(self.is_armed)
+
     def signal_stop(self) -> None:
         """Signal worker loop and video source to terminate immediately without waiting."""
         self._running = False

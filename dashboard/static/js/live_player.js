@@ -137,6 +137,11 @@
     if (videoImg.dataset) {
       videoImg.dataset.activeStreamSrc = cleanBase;
     }
+    const liveTab = document.getElementById('tab-live');
+    if (liveTab && !liveTab.classList?.contains('active')) {
+      if (resolvedCam) window.ProcessingModeUI?.syncCameraFocus?.(resolvedCam);
+      return;
+    }
     const annotatedParam = burnedAnnotationMode ? 'true' : 'false';
     const isHealthySameStream = (
       !forceReconnect

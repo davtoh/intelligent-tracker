@@ -121,7 +121,7 @@
 
     ctx.fillStyle = '#00e5ff';
     ctx.font = 'bold 11px Inter, sans-serif';
-    ctx.fillText(`BEV: ${activeCameraId || 'cam_01'} (${gw}m x ${gh}m)`, margin, 20);
+    ctx.fillText(`BEV: ${activeCameraId || 'N/A'} (${gw}m x ${gh}m)`, margin, 20);
 
     drawProjectedZones(ctx, zones, gw, gh, g2c);
     drawActiveEntities(ctx, gw, gh, g2c);

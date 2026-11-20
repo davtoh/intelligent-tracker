@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-20] fix: Integration Diagnostics Remediation Milestone 3
+- **Type**: fix
+- **Summary**: Fixed scrubber reports/media URLs, entities+alerts timeline extraction, BEV telemetry wiring, Studio video overlay gating, armed UI/AsyncInferenceWorker sync, boot stream gating, and zero active scan/surface defects
+- **Files** (22):
+  - `.TODO/integration_diagnostics_and_remediation_plan.md`
+  - `dashboard/camera_pool.py`
+  - `dashboard/services/async_inference_worker.py`
+  - `dashboard/services/process_supervisor.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/static/app.js`
+  - `dashboard/static/camera_manager.js`
+  - `dashboard/static/js/bev_minimap.js`
+  - ... (+14 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-19] feat: Step 2 Milestone 3: Scheduler HUD, Schema Telemetry & Docs
 - **Type**: feat
 - **Summary**: Extended ProcessingModeStatusResponse with scheduler telemetry, fixed data.camera_states lookup in processing_mode.js, added scheduler_hud.js tier and load-shed pills, documented scheduler and CachedReplayProvider in dashboard.rst and AGENTS.md, and verified 858 tests plus Sphinx -W.
@@ -129,18 +144,3 @@
   - `dashboard/static/js/processing_mode.js`
   - `tests/test_step4_processing_mode_ui.py`
 - **Verification**: MPLBACKEND=Agg .venv\\Scripts\\python.exe -m unittest discover tests
-
-## [2026-11-17] fix: Fix stale hidden active_tab blocking vision overlays on mode/grid switch
-- **Type**: fix
-- **Summary**: Track serverActiveTab/serverFocusedCameraId in processing_mode.js so visible tabs recover from stale server active_tab=hidden on init, setMode, and syncCameraFocus without requiring tab bounce.
-- **Files** (1):
-  - `dashboard/static/js/processing_mode.js`
-- **Verification**: python -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode
-
-## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
-- **Type**: fix
-- **Summary**: Fixed standalone StreamManager hibernation in ProcessingModeService.should_hibernate_camera and isolated FrameProcessor.step spy in test_step5_batch_frame_processor; verified 760/760 unit tests, 0 latent defects, and headless CDP layout + 1x1/2x2/3x3 grid streaming.
-- **Files** (2):
-  - `dashboard/services/processing_mode_service.py`
-  - `tests/test_step5_batch_frame_processor.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

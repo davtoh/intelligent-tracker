@@ -20,7 +20,7 @@ import socket
 import sys
 import threading
 import time
-from typing import Optional
+from typing import Any, Optional
 
 import psutil
 
@@ -69,6 +69,43 @@ def is_test_environment() -> bool:
     )
 
 
+def _configure_kernel32_job_api(k32: Any, wintypes: Any) -> None:
+    """Configure ctypes argtypes/restype for Win32 Job Object API calls."""
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    k32.SetInformationJobObject.restype = wintypes.BOOL
+    k32.SetInformationJobObject.argtypes = [
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+    ]
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.GetCurrentProcess.argtypes = []
+    k32.AssignProcessToJobObject.restype = wintypes.BOOL
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+
+
+def _is_parent_process_dead(
+    initial_ppid: int,
+    target_ppid: int | None,
+    parent_proc: Any,
+    parent_create_time: float | None,
+) -> bool:
+    """Evaluate whether the monitored parent process has terminated or been replaced."""
+    if sys.platform != "win32" and target_ppid is None and os.getppid() != initial_ppid:
+        return True
+    if parent_proc is None:
+        return not psutil.pid_exists(initial_ppid)
+    try:
+        if not parent_proc.is_running() or parent_proc.status() == psutil.STATUS_ZOMBIE:
+            return True
+        if parent_create_time is not None and parent_proc.create_time() != parent_create_time:
+            return True
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+        return True
+    except psutil.AccessDenied:
+        pass
+    return False
+
+
 class ProcessTreeSupervisor:
     """Manages process tree containment, parent watchdog monitoring, and socket availability."""
 
@@ -88,17 +125,7 @@ class ProcessTreeSupervisor:
             try:
                 from ctypes import wintypes
                 k32 = ctypes.windll.kernel32
-                k32.CreateJobObjectW.restype = wintypes.HANDLE
-                k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
-                k32.SetInformationJobObject.restype = wintypes.BOOL
-                k32.SetInformationJobObject.argtypes = [
-                    wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD
-                ]
-                k32.GetCurrentProcess.restype = wintypes.HANDLE
-                k32.GetCurrentProcess.argtypes = []
-                k32.AssignProcessToJobObject.restype = wintypes.BOOL
-                k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
-
+                _configure_kernel32_job_api(k32, wintypes)
                 h_job = k32.CreateJobObjectW(None, None)
                 if not h_job:
                     logger.warning("CreateJobObjectW failed: WinError %d", k32.GetLastError())
@@ -165,23 +192,7 @@ class ProcessTreeSupervisor:
 
             def _worker() -> None:
                 while not self._stop_event.wait(timeout=poll_interval):
-                    is_dead = False
-                    if sys.platform != "win32" and target_ppid is None and os.getppid() != initial_ppid:
-                        is_dead = True
-                    elif parent_proc is not None:
-                        try:
-                            if not parent_proc.is_running() or parent_proc.status() == psutil.STATUS_ZOMBIE:
-                                is_dead = True
-                            elif parent_create_time is not None and parent_proc.create_time() != parent_create_time:
-                                is_dead = True
-                        except (psutil.NoSuchProcess, psutil.ZombieProcess):
-                            is_dead = True
-                        except psutil.AccessDenied:
-                            pass
-                    else:
-                        is_dead = not psutil.pid_exists(initial_ppid)
-
-                    if is_dead:
+                    if _is_parent_process_dead(initial_ppid, target_ppid, parent_proc, parent_create_time):
                         logger.warning("Parent process (PID %d) terminated; triggering exit.", initial_ppid)
                         if on_parent_death is not None:
                             try:
@@ -189,11 +200,6 @@ class ProcessTreeSupervisor:
                             except Exception as cb_err:
                                 logger.error("Error in on_parent_death callback: %s", cb_err)
                         elif not is_test_environment():
-                            try:
-                                sys.stdout.flush()
-                                sys.stderr.flush()
-                            except Exception:
-                                pass
                             os._exit(0)
                         break
 

@@ -121,10 +121,7 @@ class StreamWorker:
         processor = self._get_processor()
         svc = getattr(self.manager, "_processing_mode_service", None)
         replay = CachedReplayProvider(getattr(self.manager, "db", None), self.manager.video_source, processor=processor)
-        async_worker = AsyncInferenceWorker(
-            processor, replay_provider=replay, scheduler=getattr(svc, "scheduler", None),
-            camera_id=self.manager.camera_id, is_armed=bool(getattr(self.manager, "is_armed", False)),
-        )
+        self._async_worker = async_worker = AsyncInferenceWorker(processor, replay_provider=replay, scheduler=getattr(svc, "scheduler", None), camera_id=self.manager.camera_id, is_armed=bool(getattr(self.manager, "is_armed", False)), is_armed_getter=lambda: bool(getattr(self.manager, "is_armed", False)))
         async_worker.start()
         consecutive_empty, consecutive_errors, frame_seq = 0, 0, 0
         try:
@@ -145,7 +142,8 @@ class StreamWorker:
                                 is_rec = bool(getattr(self.manager, "is_recording", False))
                                 step_res = build_worker_step_result(self.manager, async_worker, frame, frame_seq, self._should_run_vision_step(is_rec), is_rec, step_fn=build_live_step_result)
                                 if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
-                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps if step_res.fps and step_res.fps > 0 else float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0))
+                                    vs_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)
+                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps if step_res.fps and step_res.fps > 0 else vs_fps)
                                 self._process_single_frame(step_res)
                                 consecutive_errors = 0
                             except Exception as exc:
@@ -153,7 +151,7 @@ class StreamWorker:
                 except Exception as exc:
                     consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="source_enter")
         finally:
-            async_worker.stop()
+            async_worker.stop(); self._async_worker = None
 
     def _process_single_frame(self, step_res: FrameStepResult) -> None:
         """Store raw frame, encode needed overlays, and broadcast telemetry."""

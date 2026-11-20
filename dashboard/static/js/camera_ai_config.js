@@ -156,6 +156,7 @@
     const trackerSelect = document.getElementById('cam-tracker-select');
     const confInput = document.getElementById('cam-conf-input');
     const classesInput = document.getElementById('cam-classes-input');
+    const armedCb = document.getElementById('cam-armed-checkbox');
     const confVal = parseFloat(confInput?.value || '0.40');
     const classesRaw = (classesInput?.value || '').trim();
     return {
@@ -163,6 +164,7 @@
       tracker: trackerSelect?.value || 'centroid',
       confidence: isNaN(confVal) ? 0.40 : Math.min(Math.max(confVal, 0.05), 1.00),
       classes: classesRaw ? classesRaw.split(',').map(s => s.trim()).filter(Boolean) : null,
+      armed: Boolean(armedCb?.checked),
     };
   }
 
@@ -178,6 +180,8 @@
     syncConfidence(cam.confidence !== undefined && cam.confidence !== null ? cam.confidence : 0.40);
     const classesInput = document.getElementById('cam-classes-input');
     if (classesInput) classesInput.value = Array.isArray(cam.classes) ? cam.classes.join(', ') : (cam.classes || '');
+    const armedCb = document.getElementById('cam-armed-checkbox');
+    if (armedCb) armedCb.checked = Boolean(cam.armed);
     const activeClasses = classesInput ? classesInput.value.trim() : '';
     document.querySelectorAll('.btn-tag-preset').forEach(btn => {
       btn.classList.toggle('active', (btn.getAttribute('data-classes') || '').trim() === activeClasses);
@@ -192,6 +196,8 @@
     syncConfidence(0.40);
     const classesInput = document.getElementById('cam-classes-input');
     if (classesInput) classesInput.value = '';
+    const armedCb = document.getElementById('cam-armed-checkbox');
+    if (armedCb) armedCb.checked = false;
     document.querySelectorAll('.btn-tag-preset').forEach(btn => btn.classList.remove('active'));
   }
 
@@ -207,10 +213,17 @@
     const appActiveId = window.App?.getActiveCameraId?.();
     if (resolvedId !== currentId || appActiveId !== resolvedId) {
       const streamImg = document.getElementById('live-stream-img');
+      const liveTab = document.getElementById('tab-live');
+      const isLiveActive = !liveTab || Boolean(liveTab.classList?.contains('active'));
       if (window.LivePlayer?.attachLiveStream) {
-        window.LivePlayer.attachLiveStream(streamImg, resolvedId);
+        if (isLiveActive) window.LivePlayer.attachLiveStream(streamImg, resolvedId);
+        else {
+          if (streamImg?.dataset) streamImg.dataset.activeStreamSrc = `/stream/${encodeURIComponent(resolvedId)}`;
+          window.ProcessingModeUI?.syncCameraFocus?.(resolvedId);
+        }
       } else {
-        if (streamImg) streamImg.src = `/stream/${encodeURIComponent(resolvedId)}?annotated=false`;
+        if (streamImg && isLiveActive) streamImg.src = `/stream/${encodeURIComponent(resolvedId)}?annotated=false`;
+        else if (streamImg?.dataset) streamImg.dataset.activeStreamSrc = `/stream/${encodeURIComponent(resolvedId)}`;
         window.ProcessingModeUI?.syncCameraFocus?.(resolvedId);
       }
       const streamTitle = document.getElementById('video-stream-title');
@@ -233,15 +246,20 @@
     await loadCapabilities();
   }
 
+  function renderArmButton(c) {
+    return `<button class="btn btn-xs ${c.armed ? 'btn-primary' : 'btn-outline'} btn-arm-cam" data-id="${c.id}" data-armed="${c.armed ? '1' : '0'}" title="Toggle AI Armed Mode">${c.armed ? '🛡️ Armed' : '🔓 Arm'}</button>`;
+  }
+
+  function bindArmButtons(root, onUpdated) {
+    root?.querySelectorAll('.btn-arm-cam').forEach(btn => btn.addEventListener('click', async () => {
+      await fetch(`/api/cameras/${encodeURIComponent(btn.getAttribute('data-id'))}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ armed: btn.getAttribute('data-armed') !== '1' }) });
+      if (typeof onUpdated === 'function') await onUpdated();
+    }));
+  }
+
   window.CameraAIConfig = {
-    init: init,
-    loadCapabilities: loadCapabilities,
-    getValues: getValues,
-    setValues: setValues,
-    resetValues: resetValues,
-    syncConfidence: syncConfidence,
-    isSyntheticSource: isSyntheticSource,
-    resolveInitialCameraId: resolveInitialCameraId,
+    init, loadCapabilities, getValues, setValues, resetValues, syncConfidence, isSyntheticSource,
+    resolveInitialCameraId, renderArmButton, bindArmButtons,
   };
 
   if (document.readyState === 'loading') {

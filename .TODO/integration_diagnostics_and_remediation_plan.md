@@ -33,13 +33,13 @@
 
 ---
 
-## Milestone 3: Frontend Integration Fixes, Static Cleanup, & Closed-Loop `/app-debugger` Sign-Off *(Deferred to Next Turn / Milestone)*
+## Milestone 3: Frontend Integration Fixes, Static Cleanup, & Closed-Loop `/app-debugger` Sign-Off
 
-- [ ] **dashboard/static/js/scrubber_library_bridge.js** + **dashboard/static/js/video_timeline_links.js**: Fix `/api/videos/{filename}/report` -> `/api/videos/{filename}/reports` (unwrapping latest run `.report`), map `report.entities` + `report.alerts` (removing non-existent `occurrences`), and fix deep-link media path `/api/videos/{fn}` -> `/videos/{fn}`.
-- [ ] **dashboard/static/js/bev_minimap.js** + **dashboard/static/app.js** + **dashboard/static/studio.js**: Feed live `active_tracks` into `BEVMinimap` (`window.latestTelemetry` or setter) and skip `/api/cameras/{id}/overlays` fetch + clear `#studio-live-img` when a recorded video is selected in Scenario Studio.
-- [ ] **dashboard/static/partials/modals/camera_modals.html** + **dashboard/static/camera_manager.js** + **dashboard/static/js/camera_ai_config.js** + **dashboard/camera_pool.py**: Add `armed` toggle in Camera Manager UI, propagate `mgr.is_armed` updates to `AsyncInferenceWorker`, and gate boot `LivePlayer.attachLiveStream()` on active tab `=== 'tab-live'`.
-- [ ] **dashboard/static/js/multiview/multiview_client.js** + **dashboard/services/process_supervisor.py**: Resolve active `DEFECT-001`/`DEFECT-002` (`SILENT_BARE_EXCEPT`) and Win32 `ctypes.Structure` `invalid_signature` audit warnings.
-- [ ] **Closed-Loop Verification & Sign-Off**: Re-run all 3 `.diagnostics/probes/`, `diagnose.py surface --verify`, `diagnose.py scan --strict`, `diagnose.py audit`, headless CDP `--capture-runtime` across all tabs, full `unittest discover tests`, `sphinx -W`, and `diagnose.py changelog add`.
+- [x] **dashboard/static/js/scrubber_library_bridge.js** + **dashboard/static/js/video_timeline_links.js**: Fix `/api/videos/{filename}/report` -> `/api/videos/{filename}/reports` (unwrapping latest run `.report`), map `report.entities` + `report.alerts` (removing non-existent `occurrences`), and fix deep-link media path `/api/videos/{fn}` -> `/videos/{fn}`.
+- [x] **dashboard/static/js/bev_minimap.js** + **dashboard/static/app.js** + **dashboard/static/studio.js**: Feed live `active_tracks` into `BEVMinimap` (`window.latestTelemetry` or setter) and skip `/api/cameras/{id}/overlays` fetch + clear `#studio-live-img` when a recorded video is selected in Scenario Studio.
+- [x] **dashboard/static/partials/modals/camera_modals.html** + **dashboard/static/camera_manager.js** + **dashboard/static/js/camera_ai_config.js** + **dashboard/camera_pool.py**: Add `armed` toggle in Camera Manager UI, propagate `mgr.is_armed` updates to `AsyncInferenceWorker`, and gate boot `LivePlayer.attachLiveStream()` on active tab `=== 'tab-live'`.
+- [x] **dashboard/static/js/multiview/multiview_client.js** + **dashboard/services/process_supervisor.py**: Resolve active `DEFECT-001`/`DEFECT-002` (`SILENT_BARE_EXCEPT`) and Win32 `ctypes.Structure` `invalid_signature` audit warnings.
+- [x] **Closed-Loop Verification & Sign-Off**: Re-run all 3 `.diagnostics/probes/`, `diagnose.py surface --verify`, `diagnose.py scan --strict`, `diagnose.py audit`, headless CDP `--capture-runtime` across all tabs, full `unittest discover tests`, `sphinx -W`, and `diagnose.py changelog add`.
 
 ---
 

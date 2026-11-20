@@ -31,6 +31,67 @@ def _format_sighting_bbox(bbox: Union[str, Tuple[int, int, int, int], List[int]]
     return str(bbox)
 
 
+def _build_sightings_query(
+    entity_id: Optional[int],
+    source: Optional[str],
+    zone_id: Optional[str],
+    start_time: Optional[str],
+    end_time: Optional[str],
+    limit: int,
+) -> tuple[str, list[Any]]:
+    """Build parameterized SQL query and args for sightings filtering."""
+    query = "SELECT s.*, e.name AS entity_name, e.category AS entity_category FROM sightings s LEFT JOIN entities e ON s.entity_id = e.id"
+    filters = [
+        ("s.entity_id = ?", entity_id, entity_id is not None),
+        ("s.source = ?", source.strip() if source else None, bool(source)),
+        ("s.zone_id = ?", zone_id.strip() if zone_id else None, bool(zone_id)),
+        ("s.timestamp >= ?", start_time, bool(start_time)),
+        ("s.timestamp <= ?", end_time, bool(end_time)),
+    ]
+    conditions = [sql for sql, _, active in filters if active]
+    params = [val for _, val, active in filters if active]
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY s.timestamp DESC"
+    if limit > 0:
+        query += " LIMIT ?"
+        params.append(limit)
+    return query, params
+
+
+def _fetch_entity_analytics_rows(cursor: Any, entity_id: int) -> tuple[dict[str, Any], list[str], list[str], list[dict[str, Any]]]:
+    """Fetch aggregate stats, sources, zones, and timeline rows for one entity."""
+    cursor.execute(
+        "SELECT COUNT(*) as total_sightings, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen,"
+        " COUNT(DISTINCT source) as distinct_sources, COUNT(DISTINCT zone_id) as distinct_zones"
+        " FROM sightings WHERE entity_id = ?",
+        (entity_id,),
+    )
+    stats = dict(cursor.fetchone())
+    cursor.execute("SELECT DISTINCT source FROM sightings WHERE entity_id = ? AND source != ''", (entity_id,))
+    sources = [r[0] for r in cursor.fetchall()]
+    cursor.execute("SELECT DISTINCT zone_id FROM sightings WHERE entity_id = ? AND zone_id != ''", (entity_id,))
+    zones = [r[0] for r in cursor.fetchall()]
+    cursor.execute(
+        "SELECT timestamp, source, zone_id, track_id, confidence, video_filename, media_offset_sec"
+        " FROM sightings WHERE entity_id = ? ORDER BY timestamp ASC",
+        (entity_id,),
+    )
+    return stats, sources, zones, [dict(r) for r in cursor.fetchall()]
+
+
+def _compute_dwell_seconds(timeline: list[dict[str, Any]], first_seen: Optional[str], last_seen: Optional[str]) -> float:
+    """Estimate dwell duration in seconds from first and last sighting timestamps."""
+    if len(timeline) < 2 or not first_seen or not last_seen:
+        return 0.0
+    try:
+        t_first = datetime.strptime(first_seen, "%Y-%m-%d %H:%M:%S")
+        t_last = datetime.strptime(last_seen, "%Y-%m-%d %H:%M:%S")
+        return max(0.0, (t_last - t_first).total_seconds())
+    except Exception:
+        return 0.0
+
+
 class AnalyticsMixin:
     """Provides sighting audit trail logging, analytics, and export utilities."""
 
@@ -83,37 +144,7 @@ class AnalyticsMixin:
         limit: int = 100,
     ) -> List[Dict[str, Any]]:
         """Query sightings audit trail with flexible filtering."""
-        query = """
-            SELECT s.*, e.name AS entity_name, e.category AS entity_category
-            FROM sightings s
-            LEFT JOIN entities e ON s.entity_id = e.id
-        """
-        conditions = []
-        params = []
-
-        if entity_id is not None:
-            conditions.append("s.entity_id = ?")
-            params.append(entity_id)
-        if source:
-            conditions.append("s.source = ?")
-            params.append(source.strip())
-        if zone_id:
-            conditions.append("s.zone_id = ?")
-            params.append(zone_id.strip())
-        if start_time:
-            conditions.append("s.timestamp >= ?")
-            params.append(start_time)
-        if end_time:
-            conditions.append("s.timestamp <= ?")
-            params.append(end_time)
-
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY s.timestamp DESC"
-        if limit > 0:
-            query += " LIMIT ?"
-            params.append(limit)
-
+        query, params = _build_sightings_query(entity_id, source, zone_id, start_time, end_time, limit)
         with self._lock:
             cursor = self._conn.cursor()
             try:
@@ -195,9 +226,7 @@ class AnalyticsMixin:
         }
 
     def get_entity_analytics(self, entity_id: int) -> Dict[str, Any]:
-        """
-        Compute occurrence frequency, dwell timeline, and zone journey for an entity.
-        """
+        """Compute occurrence frequency, dwell timeline, and zone journey for an entity."""
         entity = self.get_entity(entity_id)
         if not entity:
             return {"error": "Entity not found", "entity_id": entity_id}
@@ -205,60 +234,9 @@ class AnalyticsMixin:
         with self._lock:
             cursor = self._conn.cursor()
             try:
-                # Count and time bounds
-                cursor.execute(
-                    """
-                    SELECT COUNT(*) as total_sightings,
-                           MIN(timestamp) as first_seen,
-                           MAX(timestamp) as last_seen,
-                           COUNT(DISTINCT source) as distinct_sources,
-                           COUNT(DISTINCT zone_id) as distinct_zones
-                    FROM sightings
-                    WHERE entity_id = ?
-                    """,
-                    (entity_id,),
-                )
-                stats = dict(cursor.fetchone())
-
-                # Distinct sources list
-                cursor.execute(
-                    "SELECT DISTINCT source FROM sightings WHERE entity_id = ? AND source != ''",
-                    (entity_id,),
-                )
-                sources = [r[0] for r in cursor.fetchall()]
-
-                # Distinct zones list
-                cursor.execute(
-                    "SELECT DISTINCT zone_id FROM sightings WHERE entity_id = ? AND zone_id != ''",
-                    (entity_id,),
-                )
-                zones = [r[0] for r in cursor.fetchall()]
-
-                # Detailed chronological sightings
-                cursor.execute(
-                    """
-                    SELECT timestamp, source, zone_id, track_id, confidence
-                    FROM sightings
-                    WHERE entity_id = ?
-                    ORDER BY timestamp ASC
-                    """,
-                    (entity_id,),
-                )
-                timeline = [dict(r) for r in cursor.fetchall()]
+                stats, sources, zones, timeline = _fetch_entity_analytics_rows(cursor, entity_id)
             finally:
                 cursor.close()
-
-        # Dwell time approximation based on sighting timestamps
-        estimated_dwell_seconds = 0.0
-        if len(timeline) >= 2:
-            try:
-                t_first = datetime.strptime(stats["first_seen"], "%Y-%m-%d %H:%M:%S")
-                t_last = datetime.strptime(stats["last_seen"], "%Y-%m-%d %H:%M:%S")
-                span = (t_last - t_first).total_seconds()
-                # If seen across a short window, span is dwell
-                estimated_dwell_seconds = max(0.0, span)
-            except Exception:
-                pass
 
         return {
             "entity": entity,
@@ -269,7 +247,7 @@ class AnalyticsMixin:
             "sources": sources,
             "distinct_zones_count": stats["distinct_zones"],
             "zones": zones,
-            "estimated_dwell_seconds": estimated_dwell_seconds,
+            "estimated_dwell_seconds": _compute_dwell_seconds(timeline, stats["first_seen"], stats["last_seen"]),
             "timeline": timeline,
         }
 

@@ -245,7 +245,7 @@
       ws.onmessage = (ev) => dispatchWsMessage(this, ev?.data);
       ws.onerror = () => {
         if (ws.readyState === WS_OPEN && typeof ws.close === 'function') {
-          try { ws.close(); } catch (_) {}
+          try { ws.close(); } catch (err) { console.debug('[MultiviewClient] Error closing failed WS:', err); }
         }
       };
       ws.onclose = (ev) => handleWsClose(this, ev, ws);
@@ -317,7 +317,7 @@
         ws.onerror = null;
         ws.onclose = null;
         if (typeof ws.close === 'function' && (ws.readyState === undefined || ws.readyState < WS_CLOSING)) {
-          try { ws.close(1000, reason); } catch (_) {}
+          try { ws.close(1000, reason); } catch (err) { console.debug('[MultiviewClient] Error closing WS:', err); }
         }
       }
       this._intentionalClose = false;

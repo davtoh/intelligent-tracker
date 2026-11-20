@@ -178,6 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function onTelemetryReceived(data) {
+    window.latestTelemetry = data;
     state.tracks = data.active_tracks || [];
     state.zones = data.zones || state.zones;
     state.tripwires = data.tripwires || state.tripwires;

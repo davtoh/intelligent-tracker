@@ -231,7 +231,7 @@ class TestStep2TabScopedPerfIntegration(unittest.TestCase):
         self.assertEqual(out["loadPlayer"], ["clip1.mp4"])
         self.assertEqual(out["restoreReport"], ["clip1.mp4"])
         self.assertEqual(out["loadDetections"], ["clip1.mp4"])
-        self.assertIn("/api/videos/clip1.mp4/report", out["fetches"])
+        self.assertIn("/api/videos/clip1.mp4/reports", out["fetches"])
 
     def test_html_partials_omit_eager_srcs_and_preserve_dom_ids(self):
         studio_html = (PARTIALS_DIR / "studio.html").read_text(encoding="utf-8")

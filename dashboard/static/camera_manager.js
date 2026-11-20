@@ -205,6 +205,7 @@
           <button class="btn btn-xs ${c.enabled ? 'btn-outline' : 'btn-primary'} btn-toggle-cam" data-id="${c.id}">
             ${c.enabled ? '⏸ Pause' : '▶ Enable'}
           </button>
+          ${window.CameraAIConfig?.renderArmButton?.(c) || ''}
         </td>
         <td>
           <button class="btn btn-xs btn-outline btn-edit-cam" data-id="${c.id}" title="Edit Camera Settings">✏️</button>
@@ -254,6 +255,7 @@
         await refreshCameras();
       });
     });
+    window.CameraAIConfig?.bindArmButtons?.(activeCamerasTableBody, refreshCameras);
 
     activeCamerasTableBody.querySelectorAll('.btn-focus-cam').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -275,10 +277,8 @@
 
   function buildCameraPayload(id, name, source) {
     const aiConfig = window.CameraAIConfig?.getValues?.() || {
-      detector: document.getElementById('cam-detector-select')?.value || 'yolov8',
-      tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
-      confidence: 0.40,
-      classes: null,
+      detector: document.getElementById('cam-detector-select')?.value || 'yolov8', tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
+      confidence: 0.40, classes: null, armed: false,
     };
 
     return {
@@ -290,6 +290,7 @@
       tracker: aiConfig.tracker || 'centroid',
       confidence: aiConfig.confidence !== undefined ? aiConfig.confidence : 0.40,
       classes: aiConfig.classes,
+      armed: Boolean(aiConfig.armed),
       enabled: true,
       device_name: selectedDeviceName,
     };

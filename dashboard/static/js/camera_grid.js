@@ -293,11 +293,14 @@
           .map((c, idx) => buildGridTileHtml(c, focusedCameraId, idx, useWs))
           .join('');
         bindGridTileEvents(multiGridContainer, onFocus);
+        const liveTab = document.getElementById('tab-live');
+        const isLiveActive = !liveTab || Boolean(liveTab.classList?.contains('active'));
         if (useWs) mountCanvasSurfaces(multiGridContainer, pageInfo.items);
-        else multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
+        else if (isLiveActive) multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
         renderedTransport = desiredTransport;
       }
-      syncMultiviewSubscription(cameras);
+      const liveTab = document.getElementById('tab-live');
+      if (!liveTab || liveTab.classList?.contains('active')) syncMultiviewSubscription(cameras);
     }
     window.CameraRecording?.hydrateFromCameraList?.(cameras);
   }
