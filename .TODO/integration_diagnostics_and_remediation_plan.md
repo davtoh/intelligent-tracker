@@ -10,14 +10,14 @@
 
 ---
 
-## Milestone 1: Upgrade `system-diagnostics`, Add `.diagnostics/probes/`, & Capture `/app-debugger` Failing Baseline *(Active)*
+## Milestone 1: Upgrade `system-diagnostics`, Add `.diagnostics/probes/`, & Capture `/app-debugger` Failing Baseline *(Completed)*
 
-- [ ] **skills/system-diagnostics/scripts/surface_scanners.py** + **skills/system-diagnostics/scripts/diagnose_cli.py** + **skills/system-diagnostics/tests/**: Add `diagnose.py surface --verify` (cross-referencing JS `getElementById` vs HTML/template IDs, JS `fetch()` paths vs FastAPI/Flask route patterns, and `window.*` reader/writer symmetry) with unit tests in `skills/system-diagnostics/tests/`.
-- [ ] **skills/system-diagnostics/scripts/shadow_prober.py** + **skills/system-diagnostics/tests/**: Add `MIXED_CLOCK_DOMAIN` AST rule detecting mixed `time.time()` and `time.monotonic()` calls inside scheduler/worker/timing modules, plus unit tests.
-- [ ] **.diagnostics/probes/cold_boot_world_probe.py** *(New)*: Probe booting `create_app()` against an isolated `TemporaryDirectory` DB/config/scenarios (including `video_file` cameras, DB/YAML zones/tripwires, and zero-stream DB routes) to assert cold-start `WorldGraph` sync, `AnalyticsScheduler` tiering, and `/api/*` health.
-- [ ] **.diagnostics/probes/replay_pipeline_probe.py** *(New)*: Probe running real `VideoSource` -> `StreamWorker` -> `CachedReplayProvider` / `AsyncInferenceWorker` -> `FrameProcessor` (>1280px frame) -> `WorldEntityBridge` -> `EventBus` with zero `SimpleNamespace` stubs.
-- [ ] **.diagnostics/probes/video_studio_contract_probe.py** *(New)*: Probe running `VideoIndexer` -> `TrackerDB` (`video_runs`, `world_timeline_events`, `GET /events`) -> Video Studio ROI tagging -> headless CDP check on `#videos`, `#studio`, `#alerts`, `#live` for HTTP `>= 400`, missing `window.*` writers, and `occurrences` vs `entities` schema mismatches.
-- [ ] **`/app-debugger` Baseline Run**: Run `diagnose.py surface --verify`, `diagnose.py scan --path intelligent_tracker dashboard scripts`, `diagnose.py probe run` across all 3 workspace probes, and headless CDP `--capture-runtime` against an isolated ephemeral server to record the verified **Red** Symptom-to-Root-Cause Matrix before edits.
+- [x] **skills/system-diagnostics/scripts/surface_scanners.py** + **skills/system-diagnostics/scripts/diagnose_cli.py** + **skills/system-diagnostics/tests/**: Add `diagnose.py surface --verify` (cross-referencing JS `getElementById` vs HTML/template IDs, JS `fetch()` paths vs FastAPI/Flask route patterns, and `window.*` reader/writer symmetry) with unit tests in `skills/system-diagnostics/tests/`.
+- [x] **skills/system-diagnostics/scripts/shadow_prober.py** + **skills/system-diagnostics/tests/**: Add `MIXED_CLOCK_DOMAIN` AST rule detecting mixed `time.time()` and `time.monotonic()` calls inside scheduler/worker/timing modules, plus unit tests.
+- [x] **.diagnostics/probes/cold_boot_world_probe.py** *(New)*: Probe booting `create_app()` against an isolated `TemporaryDirectory` DB/config/scenarios (including `video_file` cameras, DB/YAML zones/tripwires, and zero-stream DB routes) to assert cold-start `WorldGraph` sync, `AnalyticsScheduler` tiering, and `/api/*` health.
+- [x] **.diagnostics/probes/replay_pipeline_probe.py** *(New)*: Probe running real `VideoSource` -> `StreamWorker` -> `CachedReplayProvider` / `AsyncInferenceWorker` -> `FrameProcessor` (>1280px frame) -> `WorldEntityBridge` -> `EventBus` with zero `SimpleNamespace` stubs.
+- [x] **.diagnostics/probes/video_studio_contract_probe.py** *(New)*: Probe running `VideoIndexer` -> `TrackerDB` (`video_runs`, `world_timeline_events`, `GET /events`) -> Video Studio ROI tagging -> headless CDP check on `#videos`, `#studio`, `#alerts`, `#live` for HTTP `>= 400`, missing `window.*` writers, and `occurrences` vs `entities` schema mismatches.
+- [x] **`/app-debugger` Baseline Run**: Run `diagnose.py surface --verify`, `diagnose.py scan --path intelligent_tracker dashboard scripts`, `diagnose.py probe run` across all 3 workspace probes, and headless CDP `--capture-runtime` against an isolated ephemeral server to record the verified **Red** Symptom-to-Root-Cause Matrix before edits.
 
 ---
 
