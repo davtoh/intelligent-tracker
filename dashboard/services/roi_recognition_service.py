@@ -39,7 +39,9 @@ def _resolve_roi_models(stream_manager: Any, camera_pool: Any) -> tuple[Any, Any
     det = getattr(stream_manager, "detector", None) if stream_manager else None
     reid = getattr(stream_manager, "reid_extractor", None) if stream_manager else None
     if (det is None or reid is None) and camera_pool is not None:
-        for mgr in (getattr(camera_pool, "streams", None) or {}).values():
+        from dashboard.services.camera_pool_queries import snapshot_pool_streams
+
+        for mgr in snapshot_pool_streams(camera_pool).values():
             det = det or getattr(mgr, "detector", None)
             reid = reid or getattr(mgr, "reid_extractor", None)
             if det is not None and reid is not None:

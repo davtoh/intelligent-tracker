@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import VIDEOS_DIR, get_camera_pool, get_stream_manager
 from dashboard.schemas import CameraRecordStartRequest, CameraRecordStatusResponse
+from dashboard.services.camera_pool_queries import snapshot_pool_streams
 from dashboard.stream_manager import StreamManager
 
 router = APIRouter(tags=["Camera Recording"])
@@ -20,7 +21,7 @@ def _resolve_camera_stream(
     """Resolve active StreamManager from CameraPool or primary StreamManager fallback."""
     mgr = None
     if pool is not None:
-        if camera_id in pool.camera_configs or camera_id in pool.streams:
+        if camera_id in pool.camera_configs or camera_id in snapshot_pool_streams(pool):
             mgr = pool.get_stream(camera_id)
     if mgr is None and sm is not None and sm.camera_id == camera_id:
         mgr = sm

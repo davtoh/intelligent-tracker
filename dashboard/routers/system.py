@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from dashboard.services.camera_pool_queries import snapshot_pool_streams
 import psutil
 
 from dashboard.camera_pool import CameraPool
@@ -44,8 +45,9 @@ async def system_status(
     process = psutil.Process(os.getpid())
     mem_info = process.memory_info()
 
+    streams = snapshot_pool_streams(pool)
     uptime_sec = time.time() - (mgr.start_time if mgr else time.time())
-    running = (pool and any(s.is_running for s in pool.streams.values())) or (
+    running = (pool and any(s.is_running for s in streams.values())) or (
         mgr and mgr._running
     )
 
@@ -59,7 +61,7 @@ async def system_status(
         },
         "pipeline": {
             "camera_id": mgr.camera_id if mgr else "none",
-            "cameras_active": len(pool.streams) if pool else 1,
+            "cameras_active": len(streams) if pool else 1,
             "fps": mgr._latest_telemetry.get("fps", 0.0) if mgr else 0.0,
             "detector": mgr.detector.__class__.__name__ if mgr and mgr.detector else "none",
             "tracker": mgr.tracker.__class__.__name__ if mgr and mgr.tracker else "none",

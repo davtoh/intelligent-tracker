@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-21] fix: Step 2 M2: Lock-Order Deadlock Elimination, Pool-Scoped Singletons & CameraConfigStore Hardening
+- **Type**: fix
+- **Summary**: Eliminated ProcessingModeService<->StreamRecordingController AB-BA deadlock (P0-2), guarded all pool.streams accesses with snapshot_pool_streams/_snapshot_pool_streams, hardened CameraConfigStore.load_cameras() for {'cameras': ...} payloads (TRC-017), wired pool-scoped EventBus/WorldGraph/ConfidenceEngine/EventFTSIndex singletons into CameraPool/PipelineEngine/app.state (P0-5), added SQLite rollback-on-error in memory_repo.py, and upgraded cold_boot_world_probe.py + test_step2_pool_singletons_and_locks.py.
+- **Files** (24):
+  - `.diagnostics/probes/cold_boot_world_probe.py`
+  - `dashboard/app.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/dependencies.py`
+  - `dashboard/routers/camera_recording.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/videos.py`
+  - ... (+16 more)
+- **Verification**: 893/893 unittest discover tests OK; cold_boot_world_probe PASS; test_step2_pool_singletons_and_locks + test_dashboard_di + test_step3_architecture_budgets 18/18 OK
+
 ## [2026-11-21] feat: Step 1: Diagnostics Upgrades, Unmocked Probes & Red Baseline
 - **Type**: feat
 - **Summary**: Upgraded system-diagnostics/frontier-architect tooling, added ruff/mypy dev tooling, hardened 4 unmocked workspace probes (including spa_nine_tab_cdp_probe), resolved stale test traces, and captured verified Red baseline.
@@ -132,14 +147,3 @@
   - `dashboard/static/js/processing_mode.js`
   - `tests/test_step4_processing_mode_ui.py`
 - **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation
-
-## [2026-11-17] fix: Stop init() from clobbering focused_camera_id and add no-cache for /static
-- **Type**: fix
-- **Summary**: Omit default cam_01 focused_camera_id from processing_mode.js init() POST so page load never overwrites the resolved camera, remove ?v=2 from index.html, and set Cache-Control: no-cache on /static/* in dashboard/app.py.
-- **Files** (5):
-  - `CHANGELOG.md`
-  - `dashboard/app.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step3_architecture_budgets tests.test_dashboard_di

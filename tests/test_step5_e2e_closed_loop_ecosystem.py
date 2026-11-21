@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -138,6 +139,7 @@ class TestStep5E2EClosedLoopEcosystem(unittest.TestCase):
         bus.publish(RSACViolationEvent(
             camera_id="cam_e2e", zone_id="vault_zone", entity_id=eid,
             entity_name="E2E Intruder", entity_category="person",
+            timestamp=time.time() + 1.0,
             metadata={"video_filename": self.filename, "media_offset_sec": 0.4},
         ))
         bus.wait_until_empty(timeout=2.0)

@@ -13,6 +13,7 @@ import logging
 from typing import Optional
 
 import cv2
+from dashboard.services.camera_pool_queries import snapshot_pool_streams
 from fastapi import APIRouter, Depends, HTTPException
 
 from dashboard.camera_pool import CameraPool
@@ -164,7 +165,7 @@ async def get_camera_info(
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
     cfg = pool.camera_configs[camera_id]
-    mgr = pool.streams.get(camera_id)
+    mgr = snapshot_pool_streams(pool).get(camera_id)
     telemetry = mgr.get_latest_telemetry() if mgr else {}
     return {
         **cfg,
@@ -186,7 +187,7 @@ async def get_camera_telemetry_snapshot(
     mgr = None
 
     if pool:
-        if camera_id in pool.camera_configs or camera_id in pool.streams:
+        if camera_id in pool.camera_configs or camera_id in snapshot_pool_streams(pool):
             mgr = pool.get_stream(camera_id)
     if not mgr and sm and sm.camera_id == camera_id:
         mgr = sm

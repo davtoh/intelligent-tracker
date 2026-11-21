@@ -66,6 +66,17 @@ def _seed_default_camera() -> dict[str, Any]:
     }
 
 
+def _normalize_camera_payload(data: Any) -> tuple[dict[str, dict[str, Any]], bool]:
+    """Unwrap ``{"cameras": ...}`` payloads and filter malformed entries."""
+    if isinstance(data, dict) and isinstance(data.get("cameras"), (list, dict)):
+        data = data["cameras"]
+    if isinstance(data, list):
+        return {c["id"]: c for c in data if isinstance(c, dict) and isinstance(c.get("id"), str) and c["id"].strip()}, True
+    if isinstance(data, dict):
+        return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, dict)}, True
+    return {}, False
+
+
 class CameraConfigStore:
     """Thread-safe JSON-backed repository for camera channel configurations."""
 
@@ -82,18 +93,12 @@ class CameraConfigStore:
             if os.path.exists(self.config_file):
                 try:
                     with open(self.config_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    if isinstance(data, list):
-                        loaded = {c["id"]: c for c in data if isinstance(c, dict) and "id" in c}
-                        configs_loaded = True
-                    elif isinstance(data, dict):
-                        loaded = data
-                        configs_loaded = True
+                        loaded, configs_loaded = _normalize_camera_payload(json.load(f))
                 except Exception as exc:
                     logger.warning("Failed to load %s: %s", self.config_file, exc)
 
             seeded = False
-            if not configs_loaded or not loaded:
+            if not configs_loaded:
                 loaded = {"cam_01": _seed_default_camera()}
                 seeded = True
 

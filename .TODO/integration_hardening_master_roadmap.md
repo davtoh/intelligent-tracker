@@ -27,13 +27,13 @@
 ---
 
 ## Step 2: P0 Runtime Stabilization & Pool-Scoped Ownership (`P0-1`..`P0-5`)
-- [ ] **Goal**: Eliminate live/offline epoch corruption, active-recording deadlocks, `1280px` tracker box drift, heatmap runtime crashes, split-brain `WorldGraph`/`ConfidenceEngine`/`EventBus`, and `TRC-017` startup crash.
-- [ ] **Target Scope**:
-  - [ ] **Dual-Clock Separation (`P0-1`)**: Keep `time.monotonic()` in scheduler/lag/FPS/cooldown paths; pass Unix epoch `time.time()` into `FrameProcessor.step()` and `CachedReplayProvider` (`async_inference_worker.py`, `thumbnail_cache.py`), and `base_epoch + video_ts` in `VideoIndexer` (`batch.py`) while preserving `video_filename` + `media_offset_sec`.
-  - [ ] **Deadlock Elimination (`P0-2`)**: Break `ProcessingModeService._lock` <-> `StreamRecordingController._lock` AB-BA cycle and guard `pool.streams` iteration with `pool._lock`.
-  - [ ] **Coordinate & Heatmap Fixes (`P0-3`, `P0-4`)**: Clone/rescale output `tracks` and `detections` non-destructively outside `CentroidTracker`'s internal state; fix `FrameOverlayRenderer` to use `analytics.heatmap.draw()` with dynamic frame-shape alignment.
-  - [ ] **Pool Singletons & Boot Validation (`P0-5`)**: Wire pool-scoped `EventBus`, `WorldGraph`, `ConfidenceEngine`, and `EventFTSIndex` across `CameraPool`, `StreamManager`, `dependencies.py`, and `app.state`; validate `CameraConfigStore.load_cameras()` dict entries (`TRC-017`).
-- [ ] **Definition of Done**: Real-clock `replay_pipeline_probe`, `cold_boot_world_probe` deadlock/singleton checks, and full `unittest` pass with zero regressions.
+- [x] **Goal**: Eliminate live/offline epoch corruption, active-recording deadlocks, `1280px` tracker box drift, heatmap runtime crashes, split-brain `WorldGraph`/`ConfidenceEngine`/`EventBus`, and `TRC-017` startup crash.
+- [x] **Target Scope**:
+  - [x] **Dual-Clock Separation (`P0-1`)**: Keep `time.monotonic()` in scheduler/lag/FPS/cooldown paths; pass Unix epoch `time.time()` into `FrameProcessor.step()` and `CachedReplayProvider` (`async_inference_worker.py`, `thumbnail_cache.py`), and `base_epoch + video_ts` in `VideoIndexer` (`batch.py`) while preserving `video_filename` + `media_offset_sec`.
+  - [x] **Deadlock Elimination (`P0-2`)**: Break `ProcessingModeService._lock` <-> `StreamRecordingController._lock` AB-BA cycle and guard `pool.streams` iteration with `pool._lock`.
+  - [x] **Coordinate & Heatmap Fixes (`P0-3`, `P0-4`)**: Clone/rescale output `tracks` and `detections` non-destructively outside `CentroidTracker`'s internal state; fix `FrameOverlayRenderer` to use `analytics.heatmap.draw()` with dynamic frame-shape alignment.
+  - [x] **Pool Singletons & Boot Validation (`P0-5`)**: Wire pool-scoped `EventBus`, `WorldGraph`, `ConfidenceEngine`, and `EventFTSIndex` across `CameraPool`, `StreamManager`, `dependencies.py`, and `app.state`; validate `CameraConfigStore.load_cameras()` dict entries (`TRC-017`).
+- [x] **Definition of Done**: Real-clock `replay_pipeline_probe`, `cold_boot_world_probe` deadlock/singleton checks, and full `unittest` pass with zero regressions.
 
 ---
 

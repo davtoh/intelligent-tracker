@@ -138,11 +138,17 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         custom_cfg: Optional[Dict[str, Any]] = None,
         world_graph: Optional[WorldGraph] = None,
         processing_mode_service: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
+        confidence_engine: Optional[Any] = None,
+        event_fts_index: Optional[Any] = None,
     ) -> None:
         self.camera_id = camera_id
         self.name = name or f"Camera {camera_id.upper()}"
         self.source_override = source_override
         self.world_graph = world_graph
+        self._injected_event_bus = event_bus
+        self._injected_confidence_engine = confidence_engine
+        self._injected_event_fts_index = event_fts_index
         if processing_mode_service is None:
             from dashboard.services.processing_mode_service import get_processing_mode_service
 
@@ -185,6 +191,9 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             camera_id=self.camera_id,
             source_override=self.source_override,
             world_graph=self.world_graph,
+            event_bus=self._injected_event_bus,
+            confidence_engine=self._injected_confidence_engine,
+            event_fts_index=self._injected_event_fts_index,
         )
         self.db = bundle.db
         self.video_source = bundle.video_source
@@ -202,6 +211,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         self.world_graph = bundle.world_graph
         self.world_bridge = bundle.world_bridge
         self.world_rule_engine = bundle.world_rule_engine
+        self.event_fts_index = bundle.event_fts_index
         self._pipeline_bundle = bundle.pipeline_bundle
         self._latest_jpeg = self._create_placeholder_jpeg("Camera Initializing...")
 
@@ -247,14 +257,18 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
                 self.video_source.release()
             if getattr(self, "world_rule_engine", None) is not None:
                 self.world_rule_engine.stop()
+            owns_bus = getattr(getattr(self, "_pipeline_bundle", None), "_owns_event_bus", True)
+            owns_fts = getattr(getattr(self, "_pipeline_bundle", None), "_owns_fts_index", True)
             pipe_bus = None
             if self.event_pipeline:
                 if "rule_engine" in self.event_pipeline and hasattr(self.event_pipeline["rule_engine"], "stop"):
                     self.event_pipeline["rule_engine"].stop()
                 pipe_bus = self.event_pipeline.get("event_bus")
-                if pipe_bus and hasattr(pipe_bus, "stop"):
+                if owns_bus and pipe_bus and hasattr(pipe_bus, "stop"):
                     pipe_bus.stop(timeout=0.2)
-            if self.event_bus and self.event_bus is not pipe_bus and hasattr(self.event_bus, "stop"):
+            if owns_fts and getattr(self, "event_fts_index", None) is not None:
+                self.event_fts_index.detach()
+            if owns_bus and self.event_bus and self.event_bus is not pipe_bus and hasattr(self.event_bus, "stop"):
                 self.event_bus.stop(timeout=0.2)
             if self.db and hasattr(self.db, "close"):
                 self.db.close()

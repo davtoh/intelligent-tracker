@@ -13,6 +13,17 @@ from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.stream_manager import StreamManager
 
 
+def snapshot_pool_streams(pool: Any) -> dict[str, Any]:
+    """Return a thread-safe shallow copy of ``pool.streams``."""
+    if pool is None:
+        return {}
+    lock = getattr(pool, "_lock", None)
+    if lock is not None and hasattr(lock, "__enter__"):
+        with lock:
+            return dict(getattr(pool, "streams", None) or {})
+    return dict(getattr(pool, "streams", None) or {})
+
+
 def _resolve_health_status(cam_id: str, cfg: dict[str, Any], is_running: bool):
     """Resolve effective camera health status label and CameraHealth snapshot."""
     health = CameraHealthManager().get_health(cam_id)
@@ -126,7 +137,7 @@ class CameraPoolQueryMixin:
         sm = self.primary_stream
         if sm is not None and getattr(sm, "confidence_engine", None) is not None:
             return sm.confidence_engine
-        for stream in (getattr(self, "streams", None) or {}).values():
+        for stream in snapshot_pool_streams(self).values():
             eng = getattr(stream, "confidence_engine", None)
             if eng is not None:
                 return eng

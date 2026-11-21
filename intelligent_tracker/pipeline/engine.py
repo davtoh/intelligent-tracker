@@ -3,6 +3,8 @@
 import os
 from typing import Any
 
+from intelligent_tracker.events import EventBus
+from intelligent_tracker.memory import ConfidenceEngine, EventFTSIndex
 from intelligent_tracker.pipeline._detector_setup import build_detector_with_status
 from intelligent_tracker.pipeline.bundle import (
     PipelineBundle,
@@ -32,6 +34,10 @@ class PipelineEngine:
         bundle: PipelineBundle,
         config: PipelineConfig,
         raise_on_detector_error: bool | None,
+        *,
+        event_bus: EventBus | None = None,
+        confidence_engine: ConfidenceEngine | None = None,
+        event_fts_index: EventFTSIndex | None = None,
     ) -> None:
         """Assemble core capture, detection, tracking, analytics, Re-ID, and events."""
         bundle.db = build_database(config.db_path)
@@ -44,9 +50,13 @@ class PipelineEngine:
         bundle.tracker = build_tracker(config)
         bundle.analytics = build_analytics(config, bundle.video_source)
         bundle.reid_extractor, bundle.gallery_matcher = build_reid(config, bundle.db)
-        bundle.event_pipeline, bundle.event_bus = build_events(config, bundle.analytics)
-        bundle.confidence_engine = build_confidence_engine(bundle.db, bundle.event_bus)
-        bundle.event_fts_index = build_memory_index(config, bundle.db, bundle.event_bus)
+        bundle.event_pipeline, bundle.event_bus = build_events(config, bundle.analytics, event_bus=event_bus)
+        bundle.confidence_engine = build_confidence_engine(
+            bundle.db, bundle.event_bus, confidence_engine=confidence_engine,
+        )
+        bundle.event_fts_index = build_memory_index(
+            config, bundle.db, bundle.event_bus, event_fts_index=event_fts_index,
+        )
         if bundle.gallery_matcher is not None and bundle.event_fts_index is not None:
             bundle.gallery_matcher.fts_index = bundle.event_fts_index
 
@@ -121,11 +131,21 @@ class PipelineEngine:
         *,
         raise_on_detector_error: bool | None = None,
         world_graph: WorldGraph | None = None,
+        event_bus: EventBus | None = None,
+        confidence_engine: ConfidenceEngine | None = None,
+        event_fts_index: EventFTSIndex | None = None,
     ) -> PipelineBundle:
         """Instantiate and wire all pipeline subsystems without calling sys.exit()."""
-        bundle = PipelineBundle(config=config)
+        bundle = PipelineBundle(
+            config=config,
+            _owns_event_bus=event_bus is None,
+            _owns_fts_index=event_fts_index is None,
+        )
         try:
-            cls._assemble_core(bundle, config, raise_on_detector_error)
+            cls._assemble_core(
+                bundle, config, raise_on_detector_error,
+                event_bus=event_bus, confidence_engine=confidence_engine, event_fts_index=event_fts_index,
+            )
             cls._assemble_governance_and_world(bundle, config, world_graph)
         except Exception:
             bundle.close()
@@ -139,6 +159,9 @@ class PipelineEngine:
         *,
         raise_on_detector_error: bool | None = None,
         world_graph: WorldGraph | None = None,
+        event_bus: EventBus | None = None,
+        confidence_engine: ConfidenceEngine | None = None,
+        event_fts_index: EventFTSIndex | None = None,
         **config_kwargs: Any,
     ) -> PipelineBundle:
         """Normalize a config dictionary and build a PipelineBundle."""
@@ -147,6 +170,9 @@ class PipelineEngine:
             config,
             raise_on_detector_error=raise_on_detector_error,
             world_graph=world_graph,
+            event_bus=event_bus,
+            confidence_engine=confidence_engine,
+            event_fts_index=event_fts_index,
         )
 
     @classmethod
@@ -157,6 +183,9 @@ class PipelineEngine:
         *,
         raise_on_detector_error: bool | None = None,
         world_graph: WorldGraph | None = None,
+        event_bus: EventBus | None = None,
+        confidence_engine: ConfidenceEngine | None = None,
+        event_fts_index: EventFTSIndex | None = None,
     ) -> PipelineBundle:
         """Normalize CLI arguments + config dict and build a PipelineBundle."""
         config = PipelineConfig.from_cli_args(args, cfg)
@@ -164,5 +193,8 @@ class PipelineEngine:
             config,
             raise_on_detector_error=raise_on_detector_error,
             world_graph=world_graph,
+            event_bus=event_bus,
+            confidence_engine=confidence_engine,
+            event_fts_index=event_fts_index,
         )
 

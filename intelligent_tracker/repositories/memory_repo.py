@@ -143,6 +143,9 @@ class MemoryMixin:
             try:
                 cur.execute(_UPSERT_CONFIDENCE_SQL, values)
                 self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
         return self.get_entity_confidence(int(entity_id)) or {}
@@ -206,6 +209,9 @@ class MemoryMixin:
                 cur.execute(_INSERT_TIMELINE_SQL, values)
                 self._conn.commit()
                 return int(cur.lastrowid)
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 

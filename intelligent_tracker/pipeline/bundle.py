@@ -64,6 +64,8 @@ class PipelineBundle:
     world_bridge: WorldEntityBridge | None = None
     world_rule_engine: WorldRuleEngine | None = None
     writer: Any = None
+    _owns_event_bus: bool = True
+    _owns_fts_index: bool = True
     _closed: bool = False
 
     def close(self) -> None:
@@ -86,8 +88,10 @@ class PipelineBundle:
             if bus is not None and bus is not self.event_bus:
                 _safe_call(bus, "stop")
 
-        _safe_call(self.event_fts_index, "detach")
-        _safe_call(self.event_bus, "stop")
+        if self._owns_fts_index:
+            _safe_call(self.event_fts_index, "detach")
+        if self._owns_event_bus:
+            _safe_call(self.event_bus, "stop")
         _safe_call(self.db, "close")
 
 
@@ -204,13 +208,13 @@ def build_reid(
 def build_events(
     config: PipelineConfig,
     analytics: AnalyticsEngine | None = None,
+    event_bus: EventBus | None = None,
 ) -> tuple[dict[str, Any] | None, EventBus | None]:
     """Initialize event pipeline and EventBus, wiring them to analytics."""
     event_pipeline: dict[str, Any] | None = None
-    event_bus: EventBus | None = None
     raw = config.raw_config
     alert_cfg = raw.get("alerting", raw.get("events"))
-    if alert_cfg:
+    if alert_cfg and event_bus is None:
         try:
             event_pipeline = setup_event_pipeline(raw)
             event_bus = event_pipeline.get("event_bus")
@@ -229,17 +233,21 @@ def build_events(
 def build_confidence_engine(
     db: TrackerDB | None,
     event_bus: EventBus | None = None,
+    confidence_engine: ConfidenceEngine | None = None,
 ) -> ConfidenceEngine:
     """Instantiate ConfidenceEngine backed by TrackerDB when available."""
-    return ConfidenceEngine(db=db, event_bus=event_bus)
+    return confidence_engine if confidence_engine is not None else ConfidenceEngine(db=db, event_bus=event_bus)
 
 
 def build_memory_index(
     config: PipelineConfig,
     db: TrackerDB | None,
     event_bus: EventBus | None,
+    event_fts_index: EventFTSIndex | None = None,
 ) -> EventFTSIndex | None:
     """Attach EventFTSIndex to EventBus when memory indexing is enabled."""
+    if event_fts_index is not None:
+        return event_fts_index
     if not config.enable_memory_indexing or db is None or event_bus is None:
         return None
     return EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
@@ -302,6 +310,8 @@ def build_world(
 ) -> tuple[WorldGraph, WorldEntityBridge, WorldRuleEngine | None]:
     """Initialize scoped WorldGraph, WorldEntityBridge, and optional WorldRuleEngine."""
     graph = world_graph if world_graph is not None else WorldGraph(event_bus=event_bus)
+    if getattr(graph, "_event_bus", None) is None and event_bus is not None:
+        graph._event_bus = event_bus
     graph.register_camera(CameraNode(
         camera_id=config.camera_id,
         name=config.camera_id,

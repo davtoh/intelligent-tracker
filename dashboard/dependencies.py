@@ -70,23 +70,18 @@ def bind_app_state(
     db: Optional[TrackerDB] = None,
     confidence_engine: Optional[ConfidenceEngine] = None,
     world_query_engine: Optional[WorldQueryEngine] = None,
+    world_graph: Optional[Any] = None,
+    event_bus: Optional[Any] = None,
+    event_fts_index: Optional[Any] = None,
 ) -> None:
     """Bind core runtime services to ``app.state`` and sync standalone fallbacks."""
     global _camera_pool, _stream_manager, _scenario_manager, _lifecycle_manager, _db, _confidence_engine, _world_query_engine
-    app.state.camera_pool = camera_pool
-    app.state.stream_manager = stream_manager
-    app.state.scenario_manager = scenario_manager
-    app.state.lifecycle_manager = lifecycle_manager
-    app.state.db = db
-    app.state.confidence_engine = confidence_engine
-    app.state.world_query_engine = world_query_engine
-    _camera_pool = camera_pool
-    _stream_manager = stream_manager
-    _scenario_manager = scenario_manager
-    _lifecycle_manager = lifecycle_manager
-    _db = db
-    _confidence_engine = confidence_engine
-    _world_query_engine = world_query_engine
+    app.state.camera_pool, app.state.stream_manager = camera_pool, stream_manager
+    app.state.scenario_manager, app.state.lifecycle_manager = scenario_manager, lifecycle_manager
+    app.state.db, app.state.confidence_engine, app.state.world_query_engine = db, confidence_engine, world_query_engine
+    app.state.world_graph, app.state.event_bus, app.state.event_fts_index = world_graph, event_bus, event_fts_index
+    _camera_pool, _stream_manager, _scenario_manager = camera_pool, stream_manager, scenario_manager
+    _lifecycle_manager, _db, _confidence_engine, _world_query_engine = lifecycle_manager, db, confidence_engine, world_query_engine
 
 
 def clear_app_state(app: FastAPI) -> None:

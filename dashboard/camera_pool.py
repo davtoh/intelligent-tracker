@@ -18,6 +18,9 @@ from dashboard.services.camera_pool_queries import (
 )
 from dashboard.services.stream_pool_coordinator import StreamPoolCoordinator
 from dashboard.stream_manager import StreamManager
+from intelligent_tracker.database import TrackerDB
+from intelligent_tracker.events import EventBus
+from intelligent_tracker.memory import ConfidenceEngine, EventFTSIndex
 from intelligent_tracker.world import (
     GlobalCoordinateMapper,
     MultiCameraHandoffCoordinator,
@@ -47,19 +50,29 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         self._autostart = autostart
 
         self._lock = threading.RLock()
+        self.event_bus = EventBus(capacity=500)
+        self.event_bus.start()
         self.coordinate_mapper = GlobalCoordinateMapper()
-        self.world_graph = WorldGraph(coordinate_mapper=self.coordinate_mapper)
+        self.world_graph = WorldGraph(coordinate_mapper=self.coordinate_mapper, event_bus=self.event_bus)
         self.handoff_coordinator = MultiCameraHandoffCoordinator(
             self.world_graph,
             coordinate_mapper=self.coordinate_mapper,
         )
         self.world_graph.handoff_coordinator = self.handoff_coordinator
+        self._db = TrackerDB(db_path) if db_path else None
+        self._confidence_engine = ConfidenceEngine(db=self._db, event_bus=self.event_bus)
+        self.event_fts_index = (
+            EventFTSIndex(db=self._db, event_bus=self.event_bus, auto_attach=True) if self._db is not None else None
+        )
         self._config_store = CameraConfigStore(config_file=config_file, lock=self._lock)
         self._coordinator = StreamPoolCoordinator(
             db_path=db_path,
             base_config_path=base_config_path,
             world_graph=self.world_graph,
             lock=self._lock,
+            event_bus=self.event_bus,
+            confidence_engine=self._confidence_engine,
+            event_fts_index=self.event_fts_index,
         )
 
         # Auto-restore configured cameras
@@ -142,13 +155,15 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
                 return False
             self.save_cameras()
 
-        if armed is not None and camera_id in self._coordinator.streams:
-            stream_mgr = self._coordinator.streams[camera_id]
-            if hasattr(stream_mgr, "set_armed"):
-                stream_mgr.set_armed(bool(armed))
-            else:
-                stream_mgr.is_armed = bool(armed)
-            self._coordinator.sync_processing_mode()
+        if armed is not None:
+            with self._lock:
+                stream_mgr = self._coordinator.streams.get(camera_id)
+            if stream_mgr is not None:
+                if hasattr(stream_mgr, "set_armed"):
+                    stream_mgr.set_armed(bool(armed))
+                else:
+                    stream_mgr.is_armed = bool(armed)
+                self._coordinator.sync_processing_mode()
         if needs_restart:
             self._coordinator.restart_stream(camera_id, cfg)
         return True
@@ -183,3 +198,9 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
     def stop_all(self, parallel: bool = True) -> None:
         """Stop all active camera streams concurrently in parallel."""
         self._coordinator.stop_all(parallel=parallel)
+        if getattr(self, "event_fts_index", None) is not None:
+            self.event_fts_index.detach()
+        if getattr(self, "event_bus", None) is not None:
+            self.event_bus.stop(timeout=0.2)
+        if getattr(self, "_db", None) is not None:
+            self._db.close()

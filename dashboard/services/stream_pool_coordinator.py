@@ -104,8 +104,10 @@ class StreamPoolCoordinator:
     def __init__(
         self, db_path: str, base_config_path: str, world_graph: WorldGraph,
         lock: Any = None, processing_mode_service: Any = None,
+        event_bus: Any = None, confidence_engine: Any = None, event_fts_index: Any = None,
     ) -> None:
         self.db_path, self.base_config_path, self.world_graph = db_path, base_config_path, world_graph
+        self.event_bus, self.confidence_engine, self.event_fts_index = event_bus, confidence_engine, event_fts_index
         self._lock = lock or threading.RLock()
         if processing_mode_service is None:
             from dashboard.services.processing_mode_service import get_processing_mode_service
@@ -143,6 +145,8 @@ class StreamPoolCoordinator:
                     config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
                     name=cam_entry.get("name", f"Camera {camera_id.upper()}"), source_override=cam_entry.get("source", "synthetic"),
                     world_graph=self.world_graph, processing_mode_service=self.processing_mode_service,
+                    event_bus=self.event_bus, confidence_engine=self.confidence_engine,
+                    event_fts_index=self.event_fts_index,
                 )
                 mgr._in_camera_pool = True
                 self.streams[camera_id] = mgr

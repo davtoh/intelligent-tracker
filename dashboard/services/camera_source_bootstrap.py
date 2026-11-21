@@ -51,8 +51,10 @@ def probe_source_readiness(
 
 def _active_usb_indices_for_other_streams(coordinator: Any, exclude_camera_id: str) -> set[int]:
     """Return numeric device indices currently held by other running streams."""
+    from dashboard.services.camera_pool_queries import snapshot_pool_streams
+
     active: set[int] = set()
-    for cid, mgr in (getattr(coordinator, "streams", None) or {}).items():
+    for cid, mgr in snapshot_pool_streams(coordinator).items():
         if cid == exclude_camera_id or not getattr(mgr, "is_running", False):
             continue
         src = getattr(mgr, "_resolved_source", getattr(mgr, "source_override", None))
@@ -85,6 +87,9 @@ def _construct_manager_safely(
             config_path=coordinator.base_config_path, db_path=coordinator.db_path,
             camera_id=camera_id, name=name, source_override=resolved_source,
             custom_cfg=custom_cfg, world_graph=coordinator.world_graph,
+            event_bus=getattr(coordinator, "event_bus", None),
+            confidence_engine=getattr(coordinator, "confidence_engine", None),
+            event_fts_index=getattr(coordinator, "event_fts_index", None),
         )
     except Exception as exc:
         capture_runtime_exception(exc, context={"camera_id": camera_id, "source": str(raw_source)})

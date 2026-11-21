@@ -20,6 +20,17 @@ from intelligent_tracker.database import TrackerDB
 logger = logging.getLogger("intelligent_tracker.lifecycle")
 
 
+def _snapshot_pool_streams(pool: Any) -> Dict[str, Any]:
+    """Return a thread-safe shallow copy of ``pool.streams``."""
+    if pool is None:
+        return {}
+    lock = getattr(pool, "_lock", None)
+    if lock is not None and hasattr(lock, "__enter__"):
+        with lock:
+            return dict(getattr(pool, "streams", None) or {})
+    return dict(getattr(pool, "streams", None) or {})
+
+
 class StreamLifecycleManager:
     """
     Central orchestrator for stream lifecycles, background threads,
@@ -103,15 +114,15 @@ class StreamLifecycleManager:
         hibernating_streams = 0
         total_subscribers = 0
 
+        streams = _snapshot_pool_streams(self.camera_pool)
         with self._lock:
-            if self.camera_pool and hasattr(self.camera_pool, "streams"):
-                for sm in list(self.camera_pool.streams.values()):
-                    subs = getattr(sm, "subscriber_count", 0)
-                    total_subscribers += subs
-                    if sm.is_hibernating or subs == 0:
-                        hibernating_streams += 1
-                    else:
-                        active_streams += 1
+            for sm in streams.values():
+                subs = getattr(sm, "subscriber_count", 0)
+                total_subscribers += subs
+                if sm.is_hibernating or subs == 0:
+                    hibernating_streams += 1
+                else:
+                    active_streams += 1
 
         return self.db.record_resource_metric(
             cpu_percent=cpu_pct,
@@ -147,11 +158,12 @@ class StreamLifecycleManager:
         Force-evicts all active subscriber leases for a camera channel,
         forcing immediate deep hibernation to protect server resources.
         """
+        streams = _snapshot_pool_streams(self.camera_pool)
         with self._lock:
-            if not self.camera_pool or camera_id not in self.camera_pool.streams:
+            if not self.camera_pool or camera_id not in streams:
                 return {"success": False, "error": f"Camera stream '{camera_id}' not found"}
 
-            sm = self.camera_pool.streams[camera_id]
+            sm = streams[camera_id]
             old_count = getattr(sm, "subscriber_count", 0)
 
             # Evict all leases
@@ -187,11 +199,12 @@ class StreamLifecycleManager:
         (zero active subscribers) into verified deep hibernation.
         """
         hibernated = []
+        streams = _snapshot_pool_streams(self.camera_pool)
         with self._lock:
             if not self.camera_pool:
                 return {"success": False, "hibernated_count": 0}
 
-            for cid, sm in list(self.camera_pool.streams.items()):
+            for cid, sm in streams.items():
                 if sm.subscriber_count == 0:
                     sm._is_hibernating = True
                     if sm.video_source and hasattr(sm.video_source, "pause"):
@@ -225,9 +238,10 @@ class StreamLifecycleManager:
             thread_count = threading.active_count()
 
         streams_data = []
+        streams = _snapshot_pool_streams(self.camera_pool)
         with self._lock:
             if self.camera_pool:
-                for cid, sm in self.camera_pool.streams.items():
+                for cid, sm in streams.items():
                     telemetry = sm.get_latest_telemetry() if hasattr(sm, "get_latest_telemetry") else {}
                     subs = getattr(sm, "subscriber_count", 0)
                     is_hib = getattr(sm, "is_hibernating", False) or subs == 0

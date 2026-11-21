@@ -187,10 +187,12 @@ class CameraHealthManager:
 def _find_active_pool_snapshot(pool: Any, target_source: Union[str, int]) -> Optional[Dict[str, Any]]:
     """Reuse snapshot and telemetry from a running pool stream matching ``target_source``."""
     import base64
+    from dashboard.services.camera_pool_queries import snapshot_pool_streams
 
-    if not pool or not pool.streams:
+    streams = snapshot_pool_streams(pool)
+    if not streams:
         return None
-    for cam_id, stream_mgr in pool.streams.items():
+    for cam_id, stream_mgr in streams.items():
         if not stream_mgr or not stream_mgr.is_running:
             continue
         cfg = pool.camera_configs.get(cam_id, {})

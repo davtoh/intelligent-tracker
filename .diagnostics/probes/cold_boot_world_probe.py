@@ -91,15 +91,17 @@ def _check_world_reactive_events(app: Any, failures: list[str], checks: dict[str
         failures.append("P0-5: WorldGraph._event_bus is None on cold boot (reactive events disabled)")
         return
     received: list[Any] = []
-    bus.subscribe(lambda ev: received.append(ev))
-    wg.upsert_zone(
+    arrived = threading.Event()
+    bus.subscribe(lambda ev: (received.append(ev), arrived.set()))
+    wg.register_zone(
         ZoneNode(
-            zone_id="z_probe", camera_id="cam_test", name="ProbeZone", polygon=[(0, 0), (10, 0), (10, 10)]
+            zone_id="z_probe", camera_id="cam_test", name="ProbeZone", points=[(0, 0), (10, 0), (10, 10)]
         )
     )
+    arrived.wait(timeout=1.0)
     checks["world_graph_reactive_events"] = len(received)
     if not received:
-        failures.append("P0-5: WorldGraph.upsert_zone() emitted 0 reactive events to EventBus")
+        failures.append("P0-5: WorldGraph.register_zone() emitted 0 reactive events to EventBus")
 
 
 def _check_cameras_list_and_shared_confidence(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
@@ -178,24 +180,47 @@ def _check_restart_preserves_scenario(tmp: Path, failures: list[str], checks: di
 
 
 def _check_restart_and_lock_order(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
-    """Assert stream restart scenario preservation (P1-8) and ProcessingModeService lock order (P0-2)."""
+    """Assert stream restart scenario preservation (P1-8) and ProcessingModeService<->Recording lock order (P0-2)."""
+    from types import SimpleNamespace
+    import numpy as np
     from dashboard.services.processing_mode_service import ProcessingModeService
+    from dashboard.services.stream_recording import StreamRecordingController
 
     _check_restart_preserves_scenario(tmp, failures, checks)
     svc = ProcessingModeService(mode="full_realtime")
+
+    class _NoopWriter:
+        is_open = True
+        def write(self, _frame: Any) -> bool: return True
+        def release(self) -> None: self.is_open = False
+        def snapshot(self) -> dict[str, Any]: return {"frames_written": 1, "width": 64, "height": 64, "fps": 10.0}
+
+    rec = StreamRecordingController("cam_lock", output_dir=str(tmp / "rec"), writer_factory=lambda *a, **k: _NoopWriter(), mode_service_getter=lambda: svc)
+    class _StreamStub:
+        is_running, is_armed, subscriber_count, _is_hibernating = True, False, 0, False
+        @property
+        def is_recording(self) -> bool: return rec.is_recording
+    pool_stub = SimpleNamespace(streams={"cam_lock": _StreamStub()}, _lock=threading.RLock())
     stop = threading.Event()
-    t1 = threading.Thread(target=lambda: [svc.get_state(None) for _ in range(50) if not stop.is_set()], daemon=True)
-    t2 = threading.Thread(
-        target=lambda: [svc.update(mode="full_realtime") for _ in range(50) if not stop.is_set()], daemon=True
-    )
-    t1.start()
-    t2.start()
-    t1.join(timeout=2.0)
-    t2.join(timeout=2.0)
+    frame = np.zeros((64, 64, 3), dtype=np.uint8)
+
+    def _rec_loop() -> None:
+        for i in range(40):
+            if stop.is_set():
+                break
+            rec.start(filename=f"lock_{i}.mp4")
+            rec.write_frame(frame)
+            rec.stop()
+
+    t1 = threading.Thread(target=lambda: [svc.get_state(pool_stub) for _ in range(80) if not stop.is_set()], daemon=True)
+    t2 = threading.Thread(target=_rec_loop, daemon=True)
+    t1.start(); t2.start()
+    t1.join(timeout=3.0); t2.join(timeout=3.0)
     stop.set()
+    rec.finalize_if_active()
     checks["lock_order_stress_alive"] = t1.is_alive() or t2.is_alive()
     if t1.is_alive() or t2.is_alive():
-        failures.append("P0-2: ProcessingModeService lock-order stress timed out (potential deadlock)")
+        failures.append("P0-2: ProcessingModeService<->StreamRecordingController lock-order stress timed out")
 
 
 def run_probe() -> dict[str, Any]:

@@ -168,14 +168,19 @@ def _init_runtime_services(application: FastAPI):
         handoff.transition_registry = scen_mgr.world_transitions
     lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
     world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None)
+    event_bus = getattr(pool, "event_bus", None) or getattr(primary_sm, "event_bus", None)
+    event_fts_index = getattr(pool, "event_fts_index", None) or getattr(primary_sm, "event_fts_index", None)
     conf_engine = getattr(pool, "confidence_engine", None) or getattr(primary_sm, "confidence_engine", None) or ConfidenceEngine(db=db)
     provider = GeminiSemanticProvider() if os.getenv("WORLD_QUERY_PROVIDER", "").strip().lower() == "gemini" else None
     world_query_engine = WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
     bind_app_state(
         application, camera_pool=pool, stream_manager=primary_sm, scenario_manager=scen_mgr,
-        lifecycle_manager=lifecycle_mgr, db=db, confidence_engine=conf_engine, world_query_engine=world_query_engine,
+        lifecycle_manager=lifecycle_mgr, db=db, confidence_engine=conf_engine,
+        world_query_engine=world_query_engine, world_graph=world_graph,
+        event_bus=event_bus, event_fts_index=event_fts_index,
     )
-    for sm in pool.streams.values():
+    from dashboard.services.camera_pool_queries import snapshot_pool_streams
+    for sm in snapshot_pool_streams(pool).values():
         scen_mgr.apply_to_stream_manager(sm)
     return pool, primary_sm, lifecycle_mgr, owned_db
 

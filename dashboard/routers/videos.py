@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Upl
 from fastapi.responses import FileResponse
 
 from dashboard.camera_pool import CameraPool
+from dashboard.services.camera_pool_queries import snapshot_pool_streams
 from dashboard.dependencies import (
     VIDEOS_DIR,
     get_camera_pool,
@@ -134,7 +135,7 @@ def _release_pool_video_streams(pool: Optional[CameraPool], safe_name: str) -> N
         src = str(cfg.get("source", "")).strip().replace("\\", "/")
         if os.path.basename(src) == safe_name and cfg.get("enabled", True):
             pool.toggle_camera(cid, enabled=False)
-    for cid, mgr in list((getattr(pool, "streams", None) or {}).items()):
+    for cid, mgr in snapshot_pool_streams(pool).items():
         src = str(getattr(mgr, "_resolved_source", getattr(mgr, "source_override", ""))).replace("\\", "/")
         if os.path.basename(src) == safe_name and hasattr(mgr, "stop"):
             mgr.stop()
