@@ -23,10 +23,21 @@
 
   function clearFetchDedupCache() { bootFetchCache.clear(); }
 
+  function isMutationToBootPath(input, init) {
+    const method = (init?.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return false;
+    const rawUrl = typeof input === 'string' ? input : (input?.url || '');
+    return rawUrl.startsWith('/api/cameras') || rawUrl.startsWith('/api/videos');
+  }
+
   function installBootFetchDeduplicator(win = window, ttlMs = 2000) {
     if (!win || typeof win.fetch !== 'function' || win.fetch.__bootDedupWrapped) return win?.fetch;
     const origFetch = win.fetch.bind(win);
     const wrapped = function (input, init) {
+      if (isMutationToBootPath(input, init)) {
+        clearFetchDedupCache();
+        return origFetch(input, init);
+      }
       const key = getDedupKey(input, init);
       if (!key) return origFetch(input, init);
       const now = Date.now();
@@ -216,26 +227,30 @@
       window.addEventListener('resize', () => this.updateScrollButtons(), { passive: true });
     }
 
-    switchTab(tabId) {
-      const prevTab = this.activeTabId;
-      this.activeTabId = tabId;
+    invalidateCache() {
+      clearFetchDedupCache();
+    }
 
-      // Update Header nav tabs
+    syncTabElements(tabId) {
       this.tabs.forEach(t => {
         const isActive = t.id === tabId;
         t.element.classList.toggle('active', isActive);
         t.element.setAttribute('aria-selected', String(isActive));
         t.element.setAttribute('tabindex', isActive ? '0' : '-1');
         // Direct container scrolling only - NEVER scrollIntoView (prevents whole page shifts)
-        if (isActive && t.element.offsetParent !== null && this.wrapper) {
-          if (this.wrapper.scrollWidth > this.wrapper.clientWidth) {
-            const wrapRect = this.wrapper.getBoundingClientRect();
-            const tabRect = t.element.getBoundingClientRect();
-            const targetLeft = (tabRect.left - wrapRect.left) + this.wrapper.scrollLeft - (this.wrapper.clientWidth - tabRect.width) / 2;
-            this.wrapper.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
-          }
+        if (isActive && t.element.offsetParent !== null && this.wrapper && this.wrapper.scrollWidth > this.wrapper.clientWidth) {
+          const wrapRect = this.wrapper.getBoundingClientRect();
+          const tabRect = t.element.getBoundingClientRect();
+          const targetLeft = (tabRect.left - wrapRect.left) + this.wrapper.scrollLeft - (this.wrapper.clientWidth - tabRect.width) / 2;
+          this.wrapper.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
         }
       });
+    }
+
+    switchTab(tabId) {
+      const prevTab = this.activeTabId;
+      this.activeTabId = tabId;
+      this.syncTabElements(tabId);
 
       // Delegate to global switchTab in app.js
       this._inSwitchTab = true;
@@ -250,12 +265,7 @@
       }
 
       emitTabLifecycle(prevTab, tabId);
-
-      // Lock window horizontal scroll to 0
-      if (window.scrollX !== 0) {
-        window.scrollTo(0, window.scrollY);
-      }
-
+      if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
       this.updateScrollButtons();
       setTimeout(() => this.updateScrollButtons(), 350);
     }

@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let activeCameraId = (() => { try { return window.localStorage?.getItem('it_focused_camera_id') || null; } catch (_) { return null; } })();
+  let pendingLiveWsCamId = null;
+  let activeLiveWsCamId = null;
   const videoImg = document.getElementById('live-stream-img');
   const canvas = document.getElementById('interactive-canvas');
   const ctx = canvas?.getContext('2d');
@@ -25,43 +27,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const connStatusText = document.getElementById('connection-status-text');
   const alertBadge = document.getElementById('header-alert-badge');
 
-  // Standby Poster SVG Constant (Milestone 10 Parity)
-  const STANDBY_POSTER_SVG = window.LivePlayer?.STANDBY_POSTER_SVG || 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480"><rect width="100%" height="100%" fill="%230f172a"/></svg>';
-
-  // Modern Toast Notification Dispatcher (Milestone 10)
-  function showToast(titleOrMsg, bodyOrType = 'info', type = 'info', actionText = null, onAction = null) {
-    let title = titleOrMsg, body = bodyOrType, toastType = type;
-    if (['info', 'success', 'warning', 'error', 'alert', 'review'].includes(bodyOrType) && type === 'info') {
-      toastType = bodyOrType;
-      body = titleOrMsg;
-      title = toastType.toUpperCase();
-    }
-
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-
-    const toast = document.createElement('div');
-    toast.className = `toast-message ${toastType}`;
-    const actionHtml = actionText ? `<div class="toast-action">${escapeHtml(actionText)}</div>` : '';
-    toast.innerHTML = `
-      <div class="toast-header">
-        <span class="toast-title">${escapeHtml(title)}</span>
-        <button class="toast-close" aria-label="Dismiss">&times;</button>
-      </div>
-      <div class="toast-body">${escapeHtml(body)}</div>
-      ${actionHtml}
-    `;
-
-    toast.querySelector('.toast-close')?.addEventListener('click', () => toast.remove());
-    if (actionText && onAction) {
-      toast.querySelector('.toast-action')?.addEventListener('click', () => { onAction(); toast.remove(); });
-    }
-
-    container.appendChild(toast);
-    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
+  function showToast(...args) {
+    return window.AppUIHelpers?.showToast?.(...args);
   }
-
-  window.showToast = showToast;
+  window.showToast = window.showToast || showToast;
 
   function detachLiveStream() {
     window.LivePlayer?.detachLiveStream(videoImg);
@@ -69,11 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function attachLiveStream(forceReconnect = false) {
     if (activeCameraId) window.LivePlayer?.attachLiveStream(videoImg, activeCameraId, forceReconnect);
-  }
-
-  function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
   // Tab Navigation & Hash Routing
@@ -131,6 +95,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (targetTabId === 'tab-live') {
+      if (activeCameraId && (pendingLiveWsCamId === activeCameraId || activeLiveWsCamId !== activeCameraId)) {
+        activeLiveWsCamId = activeCameraId;
+        pendingLiveWsCamId = null;
+        window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
+      }
       if (!window.LivePlayer?.isPaused()) attachLiveStream(true);
     } else if (targetTabId === 'tab-videos') {
       window.VideoScrubber?.loadVideosList();
@@ -167,14 +136,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (m) m.style.display = 'flex';
       return;
     }
-    const tabId = 'tab-' + raw;
+    const tabId = raw.startsWith('tab-') ? raw : ('tab-' + raw);
     if (document.getElementById(tabId)) switchTab(tabId, false);
   }
 
   function switchCamera(camId) {
     if (!camId || camId === activeCameraId) return;
     activeCameraId = camId;
-    window.TelemetryGateway?.initWebSocket(camId, onTelemetryReceived, onWsStatusChange);
+    if (state.activeTab === 'tab-live') {
+      activeLiveWsCamId = camId;
+      pendingLiveWsCamId = null;
+      window.TelemetryGateway?.initWebSocket(camId, onTelemetryReceived, onWsStatusChange);
+    } else {
+      pendingLiveWsCamId = camId;
+    }
   }
 
   function onTelemetryReceived(data) {
@@ -200,7 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (data.tripwires) window.TelemetryGateway?.renderTripwires(data.tripwires);
     if (data.recent_alerts) {
       window.TelemetryGateway?.renderMiniAlerts(data.recent_alerts);
-      if (alertBadge) alertBadge.textContent = data.recent_alerts.length;
+      if (window.AppUIHelpers?.syncAlertBadges) {
+        window.AppUIHelpers.syncAlertBadges(data.recent_alerts.length);
+      } else if (alertBadge) {
+        alertBadge.textContent = data.recent_alerts.length;
+      }
       window.ReviewAndRSAC?.checkAlertEvents(data.recent_alerts);
     }
 
@@ -275,51 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function bindDrawerAndBackup() {
-    const drawer = document.getElementById('mobile-nav-drawer');
-    const drawerBackdrop = document.getElementById('mobile-drawer-backdrop');
-    const openDrawer = () => {
-      if (drawer) drawer.classList.add('open');
-      if (drawerBackdrop) drawerBackdrop.style.display = 'block';
-    };
-    const closeDrawer = () => {
-      if (drawer) drawer.classList.remove('open');
-      if (drawerBackdrop) drawerBackdrop.style.display = 'none';
-    };
-
-    document.getElementById('btn-mobile-menu')?.addEventListener('click', openDrawer);
-    document.getElementById('btn-close-drawer')?.addEventListener('click', closeDrawer);
-    drawerBackdrop?.addEventListener('click', closeDrawer);
-
-    drawerTabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        switchTab(tab.getAttribute('data-tab'));
-        closeDrawer();
-      });
-    });
-
-    bindDrawerActionButtons(closeDrawer);
-    window.BackupManager?.bind(showToast);
-  }
-
-  function bindDrawerActionButtons(closeDrawer) {
-    document.getElementById('drawer-btn-enroll')?.addEventListener('click', () => {
-      closeDrawer();
-      const m = document.getElementById('modal-universal-enrollment');
-      if (m) m.style.display = 'flex';
-    });
-    document.getElementById('drawer-btn-cameras')?.addEventListener('click', () => {
-      closeDrawer();
-      const m = document.getElementById('modal-camera-manager');
-      if (m) m.style.display = 'flex';
-    });
-    document.getElementById('drawer-btn-backup')?.addEventListener('click', () => {
-      closeDrawer();
-      const m = document.getElementById('modal-backup-manager');
-      if (m) m.style.display = 'flex';
-    });
-  }
-
   // Setup Lifecycle Listeners
   navTabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab'))));
   window.addEventListener('hashchange', handleHashRoute);
@@ -356,14 +290,17 @@ document.addEventListener('DOMContentLoaded', () => {
   window.LivePlayer?.bindHudButtons(videoImg, () => activeCameraId);
   window.InteractiveCanvas?.initTagModal(() => activeCameraId);
   bindCanvasEvents();
-  bindDrawerAndBackup();
+  window.AppUIHelpers?.bindDrawerAndBackup?.(drawerTabs, switchTab);
   window.GalleryTimeline?.bindGalleryEvents();
   window.GalleryTimeline?.bindTimelineEvents();
   window.GalleryTimeline?.initSnapshotModal();
   window.AnalyticsView?.initHeatmap();
 
-  if (activeCameraId) window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
   if (window.location.hash) handleHashRoute();
+  if (state.activeTab === 'tab-live' && activeCameraId) {
+    activeLiveWsCamId = activeCameraId;
+    window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
+  }
 
   // Global interfaces
   window.App = {

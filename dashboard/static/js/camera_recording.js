@@ -215,6 +215,7 @@
         return null;
       }
       const status = applyStatusToDom(data);
+      window.ProcessingModeUI?.refresh?.();
       window.showToast?.('Recording Started', `Recording ${status?.filename || camId}`, 'success');
       return status;
     } catch (err) {
@@ -238,6 +239,7 @@
         return null;
       }
       const status = applyStatusToDom(data);
+      window.ProcessingModeUI?.refresh?.();
       if (status) handleRecordingFinished(status);
       return status;
     } catch (err) {

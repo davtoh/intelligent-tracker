@@ -10,6 +10,7 @@
 
   let deferredVideoSelection = null;
   let deferredReportFilename = null;
+  let activeBridgeFilename = null;
 
   function isVideosTabActive() {
     const tabEl = document.getElementById('tab-videos');
@@ -54,6 +55,7 @@
   }
 
   function syncLoadedVideoUI(filename, isWebCompatible, codec, options = {}, context = {}) {
+    activeBridgeFilename = filename || null;
     updateLoadedTitle(filename);
     if (context.btnAddAsCamera) context.btnAddAsCamera.disabled = false;
     window.VideoJobClient?.setCurrentViewedFilename(filename);
@@ -194,6 +196,7 @@
       const latestRun = Array.isArray(runs) ? runs[0] : runs;
       const report = latestRun?.report || latestRun;
       if (!report || typeof report !== 'object') return;
+      if (activeBridgeFilename && activeBridgeFilename !== filename) return;
       const events = window.VideoTimelineLinks.extractEventsFromReport(report);
       window.VideoTimelineLinks.renderTimelineTicks(events, durationSec);
     } catch (e) {

@@ -76,10 +76,13 @@
 
       if (status === 'pending') {
         state.pendingReviewCount = items.length;
-        if (badge) {
-          badge.textContent = items.length;
-          badge.style.display = items.length > 0 ? 'inline-block' : 'none';
-        }
+        ['header-review-badge', 'drawer-review-badge', 'drawer-review-count'].forEach((id) => {
+          const b = document.getElementById(id);
+          if (b) {
+            b.textContent = items.length;
+            b.style.display = items.length > 0 ? 'inline-block' : 'none';
+          }
+        });
       }
 
       if (counter) {
