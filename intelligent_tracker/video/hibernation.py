@@ -25,6 +25,7 @@ class StreamHibernationMixin:
         """Resume capture worker thread immediately from hibernation."""
         with self._lock:
             self._is_paused = False
+            self._last_frame_time = None
             self._pause_event.set()
             logger.debug("VideoSource '%s': Resumed from hibernation.", self.source)
 

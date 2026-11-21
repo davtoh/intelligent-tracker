@@ -46,25 +46,12 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self.target_width = width
         self.target_height = height
         self.read_timeout = float(read_timeout)
-        self.warmup_timeout = (
-            float(warmup_timeout)
-            if warmup_timeout is not None
-            else max(self.read_timeout, self.read_timeout * 2.5)
-        )
+        self.warmup_timeout = float(warmup_timeout) if warmup_timeout is not None else max(self.read_timeout, self.read_timeout * 2.5)
         self.max_reconnect_backoff = float(max_reconnect_backoff)
-
-        self.is_synthetic = False
-        self.is_rtsp = False
-        self.is_file = False
-        self.is_webcam = False
-        self.is_libcamera = False
-
+        self.is_synthetic = self.is_rtsp = self.is_file = self.is_webcam = self.is_libcamera = False
         self._classify_source()
         self._init_state_and_queues()
-
-        self.width = self.target_width or 640
-        self.height = self.target_height or 480
-        self.source_fps = 30.0
+        self.width, self.height, self.source_fps = self.target_width or 640, self.target_height or 480, 30.0
 
     def _init_state_and_queues(self) -> None:
         """Initialize concurrency synchronization events, lock, queue, and telemetry."""

@@ -328,6 +328,7 @@ class CaptureWorkerMixin:
             while self._running:
                 if self._is_paused:
                     self._pause_event.wait(timeout=0.25)
+                    self._last_frame_time = None
                     next_deadline = time.monotonic()
                     continue
                 ok, next_deadline, consecutive_empty, reconnect_attempts = _step_capture_iteration(

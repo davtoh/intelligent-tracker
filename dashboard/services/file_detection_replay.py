@@ -236,6 +236,10 @@ class FileDetectionReplayProvider:
         vs_fps = float(getattr(self.video_source, "source_fps", 0.0) or 0.0)
         db_fps = float(stream.get("source_fps") or 0.0)
         self._source_fps = db_fps if db_fps > 0 else (vs_fps if vs_fps > 0 else 30.0)
+        cfg = stream.get("config") if isinstance(stream.get("config"), dict) else {}
+        if "sample_rate" in cfg:
+            sr = max(1, int(cfg.get("sample_rate") or 1))
+            self.tolerance_s = max(0.08, min(float(self.tolerance_s), (sr * 1.15) / max(1.0, self._source_fps)))
         return bool(self._records)
 
     def resolve_media_time(self, frame_seq: int, *, media_time_s: float | None = None) -> float:

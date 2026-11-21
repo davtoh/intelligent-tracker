@@ -163,7 +163,7 @@ class VideoRunRepositoryMixin:
         params: list[Any] = aliases + aliases
         sql = (
             "SELECT run_id, video_filename, base_filename, run_type, generated_at, "
-            "source_resolution, source_fps, frame_detections_json "
+            "source_resolution, source_fps, config_json, frame_detections_json "
             f"FROM video_runs WHERE (video_filename IN ({ph}) OR base_filename IN ({ph}))"
         )
         if run_id:
@@ -180,7 +180,8 @@ class VideoRunRepositoryMixin:
             "base_filename": row["base_filename"], "run_type": row["run_type"],
             "generated_at": row["generated_at"],
             "source_resolution": _parse_json(row["source_resolution"], None),
-            "source_fps": row["source_fps"], "frame_count": len(dets_list),
+            "source_fps": row["source_fps"], "config": _parse_json(row["config_json"], {}),
+            "frame_count": len(dets_list),
             "frame_detections": dets_list,
         }
 
