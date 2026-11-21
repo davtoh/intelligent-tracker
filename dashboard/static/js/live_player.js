@@ -114,6 +114,17 @@
     setStreamStatus('paused');
   }
 
+  function isSameHealthyStream(videoImg, cleanBase, annotatedParam, forceReconnect) {
+    return (
+      !forceReconnect
+      && videoImg.src
+      && videoImg.src.includes(cleanBase)
+      && videoImg.src.includes(`annotated=${annotatedParam}`)
+      && !videoImg.src.startsWith('data:image/svg+xml')
+      && (videoImg.naturalWidth === undefined || videoImg.naturalWidth > 0)
+    );
+  }
+
   function attachLiveStream(videoImg, activeCameraId, forceReconnect = false) {
     if (streamPaused) return;
     const gridMode = window.CameraGrid?.getGridMode?.();
@@ -124,43 +135,25 @@
       return;
     }
     if (!videoImg) return;
-    if (streamRetryTimer) {
-      clearTimeout(streamRetryTimer);
-      streamRetryTimer = null;
-    }
+    if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     const resolvedCam = activeCameraId || window.App?.getActiveCameraId?.() || null;
-    const rawBase = resolvedCam
-      ? `/stream/${encodeURIComponent(resolvedCam)}`
-      : (videoImg.dataset?.activeStreamSrc || '');
-    const cleanBase = rawBase.split('?')[0];
+    const cleanBase = (resolvedCam ? `/stream/${encodeURIComponent(resolvedCam)}` : (videoImg.dataset?.activeStreamSrc || '')).split('?')[0];
     if (!cleanBase) return;
-    if (videoImg.dataset) {
-      videoImg.dataset.activeStreamSrc = cleanBase;
-    }
+    if (videoImg.dataset) videoImg.dataset.activeStreamSrc = cleanBase;
     const liveTab = document.getElementById('tab-live');
     if (liveTab && !liveTab.classList?.contains('active')) {
       if (resolvedCam) window.ProcessingModeUI?.syncCameraFocus?.(resolvedCam);
       return;
     }
     const annotatedParam = burnedAnnotationMode ? 'true' : 'false';
-    const isHealthySameStream = (
-      !forceReconnect
-      && videoImg.src
-      && videoImg.src.includes(cleanBase)
-      && videoImg.src.includes(`annotated=${annotatedParam}`)
-      && !videoImg.src.startsWith('data:image/svg+xml')
-      && (videoImg.naturalWidth === undefined || videoImg.naturalWidth > 0)
-    );
-    if (isHealthySameStream) {
+    if (isSameHealthyStream(videoImg, cleanBase, annotatedParam, forceReconnect)) {
       setStreamStatus('online');
       return;
     }
     videoImg.src = `${cleanBase}?annotated=${annotatedParam}&t=${Date.now()}`;
     window.MjpegReconnect?.attach?.(videoImg);
     setStreamStatus('online');
-    if (resolvedCam) {
-      window.ProcessingModeUI?.syncCameraFocus?.(resolvedCam);
-    }
+    if (resolvedCam) window.ProcessingModeUI?.syncCameraFocus?.(resolvedCam);
   }
 
   function detachStudioStream(studioImg) {
@@ -204,11 +197,17 @@
       const camId = window.App?.getActiveCameraId?.() || null;
       attachLiveStream(liveImg, camId, false);
     } else if (targetTabId === 'tab-studio') {
-      const studioCam = document.getElementById('studio-camera-select')?.value
-        || studioImg?.dataset?.activeStreamSrc?.split('/stream/')[1]
-        || window.App?.getActiveCameraId?.()
-        || null;
-      if (studioCam) attachStudioStream(studioImg, studioCam);
+      const sel = document.getElementById('studio-camera-select');
+      const isRecordedVideo = sel?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
+      if (isRecordedVideo) {
+        detachStudioStream(studioImg);
+      } else {
+        const studioCam = sel?.value
+          || studioImg?.dataset?.activeStreamSrc?.split('/stream/')[1]
+          || window.App?.getActiveCameraId?.()
+          || null;
+        if (studioCam) attachStudioStream(studioImg, studioCam);
+      }
     } else if (targetTabId === 'tab-analytics') {
       attachHeatmapImage(heatmapImg);
     }
@@ -226,19 +225,11 @@
     }
   }
 
-  function bindPlayerHudButtons(videoImg, getActiveCameraId) {
+  function bindPauseReconnectButtons(videoImg, getActiveCameraId) {
     const btnStreamPause = document.getElementById('btn-stream-pause-play');
     const streamPauseIcon = document.getElementById('stream-pause-icon');
     const streamPauseText = document.getElementById('stream-pause-text');
     const btnStreamReconnect = document.getElementById('btn-stream-reconnect');
-    const btnFullscreenToggle = document.getElementById('btn-fullscreen-toggle');
-    const btnAnnotationMode = document.getElementById('btn-live-annotation-mode');
-    syncAnnotationToggleUi();
-    if (btnAnnotationMode) {
-      btnAnnotationMode.addEventListener('click', () => {
-        setBurnedAnnotationMode(!burnedAnnotationMode, videoImg, getActiveCameraId?.());
-      });
-    }
 
     if (btnStreamPause) {
       btnStreamPause.addEventListener('click', () => {
@@ -266,16 +257,21 @@
         window.showToast?.('Reconnecting...', 'Refreshed stream connection with server.', 'info');
       });
     }
+  }
 
-    if (btnFullscreenToggle) {
-      btnFullscreenToggle.addEventListener('click', () => toggleFullscreen(videoImg));
-    }
+  function bindPlayerHudButtons(videoImg, getActiveCameraId) {
+    const btnFullscreenToggle = document.getElementById('btn-fullscreen-toggle');
+    const btnAnnotationMode = document.getElementById('btn-live-annotation-mode');
+    syncAnnotationToggleUi();
+    btnAnnotationMode?.addEventListener('click', () => {
+      setBurnedAnnotationMode(!burnedAnnotationMode, videoImg, getActiveCameraId?.());
+    });
+    bindPauseReconnectButtons(videoImg, getActiveCameraId);
+    btnFullscreenToggle?.addEventListener('click', () => toggleFullscreen(videoImg));
 
     document.addEventListener('fullscreenchange', () => {
       const isFs = !!document.fullscreenElement;
-      const fsBtn = document.getElementById('fullscreen-btn');
       const hudFsBtn = document.getElementById('btn-fullscreen-toggle');
-      if (fsBtn) fsBtn.innerHTML = isFs ? '🗗 Exit Fullscreen' : '⛶ Fullscreen';
       if (hudFsBtn) hudFsBtn.innerHTML = isFs ? '🗗 Exit Fullscreen' : '⛶ Fullscreen';
       setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
       setTimeout(() => window.dispatchEvent(new Event('resize')), 200);

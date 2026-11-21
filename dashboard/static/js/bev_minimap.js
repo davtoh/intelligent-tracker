@@ -39,15 +39,50 @@
     }
   }
 
-  function drawProjectedZones(ctx, zones, gw, gh, g2c) {
+  function isHomographyCalibrated(homography) {
+    return Boolean(
+      homography
+      && homography.is_calibrated
+      && Array.isArray(homography.homography_matrix)
+      && homography.homography_matrix.length === 3
+    );
+  }
+
+  function projectWithHomography(px, py, homography, gw, gh, srcW, srcH) {
+    if (isHomographyCalibrated(homography)) {
+      const H = homography.homography_matrix;
+      const denom = H[2][0] * px + H[2][1] * py + H[2][2];
+      if (Math.abs(denom) > 1e-6) {
+        return {
+          x: (H[0][0] * px + H[0][1] * py + H[0][2]) / denom,
+          y: (H[1][0] * px + H[1][1] * py + H[1][2]) / denom,
+        };
+      }
+    }
+    return { x: (px / srcW) * gw, y: (py / srcH) * gh };
+  }
+
+  function updateScaleBadge(calibrated) {
+    const badge = document.getElementById('bev-metric-scale');
+    if (!badge) return;
+    badge.textContent = calibrated ? 'Calibrated' : 'Pixel Est.';
+    badge.classList?.toggle?.('badge-calibrated', calibrated);
+    badge.classList?.toggle?.('badge-uncalibrated', !calibrated);
+  }
+
+  function drawProjectedZones(ctx, zones, homography, gw, gh, g2c) {
     if (!zones) return;
+    const srcW = Number(homography?.frame_width) || 640;
+    const srcH = Number(homography?.frame_height) || 480;
     zones.forEach((z) => {
       if (!z.polygon || z.polygon.length < 3) return;
       ctx.beginPath();
-      const p0 = g2c((z.polygon[0][0] / 640) * gw, (z.polygon[0][1] / 480) * gh);
+      const gp0 = projectWithHomography(z.polygon[0][0], z.polygon[0][1], homography, gw, gh, srcW, srcH);
+      const p0 = g2c(gp0.x, gp0.y);
       ctx.moveTo(p0.x, p0.y);
       for (let i = 1; i < z.polygon.length; i++) {
-        const pt = g2c((z.polygon[i][0] / 640) * gw, (z.polygon[i][1] / 480) * gh);
+        const gp = projectWithHomography(z.polygon[i][0], z.polygon[i][1], homography, gw, gh, srcW, srcH);
+        const pt = g2c(gp.x, gp.y);
         ctx.lineTo(pt.x, pt.y);
       }
       ctx.closePath();
@@ -63,19 +98,24 @@
     });
   }
 
-  function drawActiveEntities(ctx, gw, gh, g2c) {
+  function drawActiveEntities(ctx, homography, gw, gh, g2c) {
     const activeTracks = window.latestTelemetry?.active_tracks;
     if (!activeTracks) return;
+    const calibrated = isHomographyCalibrated(homography);
+    const srcW = Number(homography?.frame_width) || 640;
+    const srcH = Number(homography?.frame_height) || 480;
 
     activeTracks.forEach((trk) => {
-      let gx = (trk.bbox[0] + trk.bbox[2] / 2) / 640 * gw;
-      let gy = (trk.bbox[1] + trk.bbox[3]) / 480 * gh;
-      if (trk.ground_pos) {
-        gx = trk.ground_pos[0];
-        gy = trk.ground_pos[1];
+      let gp;
+      if (calibrated && Array.isArray(trk.ground_pos) && trk.ground_pos.length >= 2) {
+        gp = { x: trk.ground_pos[0], y: trk.ground_pos[1] };
+      } else if (Array.isArray(trk.bbox) && trk.bbox.length >= 4) {
+        gp = projectWithHomography(trk.bbox[0] + trk.bbox[2] / 2, trk.bbox[1] + trk.bbox[3], homography, gw, gh, srcW, srcH);
+      } else {
+        return;
       }
 
-      const cp = g2c(gx, gy);
+      const cp = g2c(gp.x, gp.y);
       ctx.beginPath();
       ctx.arc(cp.x, cp.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = trk.category === 'restricted' ? '#ef4444' : '#22c55e';
@@ -91,6 +131,8 @@
   }
 
   function renderBEVMinimap(canvas, homography, zones, activeCameraId) {
+    const calibrated = isHomographyCalibrated(homography);
+    updateScaleBadge(calibrated);
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -121,14 +163,17 @@
 
     ctx.fillStyle = '#00e5ff';
     ctx.font = 'bold 11px Inter, sans-serif';
-    ctx.fillText(`BEV: ${activeCameraId || 'N/A'} (${gw}m x ${gh}m)`, margin, 20);
+    const modeTag = calibrated ? `${gw}m x ${gh}m` : 'Pixel Est.';
+    ctx.fillText(`BEV: ${activeCameraId || 'N/A'} (${modeTag})`, margin, 20);
 
-    drawProjectedZones(ctx, zones, gw, gh, g2c);
-    drawActiveEntities(ctx, gw, gh, g2c);
+    drawProjectedZones(ctx, zones, homography, gw, gh, g2c);
+    drawActiveEntities(ctx, homography, gw, gh, g2c);
   }
 
   window.BEVMinimap = {
     render: renderBEVMinimap,
+    isCalibrated: isHomographyCalibrated,
+    projectPoint: projectWithHomography,
   };
 })();
 
