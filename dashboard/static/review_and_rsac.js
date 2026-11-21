@@ -92,69 +92,63 @@
     }
   }
 
+  function normalizeCropUrl(item) {
+    const raw = item?.crop_url || item?.crop_path || '';
+    if (!raw) return '/static/avatar-placeholder.svg';
+    if (raw.startsWith('/crops/') || raw.startsWith('http') || raw.startsWith('data:')) return raw;
+    const base = String(raw).split(/[\\/]/).pop();
+    return base ? `/crops/${encodeURIComponent(base)}` : '/static/avatar-placeholder.svg';
+  }
+
+  function formatReviewTimestamp(rawTs) {
+    if (rawTs === null || rawTs === undefined || rawTs === '') return '';
+    const num = Number(rawTs);
+    if (Number.isFinite(num) && num > 0) return new Date(num * 1000).toLocaleString();
+    return String(rawTs);
+  }
+
+  function buildReviewCardHtml(item) {
+    const sim = (item.similarity ?? item.similarity_score ?? 0) * 100;
+    const simColor = sim >= 60 ? '#06b6d4' : '#f59e0b';
+    const cropUrl = normalizeCropUrl(item);
+    const suggested = item.suggested_name ?? item.matched_entity_name;
+    const matchLabel = suggested ? `Matched: <strong>${escapeHtml(suggested)}</strong>` : 'Unidentified Borderline Track';
+    const tsText = formatReviewTimestamp(item.timestamp ?? item.created_at);
+    const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(item.video_filename, item.media_offset_sec) || '';
+    const actionsHtml = item.status === 'pending'
+      ? `<div class="review-actions">
+          <button class="btn btn-xs btn-confirm" data-id="${item.id}" data-name="${escapeHtml(suggested || '')}" title="Confirm as Ground Truth Locked Anchor">✓ Confirm (Locked Anchor)</button>
+          <button class="btn btn-xs btn-reassign" data-id="${item.id}" title="Reassign signature to a different entity">🟨 Reassign</button>
+          <button class="btn btn-xs btn-enroll-new" data-id="${item.id}" data-crop="${escapeHtml(cropUrl)}" title="Enroll as a newly created entity">✨ Enroll New</button>
+          <button class="btn btn-xs btn-dismiss" data-id="${item.id}" title="Dismiss candidate without changes">✕ Dismiss</button>
+        </div>`
+      : `<div style="font-size: 11px; color: #94a3b8; font-style: italic;">Status: <span style="color: #f8fafc; font-weight: 600;">${escapeHtml(item.status)}</span>${item.notes ? ` &mdash; ${escapeHtml(item.notes)}` : ''}</div>`;
+    return `
+      <div class="glass-panel review-card" data-item-id="${item.id}">
+        <div class="review-card-top">
+          <img class="review-thumb" src="${cropUrl}" alt="Review Crop" onerror="this.onerror=null;this.src='/static/avatar-placeholder.svg';" />
+          <div class="review-meta">
+            <div class="review-title">Track #${item.track_id} (${escapeHtml(item.camera_id)})</div>
+            <div class="review-candidate-match">${matchLabel}</div>
+            <div class="confidence-meter">
+              <span>Confidence:</span>
+              <div class="confidence-bar-track"><div class="confidence-bar-fill" style="width: ${Math.min(100, Math.max(5, sim))}%; background: ${simColor};"></div></div>
+              <span style="font-weight: 600; color: ${simColor};">${sim.toFixed(1)}%</span>
+            </div>
+            <div class="review-timestamp">${escapeHtml(tsText)}</div>
+            ${seekBtn ? `<div class="review-seek-row">${seekBtn}</div>` : ''}
+          </div>
+        </div>
+        ${actionsHtml}
+      </div>`;
+  }
+
   function renderReviewGrid(items, container, status) {
     if (!items.length) {
-      container.innerHTML = `
-        <div class="empty-state">
-          No ${escapeHtml(status)} candidates in review queue. Borderline matches (0.45 &lt; sim &lt; 0.70) are automatically routed here.
-        </div>
-      `;
+      container.innerHTML = `<div class="empty-state">No ${escapeHtml(status)} candidates in review queue. Borderline matches (0.45 &lt; sim &lt; 0.70) are automatically routed here.</div>`;
       return;
     }
-
-    container.innerHTML = items.map(item => {
-      const sim = (item.similarity ?? 0) * 100;
-      const simColor = sim >= 60 ? '#06b6d4' : '#f59e0b';
-      const cropUrl = item.crop_path ? (item.crop_path.startsWith('/') ? item.crop_path : `/${item.crop_path}`) : '/static/avatar-placeholder.png';
-      const matchLabel = item.suggested_name ? `Matched: <strong>${escapeHtml(item.suggested_name)}</strong>` : 'Unidentified Borderline Track';
-      const isPending = item.status === 'pending';
-      const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(item.video_filename, item.media_offset_sec) || '';
-
-      const actionsHtml = isPending ? `
-        <div class="review-actions">
-          <button class="btn btn-xs btn-confirm" data-id="${item.id}" title="Confirm as Ground Truth Locked Anchor">
-            ✓ Confirm (Locked Anchor)
-          </button>
-          <button class="btn btn-xs btn-reassign" data-id="${item.id}" title="Reassign signature to a different entity">
-            🟨 Reassign
-          </button>
-          <button class="btn btn-xs btn-enroll-new" data-id="${item.id}" data-crop="${escapeHtml(cropUrl)}" title="Enroll as a newly created entity">
-            ✨ Enroll New
-          </button>
-          <button class="btn btn-xs btn-dismiss" data-id="${item.id}" title="Dismiss candidate without changes">
-            ✕ Dismiss
-          </button>
-        </div>
-      ` : `
-        <div style="font-size: 11px; color: #94a3b8; font-style: italic;">
-          Status: <span style="color: #f8fafc; font-weight: 600;">${escapeHtml(item.status)}</span>
-          ${item.notes ? ` &mdash; ${escapeHtml(item.notes)}` : ''}
-        </div>
-      `;
-
-      return `
-        <div class="glass-panel review-card" data-item-id="${item.id}">
-          <div class="review-card-top">
-            <img class="review-thumb" src="${cropUrl}" alt="Review Crop" onerror="this.src='/static/avatar-placeholder.png';" />
-            <div class="review-meta">
-              <div class="review-title">Track #${item.track_id} (${escapeHtml(item.camera_id)})</div>
-              <div class="review-candidate-match">${matchLabel}</div>
-              <div class="confidence-meter">
-                <span>Confidence:</span>
-                <div class="confidence-bar-track">
-                  <div class="confidence-bar-fill" style="width: ${Math.min(100, Math.max(5, sim))}%; background: ${simColor};"></div>
-                </div>
-                <span style="font-weight: 600; color: ${simColor};">${sim.toFixed(1)}%</span>
-              </div>
-              <div class="review-timestamp">${escapeHtml(item.timestamp)}</div>
-              ${seekBtn ? `<div class="review-seek-row">${seekBtn}</div>` : ''}
-            </div>
-          </div>
-          ${actionsHtml}
-        </div>
-      `;
-    }).join('');
-
+    container.innerHTML = items.map(buildReviewCardHtml).join('');
     bindReviewActionButtons(container);
   }
 
@@ -162,7 +156,7 @@
     container.querySelectorAll('.btn-confirm').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.getAttribute('data-id');
-        await confirmReviewItem(id);
+        await confirmReviewItem(id, btn.getAttribute('data-name') || '');
       });
     });
 
@@ -188,7 +182,7 @@
     });
   }
 
-  async function confirmReviewItem(itemId) {
+  async function confirmReviewItem(itemId, name = '') {
     try {
       const res = await fetch(`/api/active-learning/${itemId}/confirm`, {
         method: 'POST',
@@ -197,7 +191,7 @@
       });
       if (!res.ok) throw new Error('Confirm failed');
       const data = await res.json();
-      showToast('Candidate Confirmed', `Locked as ground truth anchor for ${data.entity_name || 'entity'}.`, 'success');
+      showToast('Candidate Confirmed', `Locked as ground truth anchor for ${data.entity_name || name || 'entity'}.`, 'success');
       loadReviewQueue(state.currentReviewStatus);
     } catch (err) {
       showToast('Confirmation Error', err.message, 'error');

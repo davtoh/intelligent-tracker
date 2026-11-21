@@ -73,11 +73,16 @@
   async function searchJourney(entityNameOrId) {
     const container = document.getElementById('journey-results-container');
     if (!container) return;
+    const q = String(entityNameOrId ?? '').trim();
+    if (!q) {
+      container.innerHTML = '<div class="empty-state">Enter an entity name or numeric Track ID to search.</div>';
+      return;
+    }
 
     container.innerHTML = '<div class="loading-state">🔍 Reconstructing cross-camera trajectory journey...</div>';
 
     try {
-      const param = isNaN(entityNameOrId) ? `entity_name=${encodeURIComponent(entityNameOrId)}` : `entity_id=${entityNameOrId}`;
+      const param = /^\d+$/.test(q) ? `track_id=${encodeURIComponent(q)}` : `entity_name=${encodeURIComponent(q)}`;
       const res = await fetch(`/api/journey/search?${param}`);
       if (!res.ok) {
         container.innerHTML = '<div class="empty-state">No journey sightings found for this entity.</div>';
@@ -94,11 +99,16 @@
   async function exportJourneyVideo(entityNameOrId) {
     const btn = document.getElementById('btn-journey-export');
     const statusDiv = document.getElementById('journey-export-status');
+    const q = String(entityNameOrId ?? '').trim();
+    if (!q) {
+      if (statusDiv) statusDiv.innerHTML = '<div class="alert alert-danger">Enter an entity name or numeric Track ID first.</div>';
+      return;
+    }
     if (btn) btn.disabled = true;
     if (statusDiv) statusDiv.innerHTML = '⏳ Slicing footage and concatenating MP4 video with tactical HUD title cards...';
 
     try {
-      const payload = isNaN(entityNameOrId) ? { entity_name: entityNameOrId } : { entity_id: parseInt(entityNameOrId, 10) };
+      const payload = /^\d+$/.test(q) ? { track_id: parseInt(q, 10) } : { entity_name: q };
       const res = await fetch('/api/journey/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

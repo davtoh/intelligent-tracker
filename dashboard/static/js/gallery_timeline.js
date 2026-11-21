@@ -30,6 +30,30 @@
     }
   }
 
+  function buildEntityCardHtml(ent) {
+    const thumb = ent.thumbnail_url || '/static/avatar-placeholder.svg';
+    const cat = ent.category || 'person';
+    return `
+      <div class="glass-panel entity-card" data-id="${ent.id}">
+        <div class="entity-card-top">
+          <img class="entity-avatar" src="${thumb}" onerror="this.onerror=null;this.src='/static/avatar-placeholder.svg';" alt="${escapeHtml(ent.name)}" />
+          <div class="entity-meta">
+            <div class="entity-name">${escapeHtml(ent.name)}</div>
+            <span class="badge-category ${cat}">${escapeHtml(cat)}</span>
+          </div>
+        </div>
+        <div class="entity-stats">
+          <span>Appearances: <strong>${ent.appearance_count || 0}</strong></span>
+          <span>Signatures: <strong>${ent.signature_count || 0}</strong></span>
+        </div>
+        <div class="entity-actions">
+          <button class="btn btn-xs btn-outline btn-view-sightings" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}">Sightings</button>
+          <button class="btn btn-xs btn-outline btn-view-versions" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}" title="Descriptor Version History & Rollback">⏳ Versions</button>
+          <button class="btn btn-xs btn-outline btn-delete-entity" data-id="${ent.id}" style="color: #ef4444;">Delete</button>
+        </div>
+      </div>`;
+  }
+
   function renderGalleryGrid() {
     const galleryGrid = document.getElementById('entity-gallery-grid');
     const gallerySearch = document.getElementById('gallery-search-input');
@@ -37,54 +61,28 @@
 
     const query = gallerySearch ? gallerySearch.value.toLowerCase().trim() : '';
     const activeCategory = document.querySelector('.filter-pill.active')?.getAttribute('data-category') || '';
-
     const filtered = allGalleryEntities.filter(ent => {
       const matchesQuery = !query || ent.name.toLowerCase().includes(query) || (ent.notes && ent.notes.toLowerCase().includes(query));
-      const matchesCat = !activeCategory || ent.category === activeCategory;
-      return matchesQuery && matchesCat;
+      return matchesQuery && (!activeCategory || ent.category === activeCategory);
     });
 
     if (!filtered.length) {
       galleryGrid.innerHTML = '<div class="empty-state">No entities match your filter criteria. Click "Enroll New Identity" to add one.</div>';
       return;
     }
-
-    galleryGrid.innerHTML = filtered.map(ent => {
-      const thumb = ent.thumbnail_url || '/static/avatar-placeholder.png';
-      const cat = ent.category || 'person';
-      return `
-        <div class="glass-panel entity-card" data-id="${ent.id}">
-          <div class="entity-card-top">
-            <img class="entity-avatar" src="${thumb}" onerror="this.src='/static/avatar-placeholder.png';" alt="${escapeHtml(ent.name)}" />
-            <div class="entity-meta">
-              <div class="entity-name">${escapeHtml(ent.name)}</div>
-              <span class="badge-category ${cat}">${escapeHtml(cat)}</span>
-            </div>
-          </div>
-          <div class="entity-stats">
-            <span>Appearances: <strong>${ent.appearance_count || 0}</strong></span>
-            <span>Signatures: <strong>${ent.signature_count || 0}</strong></span>
-          </div>
-          <div class="entity-actions">
-            <button class="btn btn-xs btn-outline btn-view-sightings" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}">Sightings</button>
-            <button class="btn btn-xs btn-outline btn-view-versions" data-id="${ent.id}" data-name="${escapeHtml(ent.name)}" title="Descriptor Version History & Rollback">⏳ Versions</button>
-            <button class="btn btn-xs btn-outline btn-delete-entity" data-id="${ent.id}" style="color: #ef4444;">Delete</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
+    galleryGrid.innerHTML = filtered.map(buildEntityCardHtml).join('');
     bindGalleryActionButtons();
   }
 
   function bindGalleryActionButtons() {
     document.querySelectorAll('.btn-view-sightings').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const entId = btn.getAttribute('data-id');
         window.switchTab?.('tab-timeline');
+        await loadTimelineFilters();
         const sel = document.getElementById('timeline-entity-select');
         if (sel) sel.value = entId;
-        loadSightings();
+        await loadSightings();
       });
     });
 
@@ -141,62 +139,51 @@
     }
   }
 
+  function buildSightingCardHtml(s) {
+    const timeStr = s.timestamp || 'Unknown';
+    const snap = s.snapshot_url || '/static/avatar-placeholder.svg';
+    const name = s.entity_name || 'Unidentified Track';
+    const cat = s.entity_category || 'person';
+    const confPct = s.confidence ? (s.confidence * 100).toFixed(0) : '100';
+    const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(s.video_filename, s.media_offset_sec) || '';
+    return `
+      <div class="timeline-node">
+        <div class="timeline-dot"></div>
+        <div class="glass-panel timeline-card">
+          <img class="timeline-thumbnail" src="${snap}" onerror="this.style.display='none'" alt="Snapshot" onclick="showSnapshotModal('${snap}', '${escapeHtml(name)} - ${escapeHtml(timeStr)}')" />
+          <div class="timeline-content">
+            <div class="timeline-title">
+              <span>${escapeHtml(name)}</span>
+              <span class="badge-category ${cat}">${escapeHtml(cat)}</span>
+              <span class="panel-badge">Zone: ${escapeHtml(s.zone_id || 'Free space')}</span>
+            </div>
+            <div class="timeline-meta">
+              <span>🕒 ${escapeHtml(timeStr)}</span> &bull;
+              <span>Track #${s.track_id}</span> &bull;
+              <span>Match Confidence: ${confPct}%</span>
+              ${seekBtn}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
   async function loadSightings() {
     const timelineList = document.getElementById('sightings-timeline-list');
-    const timelineSelectEntity = document.getElementById('timeline-entity-select');
-    const timelineSelectZone = document.getElementById('timeline-zone-select');
-    const timelineSelectLimit = document.getElementById('timeline-limit-select');
     if (!timelineList) return;
-
-    const entId = timelineSelectEntity?.value;
-    const zoneId = timelineSelectZone?.value;
-    const limit = timelineSelectLimit?.value || 50;
-
+    const entId = document.getElementById('timeline-entity-select')?.value;
+    const zoneId = document.getElementById('timeline-zone-select')?.value;
+    const limit = document.getElementById('timeline-limit-select')?.value || 50;
     let url = `/sightings?limit=${limit}`;
     if (entId) url += `&entity_id=${entId}`;
     if (zoneId) url += `&zone_id=${encodeURIComponent(zoneId)}`;
-
     timelineList.innerHTML = '<div class="empty-state">Loading sightings...</div>';
-
     try {
       const res = await fetch(url);
       const sightings = await res.json();
-
-      if (!sightings.length) {
-        timelineList.innerHTML = '<div class="empty-state">No matching sightings found for selected parameters.</div>';
-        return;
-      }
-
-      timelineList.innerHTML = sightings.map(s => {
-        const timeStr = s.timestamp || 'Unknown';
-        const snap = s.snapshot_url || '/static/avatar-placeholder.png';
-        const name = s.entity_name || 'Unidentified Track';
-        const cat = s.entity_category || 'person';
-        const confPct = s.confidence ? (s.confidence * 100).toFixed(0) : '100';
-        const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(s.video_filename, s.media_offset_sec) || '';
-
-        return `
-          <div class="timeline-node">
-            <div class="timeline-dot"></div>
-            <div class="glass-panel timeline-card">
-              <img class="timeline-thumbnail" src="${snap}" onerror="this.style.display='none'" alt="Snapshot" onclick="showSnapshotModal('${snap}', '${escapeHtml(name)} - ${escapeHtml(timeStr)}')" />
-              <div class="timeline-content">
-                <div class="timeline-title">
-                  <span>${escapeHtml(name)}</span>
-                  <span class="badge-category ${cat}">${escapeHtml(cat)}</span>
-                  <span class="panel-badge">Zone: ${escapeHtml(s.zone_id || 'Free space')}</span>
-                </div>
-                <div class="timeline-meta">
-                  <span>🕒 ${escapeHtml(timeStr)}</span> &bull;
-                  <span>Track #${s.track_id}</span> &bull;
-                  <span>Match Confidence: ${confPct}%</span>
-                  ${seekBtn}
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
+      timelineList.innerHTML = sightings.length
+        ? sightings.map(buildSightingCardHtml).join('')
+        : '<div class="empty-state">No matching sightings found for selected parameters.</div>';
     } catch (err) {
       timelineList.innerHTML = `<div class="empty-state">Error querying sightings: ${escapeHtml(err.message)}</div>`;
     }
@@ -223,9 +210,23 @@
       const modal = document.getElementById('modal-snapshot-view');
       if (modal) modal.style.display = 'none';
     });
-    document.getElementById('btn-snapshot-save')?.addEventListener('click', () => {
+    document.getElementById('btn-snapshot-save')?.addEventListener('click', async () => {
       const camId = window.App?.getActiveCameraId?.();
-      if (camId) window.open(`/stream/${encodeURIComponent(camId)}`, '_blank');
+      if (!camId) return;
+      try {
+        const res = await fetch(`/api/cameras/${encodeURIComponent(camId)}/freeze_frame`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.image_base64) return;
+        const a = document.createElement('a');
+        a.href = data.image_base64;
+        a.download = `snapshot_${camId}_${Date.now()}.jpg`;
+        document.body?.appendChild?.(a);
+        a.click();
+        a.remove?.();
+      } catch (err) {
+        window.showToast?.('Snapshot Error', err.message, 'error');
+      }
     });
   }
 

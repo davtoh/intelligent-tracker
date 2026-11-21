@@ -24,46 +24,41 @@
     }
   }
 
+  function buildVersionEntryHtml(v, entityId) {
+    const anchorBadge = v.is_anchor
+      ? '<span class="version-anchor-badge">🔒 Locked Anchor (Ground Truth)</span>'
+      : '<span style="font-size:11px;color:#94a3b8;">Adaptive EMA</span>';
+    const simText = v.similarity_to_anchor !== null && v.similarity_to_anchor !== undefined
+      ? `<span style="font-size: 11px; color: #06b6d4;">Sim: ${(v.similarity_to_anchor * 100).toFixed(1)}%</span>`
+      : '';
+    const thumbHtml = v.crop_url
+      ? `<img class="version-thumb" src="${escapeHtml(v.crop_url)}" onerror="this.style.display='none'" alt="v${v.version}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" />`
+      : '';
+    const reasonText = v.notes || v.update_reason || v.source || 'Visual Descriptor Snapshot';
+    return `
+      <div class="version-entry" data-version="${v.version}">
+        <div class="version-entry-left">
+          ${thumbHtml}
+          <span class="version-num-pill">v${v.version}</span>
+          <div class="version-meta">
+            <div class="version-reason">${escapeHtml(reasonText)} ${anchorBadge} ${simText}</div>
+            <div class="version-timestamp">Created: ${escapeHtml(v.created_at)}</div>
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-xs btn-outline btn-rollback" data-id="${entityId}" data-version="${v.version}">↩ Rollback to v${v.version}</button>
+        </div>
+      </div>`;
+  }
+
   function renderVersionEntries(versions, entityId, modal) {
     const container = document.getElementById('versions-timeline-container');
     if (!container) return;
-
     if (!versions.length) {
       container.innerHTML = '<div class="empty-state">No version history records found for this entity.</div>';
       return;
     }
-
-    container.innerHTML = versions.map(v => {
-      const isAnchor = Boolean(v.is_anchor);
-      const anchorBadge = isAnchor
-        ? '<span class="version-anchor-badge">🔒 Locked Anchor (Ground Truth)</span>'
-        : '<span style="font-size:11px;color:#94a3b8;">Adaptive EMA</span>';
-      const simText = v.similarity_to_anchor !== null && v.similarity_to_anchor !== undefined
-        ? `<span style="font-size: 11px; color: #06b6d4;">Sim: ${(v.similarity_to_anchor * 100).toFixed(1)}%</span>`
-        : '';
-
-      return `
-        <div class="version-entry" data-version="${v.version}">
-          <div class="version-entry-left">
-            <span class="version-num-pill">v${v.version}</span>
-            <div class="version-meta">
-              <div class="version-reason">
-                ${escapeHtml(v.update_reason || 'Visual Descriptor Snapshot')}
-                ${anchorBadge}
-                ${simText}
-              </div>
-              <div class="version-timestamp">Created: ${escapeHtml(v.created_at)}</div>
-            </div>
-          </div>
-          <div>
-            <button class="btn btn-xs btn-outline btn-rollback" data-id="${entityId}" data-version="${v.version}">
-              ↩ Rollback to v${v.version}
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
-
+    container.innerHTML = versions.map(v => buildVersionEntryHtml(v, entityId)).join('');
     container.querySelectorAll('.btn-rollback').forEach(btn => {
       btn.addEventListener('click', async () => {
         const v = btn.getAttribute('data-version');

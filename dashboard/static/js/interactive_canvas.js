@@ -75,15 +75,16 @@
     tooltip.style.display = 'block';
     tooltip.style.left = `${Math.min(cLeft + cssW - 180, Math.max(cLeft + 10, cLeft + track.bbox[0] * sx))}px`;
     tooltip.style.top = `${Math.max(cTop + 10, cTop + track.bbox[1] * sy - 70)}px`;
-    if (el('tooltip-title')) el('tooltip-title').textContent = track.entity_name || `Track #${track.id}`;
+    if (el('tooltip-title')) el('tooltip-title').textContent = track.entity_name || `Track #${track?.id ?? track?.track_id ?? ''}`;
     if (el('tooltip-body')) el('tooltip-body').textContent = `Conf: ${(track.confidence * 100).toFixed(0)}% | Dwell: ${track.dwell_time}s | State: ${track.state}`;
   }
   function mapClassToCategory(label) {
     const norm = String(label || '').trim().toLowerCase();
     if (!norm) return null;
     if (['car', 'truck', 'bus', 'motorcycle', 'vehicle'].includes(norm)) return 'vehicle';
-    const select = el('tag-category-select');
-    return (select && Array.from(select.options || []).some((o) => o.value === norm)) ? norm : 'object';
+    const opts = Array.from(el('tag-category-select')?.options || []).map((o) => o.value);
+    if (opts.includes(norm)) return norm;
+    return opts.find((v) => ['object', 'other', 'custom'].includes(v)) || opts[0] || 'object';
   }
   function renderCandidateChips(candidates) {
     const box = el('tag-identity-candidates');
@@ -150,14 +151,15 @@
     categoryTouched = false;
     modalTag.style.display = 'flex';
     const bbox = options.bbox || track?.bbox || null;
+    const trackId = track?.id ?? track?.track_id ?? '';
     const fields = {
       'tag-entity-id': '', 'tag-source-type': options.sourceType || 'live', 'tag-video-filename': options.videoFilename || '',
       'tag-timestamp-sec': options.timestampSec != null ? String(options.timestampSec) : '', 'tag-crop-base64': options.cropBase64 || '',
-      'tag-track-id': track?.id ?? '', 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '',
+      'tag-track-id': trackId, 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '',
       'tag-name-input': track?.entity_name || '', 'tag-category-select': track?.category || 'person',
     };
     Object.entries(fields).forEach(([id, val]) => { if (el(id)) el(id).value = val; });
-    if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${track.id}` : '🏷️ Enroll New Identity');
+    if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${trackId}` : '🏷️ Enroll New Identity');
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
     if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, track, bbox });
     el('tag-name-input')?.focus();
@@ -166,7 +168,8 @@
   function handleRoiRecognition(payload = {}) {
     lastRoiPointerMs = Date.now();
     const track = payload.track || null;
-    openTagModal(track, { ...payload, fromRoi: true, skipRecognition: true, title: track ? `🏷️ Tag Track #${track.id}` : '🎯 Tag Selected Region' });
+    const trackId = track?.id ?? track?.track_id ?? '';
+    openTagModal(track, { ...payload, fromRoi: true, skipRecognition: true, title: track ? `🏷️ Tag Track #${trackId}` : '🎯 Tag Selected Region' });
     runRoiRecognition(payload);
   }
 
