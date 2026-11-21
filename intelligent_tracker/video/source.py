@@ -70,6 +70,8 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self._frames_read = 0
         self._frames_dropped = 0
         self._reconnections = 0
+        self._loop_count = 0
+        self._eof = False
         self._is_connected = False
         self._needs_warmup = True
         self._start_time: Optional[float] = None
@@ -80,6 +82,8 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
 
     def read(self, timeout: float = 1.0) -> Tuple[bool, Optional[np.ndarray]]:
         """Retrieve latest frame from buffer, waiting up to timeout seconds."""
+        if getattr(self, "_eof", False) and not self.loop_video:
+            return False, None
         if not self._running:
             self.start()
 
@@ -134,6 +138,11 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
     def measured_fps(self) -> float:
         """Return the measured sliding-window capture FPS."""
         return float(getattr(self, "_measured_fps", 0.0) or 0.0)
+
+    @property
+    def loop_count(self) -> int:
+        """Return number of times a looping video source has wrapped."""
+        return int(getattr(self, "_loop_count", 0) or 0)
 
     @property
     def last_media_time_s(self) -> Optional[float]:

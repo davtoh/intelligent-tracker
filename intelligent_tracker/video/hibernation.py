@@ -18,6 +18,11 @@ class StreamHibernationMixin:
         """Pause capture worker thread during stream hibernation to conserve CPU."""
         with self._lock:
             self._is_paused = True
+            self._measured_fps = 0.0
+            samples = getattr(self, "_frame_interval_samples", None)
+            if isinstance(samples, list):
+                samples.clear()
+            self._last_frame_time = None
             self._pause_event.clear()
             logger.debug("VideoSource '%s': Paused (hibernating).", self.source)
 

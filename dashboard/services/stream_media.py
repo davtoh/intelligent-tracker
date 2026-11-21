@@ -74,11 +74,16 @@ class StreamMediaMixin:
         annotated: bool = True,
     ) -> bytes:
         """Retrieve most recent encoded JPEG frame (annotated or raw) or placeholder."""
+        svc = getattr(self, "_processing_mode_service", None)
+        is_capture_only = getattr(svc, "mode", None) == "capture_only"
         with self._lock:
-            if not annotated and getattr(self, "_latest_raw_jpeg", None) is not None:
-                return self._latest_raw_jpeg
+            raw_jpeg = getattr(self, "_latest_raw_jpeg", None)
+            if (not annotated or is_capture_only) and raw_jpeg is not None:
+                return raw_jpeg
             if self._latest_jpeg is not None:
                 return self._latest_jpeg
+            if raw_jpeg is not None:
+                return raw_jpeg
             return self._create_placeholder_jpeg("Waiting for stream...")
 
     def get_latest_telemetry(self, camera_id: Optional[str] = None) -> Dict[str, Any]:

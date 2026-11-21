@@ -255,14 +255,24 @@ def build_live_step_result(
     wall_ts = float(wall_now) if wall_now is not None else (_wall_now() if now is None else float(now))
     if not run_vision:
         _clear_worker_cache(async_worker)
+        decision = (
+            scheduler.should_schedule_frame(
+                camera_id, frame, mono_ts, mode=mode, is_focused=is_focused,
+                is_recording=is_recording, is_armed=is_armed, active_tab=active_tab,
+            )
+            if (scheduler is not None and camera_id)
+            else None
+        )
         return _stamp_step_provenance(
-            FrameStepResult(frame=frame, timestamp=wall_ts, fps=0.0, frame_count=frame_seq), frame_seq, wall_ts, 0.0
+            FrameStepResult(frame=frame, timestamp=wall_ts, fps=0.0, frame_count=frame_seq),
+            frame_seq, wall_ts, 0.0, decision=decision,
         )
     replayed = _try_replay_step(
         async_worker, replay_provider, frame, mono_ts, wall_ts, frame_seq, fps, media_time_s,
         scheduler, camera_id, mode, is_focused, is_recording, is_armed, active_tab,
     )
     if replayed is not None:
+        _clear_worker_cache(async_worker)
         return replayed
     decision = (
         scheduler.should_schedule_frame(

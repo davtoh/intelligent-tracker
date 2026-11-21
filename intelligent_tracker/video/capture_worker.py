@@ -10,11 +10,13 @@ import numpy as np
 
 from intelligent_tracker.camera_device import CameraDeviceHandler
 from intelligent_tracker.video.capture_helpers import (
+    compute_capture_timing,
     compute_reconnect_backoff,
+    handle_file_eof,
     probe_capture_dimensions,
     rewind_or_reopen_loop_video,
 )
-from intelligent_tracker.video.frame_timing import advance_frame_deadline, read_media_time_s, resolve_effective_fps
+from intelligent_tracker.video.frame_timing import advance_frame_deadline, read_media_time_s
 from intelligent_tracker.video.synthetic import SyntheticFrameGenerator
 
 logger = logging.getLogger(__name__)
@@ -26,8 +28,15 @@ def _step_capture_iteration(
 ) -> Tuple[bool, float, int, int]:
     """Execute a single capture read, failure recovery, or frame enqueue step."""
     loop_start = time.monotonic()
+    effective_fps, min_frame_time = compute_capture_timing(worker)
     if not worker._cap or not worker._cap.isOpened():
         if worker.is_file:
+            if not worker.loop_video:
+                worker._eof, worker._running = True, False
+                try:
+                    worker._queue.put_nowait(None)
+                except queue.Full:
+                    pass
             return False, next_deadline, consecutive_empty, reconnect_attempts
         ok, reconnect_attempts = worker._handle_reconnection(reconnect_attempts)
         return ok, next_deadline, consecutive_empty, reconnect_attempts
@@ -220,11 +229,14 @@ class CaptureWorkerMixin:
         reconnect_attempts: int,
     ) -> Tuple[bool, int, int]:
         """Process empty frame conditions: video rewind, transient webcam retries, and reconnects."""
-        if self.is_file and self.loop_video:
-            keep_going, consecutive_empty = rewind_or_reopen_loop_video(
-                self, consecutive_empty, CameraDeviceHandler.safe_release
-            )
-            return keep_going, consecutive_empty, reconnect_attempts
+        if self.is_file:
+            if self.loop_video:
+                keep_going, consecutive_empty = rewind_or_reopen_loop_video(
+                    self, consecutive_empty, CameraDeviceHandler.safe_release
+                )
+                return keep_going, consecutive_empty, reconnect_attempts
+            handle_file_eof(self)
+            return False, consecutive_empty, reconnect_attempts
 
         if self.is_webcam:
             consecutive_empty += 1
@@ -301,28 +313,16 @@ class CaptureWorkerMixin:
         self, guard: Any, consecutive_empty: int, reconnect_attempts: int
     ) -> Tuple[bool, int, int]:
         """Handle failed/timed-out frame read with driver severing or empty-frame fallback."""
-        if not self._running:
-            return False, consecutive_empty, reconnect_attempts
-        is_severed = getattr(guard, "last_read_timed_out", False)
-        if is_severed or (guard.is_reconnecting and self.auto_reconnect and not self.is_file):
-            logger.warning("VideoSource '%s': Driver timed out or breaker tripped. Severing driver.", self.source)
-            guard.safe_driver_unbind(self._cap)
-            self._cap = None
-            self._is_connected = False
-            if self.auto_reconnect and not self.is_file:
-                should_continue, reconnect_attempts = self._handle_reconnection(reconnect_attempts)
-                if not should_continue:
-                    return False, consecutive_empty, reconnect_attempts
-                guard.reset()
-                return True, consecutive_empty, reconnect_attempts
-            return False, consecutive_empty, reconnect_attempts
-        return self._handle_empty_frame(consecutive_empty, reconnect_attempts)
+        from intelligent_tracker.video.capture_helpers import handle_read_failure_helper
+
+        return handle_read_failure_helper(
+            self, guard, consecutive_empty, reconnect_attempts, CameraDeviceHandler.safe_release
+        )
 
     def _capture_worker(self) -> None:
         """Worker thread that continuously polls frames, buffers them, and safely owns cleanup."""
         reconnect_attempts, consecutive_empty = 0, 0
-        effective_fps = resolve_effective_fps(self.is_file, self.source_fps, self.fps_limit)
-        min_frame_time = (1.0 / effective_fps) if (self.is_file or self.fps_limit) else 0.0
+        effective_fps, min_frame_time = compute_capture_timing(self)
         guard, next_deadline = self._get_read_guard(), time.monotonic()
         try:
             while self._running:

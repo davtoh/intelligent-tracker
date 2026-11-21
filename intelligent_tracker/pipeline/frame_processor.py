@@ -1,6 +1,7 @@
 """Canonical per-frame CV execution engine shared by CLI and Dashboard."""
 
 from collections import deque
+from contextlib import nullcontext
 import copy
 from dataclasses import dataclass, field
 import logging
@@ -114,6 +115,7 @@ class FrameProcessor:
         self._world_bridge = world_bridge
         self.frame_count = 0
         self.measured_fps = 0.0
+        self._last_step_perf: float | None = None
         self._fps_history: deque[float] = deque(maxlen=max(1, int(fps_window)))
 
     @property
@@ -129,6 +131,7 @@ class FrameProcessor:
         """Clear accumulated frame count and rolling FPS history."""
         self.frame_count = 0
         self.measured_fps = 0.0
+        self._last_step_perf = None
         self._fps_history.clear()
 
     def step(
@@ -146,15 +149,23 @@ class FrameProcessor:
         detections = self._run_detector(processed)
         tracks = self._run_tracker(detections, now)
         tracks, detections = _rescale_tracks_and_detections(tracks, detections, frame.shape, processed.shape)
-        analytics_res, identifications = evaluate_tracks_governance(
-            self.bundle, frame, tracks, now,
-            topology=self.topology, world_bridge=self.world_bridge, run_reid=True,
-        )
+        gov_lock = getattr(self.bundle, "_governance_lock", None)
+        with gov_lock if gov_lock is not None else nullcontext():
+            analytics_res, identifications = evaluate_tracks_governance(
+                self.bundle, frame, tracks, now,
+                topology=self.topology, world_bridge=self.world_bridge, run_reid=True,
+            )
 
-        elapsed_s = max(time.perf_counter() - t_perf, 1e-6)
+        done_perf = time.perf_counter()
+        elapsed_s = max(done_perf - t_perf, 1e-6)
+        if self._last_step_perf is not None:
+            cadence_s = max(t_perf - self._last_step_perf, elapsed_s)
+            self._fps_history.append(1.0 / cadence_s)
+            self.measured_fps = sum(self._fps_history) / len(self._fps_history)
+        else:
+            self.measured_fps = 1.0 / elapsed_s
+        self._last_step_perf = t_perf
         self.frame_count += 1
-        self._fps_history.append(1.0 / elapsed_s)
-        self.measured_fps = sum(self._fps_history) / len(self._fps_history)
 
         return FrameStepResult(
             frame=processed,

@@ -161,6 +161,15 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
 
     def _resume_video_source(self) -> None:
         """Callback to resume video capture when subscribers reconnect."""
+        svc = getattr(self, "_processing_mode_service", None)
+        if svc is not None and svc.should_hibernate_camera(
+            self.camera_id,
+            subscriber_count=getattr(self, "subscriber_count", 0),
+            is_recording=bool(getattr(self, "is_recording", False)),
+            in_camera_pool=bool(getattr(self, "_in_camera_pool", False)),
+            is_armed=bool(getattr(self, "is_armed", False)),
+        ):
+            return
         if self.video_source and hasattr(self.video_source, "resume"):
             self.video_source.resume()
 

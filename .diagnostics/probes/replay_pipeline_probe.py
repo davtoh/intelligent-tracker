@@ -225,6 +225,42 @@ def _check_replay_ttl(
     return rep
 
 
+def _check_eof_and_motion_pause(
+    video_path: Path, failures: list[str], checks: dict[str, Any]
+) -> None:
+    """Verify loop_video=False EOF, pause() FPS reset, and MotionGate gap re-seed."""
+    from intelligent_tracker.pipeline.motion_gate import MotionGate
+    from intelligent_tracker.video.source import VideoSource
+
+    vs = VideoSource(str(video_path), loop_video=False)
+    try:
+        frames = 0
+        while frames < 20:
+            ok, _ = vs.read(timeout=1.0)
+            if not ok:
+                break
+            frames += 1
+        ok_after, _ = vs.read(timeout=0.1)
+        checks["non_loop_eof_stopped"] = (frames > 0) and (not ok_after) and (not vs._running)
+        if not checks["non_loop_eof_stopped"]:
+            failures.append(f"P1-9 non-loop EOF failed: frames={frames}, ok_after={ok_after}, running={vs._running}")
+        vs.pause()
+        checks["pause_clears_measured_fps"] = vs.measured_fps == 0.0 and vs._last_frame_time is None
+        if not checks["pause_clears_measured_fps"]:
+            failures.append("P1-7 pause() did not clear _measured_fps and _last_frame_time")
+    finally:
+        vs.stop()
+
+    mg = MotionGate(hold_seconds=3.0)
+    f0 = np.zeros((72, 128, 3), dtype=np.uint8)
+    f1 = np.full((72, 128, 3), 200, dtype=np.uint8)
+    mg.evaluate("cam_p3", f0, now=1.0)
+    wake = mg.evaluate("cam_p3", f1, now=10.0)
+    checks["motion_gate_gap_reseed"] = not wake.motion_active and not wake.first_trigger
+    if wake.motion_active:
+        failures.append("P3-1 MotionGate triggered false motion burst after hibernation gap")
+
+
 def _check_replay_bridge_and_ttl(
     tmp: Path, video_path: Path, failures: list[str], checks: dict[str, Any]
 ) -> None:
@@ -269,6 +305,7 @@ def run_probe() -> dict[str, Any]:
         _check_async_clock_and_overlay(tmp, failures, checks)
         _check_capture_only_mjpeg(tmp, vid, failures, checks)
         _check_replay_bridge_and_ttl(tmp, vid, failures, checks)
+        _check_eof_and_motion_pause(vid, failures, checks)
 
     status = "error" if failures else "ok"
     summary = (

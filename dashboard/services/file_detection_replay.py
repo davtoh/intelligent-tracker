@@ -205,10 +205,14 @@ class FileDetectionReplayProvider:
 
     def ensure_loaded(self) -> bool:
         """Query TrackerDB for the newest completed detection stream, with bounded empty TTL."""
-        if self._loaded and self._records:
-            return True
-        now = time.monotonic()
         db_changes = getattr(getattr(self.db, "_conn", None), "total_changes", None)
+        if self._loaded and self._records:
+            if db_changes is None or db_changes == self._last_db_changes:
+                return True
+            self._loaded = False
+            self._records = []
+            self._stream = None
+        now = time.monotonic()
         if self._loaded and self._last_empty_check_at is not None:
             same_db = db_changes is None or db_changes == self._last_db_changes
             if same_db and (now - self._last_empty_check_at) < self._empty_retry_ttl_s:

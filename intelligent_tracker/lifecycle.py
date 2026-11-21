@@ -170,6 +170,9 @@ class StreamLifecycleManager:
             with sm._subscriber_lock:
                 sm._subscribers.clear()
                 sm._ws_subscribers.clear()
+                reg = getattr(sm, "_subscriber_registry", None)
+                if reg is not None and hasattr(reg, "_subscriber_modes"):
+                    reg._subscriber_modes.clear()
 
             # Signal hibernation immediately
             if hasattr(sm, "_is_hibernating"):
@@ -178,20 +181,11 @@ class StreamLifecycleManager:
                 sm.video_source.pause()
 
             self.log_event(
-                camera_id=camera_id,
-                event_type="EVICT",
-                old_state="ONLINE" if old_count > 0 else "HIBERNATING",
-                new_state="HIBERNATING",
-                subscriber_count=0,
-                details=f"{reason} (evicted {old_count} subscribers)",
+                camera_id=camera_id, event_type="EVICT",
+                old_state="ONLINE" if old_count > 0 else "HIBERNATING", new_state="HIBERNATING",
+                subscriber_count=0, details=f"{reason} (evicted {old_count} subscribers)",
             )
-
-            return {
-                "success": True,
-                "camera_id": camera_id,
-                "evicted_subscribers": old_count,
-                "new_state": "HIBERNATING",
-            }
+            return {"success": True, "camera_id": camera_id, "evicted_subscribers": old_count, "new_state": "HIBERNATING"}
 
     def hibernate_all_idle(self) -> Dict[str, Any]:
         """
