@@ -12,6 +12,8 @@
 | **ADR-02** | **World & Spatial Representation** | **Scoped `WorldGraph` + Reactive Rules** *(retiring `MetaSpace`)* | Replaces global, unlocked `MetaSpace` weakref dictionaries (`core/spaces.py`) and unused wrappers (`high_objects.py`) with a thread-safe, instance-scoped `WorldGraph` (`intelligent_tracker/world/`). Supports multi-parent graph edges (camera, zone, entity, transition), cascading deletes/updates, and lightweight 30 FPS `Track` fast paths. |
 | **ADR-03** | **Memory, Learning & Q&A** | **Hybrid Local Memory + Pluggable VLM/LLM Layer** | Core 30 FPS tracking, Re-ID (`DualModelFeatureExtractor`), bounded EMA with Locked Anchor drift guard, Active Learning, and SQLite/vector persistence remain 100% local and offline-capable. A pluggable `WorldQueryEngine` (`intelligent_tracker/memory/`) adds SQLite FTS + optional local/cloud VLM/LLM natural-language Q&A and clip understanding. |
 | **ADR-04** | **Architecture Verification Gate** | **`arch-map` Static Snapshot** | Before spawning any step plan, run `diagnose.py arch-map` to verify live modularity budgets, route/CLI parity, cross-package coupling, and unused imports. |
+| **ADR-05** | **Frontend Component Reuse, Zero-CLS Stability & Multi-Camera AI Visibility** | **Single Reusable UI Components + Variant Parameters + Ask-First Governance** | Reuse existing `dashboard/static/js/` and `dashboard/static/partials/` components (e.g., unified `OverlayControlBar` with `live`/`scrubber` presentation variants; unified `UnifiedCanvasOverlay` across 1x1, `2x2`/`3x3`/`4x4` grid tiles, and scrubber). Keep one canonical working button per action per view; reserve stable HUD badge slots with `>= 8px` gaps, `tabular-nums`, hysteresis smoothing, and ellipsis truncation; stream throttled `/ws/multiview` JSON telemetry so AI-active grid tiles draw client-side boxes, live FPS/tracks, pool-wide alerts, and a per-tile AI toggle (`armed`). Explicitly ask the user before creating any new UI component that overlaps an existing one. |
+| **ADR-06** | **Dual-Clock Domain Contract & Pool-Scoped Singleton Ownership** | **Monotonic Scheduler/Lag vs. Wall-Clock Domain Epoch + Pool Singletons** | Strictly separate `time.monotonic()` (scheduler intervals, FPS pacing, lag deltas, cooldowns, timeouts) from Unix wall-clock epoch `time.time()` (all `FrameProcessor.step()`, `RSACSchedule`, `TrackerDB` sightings, `EventFTSIndex`, `ConfidenceEngine`, `EventBus` alerts, and `ThumbnailCache.capture_ts_ms`). Offline `VideoIndexer` stamps `base_epoch + video_ts` while preserving `video_filename` and `media_offset_sec` in sightings, FTS, and `WorldQueryEngine` citations. `CameraPool` owns shared singleton `EventBus`, `WorldGraph`, `ConfidenceEngine`, and `EventFTSIndex` instances bound to `app.state` and injected into every `StreamManager`, preserving homography/scenarios across restarts. |
 
 ---
 
@@ -98,7 +100,7 @@ Dependencies MUST flow strictly downward (Adapters $\rightarrow$ Pipeline/World 
 | `dashboard/routers/` | Thin FastAPI endpoints (5–15L per handler); zero direct `TrackerDB("...")` instantiation | **Existing (enforce DI)** |
 | `dashboard/services/` | Multi-camera orchestration (`stream_coordinator.py`, `camera_config_store.py` split from `camera_pool.py`), `pipeline_factory.py` delegating to `intelligent_tracker.pipeline` | **Decompose in Step 1 & 3** |
 | `dashboard/dependencies.py` | FastAPI `app.state` + `dependency_overrides` container (no `sys.modules` monkeypatch lookups) | **Refactor in Step 3** |
-| `dashboard/static/` | Modular HTML partials/templates + `js/` + `css/` components (< 350L/file, zero `!important`) | **Decompose in Step 3** |
+| `dashboard/static/` | Modular HTML partials/templates + reusable shared components (`UnifiedCanvasOverlay`, `OverlayControlBar`, `FrameSurface`), zero-CLS HUD stability, zero duplicate/dead controls, `< 350L`/file, zero `!important` | **Decompose in Step 3; Unify per ADR-05** |
 
 ---
 
@@ -125,9 +127,9 @@ Dependencies MUST flow strictly downward (Adapters $\rightarrow$ Pipeline/World 
 ## 6. Runtime Invariants, Migration, Privacy & Cross-Step Continuity
 
 ### 6.1 Threading, Lock Hierarchy & 30 FPS Backpressure
-- **Strict Lock Acquisition Order**: `PipelineEngine` / `StreamCoordinator` -> `WorldGraph._lock (RLock)` -> `EventBus` dispatch -> `DatabaseWriterQueue`. Lower layers MUST NEVER acquire locks from upper layers (zero lock-inversion deadlocks).
+- **Strict Lock Acquisition Order & No Cross-Service Lock Nesting**: `PipelineEngine` / `StreamCoordinator` -> `WorldGraph._lock (RLock)` -> `EventBus` dispatch -> `DatabaseWriterQueue`. Lower layers MUST NEVER acquire locks from upper layers (zero lock-inversion deadlocks). Never acquire `StreamRecordingController._lock` while holding `ProcessingModeService._lock` (or vice versa); snapshot state under the local lock and release before cross-service calls.
 - **Zero Blocking Under Lock**: Never execute SQLite writes, HTTP/webhook calls, VLM/LLM requests, `time.sleep()`, or `thread.join()` while holding `WorldGraph._lock` or `CameraPool` locks. Snapshot state under the lock, release, and perform I/O or thread joins outside.
-- **Interruptible Loops & Bounded Queues**: All capture, inference, and reconnect loops use `stop_event.wait(timeout)` (defaulting `stop_event = threading.Event()`, never `None`). Frame ingestion uses bounded drop-oldest queues so slow inference or VLM queries never cause unbounded RAM growth.
+- **Interruptible Loops, Bounded Queues & Single-Purpose Clock Boundaries**: All capture, inference, and reconnect loops use `stop_event.wait(timeout)` (defaulting `stop_event = threading.Event()`, never `None`). Frame ingestion uses bounded drop-oldest queues so slow inference or VLM queries never cause unbounded RAM growth. Never pass `time.monotonic()` into domain, DB, RSAC, or `ConfidenceEngine` timestamps (`ADR-06`).
 
 ### 6.2 Schema Migration, Deprecation & Edge-Case Guards
 - **Idempotent SQLite Migrations**: Schema evolutions in `intelligent_tracker/database.py` (WAL mode, `WorldEntity` metadata, FTS5 timeline tables, global `(X, Y)` coordinates, confidence telemetry) MUST use versioned, idempotent `PRAGMA user_version` migrations that preserve existing `data/tracker.db` records cleanly.
@@ -139,7 +141,11 @@ Dependencies MUST flow strictly downward (Adapters $\rightarrow$ Pipeline/World 
 - **Privacy Masking Hook**: Before any frame or crop is forwarded to an external `SemanticProvider` or webhook, apply the configured privacy filter (metadata-only mode or face/plate masking toggle).
 
 ### 6.4 Golden End-to-End Regression Fixture & Master Plan Continuity
-- **Golden E2E Fixture**: Maintain a deterministic headless multi-camera synthetic/recorded-clip fixture (`detector=mock`, isolated `TemporaryDirectory` DB) that verifies identical detections, zone/tripwire events, RSAC alerts, `WorldGraph` state transitions, and DB sightings across CLI and Dashboard from Step 1 through Step 6.
-- **Master Plan of Plans (`plan_engine.py`)**: Register `.TODO/world_architecture_master_roadmap.md` as the master roadmap and bind each per-step implementation plan (`.TODO/step_<N>_<slug>.md`) as a child plan via `plan_engine.py init .TODO/step_<N>_<slug>.md --parent .TODO/world_architecture_master_roadmap.md --milestone <N>` so architectural context and progress survive across conversations.
+- **Golden E2E Fixture & 4-Tier Diagnostic Verification Gate**: Maintain a deterministic headless multi-camera synthetic/recorded-clip fixture (`detector=mock`, isolated `TemporaryDirectory` DB) that verifies identical detections, zone/tripwire events, RSAC alerts, `WorldGraph` state transitions, and DB sightings across CLI and Dashboard. Enforce the 4-tier diagnostic verification gate:
+  1. Static cross-contract + cross-module AST + typechecks (`diagnose.py surface --verify`, `scan`, `audit --typecheck`).
+  2. Unmocked real-clock, deadlock, and replay workspace probes (`.diagnostics/probes/`).
+  3. 9-tab headless Chrome CDP sweeps verifying zero HTTP `>= 400`, zero JS exceptions, zero CLS/layout-jitter shifts, `>= 4px` sibling gaps, and zero dead/duplicate buttons (`--audit-layout --stability-ms 2000`).
+  4. Full headless regression (`python -m unittest discover tests`) and zero-warning Sphinx build (`sphinx -W`).
+- **Master Plan of Plans (`plan_engine.py`)**: Register `.TODO/world_architecture_master_roadmap.md` and `.TODO/integration_hardening_master_roadmap.md` as master roadmaps and bind each per-step implementation plan (`.TODO/step_<N>_<slug>.md`) as a child plan via `plan_engine.py init .TODO/step_<N>_<slug>.md --parent <master_slug> --milestone <N>` so architectural context and progress survive across conversations.
 
 
