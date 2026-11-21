@@ -109,6 +109,8 @@
       client._serverHello = msg;
     } else if (msg.type === 'source_status') {
       client.onSourceStatus?.(msg.camera_id, msg.status, msg.reason || '');
+    } else if (msg.type === 'telemetry') {
+      client.onTelemetry?.(msg);
     } else if (msg.type === 'subscribed' && msg.rejected) {
       Object.entries(msg.rejected).forEach(([cid, reason]) => {
         const mapped = reason === 'disabled' ? 'disabled' : 'offline';
@@ -206,6 +208,7 @@
 
       this.onFrame = options.onFrame || null;
       this.onSourceStatus = options.onSourceStatus || null;
+      this.onTelemetry = options.onTelemetry || null;
       this.onTransportChange = options.onTransportChange || null;
       this.onControl = options.onControl || null;
 

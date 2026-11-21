@@ -234,29 +234,58 @@
 
   function syncMultiviewSubscription(cameras) {
     if (!hasWsStack()) return;
-    const ids = getPageSlice(cameras, currentGridMode).items.map((c) => c.id).filter(Boolean);
+    const layout = getEffectiveLayout();
+    const ids = getPageSlice(cameras, layout).items.map((c) => c.id).filter(Boolean);
     if (ids.length === 0) {
       lastSubscribedKey = '';
       window.MultiviewWsClient.unsubscribeAll();
       return;
     }
-    const key = `${currentGridMode}:${ids.join(',')}`;
+    const key = `${layout}:${ids.join(',')}`;
     const st = window.MultiviewWsClient.getState?.();
     if (key !== lastSubscribedKey || (!st?.connected && !st?.degraded)) {
       lastSubscribedKey = key;
-      window.MultiviewWsClient.subscribe(ids, currentGridMode);
+      window.MultiviewWsClient.subscribe(ids, layout);
     }
   }
 
   function resubscribeActiveGrid() {
     if (currentGridMode === '1x1' || !useWsTransport()) return false;
-    const ids = getPageSlice(lastRenderArgs.activeCameras || [], currentGridMode).items
+    const layout = getEffectiveLayout();
+    const ids = getPageSlice(lastRenderArgs.activeCameras || [], layout).items
       .map((c) => c.id)
       .filter(Boolean);
-    lastSubscribedKey = ids.length ? `${currentGridMode}:${ids.join(',')}` : '';
+    lastSubscribedKey = ids.length ? `${layout}:${ids.join(',')}` : '';
     if (ids.length === 0) window.MultiviewWsClient.unsubscribeAll();
-    else window.MultiviewWsClient.subscribe(ids, currentGridMode);
+    else window.MultiviewWsClient.subscribe(ids, layout);
     return true;
+  }
+
+  function renderMultiGridView(multiGridContainer, singleVideoWrapper, cameras, focusedCameraId, onFocus) {
+    window.LivePlayer?.detachLiveStream?.(document.getElementById('live-stream-img'), { keepGrid: true });
+    singleVideoWrapper.style.display = 'none';
+    const effectiveLayout = getEffectiveLayout();
+    const useWs = useWsTransport();
+    const desiredTransport = useWs ? 'ws' : 'mjpeg';
+    multiGridContainer.style.display = 'grid';
+    multiGridContainer.className = `multi-camera-grid grid-${effectiveLayout}`;
+    const pageInfo = getPageSlice(cameras, effectiveLayout);
+    updatePaginationBar(pageInfo);
+    updateDegradedBadge();
+    if (!syncExistingTiles(multiGridContainer, pageInfo.items, focusedCameraId, desiredTransport)) {
+      teardownGridContainer(multiGridContainer, { keepWsSubscription: hasWsStack() });
+      multiGridContainer.innerHTML = pageInfo.items
+        .map((c, idx) => buildGridTileHtml(c, focusedCameraId, idx, useWs))
+        .join('');
+      bindGridTileEvents(multiGridContainer, onFocus);
+      const liveTab = document.getElementById('tab-live');
+      const isLiveActive = !liveTab || Boolean(liveTab.classList?.contains('active'));
+      if (useWs) mountCanvasSurfaces(multiGridContainer, pageInfo.items);
+      else if (isLiveActive) multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
+      renderedTransport = desiredTransport;
+    }
+    const liveTab = document.getElementById('tab-live');
+    if (!liveTab || liveTab.classList?.contains('active')) syncMultiviewSubscription(cameras);
   }
 
   function renderGrid(activeCameras, focusedCameraId, onFocus) {
@@ -277,30 +306,7 @@
       window.LivePlayer?.attachLiveStream?.(document.getElementById('live-stream-img'), focusedCameraId);
       window.dispatchEvent(new Event('resize'));
     } else {
-      window.LivePlayer?.detachLiveStream?.(document.getElementById('live-stream-img'), { keepGrid: true });
-      singleVideoWrapper.style.display = 'none';
-      const effectiveLayout = getEffectiveLayout();
-      const useWs = useWsTransport();
-      const desiredTransport = useWs ? 'ws' : 'mjpeg';
-      multiGridContainer.style.display = 'grid';
-      multiGridContainer.className = `multi-camera-grid grid-${effectiveLayout}`;
-      const pageInfo = getPageSlice(cameras, effectiveLayout);
-      updatePaginationBar(pageInfo);
-      updateDegradedBadge();
-      if (!syncExistingTiles(multiGridContainer, pageInfo.items, focusedCameraId, desiredTransport)) {
-        teardownGridContainer(multiGridContainer, { keepWsSubscription: hasWsStack() });
-        multiGridContainer.innerHTML = pageInfo.items
-          .map((c, idx) => buildGridTileHtml(c, focusedCameraId, idx, useWs))
-          .join('');
-        bindGridTileEvents(multiGridContainer, onFocus);
-        const liveTab = document.getElementById('tab-live');
-        const isLiveActive = !liveTab || Boolean(liveTab.classList?.contains('active'));
-        if (useWs) mountCanvasSurfaces(multiGridContainer, pageInfo.items);
-        else if (isLiveActive) multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
-        renderedTransport = desiredTransport;
-      }
-      const liveTab = document.getElementById('tab-live');
-      if (!liveTab || liveTab.classList?.contains('active')) syncMultiviewSubscription(cameras);
+      renderMultiGridView(multiGridContainer, singleVideoWrapper, cameras, focusedCameraId, onFocus);
     }
     window.CameraRecording?.hydrateFromCameraList?.(cameras);
   }

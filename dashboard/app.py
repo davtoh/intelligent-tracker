@@ -164,8 +164,9 @@ def _init_runtime_services(application: FastAPI):
     )
     handoff = getattr(pool, "handoff_coordinator", None)
     if handoff is not None:
-        handoff.topology = scen_mgr.topology
-        handoff.transition_registry = scen_mgr.world_transitions
+        handoff.topology, handoff.transition_registry = scen_mgr.topology, scen_mgr.world_transitions
+    if getattr(pool, "_coordinator", None) is not None:
+        pool._coordinator.scenario_manager = scen_mgr
     lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
     world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None)
     event_bus = getattr(pool, "event_bus", None) or getattr(primary_sm, "event_bus", None)
@@ -175,9 +176,8 @@ def _init_runtime_services(application: FastAPI):
     world_query_engine = WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
     bind_app_state(
         application, camera_pool=pool, stream_manager=primary_sm, scenario_manager=scen_mgr,
-        lifecycle_manager=lifecycle_mgr, db=db, confidence_engine=conf_engine,
-        world_query_engine=world_query_engine, world_graph=world_graph,
-        event_bus=event_bus, event_fts_index=event_fts_index,
+        lifecycle_manager=lifecycle_mgr, db=db, confidence_engine=conf_engine, world_query_engine=world_query_engine,
+        world_graph=world_graph, event_bus=event_bus, event_fts_index=event_fts_index,
     )
     from dashboard.services.camera_pool_queries import snapshot_pool_streams
     for sm in snapshot_pool_streams(pool).values():

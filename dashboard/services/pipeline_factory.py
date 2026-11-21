@@ -74,12 +74,13 @@ class StreamPipelineFactory:
         cls, cfg: dict[str, Any], db_path: str, camera_id: str, source_override: Any = None,
         world_graph: WorldGraph | None = None, event_bus: EventBus | None = None,
         confidence_engine: ConfidenceEngine | None = None, event_fts_index: EventFTSIndex | None = None,
+        camera_name: str | None = None,
     ) -> StreamPipelineBundle:
         """Instantiate and wire complete computer vision pipeline via PipelineEngine."""
         data = dict(cfg or {})
         raw_source = source_override if source_override is not None else data.get("video", {}).get("source")
         config = PipelineConfig.from_dict(
-            data, camera_id=camera_id, db_path=db_path, source_override=source_override,
+            data, camera_id=camera_id, camera_name=camera_name, db_path=db_path, source_override=source_override,
             detector_fallback_mock=is_synthetic_source(raw_source, data.get("type")),
             enable_governance=True, enable_event_bus_fallback=True,
         )

@@ -314,7 +314,7 @@ def build_world(
         graph._event_bus = event_bus
     graph.register_camera(CameraNode(
         camera_id=config.camera_id,
-        name=config.camera_id,
+        name=config.camera_name or config.camera_id,
         source=str(config.source),
         enabled=True,
     ))

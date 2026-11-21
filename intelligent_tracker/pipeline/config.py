@@ -214,6 +214,7 @@ class PipelineConfig:
     """Normalized configuration for assembling a unified CV pipeline."""
 
     camera_id: str = "default"
+    camera_name: str | None = None
     source: Any = "synthetic"
     resolution: tuple[int, int] = (640, 480)
     framerate: int = 30
@@ -246,11 +247,12 @@ class PipelineConfig:
 
     @classmethod
     def from_dict(
-        cls, cfg: dict[str, Any] | None = None, *, camera_id: str = "default", db_path: str | None = None,
-        source_override: Any = None, detector_fallback_mock: bool = True, enable_governance: bool = True,
-        enable_event_bus_fallback: bool = True, enable_memory_indexing: bool = True,
-        default_source: str = "synthetic", default_detector: str = "mock",
-        probe_db_reid: bool = False, config_path: str | None = None, resolve_source: bool = True,
+        cls, cfg: dict[str, Any] | None = None, *, camera_id: str = "default", camera_name: str | None = None,
+        db_path: str | None = None, source_override: Any = None, detector_fallback_mock: bool = True,
+        enable_governance: bool = True, enable_event_bus_fallback: bool = True,
+        enable_memory_indexing: bool = True, default_source: str = "synthetic",
+        default_detector: str = "mock", probe_db_reid: bool = False,
+        config_path: str | None = None, resolve_source: bool = True,
     ) -> "PipelineConfig":
         """Build a normalized PipelineConfig from a nested config dictionary."""
         data = dict(cfg or {})
@@ -259,6 +261,7 @@ class PipelineConfig:
         reid_model, resolved_db = _resolve_reid_and_db(data.get("reid", {}), db_path, data.get("database", {}), probe_db_reid)
         return cls(
             camera_id=camera_id,
+            camera_name=camera_name or data.get("name"),
             detector_fallback_mock=detector_fallback_mock,
             reid_model=reid_model,
             reid_threshold=float(data.get("reid", {}).get("threshold", 0.65)),

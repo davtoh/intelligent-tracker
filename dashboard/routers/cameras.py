@@ -75,6 +75,7 @@ async def list_cameras(
                 if mgr.video_source and mgr.video_source.is_synthetic
                 else "physical"
             ),
+            "armed": bool(getattr(mgr, "is_armed", False)), "is_armed": bool(getattr(mgr, "is_armed", False)),
         }
     ]
 

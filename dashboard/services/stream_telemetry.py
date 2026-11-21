@@ -131,4 +131,6 @@ def build_stream_telemetry(
         "motion_active": bool(getattr(step_res, "motion_active", cam_sched.get("motion_active", False))),
         "load_shed_stage": getattr(step_res, "load_shed_stage", cam_sched.get("load_shed_stage", "normal")),
         "replay_active": bool(getattr(step_res, "replay_active", False)),
+        "armed": bool(getattr(manager, "is_armed", False)),
+        "is_armed": bool(getattr(manager, "is_armed", False)),
     }

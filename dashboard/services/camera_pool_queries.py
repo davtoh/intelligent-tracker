@@ -79,6 +79,7 @@ def build_camera_status_row(
         "source_type": "synthetic" if is_synth else "physical",
         "recording": rec_state,
         "armed": bool(getattr(mgr, "is_armed", cfg.get("armed", False))),
+        "is_armed": bool(getattr(mgr, "is_armed", cfg.get("armed", False))),
     }
 
 

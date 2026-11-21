@@ -149,6 +149,11 @@ class GlobalCoordinateMapper:
         with self._lock:
             return self._homographies.get(camera_id)
 
+    def remove_homography(self, camera_id: str) -> bool:
+        """Remove any registered GroundPlaneHomography for camera_id."""
+        with self._lock:
+            return self._homographies.pop(camera_id, None) is not None
+
     def has_camera(self, camera_id: str) -> bool:
         """Return True if camera_id has a registered homography or world pose."""
         with self._lock:
@@ -218,6 +223,27 @@ def sync_homography_to_world(
         graph_mapper = getattr(world_graph, "coordinate_mapper", None)
         if graph_mapper is not None and graph_mapper is not coordinate_mapper:
             graph_mapper.register_camera(camera_id, homography=homo)
+
+
+def clear_homography_from_world(
+    world_graph: Any,
+    coordinate_mapper: GlobalCoordinateMapper | None,
+    camera_id: str,
+) -> None:
+    """Clear calibrated homography from GlobalCoordinateMapper and attached WorldGraph CameraNode."""
+    if coordinate_mapper is not None:
+        coordinate_mapper.remove_homography(camera_id)
+    if world_graph is None:
+        return
+    graph_mapper = getattr(world_graph, "coordinate_mapper", None)
+    if graph_mapper is not None and graph_mapper is not coordinate_mapper:
+        graph_mapper.remove_homography(camera_id)
+    existing = world_graph.get_node(camera_id, node_type="camera")
+    if isinstance(existing, CameraNode):
+        existing.homography = None
+        if isinstance(existing.extra, dict):
+            existing.extra.pop("homography_profile", None)
+        world_graph.register_camera(existing, preserve_defaults=False)
 
 
 def sync_loaded_homographies_to_world(

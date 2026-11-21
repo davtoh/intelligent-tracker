@@ -207,6 +207,7 @@ class ScenarioManager(ScenarioStorageMixin):
             return
         cam_id = mgr.camera_id
         cam_entry = self._ensure_camera_entry(cam_id)
+        mgr._scenario_manager = self
         mgr.homography = cam_entry["homography"]
         if mgr.analytics:
             mgr.analytics.zones.clear()

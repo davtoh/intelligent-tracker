@@ -143,7 +143,7 @@ def _check_cameras_list_and_shared_confidence(tmp: Path, failures: list[str], ch
 
 
 def _check_restart_preserves_scenario(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
-    """Assert stream restart preserves ScenarioManager zones/homography (P1-8)."""
+    """Assert stream restart preserves ScenarioManager zones/homography and friendly name (P1-8)."""
     import cv2
     import numpy as np
     from dashboard.camera_pool import CameraPool
@@ -169,12 +169,16 @@ def _check_restart_preserves_scenario(tmp: Path, failures: list[str], checks: di
         scen.apply_to_stream_manager(sm)
         pool._coordinator.restart_stream("cam_r", active_cfg)
         new_sm = pool.streams.get("cam_r")
+        cam_node = pool.world_graph.get_node("cam_r", node_type="camera")
+        cam_rows = pool.list_cameras()
         preserved = bool(
-            new_sm and getattr(new_sm, "homography", None) is not None and len(new_sm.analytics.zones) > 0
+            new_sm and getattr(new_sm, "homography", None) and new_sm.homography.is_calibrated
+            and "z_r" in new_sm.analytics.zones and getattr(cam_node, "name", "") == "RestartCam"
+            and cam_rows and "is_armed" in cam_rows[0]
         )
         checks["restart_preserves_scenario_homography"] = preserved
         if not preserved:
-            failures.append("P1-8: restart_stream() dropped ScenarioManager zones/homography")
+            failures.append("P1-8: restart_stream() dropped ScenarioManager zones/homography or friendly name")
     finally:
         pool.stop_all()
 
@@ -201,23 +205,17 @@ def _check_restart_and_lock_order(tmp: Path, failures: list[str], checks: dict[s
         @property
         def is_recording(self) -> bool: return rec.is_recording
     pool_stub = SimpleNamespace(streams={"cam_lock": _StreamStub()}, _lock=threading.RLock())
-    stop = threading.Event()
-    frame = np.zeros((64, 64, 3), dtype=np.uint8)
+    stop, frame = threading.Event(), np.zeros((64, 64, 3), dtype=np.uint8)
 
     def _rec_loop() -> None:
         for i in range(40):
-            if stop.is_set():
-                break
-            rec.start(filename=f"lock_{i}.mp4")
-            rec.write_frame(frame)
-            rec.stop()
+            if not stop.is_set():
+                rec.start(filename=f"lock_{i}.mp4"); rec.write_frame(frame); rec.stop()
 
     t1 = threading.Thread(target=lambda: [svc.get_state(pool_stub) for _ in range(80) if not stop.is_set()], daemon=True)
     t2 = threading.Thread(target=_rec_loop, daemon=True)
-    t1.start(); t2.start()
-    t1.join(timeout=3.0); t2.join(timeout=3.0)
-    stop.set()
-    rec.finalize_if_active()
+    t1.start(); t2.start(); t1.join(timeout=3.0); t2.join(timeout=3.0)
+    stop.set(); rec.finalize_if_active()
     checks["lock_order_stress_alive"] = t1.is_alive() or t2.is_alive()
     if t1.is_alive() or t2.is_alive():
         failures.append("P0-2: ProcessingModeService<->StreamRecordingController lock-order stress timed out")

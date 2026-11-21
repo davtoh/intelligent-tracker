@@ -52,6 +52,28 @@ def _default_overlays() -> Dict[str, bool]:
     }
 
 
+def _fallback_close_manager_resources(manager: "StreamManager") -> None:
+    """Release StreamManager resources when no PipelineBundle is attached."""
+    if getattr(manager, "video_source", None):
+        manager.video_source.release()
+    if getattr(manager, "world_rule_engine", None) is not None:
+        manager.world_rule_engine.stop()
+    pipe_bus = None
+    if getattr(manager, "event_pipeline", None):
+        rule_eng = manager.event_pipeline.get("rule_engine")
+        if rule_eng is not None and hasattr(rule_eng, "stop"):
+            rule_eng.stop()
+        pipe_bus = manager.event_pipeline.get("event_bus")
+        if pipe_bus and hasattr(pipe_bus, "stop"):
+            pipe_bus.stop(timeout=0.2)
+    if getattr(manager, "event_fts_index", None) is not None:
+        manager.event_fts_index.detach()
+    if getattr(manager, "event_bus", None) and manager.event_bus is not pipe_bus and hasattr(manager.event_bus, "stop"):
+        manager.event_bus.stop(timeout=0.2)
+    if getattr(manager, "db", None) and hasattr(manager.db, "close"):
+        manager.db.close()
+
+
 def _init_manager_config(
     manager: "StreamManager",
     config_path: Optional[str],
@@ -198,6 +220,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             cfg=self.cfg,
             db_path=self.db_path,
             camera_id=self.camera_id,
+            camera_name=self.name,
             source_override=self.source_override,
             world_graph=self.world_graph,
             event_bus=self._injected_event_bus,
@@ -254,34 +277,19 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             logger.info("StreamManager background worker started for %s", self.camera_id)
 
     def stop(self) -> None:
-        """Stop background worker cleanly."""
+        """Stop background worker cleanly and release owned pipeline resources outside self._lock."""
         self.signal_stop()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=0.6)
         recorder = getattr(self, "_recording_controller", None)
         if recorder is not None:
             recorder.finalize_if_active()
-        with self._lock:
-            if self.video_source:
-                self.video_source.release()
-            if getattr(self, "world_rule_engine", None) is not None:
-                self.world_rule_engine.stop()
-            owns_bus = getattr(getattr(self, "_pipeline_bundle", None), "_owns_event_bus", True)
-            owns_fts = getattr(getattr(self, "_pipeline_bundle", None), "_owns_fts_index", True)
-            pipe_bus = None
-            if self.event_pipeline:
-                if "rule_engine" in self.event_pipeline and hasattr(self.event_pipeline["rule_engine"], "stop"):
-                    self.event_pipeline["rule_engine"].stop()
-                pipe_bus = self.event_pipeline.get("event_bus")
-                if owns_bus and pipe_bus and hasattr(pipe_bus, "stop"):
-                    pipe_bus.stop(timeout=0.2)
-            if owns_fts and getattr(self, "event_fts_index", None) is not None:
-                self.event_fts_index.detach()
-            if owns_bus and self.event_bus and self.event_bus is not pipe_bus and hasattr(self.event_bus, "stop"):
-                self.event_bus.stop(timeout=0.2)
-            if self.db and hasattr(self.db, "close"):
-                self.db.close()
-            logger.info("StreamManager stopped for %s", self.camera_id)
+        bundle = getattr(self, "_pipeline_bundle", None)
+        if bundle is not None and hasattr(bundle, "close"):
+            bundle.close()
+        else:
+            _fallback_close_manager_resources(self)
+        logger.info("StreamManager stopped for %s", self.camera_id)
 
     def start_recording(self, **kwargs: Any) -> Dict[str, Any]:
         """Start MP4 recording, wake hibernating source, and sync processing state."""
