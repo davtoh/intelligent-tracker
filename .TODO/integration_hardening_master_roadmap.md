@@ -15,14 +15,14 @@
 ---
 
 ## Step 1: Diagnostics Tooling Upgrades, Visual/CLS Checks, Unmocked Workspace Probes & `/app-debugger` Headless Baseline
-- [ ] **Child Plan**: `.TODO/step_1_diagnostics_and_probe_hardening.md`
-- [ ] **Goal**: Close every static, surface, cross-module, trace, and visual layout blind spot that let `P0–P2` integration bugs slip past `882` green tests, and establish a verified failing **Red** `/app-debugger` baseline.
-- [ ] **Target Scope**:
-  - [ ] Upgrade `skills/system-diagnostics/` (`surface_scanners.py`, `surface_verifier.py`, `surface_contracts.py`, `audit_layout.js`, `cdp_inspect.py`, `cross_module_rules.py`, `shadow_prober.py`, `trace_recorder.py`, `trace_cli.py`) + unit tests.
-  - [ ] Add `UI Component Reuse & Ask-Before-Creating-New-Component` gate to `skills/frontier-architect/`.
-  - [ ] Add optional `[project.optional-dependencies] dev` (`ruff`, `mypy`) in `pyproject.toml` and verify live `diagnose.py audit --typecheck`.
-  - [ ] Harden `.diagnostics/probes/` (`replay_pipeline_probe.py`, `cold_boot_world_probe.py`, `video_studio_contract_probe.py`, new `spa_nine_tab_cdp_probe.py`) and record the verified Red Symptom-to-Root-Cause Matrix + `debug-retro`.
-- [ ] **Definition of Done**: Skill test suites (`system-diagnostics`, `app-debugger`, `frontier-architect`) 100% pass; `diagnose.py audit --typecheck` active; all 4 probes reproducibly expose target bugs against baseline.
+- [x] **Child Plan**: `.TODO/step_1_diagnostics_and_probe_hardening.md`
+- [x] **Goal**: Close every static, surface, cross-module, trace, and visual layout blind spot that let `P0–P2` integration bugs slip past `882` green tests, and establish a verified failing **Red** `/app-debugger` baseline.
+- [x] **Target Scope**:
+  - [x] Upgrade `skills/system-diagnostics/` (`surface_scanners.py`, `surface_verifier.py`, `surface_contracts.py`, `audit_layout.js`, `cdp_inspect.py`, `cross_module_rules.py`, `shadow_prober.py`, `trace_recorder.py`, `trace_cli.py`) + unit tests.
+  - [x] Add `UI Component Reuse & Ask-Before-Creating-New-Component` gate to `skills/frontier-architect/`.
+  - [x] Add optional `[project.optional-dependencies] dev` (`ruff`, `mypy`) in `pyproject.toml` and verify live `diagnose.py audit --typecheck`.
+  - [x] Harden `.diagnostics/probes/` (`replay_pipeline_probe.py`, `cold_boot_world_probe.py`, `video_studio_contract_probe.py`, new `spa_nine_tab_cdp_probe.py`) and record the verified Red Symptom-to-Root-Cause Matrix + `debug-retro`.
+- [x] **Definition of Done**: Skill test suites (`system-diagnostics`, `app-debugger`, `frontier-architect`) 100% pass; `diagnose.py audit --typecheck` active; all 4 probes reproducibly expose target bugs against baseline.
 
 ---
 

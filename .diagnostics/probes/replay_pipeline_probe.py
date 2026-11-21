@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Diagnostic Probe: replay_pipeline_probe.
 
-Runs real VideoSource -> FrameProcessor (>1280px) -> CachedReplayProvider ->
-WorldEntityBridge -> EventBus with zero SimpleNamespace stubs.
+Runs unmocked VideoSource -> FrameProcessor (>1280px) -> CentroidTracker ->
+FrameOverlayRenderer -> AsyncInferenceWorker -> CachedReplayProvider -> EventBus.
 """
 
 import json
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ if str(REPO_ROOT) not in sys.path:
 
 def _write_hd_video(path: Path, width: int = 1920, height: int = 1080, frames: int = 6) -> None:
     """Create a real >1280px synthetic MP4 clip for pipeline testing."""
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore[attr-defined]
     writer = cv2.VideoWriter(str(path), fourcc, 10.0, (width, height))
     try:
         for i in range(frames):
@@ -33,11 +34,8 @@ def _write_hd_video(path: Path, width: int = 1920, height: int = 1080, frames: i
         writer.release()
 
 
-def _check_track_and_scale_contracts(tmp: Path, video_path: Path, failures: list[str], checks: dict[str, Any]) -> None:
-    """Check Track.to_dict(), FrameProcessor >1280px scale, and VideoSource FPS attrs."""
-    from intelligent_tracker.detectors import MockDetector
-    from intelligent_tracker.pipeline.config import PipelineConfig
-    from intelligent_tracker.pipeline.engine import PipelineEngine
+def _check_track_and_fps(video_path: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Verify Track.to_dict() keys and VideoSource FPS attributes."""
     from intelligent_tracker.tracker.track import Track
     from intelligent_tracker.video.source import VideoSource
 
@@ -56,31 +54,179 @@ def _check_track_and_scale_contracts(tmp: Path, video_path: Path, failures: list
     finally:
         vs.stop()
 
-    cfg = PipelineConfig(db_path=str(tmp / "p.db"), detector_model="mock", reid_model="color", tracker_type="centroid")
+
+def _check_hd_scale_and_centroid(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Verify 1920x1080 max_dim=1280 rescale and multi-frame CentroidTracker persistence (P0-3)."""
+    from intelligent_tracker.detectors import MockDetector
+    from intelligent_tracker.pipeline.config import PipelineConfig
+    from intelligent_tracker.pipeline.engine import PipelineEngine
+    from intelligent_tracker.pipeline.frame_processor import FrameProcessor
+
+    cfg = PipelineConfig(
+        db_path=str(tmp / "p.db"), detector_model="mock", reid_model="color", tracker_type="centroid"
+    )
     bundle = PipelineEngine.build(cfg)
     try:
-        bundle.detector = MockDetector(boxes=[[1400, 700, 1580, 950, 0.9, "person"]])
-        from intelligent_tracker.pipeline.frame_processor import FrameProcessor
+        det = MockDetector(boxes=[[1400, 700, 1580, 950, 0.9, "person"]])
+        bundle.detector = det
         proc = FrameProcessor(bundle)
         hd_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        res = proc.step(hd_frame, timestamp=1.0, max_dim=1280)
-        # In 1920x1080 with max_dim=1280, frame is downscaled by 1280/1920 (2/3)
-        # If tracks are NOT rescaled back, x1 will be ~933 instead of ~1400
-        if res.tracks:
-            bx = res.tracks[0].bbox[0]
-            checks["hd_track_x1"] = bx
-            if bx < 1200:
-                failures.append(f"FrameProcessor max_dim=1280 coordinate mismatch: input x1=1400 returned x1={bx}")
-        else:
+        track_ids: list[int] = []
+        last_res = None
+        for idx in range(5):
+            det.boxes = [[1350 + idx * 15, 700, 1530 + idx * 15, 950, 0.9, "person"]]
+            last_res = proc.step(hd_frame, timestamp=1700000000.0 + idx * 0.1, max_dim=1280)
+            if last_res.tracks:
+                track_ids.append(next(iter(last_res.tracks.keys())))
+        if not last_res or not last_res.tracks:
             checks["hd_track_x1"] = None
+            failures.append("FrameProcessor.step() returned empty res.tracks on 1920x1080 input")
+            return
+        bx = next(iter(last_res.tracks.values())).bbox[0]
+        checks["hd_track_x1"] = bx
+        checks["centroid_hd_track_ids"] = track_ids
+        if bx < 1200:
+            failures.append(f"FrameProcessor max_dim=1280 coordinate mismatch: x1={bx}")
+        if len(track_ids) < 5 or len(set(track_ids)) != 1:
+            failures.append(f"CentroidTracker P0-3 multi-frame persistence failed: ids={track_ids}")
     finally:
         bundle.close()
 
 
-def _check_replay_bridge_and_ttl(tmp: Path, video_path: Path, failures: list[str], checks: dict[str, Any]) -> None:
+def _check_async_clock(
+    bundle: Any, frame: np.ndarray, failures: list[str], checks: dict[str, Any]
+) -> dict[int, Any]:
+    """Verify real-clock AsyncInferenceWorker epoch vs monotonic stamping (P0-1)."""
+    from dashboard.services.async_inference_worker import AsyncInferenceWorker
+    from intelligent_tracker.pipeline.frame_processor import FrameProcessor
+
+    worker = AsyncInferenceWorker(FrameProcessor(bundle), max_dim=1280)
+    worker.start()
+    worker.submit(frame, timestamp=None, frame_seq=1)
+    res = None
+    for _ in range(40):
+        res = worker.get_latest_result()
+        if res is not None:
+            break
+        time.sleep(0.025)
+    worker.stop()
+    ts_val = float(getattr(res, "timestamp", 0.0)) if res is not None else 0.0
+    checks["async_worker_step_timestamp"] = ts_val
+    if res is None or ts_val < 1_000_000_000.0:
+        failures.append(f"P0-1 clock-domain bug: AsyncInferenceWorker stamped monotonic timestamp={ts_val}")
+    return res.tracks if res else {}
+
+
+def _check_overlay_heatmap(
+    bundle: Any, frame: np.ndarray, tracks: dict[int, Any], failures: list[str], checks: dict[str, Any]
+) -> None:
+    """Verify FrameOverlayRenderer heatmap overlay and 16:9 output shape (P0-4)."""
+    from dashboard.services.frame_overlay import FrameOverlayRenderer
+
+    try:
+        out = FrameOverlayRenderer.render(
+            frame,
+            tracks,
+            {"heatmap": True},
+            "cam_01",
+            10.0,
+            0.0,
+            analytics=bundle.analytics,
+            draw_heatmap=True,
+        )
+        checks["overlay_16_9_shape"] = list(out.shape)
+        if out.shape != (720, 1280, 3):
+            failures.append(f"FrameOverlayRenderer 16:9 shape mismatch: {out.shape}")
+    except (AttributeError, RuntimeError, TypeError) as exc:
+        checks["overlay_heatmap_error"] = f"{type(exc).__name__}: {exc}"
+        failures.append(f"P0-4 FrameOverlayRenderer(draw_heatmap=True) raised {type(exc).__name__}: {exc}")
+
+
+def _check_async_clock_and_overlay(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Run AsyncInferenceWorker clock check and FrameOverlayRenderer heatmap check."""
+    from intelligent_tracker.detectors import MockDetector
+    from intelligent_tracker.pipeline.config import PipelineConfig
+    from intelligent_tracker.pipeline.engine import PipelineEngine
+
+    cfg = PipelineConfig(
+        db_path=str(tmp / "clk.db"), detector_model="mock", reid_model="color", tracker_type="centroid"
+    )
+    bundle = PipelineEngine.build(cfg)
+    try:
+        bundle.detector = MockDetector(boxes=[[100, 100, 220, 320, 0.9, "person"]])
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        tracks = _check_async_clock(bundle, frame, failures, checks)
+        _check_overlay_heatmap(bundle, frame, tracks, failures, checks)
+    finally:
+        bundle.close()
+
+
+def _check_capture_only_mjpeg(
+    tmp: Path, video_path: Path, failures: list[str], checks: dict[str, Any]
+) -> None:
+    """Verify capture_only mode does not freeze annotated MJPEG /stream/{id} (P1-6)."""
+    from dashboard.services.processing_mode_service import ProcessingModeService
+    from dashboard.services.stream_worker import StreamWorker
+    from dashboard.stream_manager import StreamManager
+    from intelligent_tracker.pipeline.frame_processor import FrameStepResult
+
+    mode_svc = ProcessingModeService(mode="capture_only")
+    mgr = StreamManager(
+        camera_id="cam_cap",
+        source_override=str(video_path),
+        db_path=str(tmp / "cap.db"),
+        custom_cfg={"detector": {"model": "mock"}, "reid": {"model": "color"}},
+        processing_mode_service=mode_svc,
+    )
+    try:
+        worker = StreamWorker(mgr)
+        f1 = np.full((240, 320, 3), 40, dtype=np.uint8)
+        f2 = np.full((240, 320, 3), 200, dtype=np.uint8)
+        worker._process_single_frame(
+            FrameStepResult(frame=f1, detections=[], tracks={}, analytics={}, identifications=[])
+        )
+        j1 = mgr.get_latest_frame_jpeg(annotated=True)
+        worker._process_single_frame(
+            FrameStepResult(frame=f2, detections=[], tracks={}, analytics={}, identifications=[])
+        )
+        j2 = mgr.get_latest_frame_jpeg(annotated=True)
+        changed = j1 != j2 and len(j2) > 0
+        checks["capture_only_annotated_mjpeg_updates"] = changed
+        if not changed:
+            failures.append(
+                "P1-6: capture_only mode froze get_latest_frame_jpeg(annotated=True) on static placeholder"
+            )
+    finally:
+        mgr.stop()
+
+
+def _check_replay_ttl(
+    db: Any, vs: Any, video_path: Path, failures: list[str], checks: dict[str, Any]
+) -> Any:
+    """Verify FileDetectionReplayProvider reloads after DB save_video_run()."""
+    from dashboard.services.file_detection_replay import FileDetectionReplayProvider
+
+    rep = FileDetectionReplayProvider(db, vs)
+    loaded_before = rep.ensure_loaded()
+    tracks = [{"track_id": 1, "label": "person", "confidence": 0.9, "bbox": [10, 10, 50, 50], "entity_id": 1}]
+    db.save_video_run(
+        video_filename=video_path.name,
+        report={"entities": [], "alerts": []},
+        frame_detections=[{"frame_idx": 0, "timestamp_sec": 0.0, "tracks": tracks}],
+        source_fps=10.0,
+    )
+    loaded_after = rep.ensure_loaded()
+    checks["replay_ttl_reload_after_complete"] = bool(loaded_after)
+    if not loaded_before and not loaded_after:
+        failures.append("FileDetectionReplayProvider.ensure_loaded() cached _loaded=True on empty DB")
+    return rep
+
+
+def _check_replay_bridge_and_ttl(
+    tmp: Path, video_path: Path, failures: list[str], checks: dict[str, Any]
+) -> None:
     """Check CachedReplayProvider WorldEntityBridge sync and FileDetectionReplayProvider TTL."""
     from dashboard.services.cached_replay_provider import CachedReplayProvider
-    from dashboard.services.file_detection_replay import FileDetectionReplayProvider
     from intelligent_tracker.database import TrackerDB
     from intelligent_tracker.pipeline.config import PipelineConfig
     from intelligent_tracker.pipeline.engine import PipelineEngine
@@ -88,33 +234,19 @@ def _check_replay_bridge_and_ttl(tmp: Path, video_path: Path, failures: list[str
 
     db = TrackerDB(str(tmp / "replay.db"))
     vs = VideoSource(str(video_path))
-    cfg = PipelineConfig(db_path=str(tmp / "replay.db"), detector_model="mock", reid_model="color", tracker_type="centroid")
+    cfg = PipelineConfig(
+        db_path=str(tmp / "replay.db"), detector_model="mock", reid_model="color", tracker_type="centroid"
+    )
     bundle = PipelineEngine.build(cfg)
     try:
-        rep = FileDetectionReplayProvider(db, vs)
-        loaded_before = rep.ensure_loaded()
-        db.save_video_run(
-            video_filename=video_path.name,
-            report={"entities": [], "alerts": []},
-            frame_detections=[{
-                "frame_idx": 0, "timestamp_sec": 0.0,
-                "tracks": [{"track_id": 1, "label": "person", "confidence": 0.9, "bbox": [10, 10, 50, 50], "entity_id": 1}],
-            }],
-            source_fps=10.0,
-        )
-        loaded_after = rep.ensure_loaded()
-        checks["replay_ttl_reload_after_complete"] = bool(loaded_after)
-        if not loaded_before and not loaded_after:
-            failures.append("FileDetectionReplayProvider.ensure_loaded() permanently cached _loaded=True on empty DB")
-
+        rep = _check_replay_ttl(db, vs, video_path, failures, checks)
         crp = CachedReplayProvider(db, vs, bundle=bundle, replay_provider=rep, run_reid=False)
-        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        crp.build_step_result(frame, now=100.0, frame_seq=0, media_time_s=0.0)
+        crp.build_step_result(np.zeros((480, 640, 3), dtype=np.uint8), now=100.0, frame_seq=0, media_time_s=0.0)
         snap = bundle.world_graph.snapshot() if bundle.world_graph and hasattr(bundle.world_graph, "snapshot") else {}
         wg_entities = len(snap.get("entities", {}))
         checks["replay_world_bridge_entities"] = wg_entities
         if wg_entities == 0:
-            failures.append("CachedReplayProvider(run_reid=False) skipped WorldEntityBridge sync (0 entities in WorldGraph)")
+            failures.append("CachedReplayProvider(run_reid=False) skipped WorldEntityBridge sync (0 entities)")
     finally:
         vs.stop()
         bundle.close()
@@ -129,11 +261,18 @@ def run_probe() -> dict[str, Any]:
         tmp = Path(tmpdir)
         vid = tmp / "vid.mp4"
         _write_hd_video(vid)
-        _check_track_and_scale_contracts(tmp, vid, failures, checks)
+        _check_track_and_fps(vid, failures, checks)
+        _check_hd_scale_and_centroid(tmp, failures, checks)
+        _check_async_clock_and_overlay(tmp, failures, checks)
+        _check_capture_only_mjpeg(tmp, vid, failures, checks)
         _check_replay_bridge_and_ttl(tmp, vid, failures, checks)
 
     status = "error" if failures else "ok"
-    summary = f"Replay pipeline probe: {len(failures)} failure(s)" if failures else "Replay pipeline probe passed all checks."
+    summary = (
+        f"Replay pipeline probe: {len(failures)} failure(s)"
+        if failures
+        else "Replay pipeline probe passed all checks."
+    )
     return {"status": status, "summary": summary, "details": {"checks": checks, "failures": failures}}
 
 

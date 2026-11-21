@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-21] feat: Step 1: Diagnostics Upgrades, Unmocked Probes & Red Baseline
+- **Type**: feat
+- **Summary**: Upgraded system-diagnostics/frontier-architect tooling, added ruff/mypy dev tooling, hardened 4 unmocked workspace probes (including spa_nine_tab_cdp_probe), resolved stale test traces, and captured verified Red baseline.
+- **Files** (3):
+  - `.diagnostics/probes/cold_boot_world_probe.py`
+  - `.diagnostics/probes/replay_pipeline_probe.py`
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-20] fix: Integration Diagnostics Remediation Milestone 3
 - **Type**: fix
 - **Summary**: Fixed scrubber reports/media URLs, entities+alerts timeline extraction, BEV telemetry wiring, Studio video overlay gating, armed UI/AsyncInferenceWorker sync, boot stream gating, and zero active scan/surface defects
@@ -134,13 +143,3 @@
   - `dashboard/static/js/processing_mode.js`
   - `tests/test_step4_processing_mode_ui.py`
 - **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step3_architecture_budgets tests.test_dashboard_di
-
-## [2026-11-17] fix: Fix stale hidden active_tab and browser-cache recovery in processing_mode.js
-- **Type**: fix
-- **Summary**: Unconditionally sync active_tab on visible setMode/syncCameraFocus/window-focus and cache-bust processing_mode.js?v=2 so background/other-tab hidden state never blocks vision overlays.
-- **Files** (4):
-  - `CHANGELOG.md`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: MPLBACKEND=Agg .venv\\Scripts\\python.exe -m unittest discover tests
