@@ -24,6 +24,8 @@ class TelemetryMixin:
         """Record a periodic system resource telemetry sample."""
         ts = timestamp if timestamp is not None else time.time()
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -36,12 +38,17 @@ class TelemetryMixin:
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_resource_metrics(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Retrieve recent system resource telemetry samples in chronological order."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -69,6 +76,8 @@ class TelemetryMixin:
         """Log a stream lifecycle transition (e.g. START, HIBERNATE, RESUME, EVICT, STOP)."""
         ts = timestamp if timestamp is not None else time.time()
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -81,6 +90,9 @@ class TelemetryMixin:
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -91,6 +103,8 @@ class TelemetryMixin:
     ) -> List[Dict[str, Any]]:
         """Retrieve historical stream lifecycle events."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 if camera_id:

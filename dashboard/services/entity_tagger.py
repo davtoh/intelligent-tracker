@@ -9,6 +9,7 @@ embeddings, persists thumbnails, and registers entities into SQLite TrackerDB.
 import logging
 import os
 import time
+import uuid
 from typing import Any
 
 import cv2
@@ -18,6 +19,49 @@ from intelligent_tracker.reid.factory import ReIDExtractorFactory
 
 logger = logging.getLogger(__name__)
 CROPS_DIR = os.path.join("data", "crops")
+
+
+def _save_tag_crop_and_anchor(
+    db: Any, entity_id: int, entity_name: str, notes: str, emb: np.ndarray, crop: np.ndarray
+) -> tuple[int, str]:
+    """Write collision-free crop image and persist locked anchor + descriptor version."""
+    slug = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in entity_name.lower())
+    crop_rel_path = os.path.join(
+        CROPS_DIR, f"{slug}_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.jpg"
+    ).replace("\\", "/")
+    abs_crop_path = os.path.abspath(crop_rel_path)
+    os.makedirs(os.path.dirname(abs_crop_path), exist_ok=True)
+    cv2.imwrite(abs_crop_path, crop)
+    sig_id = db.add_signature(entity_id=entity_id, embedding=emb, crop_path=crop_rel_path, is_anchor=1, locked=1)
+    if hasattr(db, "record_descriptor_version"):
+        db.record_descriptor_version(
+            entity_id=entity_id, embedding=emb, crop_path=crop_rel_path,
+            source="manual_tag", notes=notes or "Manual tag anchor", is_anchor=1,
+        )
+    return sig_id, crop_rel_path
+
+
+def _sync_matcher_and_bridge(
+    gallery_matcher: Any, world_bridge: Any, track_id: int | None,
+    entity_id: int | None, entity_name: str, category: str, camera_id: str,
+) -> None:
+    """Update GalleryMatcher cache and WorldEntityBridge assignment after tagging."""
+    if gallery_matcher is not None:
+        if track_id is not None and isinstance(getattr(gallery_matcher, "_identified_tracks", None), dict):
+            gallery_matcher._identified_tracks[track_id] = {
+                "entity_id": entity_id, "entity_name": entity_name, "category": category, "reid_score": 1.0,
+            }
+        try:
+            gallery_matcher.refresh_gallery()
+        except Exception:
+            pass
+    if world_bridge is not None and track_id is not None and entity_id is not None and hasattr(world_bridge, "reassign_track"):
+        try:
+            world_bridge.reassign_track(
+                camera_id=camera_id, track_id=track_id, entity_id=entity_id, name=entity_name, category=category,
+            )
+        except Exception:
+            pass
 
 
 class EntityTaggerService:
@@ -90,13 +134,7 @@ class EntityTaggerService:
         else:
             entity_id = db.add_entity(name=entity_name, category=category, notes=notes)
 
-        slug = entity_name.lower().replace(" ", "_")
-        crop_rel_path = os.path.join(CROPS_DIR, f"{slug}_{int(time.time())}.jpg").replace("\\", "/")
-        abs_crop_path = os.path.abspath(crop_rel_path)
-        os.makedirs(os.path.dirname(abs_crop_path), exist_ok=True)
-        cv2.imwrite(abs_crop_path, crop)
-
-        sig_id = db.add_signature(entity_id=entity_id, embedding=emb, crop_path=crop_rel_path)
+        sig_id, crop_rel_path = _save_tag_crop_and_anchor(db, entity_id, entity_name, notes, emb, crop)
         bx, by, bw, bh = bbox_tuple
         db.record_sighting(
             entity_id=entity_id, track_id=track_id or 0, source=camera_id,
@@ -112,19 +150,23 @@ class EntityTaggerService:
         entity_name: str,
         category: str,
         gallery_matcher: Any,
+        *,
+        entity_id: int | None = None,
+        camera_id: str = "cam_01",
+        world_bridge: Any = None,
     ) -> None:
-        """Propagate newly tagged identity to active tracker track and gallery matcher."""
+        """Propagate newly tagged identity to active tracker track, gallery matcher, and world bridge."""
         if track_id is not None and tracker is not None:
-            tracks = getattr(tracker, "tracks", {}) or {}
-            trk = tracks.get(track_id)
+            trk = (getattr(tracker, "tracks", {}) or {}).get(track_id)
             if trk is not None:
+                if entity_id is not None:
+                    trk.entity_id = entity_id
                 trk.entity_name = entity_name
                 trk.category = category
-        if gallery_matcher is not None:
-            try:
-                gallery_matcher.refresh_gallery()
-            except Exception:
-                pass
+                trk.entity_category = category
+                trk.identity_label = entity_name
+                trk.reid_score = 1.0
+        _sync_matcher_and_bridge(gallery_matcher, world_bridge, track_id, entity_id, entity_name, category, camera_id)
 
     @staticmethod
     def tag_entity(
@@ -139,6 +181,7 @@ class EntityTaggerService:
         tracker: Any = None,
         reid_extractor: Any = None,
         gallery_matcher: Any = None,
+        world_bridge: Any = None,
     ) -> dict[str, Any]:
         """Extract frame crop, compute deterministic Re-ID embedding, and register entity."""
         if not db:
@@ -152,7 +195,8 @@ class EntityTaggerService:
         entity_id, sig_id, crop_rel_path = EntityTaggerService._upsert_entity_and_signature(
             db, entity_name, category, notes, emb, crop, camera_id, track_id, bbox_tuple)
         EntityTaggerService._update_live_track_identity(
-            tracker, track_id, entity_name, category, gallery_matcher)
+            tracker, track_id, entity_name, category, gallery_matcher,
+            entity_id=entity_id, camera_id=camera_id, world_bridge=world_bridge)
         logger.info("Successfully tagged entity '%s' (ID #%d, sig #%d)", entity_name, entity_id, sig_id)
         return {"entity_id": entity_id, "name": entity_name, "category": category,
                 "signature_id": sig_id, "crop_path": crop_rel_path}

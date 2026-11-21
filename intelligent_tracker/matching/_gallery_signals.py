@@ -123,6 +123,35 @@ def _resolve_media_fields(
     return resolved_video, resolved_offset
 
 
+def _index_periodic_sighting_fts(
+    matcher: Any,
+    *,
+    entity_id: int,
+    name: str,
+    category: str,
+    track_id: int,
+    source: str,
+    zone_id: str,
+    confidence: float,
+    timestamp: float,
+    video_filename: str,
+    media_offset_sec: float,
+) -> None:
+    """Index a periodic sighting into EventFTSIndex if wired on matcher."""
+    fts_index = getattr(matcher, "fts_index", None)
+    if fts_index is None:
+        return
+    try:
+        fts_index.index_sighting(
+            entity_id=entity_id, entity_name=name, category=category,
+            camera_id=source, zone_id=zone_id, confidence=confidence,
+            timestamp=timestamp, metadata={"track_id": track_id},
+            video_filename=video_filename, media_offset_sec=media_offset_sec,
+        )
+    except Exception as exc:
+        logger.debug("Periodic sighting FTS indexing skipped: %s", exc)
+
+
 def emit_periodic_sighting(
     matcher: Any,
     *,
@@ -144,7 +173,6 @@ def emit_periodic_sighting(
     last_log = matcher._last_sighting_time.get(tid)
     if last_log is not None and (timestamp - last_log < matcher.sighting_interval) and (timestamp >= last_log):
         return False
-
     resolved_video, resolved_offset = _resolve_media_fields(matcher, video_filename, media_offset_sec, timestamp)
     matcher.db.add_sighting(
         entity_id=entity_id, track_id=tid, source=source,
@@ -152,15 +180,9 @@ def emit_periodic_sighting(
         video_filename=resolved_video, media_offset_sec=resolved_offset,
     )
     matcher._last_sighting_time[tid] = timestamp
-    fts_index = getattr(matcher, "fts_index", None)
-    if fts_index is not None:
-        try:
-            fts_index.index_sighting(
-                entity_id=entity_id, entity_name=name, category=category,
-                camera_id=source, zone_id=zone_id, confidence=confidence,
-                timestamp=timestamp, metadata={"track_id": tid},
-                video_filename=resolved_video, media_offset_sec=resolved_offset,
-            )
-        except Exception as exc:
-            logger.debug("Periodic sighting FTS indexing skipped: %s", exc)
+    _index_periodic_sighting_fts(
+        matcher, entity_id=entity_id, name=name, category=category, track_id=tid,
+        source=source, zone_id=zone_id, confidence=confidence, timestamp=timestamp,
+        video_filename=resolved_video, media_offset_sec=resolved_offset,
+    )
     return True

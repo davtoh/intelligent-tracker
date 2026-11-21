@@ -8,7 +8,6 @@ analytics, RSAC alerts, and active-learning candidates into SQLite ``TrackerDB``
 """
 
 import logging
-import math
 import os
 import threading
 import time
@@ -23,7 +22,10 @@ from intelligent_tracker.batch_reporting import (
     export_occurrence_report,
     flush_meta,
     format_occurrence_report,
+    open_video_capture as _open_video_capture,
     print_occurrence_report,
+    read_video_timestamp as _read_video_timestamp,
+    record_step_occurrences as _record_step_occurrences,
     run_batch_cli,
 )
 from intelligent_tracker.database import TrackerDB
@@ -70,68 +72,9 @@ def _dispatch_frame_flush(
     return len(frame_detections)
 
 
-def _open_video_capture(video_path: str) -> tuple[cv2.VideoCapture, dict[str, Any]]:
-    """Validate and open a recorded video file, returning capture and metadata."""
-    if not os.path.isfile(video_path):
-        raise FileNotFoundError(f"Video file not found: {video_path}")
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise RuntimeError(f"Failed to open video file: {video_path}")
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    raw_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
-    fps = raw_fps if (math.isfinite(raw_fps) and raw_fps > 0.0) else 30.0
-    meta = {
-        "total_frames": total_frames,
-        "fps": fps,
-        "source_fps": round(fps, 4),
-        "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0),
-        "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0),
-        "duration_sec": total_frames / fps if fps > 0 else 0.0,
-    }
-    return cap, meta
-
-
-def _read_video_timestamp(cap: cv2.VideoCapture, read_frames: int, fps: float) -> float:
-    """Resolve current frame media offset in seconds from container PTS or FPS."""
-    pos_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
-    if pos_msec is not None and math.isfinite(pos_msec) and pos_msec > 0.0:
-        return float(pos_msec) / 1000.0
-    return (read_frames - 1) / fps
-
-
 def _step_video_frame(processor: FrameProcessor, frame: Any, timestamp: float) -> FrameStepResult:
     """Execute one canonical ``FrameProcessor.step`` cycle on an offline frame."""
     return processor.step(frame, timestamp=timestamp)
-
-
-def _record_step_occurrences(
-    step_res: FrameStepResult,
-    state: dict[str, Any],
-    read_frames: int,
-    width: int,
-    height: int,
-    *,
-    video_ts: float | None = None,
-) -> None:
-    """Accumulate detection, identification, and overlay track records from a step."""
-    state["total_detections"] += len(step_res.detections)
-    if step_res.identifications:
-        state["matched_identifications"] += len(step_res.identifications)
-        for ev in step_res.identifications:
-            if hasattr(ev, "entity_id"):
-                state["identified_entities"].add(ev.entity_id)
-
-    tracks = step_res.tracks
-    track_objects = tracks.values() if isinstance(tracks, dict) else tracks
-    active_tracks = [t.to_dict() for t in track_objects if hasattr(t, "to_dict")]
-    if active_tracks:
-        rel_time = float(video_ts) if video_ts is not None else float(step_res.timestamp)
-        state["frame_detections"].append({
-            "time": round(rel_time, 3),
-            "frame": read_frames - 1,
-            "source_resolution": [width, height],
-            "tracks": active_tracks,
-        })
 
 
 class VideoIndexer:
@@ -156,8 +99,28 @@ class VideoIndexer:
         video_filename: str = "",
         world_graph: Any = None,
         confidence_engine: Any = None,
+        fts_index: Any = None,
     ) -> None:
+        self._owns_db = db is None
         self.db = db if db is not None else TrackerDB(db_path)
+        try:
+            self._init_components(
+                detector_name, reid_name, reid_threshold, tracker_type, sample_rate,
+                conf_threshold, classes, analytics, rsac_manager, active_learning,
+                event_bus, frame_processor, video_filename, world_graph, confidence_engine, fts_index,
+            )
+        except Exception:
+            self.close()
+            raise
+
+    def _init_components(
+        self, detector_name: str, reid_name: str, reid_threshold: float, tracker_type: str,
+        sample_rate: int, conf_threshold: float, classes: list[str] | None,
+        analytics: AnalyticsEngine | None, rsac_manager: Any, active_learning: Any,
+        event_bus: Any, frame_processor: FrameProcessor | None, video_filename: str,
+        world_graph: Any, confidence_engine: Any, fts_index: Any,
+    ) -> None:
+        """Initialize detector, tracker, Re-ID extractor, matcher, and world hooks."""
         self.sample_rate = max(1, int(sample_rate))
         self._cfg_meta = (detector_name, reid_name, float(reid_threshold), tracker_type, float(conf_threshold), classes)
         self.rsac_manager, self.active_learning = rsac_manager, active_learning
@@ -165,15 +128,31 @@ class VideoIndexer:
         self.video_filename = str(video_filename or "").strip()
         self.world_graph = world_graph if world_graph is not None else WorldGraph()
         self.confidence_engine = confidence_engine if confidence_engine is not None else ConfidenceEngine(db=self.db)
+        self.fts_index = fts_index
         self.detector = _create_batch_detector(detector_name, conf_threshold, classes)
         self.tracker = TrackerFactory.create(tracker_type)
         self.extractor = ReIDExtractorFactory.create(reid_name)
         self.matcher = GalleryMatcher(
             db=self.db, extractor=self.extractor, reid_threshold=reid_threshold,
             sighting_interval=1.0, active_learning=active_learning,
-            confidence_engine=self.confidence_engine,
+            confidence_engine=self.confidence_engine, fts_index=self.fts_index,
         )
         self.analytics = analytics
+
+    def close(self) -> None:
+        """Close owned TrackerDB connection idempotently."""
+        if getattr(self, "_owns_db", False) and getattr(self, "db", None) is not None:
+            try:
+                self.db.close()
+            finally:
+                self.db = None
+                self._owns_db = False
+
+    def __enter__(self) -> "VideoIndexer":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
 
     def _build_frame_processor(self, source_name: str, video_filename: str = "") -> FrameProcessor:
         """Build or configure the canonical ``FrameProcessor`` for offline video frames."""
@@ -182,10 +161,14 @@ class VideoIndexer:
             bundle = self.frame_processor.bundle
             if bundle.gallery_matcher is not None:
                 bundle.gallery_matcher.video_filename = resolved_video
+                if self.fts_index is not None and getattr(bundle.gallery_matcher, "fts_index", None) is None:
+                    bundle.gallery_matcher.fts_index = self.fts_index
             if bundle.active_learning is not None:
                 bundle.active_learning.video_filename = resolved_video
             return self.frame_processor
         self.matcher.video_filename = resolved_video
+        if self.fts_index is not None and getattr(self.matcher, "fts_index", None) is None:
+            self.matcher.fts_index = self.fts_index
         if self.active_learning is not None:
             self.active_learning.video_filename = resolved_video
         det, reid, thresh, trk, conf, classes = self._cfg_meta
@@ -198,6 +181,7 @@ class VideoIndexer:
             analytics=self.analytics, reid_extractor=self.extractor, gallery_matcher=self.matcher,
             rsac_manager=self.rsac_manager, active_learning=self.active_learning, event_bus=self.event_bus,
             world_graph=self.world_graph, confidence_engine=self.confidence_engine,
+            event_fts_index=self.fts_index,
         )
         return FrameProcessor(bundle=bundle)
 
@@ -237,6 +221,34 @@ class VideoIndexer:
         )
         return build_final_report(video_path, source_name, meta, state)
 
+    def _process_sampled_frame(
+        self, cap: cv2.VideoCapture, processor: FrameProcessor, frame: Any,
+        meta: dict[str, Any], state: dict[str, Any],
+        frame_flush_callback: Any, flush_step: int, progress_callback: Any, verbose: bool,
+    ) -> None:
+        """Step a single sampled frame through FrameProcessor and flush updates."""
+        state["processed_frames"] += 1
+        video_ts = _read_video_timestamp(cap, state["read_frames"], meta["fps"])
+        state["last_video_ts"] = video_ts
+        base_epoch = float(state["start_wall_time"])
+        if processor.bundle.gallery_matcher is not None:
+            processor.bundle.gallery_matcher.current_media_offset_sec = video_ts
+        if processor.bundle.active_learning is not None:
+            processor.bundle.active_learning.current_media_offset_sec = video_ts
+        media_state = getattr(self, "_media_offset_state", None)
+        if isinstance(media_state, dict):
+            media_state["start_wall_time"], media_state["offset_sec"] = base_epoch, video_ts
+        step_res = _step_video_frame(processor, frame, base_epoch + video_ts)
+        _record_step_occurrences(
+            step_res, state, state["read_frames"], meta["width"], meta["height"], video_ts=video_ts
+        )
+        if frame_flush_callback is not None and state["processed_frames"] % flush_step == 0:
+            state["last_flushed_idx"] = _dispatch_frame_flush(
+                frame_flush_callback, state["frame_detections"], state["last_flushed_idx"],
+                flush_meta(meta, state, video_ts, final=False),
+            )
+        emit_progress(progress_callback, state, meta, verbose)
+
     def _run_capture_loop(
         self, cap: cv2.VideoCapture, processor: FrameProcessor, meta: dict[str, Any],
         state: dict[str, Any], max_frames: int, stop_event: threading.Event | None,
@@ -257,35 +269,17 @@ class VideoIndexer:
                 break
             if (state["read_frames"] - 1) % self.sample_rate != 0:
                 continue
-            state["processed_frames"] += 1
-            video_ts = _read_video_timestamp(cap, state["read_frames"], meta["fps"])
-            state["last_video_ts"] = video_ts
-            base_epoch = float(state["start_wall_time"])
-            wall_ts = base_epoch + video_ts
-            if processor.bundle.gallery_matcher is not None:
-                processor.bundle.gallery_matcher.current_media_offset_sec = video_ts
-            if processor.bundle.active_learning is not None:
-                processor.bundle.active_learning.current_media_offset_sec = video_ts
-            media_state = getattr(self, "_media_offset_state", None)
-            if isinstance(media_state, dict):
-                media_state["start_wall_time"] = base_epoch
-                media_state["offset_sec"] = video_ts
-            step_res = _step_video_frame(processor, frame, wall_ts)
-            _record_step_occurrences(
-                step_res, state, state["read_frames"], meta["width"], meta["height"], video_ts=video_ts
+            self._process_sampled_frame(
+                cap, processor, frame, meta, state,
+                frame_flush_callback, flush_step, progress_callback, verbose,
             )
-            if frame_flush_callback is not None and state["processed_frames"] % flush_step == 0:
-                state["last_flushed_idx"] = _dispatch_frame_flush(
-                    frame_flush_callback, state["frame_detections"], state["last_flushed_idx"],
-                    flush_meta(meta, state, video_ts, final=False),
-                )
-            emit_progress(progress_callback, state, meta, verbose)
 
     def generate_occurrence_report(
-        self, entity_id: int | None = None, source: str | None = None
+        self, entity_id: int | None = None, source: str | None = None, video_filename: str | None = None,
     ) -> dict[str, Any]:
         """Generate occurrence analytics and sighting timelines across entities."""
-        return format_occurrence_report(self.db, entity_id=entity_id, source=source)
+        vf = video_filename if video_filename is not None else (self.video_filename or None)
+        return format_occurrence_report(self.db, entity_id=entity_id, source=source, video_filename=vf)
 
     def print_report(self, report: dict[str, Any]) -> None:
         """Format and print an occurrence analytics summary table to the console."""

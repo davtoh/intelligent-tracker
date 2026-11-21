@@ -104,10 +104,15 @@ class VideoRunRepositoryMixin:
             source_fps, run_type, base_filename, run_id, timestamp, generated_at, metrics,
         )
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(UPSERT_VIDEO_RUN_SQL, params)
                 self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
         record = self.get_video_run(rid, include_detections=False) or {}
@@ -131,6 +136,8 @@ class VideoRunRepositoryMixin:
             sql += f" AND (video_filename IN ({ph}) OR base_filename IN ({ph}))"
             params.extend(aliases + aliases)
         with self._lock:
+            if self._conn is None:
+                return None
             row = self._conn.execute(sql, params).fetchone()
         return _hydrate_video_run(row, include_detections=include_detections) if row else None
 
@@ -149,6 +156,8 @@ class VideoRunRepositoryMixin:
             sql += f" WHERE video_filename IN ({ph}) OR base_filename IN ({ph})"
             params.extend(aliases + aliases)
         with self._lock:
+            if self._conn is None:
+                return []
             rows = self._conn.execute(f"{sql} ORDER BY timestamp DESC", params).fetchall()
         return [_hydrate_video_run(r, include_detections=include_detections) for r in rows]
 
@@ -170,6 +179,8 @@ class VideoRunRepositoryMixin:
             sql += " AND run_id = ?"
             params.append(str(run_id).strip())
         with self._lock:
+            if self._conn is None:
+                return None
             row = self._conn.execute(f"{sql} ORDER BY timestamp DESC LIMIT 1", params).fetchone()
         if not row or row["frame_detections_json"] is None:
             return None
@@ -191,6 +202,8 @@ class VideoRunRepositoryMixin:
         """Update inferred ``source_resolution`` (and optional ``source_fps``) on a run."""
         res_json = json.dumps(source_resolution) if source_resolution is not None else None
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -200,6 +213,9 @@ class VideoRunRepositoryMixin:
                 )
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -211,6 +227,8 @@ class VideoRunRepositoryMixin:
             return False
         ph = ",".join("?" for _ in aliases)
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -220,6 +238,9 @@ class VideoRunRepositoryMixin:
                 )
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -230,6 +251,8 @@ class VideoRunRepositoryMixin:
             return 0
         ph = ",".join("?" for _ in aliases)
         with self._lock:
+            if self._conn is None:
+                return 0
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -238,5 +261,8 @@ class VideoRunRepositoryMixin:
                 )
                 self._conn.commit()
                 return cur.rowcount
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()

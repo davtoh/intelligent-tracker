@@ -38,6 +38,7 @@ def _build_sightings_query(
     start_time: Optional[str],
     end_time: Optional[str],
     limit: int,
+    video_filename: Optional[str] = None,
 ) -> tuple[str, list[Any]]:
     """Build parameterized SQL query and args for sightings filtering."""
     query = "SELECT s.*, e.name AS entity_name, e.category AS entity_category FROM sightings s LEFT JOIN entities e ON s.entity_id = e.id"
@@ -45,6 +46,7 @@ def _build_sightings_query(
         ("s.entity_id = ?", entity_id, entity_id is not None),
         ("s.source = ?", source.strip() if source else None, bool(source)),
         ("s.zone_id = ?", zone_id.strip() if zone_id else None, bool(zone_id)),
+        ("s.video_filename = ?", video_filename.strip() if video_filename else None, bool(video_filename)),
         ("s.timestamp >= ?", start_time, bool(start_time)),
         ("s.timestamp <= ?", end_time, bool(end_time)),
     ]
@@ -59,23 +61,28 @@ def _build_sightings_query(
     return query, params
 
 
-def _fetch_entity_analytics_rows(cursor: Any, entity_id: int) -> tuple[dict[str, Any], list[str], list[str], list[dict[str, Any]]]:
+def _fetch_entity_analytics_rows(
+    cursor: Any, entity_id: int, video_filename: Optional[str] = None
+) -> tuple[dict[str, Any], list[str], list[str], list[dict[str, Any]]]:
     """Fetch aggregate stats, sources, zones, and timeline rows for one entity."""
+    vf = video_filename.strip() if video_filename else ""
+    vf_clause = " AND video_filename = ?" if vf else ""
+    base_params: Tuple[Any, ...] = (entity_id, vf) if vf else (entity_id,)
     cursor.execute(
         "SELECT COUNT(*) as total_sightings, MIN(timestamp) as first_seen, MAX(timestamp) as last_seen,"
         " COUNT(DISTINCT source) as distinct_sources, COUNT(DISTINCT zone_id) as distinct_zones"
-        " FROM sightings WHERE entity_id = ?",
-        (entity_id,),
+        f" FROM sightings WHERE entity_id = ?{vf_clause}",
+        base_params,
     )
     stats = dict(cursor.fetchone())
-    cursor.execute("SELECT DISTINCT source FROM sightings WHERE entity_id = ? AND source != ''", (entity_id,))
+    cursor.execute(f"SELECT DISTINCT source FROM sightings WHERE entity_id = ? AND source != ''{vf_clause}", base_params)
     sources = [r[0] for r in cursor.fetchall()]
-    cursor.execute("SELECT DISTINCT zone_id FROM sightings WHERE entity_id = ? AND zone_id != ''", (entity_id,))
+    cursor.execute(f"SELECT DISTINCT zone_id FROM sightings WHERE entity_id = ? AND zone_id != ''{vf_clause}", base_params)
     zones = [r[0] for r in cursor.fetchall()]
     cursor.execute(
         "SELECT timestamp, source, zone_id, track_id, confidence, video_filename, media_offset_sec"
-        " FROM sightings WHERE entity_id = ? ORDER BY timestamp ASC",
-        (entity_id,),
+        f" FROM sightings WHERE entity_id = ?{vf_clause} ORDER BY timestamp ASC",
+        base_params,
     )
     return stats, sources, zones, [dict(r) for r in cursor.fetchall()]
 
@@ -90,6 +97,14 @@ def _compute_dwell_seconds(timeline: list[dict[str, Any]], first_seen: Optional[
         return max(0.0, (t_last - t_first).total_seconds())
     except Exception:
         return 0.0
+
+
+_INSERT_SIGHTING_SQL = """
+INSERT INTO sightings (
+    entity_id, track_id, source, timestamp, zone_id, bbox,
+    confidence, snapshot_path, video_filename, media_offset_sec
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
 
 
 class AnalyticsMixin:
@@ -109,26 +124,22 @@ class AnalyticsMixin:
         media_offset_sec: float = 0.0,
     ) -> int:
         """Log an entity sighting to the audit trail and return its ID."""
-        ts_str = _format_sighting_timestamp(timestamp)
-        bbox_str = _format_sighting_bbox(bbox)
+        params = (
+            entity_id, track_id, source.strip(), _format_sighting_timestamp(timestamp),
+            zone_id.strip(), _format_sighting_bbox(bbox), float(confidence),
+            snapshot_path.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
+        )
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cursor = self._conn.cursor()
             try:
-                cursor.execute(
-                    """
-                    INSERT INTO sightings (
-                        entity_id, track_id, source, timestamp, zone_id, bbox,
-                        confidence, snapshot_path, video_filename, media_offset_sec
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        entity_id, track_id, source.strip(), ts_str, zone_id.strip(),
-                        bbox_str, float(confidence), snapshot_path.strip(),
-                        str(video_filename or "").strip(), float(media_offset_sec or 0.0),
-                    ),
-                )
+                cursor.execute(_INSERT_SIGHTING_SQL, params)
                 self._conn.commit()
                 return cursor.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cursor.close()
 
@@ -142,10 +153,15 @@ class AnalyticsMixin:
         start_time: Optional[str] = None,
         end_time: Optional[str] = None,
         limit: int = 100,
+        video_filename: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Query sightings audit trail with flexible filtering."""
-        query, params = _build_sightings_query(entity_id, source, zone_id, start_time, end_time, limit)
+        query, params = _build_sightings_query(
+            entity_id, source, zone_id, start_time, end_time, limit, video_filename=video_filename
+        )
         with self._lock:
+            if self._conn is None:
+                return []
             cursor = self._conn.cursor()
             try:
                 cursor.execute(query, params)
@@ -163,6 +179,8 @@ class AnalyticsMixin:
             return {}
 
         with self._lock:
+            if self._conn is None:
+                return {}
             cursor = self._conn.cursor()
             try:
                 if entity_ids is None:
@@ -203,6 +221,11 @@ class AnalyticsMixin:
     def get_analytics_summary(self) -> dict[str, Any]:
         """Return aggregate entity, signature, and sighting breakdown statistics."""
         with self._lock:
+            if self._conn is None:
+                return {
+                    "total_entities": 0, "total_signatures": 0, "total_sightings": 0,
+                    "sightings_by_entity": {}, "sightings_by_source": {}, "sightings_by_zone": {},
+                }
             cursor = self._conn.cursor()
             try:
                 total_entities = int(cursor.execute("SELECT COUNT(*) FROM entities").fetchone()[0])
@@ -225,16 +248,22 @@ class AnalyticsMixin:
             "sightings_by_zone": by_zone,
         }
 
-    def get_entity_analytics(self, entity_id: int) -> Dict[str, Any]:
+    def get_entity_analytics(
+        self, entity_id: int, video_filename: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Compute occurrence frequency, dwell timeline, and zone journey for an entity."""
         entity = self.get_entity(entity_id)
         if not entity:
             return {"error": "Entity not found", "entity_id": entity_id}
 
         with self._lock:
+            if self._conn is None:
+                return {"error": "Database connection is closed", "entity_id": entity_id}
             cursor = self._conn.cursor()
             try:
-                stats, sources, zones, timeline = _fetch_entity_analytics_rows(cursor, entity_id)
+                stats, sources, zones, timeline = _fetch_entity_analytics_rows(
+                    cursor, entity_id, video_filename=video_filename
+                )
             finally:
                 cursor.close()
 

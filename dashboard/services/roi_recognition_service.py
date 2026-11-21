@@ -12,6 +12,7 @@ import base64
 import logging
 import os
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ import numpy as np
 
 from dashboard.services.entity_tagger import EntityTaggerService
 from intelligent_tracker.detectors import DetectorFactory
+from intelligent_tracker.memory.confidence import ConfidenceEngine
 from intelligent_tracker.reid import batch_cosine_similarity
 from intelligent_tracker.reid.factory import ReIDExtractorFactory
 
@@ -32,6 +34,79 @@ class RoiNotFoundError(LookupError):
 
 class RoiUnavailableError(RuntimeError):
     """Raised when a live camera stream has no frame buffered yet."""
+
+
+def _resolve_roi_services(
+    db: Any,
+    stream_manager: Any,
+    camera_pool: Any,
+    confidence_engine: Any,
+    fts_index: Any,
+) -> tuple[Any, Any]:
+    """Resolve ConfidenceEngine and EventFTSIndex from explicit args, stream, or pool."""
+    ce = (
+        confidence_engine
+        or getattr(stream_manager, "confidence_engine", None)
+        or getattr(camera_pool, "confidence_engine", None)
+    )
+    if ce is None and db is not None:
+        ce = ConfidenceEngine(db=db)
+    fts = (
+        fts_index
+        or getattr(stream_manager, "event_fts_index", None)
+        or getattr(camera_pool, "event_fts_index", None)
+    )
+    return ce, fts
+
+
+def _record_roi_side_effects(
+    svc: Any,
+    *,
+    entity_id: int,
+    entity_name: str,
+    category: str,
+    emb: np.ndarray,
+    crop_path: str,
+    notes: str,
+    source: str,
+    track_id: int | None,
+    camera_id: str | None,
+    video_filename: str,
+    media_offset_sec: float,
+) -> None:
+    """Record descriptor version, confidence feedback, FTS sighting, and live track sync."""
+    if hasattr(svc.db, "record_descriptor_version"):
+        svc.db.record_descriptor_version(
+            entity_id=entity_id, embedding=emb, crop_path=crop_path,
+            source="manual_roi", notes=notes or "ROI tag anchor", is_anchor=1,
+        )
+    if svc.confidence_engine is not None:
+        try:
+            svc.confidence_engine.record_human_feedback(
+                entity_id=entity_id, action="confirm", camera_id=source, zone_id="manual_roi",
+            )
+        except Exception as exc:
+            logger.debug("ROI confidence feedback skipped: %s", exc)
+    if svc.fts_index is not None:
+        try:
+            svc.fts_index.index_sighting(
+                entity_id=entity_id, entity_name=entity_name, category=category,
+                camera_id=source, zone_id="manual_roi", confidence=1.0,
+                metadata={"track_id": track_id or 0},
+                video_filename=video_filename, media_offset_sec=media_offset_sec,
+            )
+        except Exception as exc:
+            logger.debug("ROI FTS indexing skipped: %s", exc)
+    mgr = svc.stream_manager
+    if mgr is None and camera_id and svc.camera_pool is not None:
+        mgr = svc.camera_pool.get_stream(camera_id)
+    if mgr is not None:
+        EntityTaggerService._update_live_track_identity(
+            getattr(mgr, "tracker", None), track_id, entity_name, category,
+            getattr(mgr, "gallery_matcher", None),
+            entity_id=entity_id, camera_id=camera_id or source,
+            world_bridge=getattr(mgr, "world_bridge", None),
+        )
 
 
 def _resolve_roi_models(stream_manager: Any, camera_pool: Any) -> tuple[Any, Any]:
@@ -71,12 +146,17 @@ class RoiRecognitionService:
         camera_pool: Any = None,
         videos_dir: str = os.path.join("data", "videos"),
         crops_dir: str = os.path.join("data", "crops"),
+        confidence_engine: Any = None,
+        fts_index: Any = None,
     ) -> None:
         self.db = db
         self.stream_manager = stream_manager
         self.camera_pool = camera_pool
         self.videos_dir = videos_dir
         self.crops_dir = crops_dir
+        self.confidence_engine, self.fts_index = _resolve_roi_services(
+            db, stream_manager, camera_pool, confidence_engine, fts_index
+        )
 
     @staticmethod
     def _decode_base64_image(crop_base64: str) -> np.ndarray:
@@ -135,9 +215,10 @@ class RoiRecognitionService:
                 cap.set(cv2.CAP_PROP_POS_MSEC, ts_ms)
             ok, frame = cap.read()
             if not ok or frame is None or frame.size == 0:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                ok, frame = cap.read()
-            if not ok or frame is None or frame.size == 0:
+                if ts_ms > 0:
+                    raise RoiUnavailableError(
+                        f"Could not decode frame from '{safe_name}' at {timestamp_sec}s"
+                    )
                 raise RoiUnavailableError(f"Could not decode frame from '{safe_name}'")
             return frame
         finally:
@@ -262,9 +343,10 @@ class RoiRecognitionService:
         self,
         entity_name: str, category: str, entity_id: int | None, notes: str,
         crop: np.ndarray, emb: np.ndarray, box: tuple[int, int, int, int],
-        source: str, track_id: int | None, *, video_filename: str = "", media_offset_sec: float = 0.0,
+        source: str, track_id: int | None, *, video_filename: str = "",
+        media_offset_sec: float = 0.0, camera_id: str | None = None,
     ) -> dict[str, Any]:
-        """Upsert entity, write crop thumbnail, and record signature and sighting."""
+        """Upsert entity, write crop thumbnail, and record locked anchor, sighting, and side effects."""
         target = self.db.get_entity(entity_id) if entity_id is not None else self.db.get_entity_by_name(entity_name)
         if target is not None:
             resolved_id, resolved_name = int(target["id"]), target["name"]
@@ -274,17 +356,24 @@ class RoiRecognitionService:
             resolved_id = int(self.db.add_entity(name=entity_name, category=category, notes=notes))
             resolved_name = entity_name
         slug = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in resolved_name.lower())
-        crop_path = os.path.join(self.crops_dir, f"{slug}_{int(time.time() * 1000)}.jpg").replace("\\", "/")
+        crop_path = os.path.join(
+            self.crops_dir, f"{slug}_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.jpg"
+        ).replace("\\", "/")
         os.makedirs(os.path.dirname(os.path.abspath(crop_path)), exist_ok=True)
         cv2.imwrite(os.path.abspath(crop_path), crop)
-        sig_id = int(self.db.add_signature(entity_id=resolved_id, embedding=emb, crop_path=crop_path))
+        sig_id = int(self.db.add_signature(
+            entity_id=resolved_id, embedding=emb, crop_path=crop_path, is_anchor=1, locked=1,
+        ))
         bx, by, bw, bh = box
-        sighting_id = int(
-            self.db.record_sighting(
-                entity_id=resolved_id, track_id=track_id or 0, source=source,
-                zone_id="manual_roi", bbox=f"{bx},{by},{bw},{bh}", confidence=1.0,
-                snapshot_path=crop_path, video_filename=video_filename, media_offset_sec=media_offset_sec,
-            )
+        sighting_id = int(self.db.record_sighting(
+            entity_id=resolved_id, track_id=track_id or 0, source=source,
+            zone_id="manual_roi", bbox=f"{bx},{by},{bw},{bh}", confidence=1.0,
+            snapshot_path=crop_path, video_filename=video_filename, media_offset_sec=media_offset_sec,
+        ))
+        _record_roi_side_effects(
+            self, entity_id=resolved_id, entity_name=resolved_name, category=category,
+            emb=emb, crop_path=crop_path, notes=notes, source=source, track_id=track_id,
+            camera_id=camera_id, video_filename=video_filename, media_offset_sec=media_offset_sec,
         )
         return {
             "entity_id": resolved_id, "entity_name": resolved_name, "category": category,
@@ -312,5 +401,7 @@ class RoiRecognitionService:
         source = video_filename or camera_id or "manual_roi"
         return self._persist_roi_tag(
             entity_name, category, entity_id, notes, crop, emb, box, source, track_id,
-            video_filename=str(video_filename or "").strip(), media_offset_sec=float(timestamp_sec or 0.0),
+            video_filename=str(video_filename or "").strip(),
+            media_offset_sec=float(timestamp_sec or 0.0),
+            camera_id=camera_id,
         )

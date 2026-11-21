@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-21] feat: Step 3: P1 Pipeline, Multiview Telemetry, Video Studio & Persistence Hardening
+- **Type**: feat
+- **Summary**: Completed P1-6..P1-13, /ws/multiview JSON telemetry, P3 edge cases, and TRC-018
+- **Files** (32):
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+  - `dashboard/routers/analytics.py`
+  - `dashboard/routers/tagging.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/services/entity_tagger.py`
+  - `dashboard/services/roi_recognition_service.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+24 more)
+
 ## [2026-11-21] fix: Step 2 M2: Lock-Order Deadlock Elimination, Pool-Scoped Singletons & CameraConfigStore Hardening
 - **Type**: fix
 - **Summary**: Eliminated ProcessingModeService<->StreamRecordingController AB-BA deadlock (P0-2), guarded all pool.streams accesses with snapshot_pool_streams/_snapshot_pool_streams, hardened CameraConfigStore.load_cameras() for {'cameras': ...} payloads (TRC-017), wired pool-scoped EventBus/WorldGraph/ConfidenceEngine/EventFTSIndex singletons into CameraPool/PipelineEngine/app.state (P0-5), added SQLite rollback-on-error in memory_repo.py, and upgraded cold_boot_world_probe.py + test_step2_pool_singletons_and_locks.py.
@@ -125,19 +139,6 @@
   - `dashboard/static/js/live_player.js`
   - ... (+13 more)
 - **Verification**: python -m unittest discover tests (779 tests OK) + diagnose.py ui --live --capture-runtime (0 exceptions, 0 networkErrors)
-
-## [2026-11-17] fix: Unify active camera SSOT across frontend modules and eliminate cam_01 stub leakage
-- **Type**: fix
-- **Summary**: Initialize app.js and camera_manager.js from it_focused_camera_id/null instead of cam_01, validate syncCameraFocus against ProcessingModeUI.setAvailableCameras(), and gate LivePlayer.syncCameraFocus on resolved camera IDs.
-- **Files** (7):
-  - `CHANGELOG.md`
-  - `dashboard/static/app.js`
-  - `dashboard/static/camera_manager.js`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation tests.test_step2_tab_scoped_streams tests.test_camera_grid_teardown
 
 ## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
 - **Type**: fix

@@ -10,6 +10,20 @@ import time
 from typing import Optional, Dict, Any, List, Union, Tuple
 
 
+_UPSERT_TRANSITION_SQL = """
+INSERT INTO spatial_transitions (
+    link_id, source_camera, source_zone, target_camera, target_zone,
+    t_min, t_max, prior_boost, bidirectional, active
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(link_id) DO UPDATE SET
+    source_camera = excluded.source_camera, source_zone = excluded.source_zone,
+    target_camera = excluded.target_camera, target_zone = excluded.target_zone,
+    t_min = excluded.t_min, t_max = excluded.t_max,
+    prior_boost = excluded.prior_boost, bidirectional = excluded.bidirectional,
+    active = excluded.active
+"""
+
+
 class SpatialMixin:
     """Provides spatial zone, tripwire, transition, and homography persistence."""
 
@@ -28,6 +42,8 @@ class SpatialMixin:
         poly_json = json.dumps(polygon)
         color_str = json.dumps(color) if isinstance(color, (list, tuple)) else str(color)
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -46,12 +62,17 @@ class SpatialMixin:
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_zones(self, camera_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve spatial zones, optionally filtered by camera_id."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 if camera_id:
@@ -75,11 +96,16 @@ class SpatialMixin:
     def delete_zone(self, camera_id: str, name: str) -> bool:
         """Delete a spatial zone by camera and name."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM spatial_zones WHERE camera_id = ? AND name = ?", (camera_id, name))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -96,6 +122,8 @@ class SpatialMixin:
         line_json = json.dumps(line_segment)
         color_str = json.dumps(color) if isinstance(color, (list, tuple)) else str(color)
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -112,12 +140,17 @@ class SpatialMixin:
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_tripwires(self, camera_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve spatial tripwires, optionally filtered by camera_id."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 if camera_id:
@@ -142,11 +175,16 @@ class SpatialMixin:
     def delete_tripwire(self, camera_id: str, name: str) -> bool:
         """Delete a spatial tripwire by camera and name."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM spatial_tripwires WHERE camera_id = ? AND name = ?", (camera_id, name))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -165,33 +203,27 @@ class SpatialMixin:
     ) -> int:
         """Create or update a cross-camera spatial transition link."""
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
-                    """
-                    INSERT INTO spatial_transitions (link_id, source_camera, source_zone, target_camera, target_zone, t_min, t_max, prior_boost, bidirectional, active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(link_id) DO UPDATE SET
-                        source_camera = excluded.source_camera,
-                        source_zone = excluded.source_zone,
-                        target_camera = excluded.target_camera,
-                        target_zone = excluded.target_zone,
-                        t_min = excluded.t_min,
-                        t_max = excluded.t_max,
-                        prior_boost = excluded.prior_boost,
-                        bidirectional = excluded.bidirectional,
-                        active = excluded.active
-                    """,
+                    _UPSERT_TRANSITION_SQL,
                     (link_id, source_camera, source_zone, target_camera, target_zone, t_min, t_max, prior_boost, 1 if bidirectional else 0, 1 if active else 0),
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_spatial_transitions(self) -> List[Dict[str, Any]]:
         """Retrieve all cross-camera spatial transition links."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 cur.execute("SELECT * FROM spatial_transitions ORDER BY id ASC")
@@ -209,11 +241,16 @@ class SpatialMixin:
     def delete_spatial_transition(self, link_id: str) -> bool:
         """Delete a spatial transition link by link_id."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM spatial_transitions WHERE link_id = ?", (link_id,))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -228,6 +265,8 @@ class SpatialMixin:
     ) -> int:
         """Save 4-point homography calibration for a camera channel."""
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -245,12 +284,17 @@ class SpatialMixin:
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_homography_calibration(self, camera_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve homography calibration profile for a camera."""
         with self._lock:
+            if self._conn is None:
+                return None
             cur = self._conn.cursor()
             try:
                 cur.execute("SELECT * FROM homography_calibrations WHERE camera_id = ?", (camera_id,))
@@ -268,11 +312,16 @@ class SpatialMixin:
     def delete_homography_calibration(self, camera_id: str) -> bool:
         """Delete homography calibration profile for a camera."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM homography_calibrations WHERE camera_id = ?", (camera_id,))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 

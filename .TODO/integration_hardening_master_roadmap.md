@@ -38,12 +38,12 @@
 ---
 
 ## Step 3: P1 Pipeline, Multiview Telemetry, Lifecycle, Video Studio & Persistence Hardening (`P1-6`..`P1-13` + `/ws/multiview` JSON + P3 Edge Cases)
-- [ ] **Goal**: Stabilize capture/FPS/replay state machines, stream restarts, multiview JSON telemetry, offline Video Studio indexing/ROI tagging, and persistence/security invariants.
-- [ ] **Target Scope**:
-  - [ ] **Streaming, FPS & Replay (`P1-6`, `P1-7`, `P1-9`, `P1-10`, P3)**: Fallback to `_latest_raw_jpeg` in `capture_only`; prefer `vs.measured_fps` over inference-compute FPS and reset `_measured_fps` on pause/reconnect; fix `REPLAY` <-> `LIVE` races, `loop_video=False` EOF restart, `MotionGate` stale-bg burst on resume, `video_file` slow-disk reopen, and hibernation/paused wake fights.
-  - [ ] **Multiview JSON Telemetry & Pool Alerts**: Extend `/ws/multiview` to stream throttled JSON telemetry (`tracks`, `fps`, `priority_tier`, `armed`, `ai_active`) alongside binary JPEG frames, and fix slow-client HOL blocking (`MultiviewSession._flush_camera`) and `FrameSurface.resetSeq()` on restart.
-  - [ ] **Restarts, Video Studio, ROI & Persistence (`P1-8`, `P1-11`, `P1-12`, `P1-13`)**: Preserve `CameraNode` homography/pose and reapply `ScenarioManager` on camera restart/retry; close `PipelineBundle` in `StreamManager.stop()`; fix `_gallery_signals` FTS `video_filename`/`media_offset_sec`, `WorldQueryEngine` citations, `EntityIdentifiedEvent.zone_id`, and per-video report filtering; lock ROI anchors (`is_anchor=1, locked=1`) and sync `WorldEntityBridge`; harden `BackupManager` symlink/WAL restore, guard `_conn is None` across repository mixins, and add `.close()` cleanup (`TRC-018`).
-- [ ] **Definition of Done**: All backend/pipeline probes pass; `TRC-017` & `TRC-018` absent; full `unittest` 100% green.
+- [x] **Goal**: Stabilize capture/FPS/replay state machines, stream restarts, multiview JSON telemetry, offline Video Studio indexing/ROI tagging, and persistence/security invariants.
+- [x] **Target Scope**:
+  - [x] **Streaming, FPS & Replay (`P1-6`, `P1-7`, `P1-9`, `P1-10`, P3)**: Fallback to `_latest_raw_jpeg` in `capture_only`; prefer `vs.measured_fps` over inference-compute FPS and reset `_measured_fps` on pause/reconnect; fix `REPLAY` <-> `LIVE` races, `loop_video=False` EOF restart, `MotionGate` stale-bg burst on resume, `video_file` slow-disk reopen, and hibernation/paused wake fights.
+  - [x] **Multiview JSON Telemetry & Pool Alerts**: Extend `/ws/multiview` to stream throttled JSON telemetry (`tracks`, `fps`, `priority_tier`, `armed`, `ai_active`) alongside binary JPEG frames, and fix slow-client HOL blocking (`MultiviewSession._flush_camera`) and `FrameSurface.resetSeq()` on restart.
+  - [x] **Restarts, Video Studio, ROI & Persistence (`P1-8`, `P1-11`, `P1-12`, `P1-13`)**: Preserve `CameraNode` homography/pose and reapply `ScenarioManager` on camera restart/retry; close `PipelineBundle` in `StreamManager.stop()`; fix `_gallery_signals` FTS `video_filename`/`media_offset_sec`, `WorldQueryEngine` citations, `EntityIdentifiedEvent.zone_id`, and per-video report filtering; lock ROI anchors (`is_anchor=1, locked=1`) and sync `WorldEntityBridge`; harden `BackupManager` symlink/WAL restore, guard `_conn is None` across repository mixins, and add `.close()` cleanup (`TRC-018`).
+- [x] **Definition of Done**: All backend/pipeline probes pass; `TRC-017` & `TRC-018` absent; full `unittest` 100% green.
 
 ---
 

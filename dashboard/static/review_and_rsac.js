@@ -103,10 +103,10 @@
     }
 
     container.innerHTML = items.map(item => {
-      const sim = (item.similarity_score || 0) * 100;
+      const sim = (item.similarity ?? 0) * 100;
       const simColor = sim >= 60 ? '#06b6d4' : '#f59e0b';
       const cropUrl = item.crop_path ? (item.crop_path.startsWith('/') ? item.crop_path : `/${item.crop_path}`) : '/static/avatar-placeholder.png';
-      const matchLabel = item.matched_entity_name ? `Matched: <strong>${escapeHtml(item.matched_entity_name)}</strong>` : 'Unidentified Borderline Track';
+      const matchLabel = item.suggested_name ? `Matched: <strong>${escapeHtml(item.suggested_name)}</strong>` : 'Unidentified Borderline Track';
       const isPending = item.status === 'pending';
       const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(item.video_filename, item.media_offset_sec) || '';
 
@@ -146,7 +146,7 @@
                 </div>
                 <span style="font-weight: 600; color: ${simColor};">${sim.toFixed(1)}%</span>
               </div>
-              <div class="review-timestamp">${escapeHtml(item.created_at)}</div>
+              <div class="review-timestamp">${escapeHtml(item.timestamp)}</div>
               ${seekBtn ? `<div class="review-seek-row">${seekBtn}</div>` : ''}
             </div>
           </div>

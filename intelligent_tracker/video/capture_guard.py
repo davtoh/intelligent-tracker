@@ -6,93 +6,24 @@ from deadlocking acquisition worker threads or blocking server shutdown.
 """
 
 import logging
-import sys
 import threading
-import time
-from enum import Enum
 from typing import Any, Callable, Optional, Set, Tuple
 import numpy as np
+
+from intelligent_tracker.video._capture_guard_worker import (
+    CircuitState,
+    _CaptureReadJob,
+    _CircuitStateMixin,
+    advance_failure_state,
+    ensure_read_job,
+    spawn_driver_unbind,
+    wait_for_read_job,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class CircuitState(str, Enum):
-    """Camera driver circuit-breaker operating states."""
-
-    HEALTHY = "HEALTHY"
-    STALLED = "STALLED"
-    RECONNECTING = "RECONNECTING"
-
-
-class _CaptureReadJob:
-    """Encapsulates a decoupled read operation in a persistent daemon worker."""
-
-    def __init__(self, cap: Any):
-        self.cap = cap
-        self.trigger = threading.Event()
-        self.done = threading.Event()
-        self.stopped = False
-        self.is_reading = False
-        self.ret: bool = False
-        self.frame: Optional[np.ndarray] = None
-        self.thread = threading.Thread(
-            target=self._run,
-            name="CaptureReadJobWorker",
-            daemon=True,
-        )
-        self.thread.start()
-
-    def _run(self) -> None:
-        """Worker loop executing cap.read() upon trigger notification."""
-        com_initialized = False
-        if sys.platform == "win32":
-            try:
-                import ctypes
-
-                ole32 = getattr(ctypes, "windll", None)
-                if ole32 is not None:
-                    hr = ole32.ole32.CoInitializeEx(None, 0)
-                    com_initialized = hr in (0, 1)
-            except Exception as e:
-                logger.debug("COM initialization skipped/failed: %s", e)
-
-        try:
-            while not self.stopped:
-                if not self.trigger.wait(timeout=0.1):
-                    continue
-                self.trigger.clear()
-                if self.stopped:
-                    break
-                self.is_reading = True
-                try:
-                    ret, frame = self.cap.read()
-                except Exception as e:
-                    logger.debug("Exception in cap.read() worker: %s", e)
-                    ret, frame = False, None
-                finally:
-                    self.is_reading = False
-
-                self.ret = ret
-                self.frame = frame
-                self.done.set()
-        finally:
-            if com_initialized:
-                try:
-                    import ctypes
-
-                    ole32 = getattr(ctypes, "windll", None)
-                    if ole32 is not None:
-                        ole32.ole32.CoUninitialize()
-                except Exception:
-                    pass
-
-    def stop(self) -> None:
-        """Signal worker to terminate loop."""
-        self.stopped = True
-        self.trigger.set()
-
-
-class CaptureReadGuard:
+class CaptureReadGuard(_CircuitStateMixin):
     """Decouples synchronous C++ driver reads with timeout and circuit-breaker.
 
     Transitions through states:
@@ -124,42 +55,12 @@ class CaptureReadGuard:
         self._last_read_timed_out: bool = False
         self._lock = threading.RLock()
 
-    @property
-    def last_read_timed_out(self) -> bool:
-        """Return True if the most recent read() timed out."""
-        return self._last_read_timed_out
-
     def is_cap_severed(self, cap: Any) -> bool:
         """Return True if safe unbind was dispatched or cap timed out."""
         if cap is None:
             return True
         with self._lock:
             return id(cap) in self._timed_out_caps or id(cap) in self._unbound_caps
-
-    @property
-    def state(self) -> CircuitState:
-        """Return current circuit-breaker state."""
-        return self._state
-
-    @property
-    def consecutive_failures(self) -> int:
-        """Return count of consecutive empty or timed-out read attempts."""
-        return self._consecutive_failures
-
-    @property
-    def is_healthy(self) -> bool:
-        """Return True if circuit-breaker is in HEALTHY state."""
-        return self._state == CircuitState.HEALTHY
-
-    @property
-    def is_stalled(self) -> bool:
-        """Return True if circuit-breaker is in STALLED state."""
-        return self._state == CircuitState.STALLED
-
-    @property
-    def is_reconnecting(self) -> bool:
-        """Return True if circuit-breaker is in RECONNECTING state."""
-        return self._state == CircuitState.RECONNECTING
 
     def reset(self) -> None:
         """Reset circuit breaker to HEALTHY with zero failures."""
@@ -177,42 +78,31 @@ class CaptureReadGuard:
             if self._consecutive_failures < self.stalled_threshold:
                 self._consecutive_failures = self.stalled_threshold
 
-    def _ensure_job(self, cap: Any) -> Optional[_CaptureReadJob]:
-        """Ensure an active reader job matches the provided capture instance."""
-        if id(cap) in self._timed_out_caps:
-            return None
-
-        if self._current_job is not None:
-            if self._current_job.cap is cap:
-                if self._current_job.is_reading:
-                    return None
-                if self._current_job.thread.is_alive():
-                    return self._current_job
-            self._current_job.stop()
-            self._current_job = None
-            self._active_cap = None
-
-        self._active_cap = cap
-        self._current_job = _CaptureReadJob(cap)
-        return self._current_job
-
-    def _wait_interruptible(
-        self,
-        job: _CaptureReadJob,
-        timeout: float,
-        stop_event: Optional[threading.Event] = None,
-    ) -> bool:
-        """Wait for read job completion with bounded timeout and stop event checks."""
-        deadline = time.time() + timeout
-        while True:
-            if stop_event and stop_event.is_set():
-                return False
-            remaining = deadline - time.time()
-            if remaining <= 0:
-                return False
-            slice_dur = min(0.05, remaining)
-            if job.done.wait(timeout=slice_dur):
-                return True
+    def _prepare_read(
+        self, cap: Any, timeout: Optional[float]
+    ) -> Tuple[Optional[_CaptureReadJob], float, bool]:
+        """Validate cap and trigger read job under lock. Returns (job, timeout_s, timed_out)."""
+        with self._lock:
+            if cap is None:
+                advance_failure_state(self)
+                self._last_read_timed_out = False
+                return None, 0.0, False
+            if id(cap) in self._timed_out_caps:
+                advance_failure_state(self)
+                self._last_read_timed_out = True
+                return None, 0.0, True
+            is_warm = id(cap) in self._warmed_caps
+            eff_timeout = float(timeout) if timeout is not None else (
+                self.timeout if is_warm else self.warmup_timeout
+            )
+            job = ensure_read_job(self, cap)
+            if job is None:
+                advance_failure_state(self)
+                self._last_read_timed_out = True
+                return None, eff_timeout, True
+            job.done.clear()
+            job.trigger.set()
+            return job, eff_timeout, False
 
     def read(
         self,
@@ -220,41 +110,18 @@ class CaptureReadGuard:
         timeout: Optional[float] = None,
         stop_event: Optional[threading.Event] = None,
     ) -> Tuple[bool, Optional[np.ndarray]]:
-        """Execute bounded read decoupling synchronous driver calls.
-
-        Returns (ret, frame). Returns (False, None) on empty frame or timeout.
-        """
-        if cap is None:
-            self._record_failure()
-            self._last_read_timed_out = False
+        """Execute bounded read decoupling synchronous driver calls."""
+        job, eff_timeout, _ = self._prepare_read(cap, timeout)
+        if job is None:
             return False, None
 
-        if id(cap) in self._timed_out_caps:
-            self._last_read_timed_out = True
-            self._record_failure()
-            return False, None
-
-        is_warm = id(cap) in self._warmed_caps
-        effective_timeout = float(timeout) if timeout is not None else (self.timeout if is_warm else self.warmup_timeout)
-
-        with self._lock:
-            job = self._ensure_job(cap)
-            if job is None:
-                self._record_failure()
-                self._last_read_timed_out = True
-                return False, None
-            job.done.clear()
-            job.trigger.set()
-
-        completed = self._wait_interruptible(job, effective_timeout, stop_event)
-
+        completed = wait_for_read_job(job, eff_timeout, stop_event)
         if not completed:
             if stop_event and stop_event.is_set():
                 return False, None
-
             logger.warning(
                 "CaptureReadGuard: Driver read timed out after %.2fs. Tripping breaker.",
-                effective_timeout,
+                eff_timeout,
             )
             with self._lock:
                 self._last_read_timed_out = True
@@ -264,73 +131,30 @@ class CaptureReadGuard:
                     self._current_job.stop()
                     self._current_job = None
                     self._active_cap = None
-                self._record_failure()
+                advance_failure_state(self)
             self.safe_driver_unbind(cap)
             return False, None
 
-        self._last_read_timed_out = False
         ret, frame = job.ret, job.frame
-        if ret and frame is not None:
-            self._warmed_caps.add(id(cap))
-            self.reset()
-            return True, frame
-
-        self._record_failure()
-        return False, None
-
-    def _record_failure(self) -> None:
-        """Update consecutive failures and state machine transitions."""
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self.reconnect_threshold:
-            self._state = CircuitState.RECONNECTING
-        elif self._consecutive_failures >= self.stalled_threshold:
-            self._state = CircuitState.STALLED
+        with self._lock:
+            self._last_read_timed_out = False
+            if ret and frame is not None:
+                self._warmed_caps.add(id(cap))
+                self.reset()
+                return True, frame
+            advance_failure_state(self)
+            return False, None
 
     def safe_driver_unbind(self, cap: Any) -> None:
         """Execute non-blocking driver unbind in background thread to prevent COM deadlock."""
         if cap is None:
             return
-
         cap_id = id(cap)
         with self._lock:
             if cap_id in self._unbound_caps:
                 return
             self._unbound_caps.add(cap_id)
-
-        def _do_unbind() -> None:
-            com_initialized = False
-            if sys.platform == "win32":
-                try:
-                    import ctypes
-
-                    ole32 = getattr(ctypes, "windll", None)
-                    if ole32 is not None:
-                        hr = ole32.ole32.CoInitializeEx(None, 0)
-                        com_initialized = hr in (0, 1)
-                except Exception as e:
-                    logger.debug("COM initialization in unbind worker skipped/failed: %s", e)
-
-            try:
-                if self._safe_unbind_cb:
-                    self._safe_unbind_cb(cap)
-                else:
-                    from intelligent_tracker.camera_device import CameraDeviceHandler
-                    CameraDeviceHandler.safe_release(cap, settle_delay=0.1)
-            except Exception as e:
-                logger.debug("Exception during background driver unbind: %s", e)
-            finally:
-                if com_initialized:
-                    try:
-                        import ctypes
-
-                        ole32 = getattr(ctypes, "windll", None)
-                        if ole32 is not None:
-                            ole32.ole32.CoUninitialize()
-                    except Exception:
-                        pass
-
-        t = threading.Thread(target=_do_unbind, name="SafeDriverUnbindWorker", daemon=True)
-        t.start()
+        spawn_driver_unbind(cap, self._safe_unbind_cb)
 
     def stop(self) -> None:
         """Clean up active reader job without blocking."""

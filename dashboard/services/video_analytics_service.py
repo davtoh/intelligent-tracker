@@ -85,6 +85,17 @@ def _serialize_offline_alert(event: Any, safe_name: str, offset_sec: float) -> d
     }
 
 
+def _apply_scenario_to_analytics(analytics: AnalyticsEngine, scenario_camera_id: str | None) -> None:
+    """Copy configured zones and tripwires from ScenarioManager onto offline AnalyticsEngine."""
+    if not scenario_camera_id:
+        return
+    entry = (get_scenario_mgr().cameras or {}).get(scenario_camera_id) or {}
+    for z in (entry.get("zones") or {}).values():
+        analytics.add_zone(copy.deepcopy(z))
+    for tw in (entry.get("tripwires") or {}).values():
+        analytics.add_tripwire(copy.deepcopy(tw))
+
+
 def _build_offline_analytics_and_bus(
     db: TrackerDB, scenario_camera_id: str | None, safe_name: str
 ) -> tuple[AnalyticsEngine, RSACManager, EventBus, list[dict[str, Any]], EventFTSIndex, dict[str, Any]]:
@@ -98,34 +109,23 @@ def _build_offline_analytics_and_bus(
         raw_offset = getattr(event, "media_offset_sec", None)
         ev_ts = float(getattr(event, "timestamp", 0.0) or 0.0)
         base = media_state.get("start_wall_time")
-        if raw_offset is not None:
-            offset_sec = float(raw_offset)
-        elif base is not None and ev_ts >= float(base):
-            offset_sec = round(ev_ts - float(base), 6)
-        else:
-            offset_sec = float(media_state["offset_sec"])
+        offset_sec = float(raw_offset) if raw_offset is not None else (
+            round(ev_ts - float(base), 6) if base is not None and ev_ts >= float(base) else float(media_state["offset_sec"])
+        )
         setattr(event, "video_filename", safe_name)
         setattr(event, "media_offset_sec", offset_sec)
         meta = getattr(event, "metadata", None)
         if isinstance(meta, dict):
-            meta["video_filename"] = safe_name
-            meta["media_offset_sec"] = offset_sec
+            meta["video_filename"], meta["media_offset_sec"] = safe_name, offset_sec
         if isinstance(event, _ALERT_EVENT_TYPES):
             collected_alerts.append(_serialize_offline_alert(event, safe_name, offset_sec))
 
     event_bus.subscribe(_tag_and_collect)
     fts_index = EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
     analytics = AnalyticsEngine(
-        camera_id=scenario_camera_id or "offline_video",
-        event_bus=event_bus,
-        rsac_manager=rsac_mgr,
+        camera_id=scenario_camera_id or "offline_video", event_bus=event_bus, rsac_manager=rsac_mgr,
     )
-    if scenario_camera_id:
-        entry = (get_scenario_mgr().cameras or {}).get(scenario_camera_id) or {}
-        for z in (entry.get("zones") or {}).values():
-            analytics.add_zone(copy.deepcopy(z))
-        for tw in (entry.get("tripwires") or {}).values():
-            analytics.add_tripwire(copy.deepcopy(tw))
+    _apply_scenario_to_analytics(analytics, scenario_camera_id)
     return analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state
 
 
@@ -153,12 +153,15 @@ def create_video_indexer(db: TrackerDB, opts: dict[str, Any], safe_name: str = "
         "db": db, "sample_rate": opts["sample_rate"], "conf_threshold": opts["confidence"],
         "classes": opts["classes"], "analytics": analytics, "rsac_manager": rsac_mgr,
         "active_learning": al_mgr, "event_bus": event_bus, "video_filename": safe_name,
+        "fts_index": fts_index,
     }
     try:
         indexer = VideoIndexer(detector_name=det, **kwargs)
     except Exception as err:
         logger.warning("VideoIndexer initialization with detector '%s' failed (%s), falling back to mock", det, err)
         indexer = VideoIndexer(detector_name="mock", **kwargs)
+    if getattr(indexer, "matcher", None) is not None:
+        indexer.matcher.fts_index = fts_index
     setattr(indexer, "_collected_alerts", collected_alerts)
     setattr(indexer, "_fts_index", fts_index)
     setattr(indexer, "_media_offset_state", media_state)
@@ -200,7 +203,7 @@ def finalize_analytics_report(
 ) -> dict[str, Any]:
     """Assemble occurrence report metrics and persist stacked report + detection stream."""
     _teardown_indexer_bus(indexer)
-    report = indexer.generate_occurrence_report()
+    report = indexer.generate_occurrence_report(video_filename=safe_name)
     report["frames_processed"] = summary.get("processed_frames", 0)
     report["total_detections"] = summary.get("total_detections", 0)
     report["total_sightings"] = summary.get("identifications_count", 0)

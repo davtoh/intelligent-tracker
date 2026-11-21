@@ -160,6 +160,8 @@ class SchemaMixin:
     def _init_schema(self) -> None:
         """Create tables and indexes if they do not exist."""
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cursor = self._conn.cursor()
             try:
                 for ddl in (
@@ -171,6 +173,9 @@ class SchemaMixin:
                 self._seed_default_data(cursor)
                 self._init_indexes(cursor)
                 self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cursor.close()
 

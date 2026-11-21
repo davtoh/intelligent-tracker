@@ -12,7 +12,7 @@ from dataclasses import asdict
 import io
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -121,11 +121,16 @@ def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
 
 
 @router.post("/entities")
-async def create_entity(req: EntityCreateRequest, db: TrackerDB = Depends(get_db)):
+async def create_entity(
+    request: Request,
+    req: EntityCreateRequest,
+    db: TrackerDB = Depends(get_db),
+):
     """Enroll a new identity into the persistent Re-ID gallery database."""
-    if db is None:
+    resolved_db = _resolve_analytics_db(request, db)
+    if resolved_db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_create_entity_sync, db, req)
+    return await asyncio.to_thread(_create_entity_sync, resolved_db, req)
 
 
 def _fetch_entity_details(db, entity_id: int) -> dict:
@@ -140,11 +145,16 @@ def _fetch_entity_details(db, entity_id: int) -> dict:
 
 
 @router.get("/entities/{entity_id}")
-async def get_entity_details(entity_id: int, db: TrackerDB = Depends(get_db)):
+async def get_entity_details(
+    entity_id: int,
+    request: Request,
+    db: TrackerDB = Depends(get_db),
+):
     """Get single enrolled entity details with signatures and recent sightings."""
-    if db is None:
+    resolved_db = _resolve_analytics_db(request, db)
+    if resolved_db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_fetch_entity_details, db, entity_id)
+    return await asyncio.to_thread(_fetch_entity_details, resolved_db, entity_id)
 
 
 def _delete_entity_sync(db, mgr, entity_id: int) -> dict:
@@ -163,10 +173,11 @@ async def delete_entity(
     db: TrackerDB = Depends(get_db),
 ):
     """Remove entity and its signatures from the gallery."""
-    if db is None:
+    resolved_db = _resolve_analytics_db(request, db)
+    if resolved_db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
     mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id)
+    return await asyncio.to_thread(_delete_entity_sync, resolved_db, mgr, entity_id)
 
 
 def _enrich_sighting(s: dict, db) -> dict:
@@ -214,6 +225,7 @@ def _fetch_sightings_sync(
 
 @router.get("/sightings")
 async def query_sightings(
+    request: Request,
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
     zone_id: Optional[str] = None,
@@ -223,11 +235,12 @@ async def query_sightings(
     db: TrackerDB = Depends(get_db),
 ):
     """Search historical sighting timeline records with entity, zone, and time filters."""
-    if db is None:
+    resolved_db = _resolve_analytics_db(request, db)
+    if resolved_db is None:
         return []
     return await asyncio.to_thread(
         _fetch_sightings_sync,
-        db,
+        resolved_db,
         entity_id,
         entity_name,
         zone_id,
@@ -265,7 +278,8 @@ async def list_recent_events(
 ):
     """Get recent security and tracking alerts merged from EventBus and TrackerDB."""
     mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_merge_recent_events, mgr, db, limit)
+    resolved_db = _resolve_analytics_db(request, db)
+    return await asyncio.to_thread(_merge_recent_events, mgr, resolved_db, limit)
 
 
 @router.post("/tag")

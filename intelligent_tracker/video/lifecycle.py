@@ -5,6 +5,7 @@ import logging
 import queue
 import threading
 import time
+import weakref
 from typing import Any, Optional
 
 from intelligent_tracker.camera_device import CameraDeviceHandler
@@ -36,10 +37,13 @@ class CaptureLifecycleMixin:
             if self._running:
                 return self
 
-            success = self._open_capture()
-            if not success and not self.auto_reconnect:
-                raise RuntimeError(f"Could not open video source: {self.source}")
+        success = self._open_capture()
+        if not success and not self.auto_reconnect:
+            raise RuntimeError(f"Could not open video source: {self.source}")
 
+        with self._lock:
+            if self._running:
+                return self
             self._running = True
             self._is_paused = False
             self._stop_event.clear()
@@ -52,7 +56,15 @@ class CaptureLifecycleMixin:
             )
             self._thread.start()
             try:
-                atexit.register(self.stop)
+                self_ref = weakref.ref(self)
+
+                def _atexit_stop() -> None:
+                    inst = self_ref()
+                    if inst is not None:
+                        inst.stop()
+
+                self._atexit_cb = _atexit_stop
+                atexit.register(_atexit_stop)
             except Exception:
                 pass
 
@@ -107,10 +119,13 @@ class CaptureLifecycleMixin:
                 finally:
                     self._cap = None
                     self._is_connected = False
-        try:
-            atexit.unregister(self.stop)
-        except Exception:
-            pass
+        cb = getattr(self, "_atexit_cb", None)
+        if cb is not None:
+            try:
+                atexit.unregister(cb)
+            except Exception:
+                pass
+            self._atexit_cb = None
 
     def release(self) -> None:
         """Compatibility alias for stop()."""

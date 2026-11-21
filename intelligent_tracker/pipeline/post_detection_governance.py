@@ -107,15 +107,17 @@ def publish_id_events(
             snap_b64 = getattr(ev, "snapshot_base64", None)
             if snap_b64 is None and trk is not None and getattr(trk, "bbox", None) is not None:
                 snap_b64 = crop_to_base64(frame, trk.bbox)
+            zone_id = getattr(ev, "zone_id", None) or getattr(trk, "current_zone", None)
             if isinstance(ev, EntityIdentifiedEvent):
                 ev.camera_id = ev.camera_id or camera_id
+                ev.zone_id = ev.zone_id or zone_id
                 ev.snapshot_base64 = ev.snapshot_base64 if ev.snapshot_base64 is not None else snap_b64
                 id_ev = ev
             else:
                 id_ev = EntityIdentifiedEvent(
                     camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
                     name=ev.name, category=ev.category, similarity=ev.similarity,
-                    snapshot_base64=snap_b64, timestamp=timestamp,
+                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp,
                 )
             bus.publish(id_ev)
             if str(getattr(ev, "category", "")).lower() in _RESTRICTED_CATEGORIES:
@@ -123,7 +125,7 @@ def publish_id_events(
                     camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
                     name=ev.name, category=ev.category, severity="critical",
                     message=f"Restricted entity '{ev.name}' detected",
-                    snapshot_base64=snap_b64, timestamp=timestamp,
+                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp,
                 ))
         except Exception as exc:
             logger.debug("Event publish error: %s", exc)

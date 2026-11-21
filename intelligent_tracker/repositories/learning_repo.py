@@ -9,6 +9,15 @@ import time
 from typing import Optional, Dict, Any, List
 
 
+_INSERT_REVIEW_SQL = """
+INSERT INTO review_queue (
+    camera_id, track_id, crop_path, timestamp, suggested_entity_id,
+    suggested_name, suggested_category, similarity, status,
+    video_filename, media_offset_sec
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+
 class LearningMixin:
     """Provides active learning review items and custom category persistence."""
 
@@ -27,31 +36,26 @@ class LearningMixin:
         **kwargs,
     ) -> int:
         """Add an ambiguous detection to the active learning review queue."""
-        similarity = kwargs.get("similarity_score", similarity)
-        if suggested_entity_id is None:
-            suggested_entity_id = kwargs.get("matched_entity_id")
-        suggested_name = suggested_name or kwargs.get("matched_entity_name", "")
-        suggested_category = suggested_category or kwargs.get("matched_category", "")
+        sim = float(kwargs.get("similarity_score", similarity))
+        ent_id = suggested_entity_id if suggested_entity_id is not None else kwargs.get("matched_entity_id")
+        s_name = (suggested_name or kwargs.get("matched_entity_name", "")).strip()
+        s_cat = (suggested_category or kwargs.get("matched_category", "")).strip()
         now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        params = (
+            camera_id, track_id, crop_path.strip(), now, ent_id, s_name, s_cat,
+            sim, status.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
+        )
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
-                cur.execute(
-                    """
-                    INSERT INTO review_queue (
-                        camera_id, track_id, crop_path, timestamp, suggested_entity_id,
-                        suggested_name, suggested_category, similarity, status,
-                        video_filename, media_offset_sec
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        camera_id, track_id, crop_path.strip(), now, suggested_entity_id,
-                        suggested_name.strip(), suggested_category.strip(), float(similarity),
-                        status.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
-                    ),
-                )
+                cur.execute(_INSERT_REVIEW_SQL, params)
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -68,6 +72,8 @@ class LearningMixin:
             params.append(int(limit))
 
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 cur.execute(query, params)
@@ -78,6 +84,8 @@ class LearningMixin:
     def get_review_item(self, review_id: int) -> Optional[Dict[str, Any]]:
         """Retrieve single review queue item by ID."""
         with self._lock:
+            if self._conn is None:
+                return None
             cur = self._conn.cursor()
             try:
                 cur.execute("SELECT * FROM review_queue WHERE id = ?", (review_id,))
@@ -90,6 +98,8 @@ class LearningMixin:
         """Update status of a review queue candidate ('confirmed', 'reassigned', 'enrolled_new', 'dismissed')."""
         now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -98,12 +108,17 @@ class LearningMixin:
                 )
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_custom_categories(self) -> List[Dict[str, Any]]:
         """List all registered custom categories with color badges."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 cur.execute("SELECT * FROM custom_categories ORDER BY id ASC")
@@ -121,6 +136,8 @@ class LearningMixin:
     ) -> bool:
         """Register or update custom category badge."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -137,17 +154,25 @@ class LearningMixin:
                 )
                 self._conn.commit()
                 return True
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def delete_custom_category(self, cat_id: str) -> bool:
         """Delete custom category."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM custom_categories WHERE id = ?", (cat_id.strip().lower(),))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
