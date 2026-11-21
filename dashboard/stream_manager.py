@@ -286,6 +286,12 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             recorder.finalize_if_active()
         bundle = getattr(self, "_pipeline_bundle", None)
         if bundle is not None and hasattr(bundle, "close"):
+            ep = getattr(self, "event_pipeline", None)
+            if isinstance(ep, dict) and ep is not getattr(bundle, "event_pipeline", None):
+                if (re_obj := ep.get("rule_engine")) is not None and hasattr(re_obj, "stop"):
+                    re_obj.stop()
+                if (eb_obj := ep.get("event_bus")) is not None and eb_obj is not getattr(bundle, "event_bus", None) and hasattr(eb_obj, "stop"):
+                    eb_obj.stop(timeout=0.2)
             bundle.close()
         else:
             _fallback_close_manager_resources(self)

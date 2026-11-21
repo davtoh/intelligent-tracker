@@ -109,7 +109,7 @@ class ScenarioManager(ScenarioStorageMixin):
         cam_entry = self._ensure_camera_entry(camera_id)
         deleted = cam_entry["zones"].pop(name, None) is not None
         if self.db:
-            deleted = deleted or self.db.delete_zone(camera_id, name)
+            deleted = bool(self.db.delete_zone(camera_id, name)) or deleted
         if deleted:
             self.save_to_yaml()
         remove_child_from_world(self.world_graph, camera_id, "zone", name)
@@ -134,7 +134,7 @@ class ScenarioManager(ScenarioStorageMixin):
         cam_entry = self._ensure_camera_entry(camera_id)
         deleted = cam_entry["tripwires"].pop(name, None) is not None
         if self.db:
-            deleted = deleted or self.db.delete_tripwire(camera_id, name)
+            deleted = bool(self.db.delete_tripwire(camera_id, name)) or deleted
         if deleted:
             self.save_to_yaml()
         remove_child_from_world(self.world_graph, camera_id, "tripwire", name)

@@ -20,13 +20,14 @@ from dashboard.services.stream_telemetry import (
     _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
     _extract_track_telemetry, _resolve_detector_telemetry, build_stream_telemetry,
 )
-from dashboard.services.stream_worker_recovery import handle_worker_exception, publish_error_placeholders, step_worker_vs_frame
+from dashboard.services.stream_worker_recovery import build_live_step_result, handle_worker_exception, publish_error_placeholders, step_worker_vs_frame
 from intelligent_tracker.pipeline import FrameProcessor, FrameStepResult, PipelineBundle, PipelineConfig
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
 
 __all__ = [
     "StreamWorker",
+    "build_live_step_result",
     "build_stream_telemetry",
     "_build_tripwires_data",
     "_build_zones_data",
@@ -53,6 +54,7 @@ class StreamWorker:
     def __init__(self, manager: Any) -> None:
         self.manager = manager
         self._processor: FrameProcessor | None = None
+        self._async_worker: AsyncInferenceWorker | None = None
 
     def _get_processor(self) -> FrameProcessor:
         """Lazily build and synchronize the canonical FrameProcessor."""
@@ -152,8 +154,9 @@ class StreamWorker:
             ann_missing = getattr(self.manager, "_latest_jpeg", None) is None
         svc = getattr(self.manager, "_processing_mode_service", None)
         is_capture_only = getattr(svc, "mode", None) == "capture_only"
-        has_raw, has_ann = getattr(self.manager, "has_raw_subscribers", True), getattr(self.manager, "has_annotated_subscribers", True)
-        if is_capture_only or has_raw or has_ann or raw_missing:
+        has_raw = getattr(self.manager, "has_raw_subscribers", True)
+        has_ann = getattr(self.manager, "has_annotated_subscribers", True)
+        if is_capture_only or has_raw or raw_missing:
             self._encode_raw_frame(step_res.frame)
         recorder = getattr(self.manager, "_recording_controller", None)
         is_rec = bool(recorder is not None and recorder.is_recording)
@@ -164,7 +167,7 @@ class StreamWorker:
                     self.manager._latest_jpeg = self.manager._latest_raw_jpeg
         elif has_ann or is_rec or ann_missing:
             annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
-        if is_rec:
+        if is_rec and recorder is not None:
             recorder.write_frame(step_res.frame, annotated, step_res=step_res)
         thumb_src = annotated if annotated is not None else step_res.frame
         maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp, mono_s=time.monotonic())

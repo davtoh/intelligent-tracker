@@ -27,7 +27,8 @@ description: Apply when editing intelligent_tracker/ pipeline, world, memory, da
 - **Key Domain Signatures**:
   - `PipelineConfig` uses `detector_confidence` and `detector_classes`.
   - `ScenarioManager` uses `config_path`, `save_zone`, and `save_tripwire`.
-  - `TrackerDB` exposes `get_signatures()` (returns deserialized numpy embeddings), `set_rsac_rule(allowed_categories=...)`, `get_review_item(item_id)`, `add_entity()`, and `add_sighting()`.
+  - `TrackerDB` exposes `get_signatures()` (returns deserialized numpy embeddings), `set_rsac_rule(allowed_categories=...)`, `get_review_item(item_id)`, `add_entity()`, `add_sighting()`, and `save_video_run()` (returns dict with `run_id`).
+  - `FrameProcessor.step()` must not seed `_fps_history` on frame 1 with `1/elapsed_s`; when extracting helpers from near-limit modules, keep symbols patched by `tests/` re-exported.
   - `Track` instances without an identified entity must not define an unconditional `entity_id=None` attribute (`hasattr(trk, 'entity_id') == False`; use `getattr(self, 'entity_id', None)` in `to_dict()`).
   - Non-destructively clone/rescale `tracks` and `detections` outside `CentroidTracker` internal state (`P0-3`), and align `FrameOverlayRenderer` heatmap shape dynamically via `analytics.heatmap.draw()` (`P0-4`).
 - **ROI Tagging & FastAPI Schema Parity**: Reuse `EntityTaggerService._compute_deterministic_embedding` and `_extract_bounded_crop` with injectable `crops_dir` / `videos_dir`. When adding controller return fields (e.g. `report_run_id`), declare them on Pydantic `response_model` schemas (`CameraRecordStatusResponse`). Offload sync SQLite/gallery calls in `async def` routes (`rsac.py`) via `asyncio.to_thread`.

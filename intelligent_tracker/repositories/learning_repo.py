@@ -21,6 +21,9 @@ INSERT INTO review_queue (
 class LearningMixin:
     """Provides active learning review items and custom category persistence."""
 
+    _conn: Any
+    _lock: Any
+
     def add_review_item(
         self,
         camera_id: str,
@@ -62,7 +65,7 @@ class LearningMixin:
     def list_review_items(self, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
         """List active learning review items, optionally filtered by status."""
         query = "SELECT * FROM review_queue"
-        params = []
+        params: List[Any] = []
         if status:
             query += " WHERE status = ?"
             params.append(status.strip())

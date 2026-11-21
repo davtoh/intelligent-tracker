@@ -113,6 +113,9 @@ def _build_timeline_query(
 class MemoryMixin:
     """Provides confidence state persistence and FTS5 timeline operations."""
 
+    _conn: Any
+    _lock: Any
+
     def get_schema_version(self) -> int:
         """Return the SQLite ``PRAGMA user_version`` integer."""
         with self._lock:

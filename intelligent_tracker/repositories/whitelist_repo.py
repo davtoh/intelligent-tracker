@@ -40,6 +40,9 @@ def _serialize_whitelist_embedding(embedding: Optional[Union[np.ndarray, bytes]]
 class WhitelistMixin:
     """Provides local whitelist credentials, cloud sync state, and offline outbox queuing."""
 
+    _conn: Any
+    _lock: Any
+
     def get_sync_state(self, sync_key: str = "default") -> Optional[Dict[str, Any]]:
         """Retrieve synchronization state and ETag for Cloud Hub delta sync."""
         with self._lock:

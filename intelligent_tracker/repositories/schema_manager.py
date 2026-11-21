@@ -7,6 +7,7 @@ for the Intelligent Tracker persistence subsystem.
 
 import logging
 import sqlite3
+from typing import Any
 
 from intelligent_tracker.repositories.memory_schema import apply_memory_schema_migrations
 from intelligent_tracker.repositories.video_schema import apply_video_schema_migrations
@@ -156,6 +157,9 @@ _INDEX_STATEMENTS = (
 
 class SchemaMixin:
     """Provides schema creation, index setup, and default data seeding."""
+
+    _conn: Any
+    _lock: Any
 
     def _init_schema(self) -> None:
         """Create tables and indexes if they do not exist."""

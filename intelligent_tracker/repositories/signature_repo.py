@@ -13,6 +13,9 @@ import numpy as np
 class SignatureMixin:
     """Provides Re-ID signature embeddings and gallery extraction."""
 
+    _conn: Any
+    _lock: Any
+
     @staticmethod
     def serialize_embedding(embedding: np.ndarray) -> bytes:
         """Serialize a 1D NumPy float vector to bytes."""

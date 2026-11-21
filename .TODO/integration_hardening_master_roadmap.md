@@ -48,6 +48,7 @@
 ---
 
 ## Step 4: P2 Frontend Contracts, Unified `OverlayControlBar`, Zero-CLS HUD, Multiview AI Boxes/Toggle & Final `/app-debugger` Sign-Off (`P2-14`..`P2-26`)
+- [ ] **Child Plan**: `.TODO/step_4_p2_frontend_contracts_and_multiview_ai.md`
 - [ ] **Goal**: Resolve every broken frontend-backend contract, eliminate HUD jitter/duplicate controls, unify `"Video Overlays"`, enable multi-camera grid AI boxes/alerts/toggles, and pass full headless (and optional live) `/app-debugger` sign-off.
 - [ ] **Target Scope**:
   - [ ] **Schema & Wiring Contracts (`P2-14`..`P2-22`)**: Fix Review Queue (`similarity`, `suggested_name`, `timestamp`, `/crops/*`, placeholder asset), Video Studio click-to-tag (`track_id`), Alerts (`name`, `severity`, `message`), Live overlay target channel, Camera Manager preset/`enabled`/capabilities race/Cancel/`getActiveCameras`, Enroll & Quick-Tag modals, Scenario Studio/BEV Minimap coordinates & recorded-video re-entry, `#btn-snapshot-save` freeze-frame, `journey_search.js`, `rsac_versions.js`, scoped `.btn-tag-preset`, and SPA hash-boot/cache/`?token=`/WS cleanup.

@@ -90,6 +90,9 @@ def _build_save_params(
 class VideoRunRepositoryMixin:
     """Provides SQLite persistence and alias-aware queries for ``video_runs``."""
 
+    _conn: Any
+    _lock: Any
+
     def save_video_run(
         self, video_filename: str, report: dict[str, Any],
         config: dict[str, Any] | None = None, frame_detections: list[dict[str, Any]] | None = None,

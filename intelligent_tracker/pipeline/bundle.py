@@ -1,7 +1,8 @@
 """PipelineBundle container, deterministic teardown, and subsystem builders."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
+import threading
 from typing import Any
 
 from intelligent_tracker.active_learning import ActiveLearningManager
@@ -67,32 +68,34 @@ class PipelineBundle:
     _owns_event_bus: bool = True
     _owns_fts_index: bool = True
     _closed: bool = False
+    _close_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def close(self) -> None:
         """Deterministically release all owned resources and background workers."""
-        if self._closed:
-            return
-        self._closed = True
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
 
-        _safe_call(self.writer, "release")
-        _safe_call(self.video_source, "stop")
-        _safe_call(self.video_source, "release")
-        _safe_call(self.world_rule_engine, "stop")
+            _safe_call(self.writer, "release")
+            _safe_call(self.video_source, "stop")
+            _safe_call(self.video_source, "release")
+            _safe_call(self.world_rule_engine, "stop")
 
-        if isinstance(self.event_pipeline, dict):
-            _safe_call(self.event_pipeline.get("rule_engine"), "stop")
-            _safe_call(self.event_pipeline.get("mqtt"), "disconnect")
-            for webhook in self.event_pipeline.get("webhooks") or []:
-                _safe_call(webhook, "close")
-            bus = self.event_pipeline.get("event_bus")
-            if bus is not None and bus is not self.event_bus:
-                _safe_call(bus, "stop")
+            if isinstance(self.event_pipeline, dict):
+                _safe_call(self.event_pipeline.get("rule_engine"), "stop")
+                _safe_call(self.event_pipeline.get("mqtt"), "disconnect")
+                for webhook in self.event_pipeline.get("webhooks") or []:
+                    _safe_call(webhook, "close")
+                bus = self.event_pipeline.get("event_bus")
+                if bus is not None and bus is not self.event_bus:
+                    _safe_call(bus, "stop")
 
-        if self._owns_fts_index:
-            _safe_call(self.event_fts_index, "detach")
-        if self._owns_event_bus:
-            _safe_call(self.event_bus, "stop")
-        _safe_call(self.db, "close")
+            if self._owns_fts_index:
+                _safe_call(self.event_fts_index, "detach")
+            if self._owns_event_bus:
+                _safe_call(self.event_bus, "stop")
+            _safe_call(self.db, "close")
 
 
 def build_database(db_path: str | None) -> TrackerDB | None:

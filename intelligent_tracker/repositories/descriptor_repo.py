@@ -71,6 +71,11 @@ def _restore_signature_from_version(
 class DescriptorMixin:
     """Provides historical descriptor snapshotting and signature rollback."""
 
+    _conn: Any
+    _lock: Any
+    serialize_embedding: Any
+    deserialize_embedding: Any
+
     def record_descriptor_version(
         self,
         entity_id: int,

@@ -9,7 +9,6 @@ import json
 import time
 from typing import Optional, Dict, Any, List, Union, Tuple
 
-
 _UPSERT_TRANSITION_SQL = """
 INSERT INTO spatial_transitions (
     link_id, source_camera, source_zone, target_camera, target_zone,
@@ -23,9 +22,10 @@ ON CONFLICT(link_id) DO UPDATE SET
     active = excluded.active
 """
 
-
 class SpatialMixin:
     """Provides spatial zone, tripwire, transition, and homography persistence."""
+    _conn: Any
+    _lock: Any
 
     def save_zone(
         self,

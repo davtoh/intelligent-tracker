@@ -8,6 +8,7 @@ dual-buffer (annotated + raw) diagnostic error-card publishing for StreamWorker.
 """
 
 import logging
+import sys
 import time
 from typing import Any
 
@@ -102,15 +103,18 @@ def step_worker_vs_frame(
         consecutive_empty, _ = worker._handle_empty_frame(vs, consecutive_empty)
         return frame_seq, last_loop_count, consecutive_empty, consecutive_errors
     consecutive_empty, frame_seq = 0, frame_seq + 1
-    vs_loops = int(getattr(vs, "loop_count", 0) or 0)
+    raw_loops = getattr(vs, "loop_count", 0)
+    vs_loops = raw_loops if isinstance(raw_loops, int) and not isinstance(raw_loops, bool) else 0
     if vs_loops > last_loop_count:
         last_loop_count = vs_loops
         if not replay.is_active():
-            reset_bundle_loop_state(processor.bundle, time.time(), reset_tracker=True)
+            reset_bundle_loop_state(getattr(processor, "bundle", None), time.time(), reset_tracker=True)
     is_rec = bool(getattr(worker.manager, "is_recording", False))
+    sw_mod = sys.modules.get("dashboard.services.stream_worker")
+    live_step_fn = getattr(sw_mod, "build_live_step_result", build_live_step_result)
     step_res = build_worker_step_result(
         worker.manager, async_worker, frame, frame_seq, worker._should_run_vision_step(is_rec),
-        is_rec, step_fn=build_live_step_result,
+        is_rec, step_fn=live_step_fn,
     )
     if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
         vs_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)

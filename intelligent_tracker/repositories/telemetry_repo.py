@@ -12,6 +12,9 @@ from typing import Optional, Dict, Any, List
 class TelemetryMixin:
     """Provides system resource telemetry and stream lifecycle event persistence."""
 
+    _conn: Any
+    _lock: Any
+
     def record_resource_metric(
         self,
         cpu_percent: float,

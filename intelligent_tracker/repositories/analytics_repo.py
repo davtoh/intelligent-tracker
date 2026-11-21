@@ -110,6 +110,10 @@ INSERT INTO sightings (
 class AnalyticsMixin:
     """Provides sighting audit trail logging, analytics, and export utilities."""
 
+    _conn: Any
+    _lock: Any
+    get_entity: Any
+
     def add_sighting(
         self,
         entity_id: Optional[int],

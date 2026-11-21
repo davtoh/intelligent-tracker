@@ -63,6 +63,10 @@ def _build_entity_update_query(
 class EntityMixin:
     """Provides entity CRUD operations and high-level enrollment logic."""
 
+    _conn: Any
+    _lock: Any
+    add_signature: Any
+
     def add_entity(
         self,
         name: str,

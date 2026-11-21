@@ -28,6 +28,9 @@ ON CONFLICT(camera_id, zone_id) DO UPDATE SET
 class RsacMixin:
     """Provides RSAC zone rules and pet whitelist persistence."""
 
+    _conn: Any
+    _lock: Any
+
     def get_rsac_rules(self, camera_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List RSAC zone permission rules, optionally filtered by camera."""
         query = "SELECT * FROM rsac_zone_rules"
