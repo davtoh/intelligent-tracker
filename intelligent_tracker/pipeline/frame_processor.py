@@ -1,6 +1,7 @@
 """Canonical per-frame CV execution engine shared by CLI and Dashboard."""
 
 from collections import deque
+import copy
 from dataclasses import dataclass, field
 import logging
 import time
@@ -56,25 +57,45 @@ def prepare_frame(
     return out
 
 
+def _scale_bbox(bbox: Any, sx: float, sy: float) -> tuple[int, int, int, int]:
+    """Scale (x, y, w, h) bounding box coordinates by (sx, sy)."""
+    return (
+        int(round(bbox[0] * sx)),
+        int(round(bbox[1] * sy)),
+        max(1, int(round(bbox[2] * sx))),
+        max(1, int(round(bbox[3] * sy))),
+    )
+
+
+def _scale_obj_coords(obj: Any, sx: float, sy: float) -> Any:
+    """Clone and scale bbox, centroid, and velocity on a track or detection."""
+    bbox = getattr(obj, "bbox", None)
+    if isinstance(obj, tuple) and hasattr(obj, "_replace"):
+        return obj._replace(bbox=_scale_bbox(bbox, sx, sy)) if (bbox is not None and len(bbox) >= 4) else obj
+    cloned = copy.copy(obj)
+    if bbox is not None and len(bbox) >= 4:
+        cloned.bbox = _scale_bbox(bbox, sx, sy)
+    c = getattr(cloned, "centroid", None)
+    if c is not None and len(c) >= 2:
+        cloned.centroid = (float(c[0]) * sx, float(c[1]) * sy)
+    v = getattr(cloned, "velocity", None)
+    if v is not None and len(v) >= 2:
+        cloned.velocity = (float(v[0]) * sx, float(v[1]) * sy)
+    return cloned
+
+
 def _rescale_tracks_and_detections(
     tracks: dict[int, Any], detections: list[Any], src_shape: tuple[int, ...], proc_shape: tuple[int, ...]
-) -> None:
-    """Rescale track coordinates back to original frame dimensions."""
+) -> tuple[dict[int, Any], list[Any]]:
+    """Clone and rescale track/detection coordinates back to original frame dimensions."""
     orig_h, orig_w = int(src_shape[0]), int(src_shape[1])
     proc_h, proc_w = int(proc_shape[0]), int(proc_shape[1])
     if orig_h <= 0 or orig_w <= 0 or proc_h <= 0 or proc_w <= 0 or (orig_h == proc_h and orig_w == proc_w):
-        return
+        return tracks, detections
     sx, sy = orig_w / float(proc_w), orig_h / float(proc_h)
-    for trk in tracks.values():
-        bbox = getattr(trk, "bbox", None)
-        if bbox is not None and len(bbox) >= 4:
-            trk.bbox = (int(round(bbox[0] * sx)), int(round(bbox[1] * sy)), max(1, int(round(bbox[2] * sx))), max(1, int(round(bbox[3] * sy))))
-        c = getattr(trk, "centroid", None)
-        if c is not None and len(c) >= 2:
-            trk.centroid = (float(c[0]) * sx, float(c[1]) * sy)
-        v = getattr(trk, "velocity", None)
-        if v is not None and len(v) >= 2:
-            trk.velocity = (float(v[0]) * sx, float(v[1]) * sy)
+    rescaled_tracks = {tid: _scale_obj_coords(trk, sx, sy) for tid, trk in tracks.items()}
+    rescaled_dets = [_scale_obj_coords(det, sx, sy) for det in detections]
+    return rescaled_tracks, rescaled_dets
 
 
 class FrameProcessor:
@@ -124,7 +145,7 @@ class FrameProcessor:
 
         detections = self._run_detector(processed)
         tracks = self._run_tracker(detections, now)
-        _rescale_tracks_and_detections(tracks, detections, frame.shape, processed.shape)
+        tracks, detections = _rescale_tracks_and_detections(tracks, detections, frame.shape, processed.shape)
         analytics_res, identifications = evaluate_tracks_governance(
             self.bundle, frame, tracks, now,
             topology=self.topology, world_bridge=self.world_bridge, run_reid=True,

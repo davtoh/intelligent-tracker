@@ -67,14 +67,14 @@ def _check_hd_scale_and_centroid(tmp: Path, failures: list[str], checks: dict[st
     )
     bundle = PipelineEngine.build(cfg)
     try:
-        det = MockDetector(boxes=[[1400, 700, 1580, 950, 0.9, "person"]])
+        det = MockDetector(boxes=[(1350, 700, 180, 250)])
         bundle.detector = det
         proc = FrameProcessor(bundle)
         hd_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         track_ids: list[int] = []
         last_res = None
         for idx in range(5):
-            det.boxes = [[1350 + idx * 15, 700, 1530 + idx * 15, 950, 0.9, "person"]]
+            det.preset_boxes = [(1350 + idx * 15, 700, 180, 250)]
             last_res = proc.step(hd_frame, timestamp=1700000000.0 + idx * 0.1, max_dim=1280)
             if last_res.tracks:
                 track_ids.append(next(iter(last_res.tracks.keys())))
@@ -121,9 +121,12 @@ def _check_overlay_heatmap(
     bundle: Any, frame: np.ndarray, tracks: dict[int, Any], failures: list[str], checks: dict[str, Any]
 ) -> None:
     """Verify FrameOverlayRenderer heatmap overlay and 16:9 output shape (P0-4)."""
+    from types import SimpleNamespace
     from dashboard.services.frame_overlay import FrameOverlayRenderer
 
     try:
+        if getattr(bundle.analytics, "heatmap", None) is not None:
+            bundle.analytics.heatmap.update([SimpleNamespace(centroid=(160.0, 180.0))])
         out = FrameOverlayRenderer.render(
             frame,
             tracks,

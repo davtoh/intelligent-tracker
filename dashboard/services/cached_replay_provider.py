@@ -94,7 +94,7 @@ class CachedReplayProvider:
     def build_step_result(
         self,
         frame: Any,
-        now: float,
+        now: float | None,
         frame_seq: int,
         fps: float = 0.0,
         *,
@@ -103,34 +103,26 @@ class CachedReplayProvider:
         """Return zero-GPU FrameStepResult with live rule governance, or None if unindexed."""
         if not self.replay.ensure_loaded():
             return None
+        wall_now = time.time() if now is None else float(now)
         t_start = time.perf_counter()
         resolved_t = self.replay.resolve_media_time(frame_seq, media_time_s=media_time_s)
         bundle, topology, bridge = self._resolve_context()
         if self._detect_loop_wrap(frame_seq, resolved_t):
-            self.reset_loop_state(bundle, now)
-        self._last_media_time_s = resolved_t
-        self._last_frame_seq = int(frame_seq)
-
-        tracks: dict[int, ReplayTrack] = (
-            self.replay.lookup_tracks(frame_seq, frame.shape, media_time_s=resolved_t) or {}
-        )
+            self.reset_loop_state(bundle, wall_now)
+        self._last_media_time_s, self._last_frame_seq = resolved_t, int(frame_seq)
+        tracks: dict[int, ReplayTrack] = self.replay.lookup_tracks(frame_seq, frame.shape, media_time_s=resolved_t) or {}
         analytics_res, identifications = ({}, [])
         if bundle is not None:
             analytics_res, identifications = evaluate_tracks_governance(
-                bundle, frame, tracks, now, topology=topology, world_bridge=bridge, run_reid=self._run_reid
+                bundle, frame, tracks, wall_now, topology=topology, world_bridge=bridge, run_reid=self._run_reid
             )
-
         elapsed_ms = max(0.0, (time.perf_counter() - t_start) * 1000.0)
         resolved_fps = float(fps) if float(fps or 0.0) > 0 else float(getattr(self.replay, "_source_fps", 0.0) or 0.0)
-        return _stamp_replay_result(
-            FrameStepResult(
-                frame=frame, tracks=tracks, analytics=analytics_res,
-                identifications=identifications, timestamp=now, fps=resolved_fps,
-                frame_count=frame_seq, processing_ms=elapsed_ms,
-            ),
-            frame_seq=frame_seq,
-            now=now,
+        res = FrameStepResult(
+            frame=frame, tracks=tracks, analytics=analytics_res, identifications=identifications,
+            timestamp=wall_now, fps=resolved_fps, frame_count=frame_seq, processing_ms=elapsed_ms,
         )
+        return _stamp_replay_result(res, frame_seq=frame_seq, now=wall_now)
 
 
 def _stamp_replay_result(res: FrameStepResult, *, frame_seq: int, now: float) -> FrameStepResult:

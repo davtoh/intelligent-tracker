@@ -57,6 +57,11 @@ def _encode_tier_jpeg(frame: np.ndarray, tier: int, quality: int) -> bytes | Non
     return buf.tobytes()
 
 
+def _wall_now() -> float:
+    """Return current Unix wall-clock epoch timestamp in seconds."""
+    return time.time()
+
+
 class ThumbnailCache:
     """Thread-safe per-camera thumbnail cache with tier leases and FPS gating."""
 
@@ -101,14 +106,17 @@ class ThumbnailCache:
                     tiers[tier] = fps
             return tiers
 
-    def update_frame(self, frame: Any, seq: int, timestamp_s: float | None = None) -> list[int]:
+    def update_frame(
+        self, frame: Any, seq: int, timestamp_s: float | None = None, *, mono_s: float | None = None
+    ) -> list[int]:
         """Encode thumbnails for due leased tiers; return list of updated tier widths."""
-        now = time.time() if timestamp_s is None else float(timestamp_s)
-        due_tiers = self._collect_due_tiers(now)
+        wall_ts = _wall_now() if timestamp_s is None else float(timestamp_s)
+        rate_ts = float(mono_s) if mono_s is not None else (time.monotonic() if timestamp_s is None else wall_ts)
+        due_tiers = self._collect_due_tiers(rate_ts)
         if not due_tiers:
             return []
 
-        ts_ms = max(0, int(round(now * 1000.0)))
+        ts_ms = max(0, int(round(wall_ts * 1000.0)))
         encoded: dict[int, ThumbnailSlot] = {}
         for tier in due_tiers:
             jpeg = _encode_tier_jpeg(frame, tier, self._quality)
@@ -121,7 +129,7 @@ class ThumbnailCache:
             for tier, slot in encoded.items():
                 if any(t == tier for t, _ in self._leases.values()):
                     self._slots[tier] = slot
-                    self._last_encode_ts[tier] = now
+                    self._last_encode_ts[tier] = rate_ts
         return list(encoded.keys())
 
     def _collect_due_tiers(self, now: float) -> list[int]:
@@ -151,8 +159,10 @@ class ThumbnailCache:
             self._last_encode_ts.clear()
 
 
-def maybe_update_manager_thumbnail(manager: Any, frame: Any, seq: int, timestamp_s: float) -> None:
+def maybe_update_manager_thumbnail(
+    manager: Any, frame: Any, seq: int, timestamp_s: float, *, mono_s: float | None = None
+) -> None:
     """Update ``manager.thumbnail_cache`` if present and at least one tier is leased."""
     cache = getattr(manager, "thumbnail_cache", None)
     if cache is not None and cache.has_leases():
-        cache.update_frame(frame, seq, timestamp_s)
+        cache.update_frame(frame, seq, timestamp_s, mono_s=mono_s)

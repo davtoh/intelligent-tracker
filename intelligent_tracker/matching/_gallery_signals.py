@@ -110,10 +110,15 @@ def _resolve_media_fields(
 ) -> tuple[str, float]:
     """Resolve video_filename and media_offset_sec for offline or live sightings."""
     resolved_video = str(video_filename or getattr(matcher, "video_filename", "") or "").strip()
+    stored_offset = getattr(matcher, "current_media_offset_sec", None)
     resolved_offset = (
         float(media_offset_sec)
         if media_offset_sec is not None
-        else (float(timestamp) if resolved_video else 0.0)
+        else (
+            float(stored_offset)
+            if resolved_video and stored_offset is not None
+            else (float(timestamp) if resolved_video else 0.0)
+        )
     )
     return resolved_video, resolved_offset
 
@@ -154,6 +159,7 @@ def emit_periodic_sighting(
                 entity_id=entity_id, entity_name=name, category=category,
                 camera_id=source, zone_id=zone_id, confidence=confidence,
                 timestamp=timestamp, metadata={"track_id": tid},
+                video_filename=resolved_video, media_offset_sec=resolved_offset,
             )
         except Exception as exc:
             logger.debug("Periodic sighting FTS indexing skipped: %s", exc)

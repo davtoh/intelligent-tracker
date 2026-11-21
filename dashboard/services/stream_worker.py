@@ -174,7 +174,9 @@ class StreamWorker:
             recorder.write_frame(step_res.frame, annotated, step_res=step_res)
 
         thumb_src = annotated if annotated is not None else step_res.frame
-        maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp)
+        maybe_update_manager_thumbnail(
+            self.manager, thumb_src, step_res.frame_count, step_res.timestamp, mono_s=time.monotonic()
+        )
 
         vs = getattr(self.manager, "video_source", None)
         vs_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)

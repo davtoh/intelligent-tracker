@@ -87,14 +87,23 @@ def _serialize_offline_alert(event: Any, safe_name: str, offset_sec: float) -> d
 
 def _build_offline_analytics_and_bus(
     db: TrackerDB, scenario_camera_id: str | None, safe_name: str
-) -> tuple[AnalyticsEngine, RSACManager, EventBus, list[dict[str, Any]], EventFTSIndex]:
+) -> tuple[AnalyticsEngine, RSACManager, EventBus, list[dict[str, Any]], EventFTSIndex, dict[str, Any]]:
     rsac_mgr = RSACManager(db=db)
     event_bus = EventBus(capacity=500)
     event_bus.start()
     collected_alerts: list[dict[str, Any]] = []
+    media_state: dict[str, Any] = {"offset_sec": 0.0, "start_wall_time": None}
 
     def _tag_and_collect(event: Any) -> None:
-        offset_sec = float(getattr(event, "timestamp", 0.0) or 0.0)
+        raw_offset = getattr(event, "media_offset_sec", None)
+        ev_ts = float(getattr(event, "timestamp", 0.0) or 0.0)
+        base = media_state.get("start_wall_time")
+        if raw_offset is not None:
+            offset_sec = float(raw_offset)
+        elif base is not None and ev_ts >= float(base):
+            offset_sec = round(ev_ts - float(base), 6)
+        else:
+            offset_sec = float(media_state["offset_sec"])
         setattr(event, "video_filename", safe_name)
         setattr(event, "media_offset_sec", offset_sec)
         meta = getattr(event, "metadata", None)
@@ -117,7 +126,7 @@ def _build_offline_analytics_and_bus(
             analytics.add_zone(copy.deepcopy(z))
         for tw in (entry.get("tripwires") or {}).values():
             analytics.add_tripwire(copy.deepcopy(tw))
-    return analytics, rsac_mgr, event_bus, collected_alerts, fts_index
+    return analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state
 
 
 def _teardown_indexer_bus(indexer: VideoIndexer | None) -> None:
@@ -135,7 +144,7 @@ def _teardown_indexer_bus(indexer: VideoIndexer | None) -> None:
 
 def create_video_indexer(db: TrackerDB, opts: dict[str, Any], safe_name: str = "") -> VideoIndexer:
     """Instantiate VideoIndexer with spatial scenario, RSAC, ActiveLearning, and EventBus wiring."""
-    analytics, rsac_mgr, event_bus, collected_alerts, fts_index = _build_offline_analytics_and_bus(
+    analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state = _build_offline_analytics_and_bus(
         db, opts.get("scenario_camera_id"), safe_name
     )
     al_mgr = ActiveLearningManager(db=db, event_bus=event_bus)
@@ -152,6 +161,7 @@ def create_video_indexer(db: TrackerDB, opts: dict[str, Any], safe_name: str = "
         indexer = VideoIndexer(detector_name="mock", **kwargs)
     setattr(indexer, "_collected_alerts", collected_alerts)
     setattr(indexer, "_fts_index", fts_index)
+    setattr(indexer, "_media_offset_state", media_state)
     return indexer
 
 

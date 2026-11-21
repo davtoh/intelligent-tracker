@@ -105,7 +105,13 @@ def _step_video_frame(processor: FrameProcessor, frame: Any, timestamp: float) -
 
 
 def _record_step_occurrences(
-    step_res: FrameStepResult, state: dict[str, Any], read_frames: int, width: int, height: int
+    step_res: FrameStepResult,
+    state: dict[str, Any],
+    read_frames: int,
+    width: int,
+    height: int,
+    *,
+    video_ts: float | None = None,
 ) -> None:
     """Accumulate detection, identification, and overlay track records from a step."""
     state["total_detections"] += len(step_res.detections)
@@ -119,8 +125,9 @@ def _record_step_occurrences(
     track_objects = tracks.values() if isinstance(tracks, dict) else tracks
     active_tracks = [t.to_dict() for t in track_objects if hasattr(t, "to_dict")]
     if active_tracks:
+        rel_time = float(video_ts) if video_ts is not None else float(step_res.timestamp)
         state["frame_detections"].append({
-            "time": round(step_res.timestamp, 3),
+            "time": round(rel_time, 3),
             "frame": read_frames - 1,
             "source_resolution": [width, height],
             "tracks": active_tracks,
@@ -253,8 +260,20 @@ class VideoIndexer:
             state["processed_frames"] += 1
             video_ts = _read_video_timestamp(cap, state["read_frames"], meta["fps"])
             state["last_video_ts"] = video_ts
-            step_res = _step_video_frame(processor, frame, video_ts)
-            _record_step_occurrences(step_res, state, state["read_frames"], meta["width"], meta["height"])
+            base_epoch = float(state["start_wall_time"])
+            wall_ts = base_epoch + video_ts
+            if processor.bundle.gallery_matcher is not None:
+                processor.bundle.gallery_matcher.current_media_offset_sec = video_ts
+            if processor.bundle.active_learning is not None:
+                processor.bundle.active_learning.current_media_offset_sec = video_ts
+            media_state = getattr(self, "_media_offset_state", None)
+            if isinstance(media_state, dict):
+                media_state["start_wall_time"] = base_epoch
+                media_state["offset_sec"] = video_ts
+            step_res = _step_video_frame(processor, frame, wall_ts)
+            _record_step_occurrences(
+                step_res, state, state["read_frames"], meta["width"], meta["height"], video_ts=video_ts
+            )
             if frame_flush_callback is not None and state["processed_frames"] % flush_step == 0:
                 state["last_flushed_idx"] = _dispatch_frame_flush(
                     frame_flush_callback, state["frame_detections"], state["last_flushed_idx"],
