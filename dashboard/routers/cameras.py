@@ -216,6 +216,7 @@ async def get_camera_telemetry_snapshot(
     }
 
 
+@router.patch("/api/cameras/{camera_id}")
 @router.put("/api/cameras/{camera_id}")
 async def update_camera(
     camera_id: str,

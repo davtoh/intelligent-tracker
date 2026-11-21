@@ -176,6 +176,72 @@ class TestStep4OverlayBarAndStudio(unittest.TestCase):
         out = _run_vm([STATIC_DIR / "js" / "live_player.js"], script)
         self.assertTrue(out["isPoster"])
 
+    def test_zero_cls_hud_css_and_title_containment(self) -> None:
+        css = (STATIC_DIR / "css" / "player.css").read_text(encoding="utf-8")
+        self.assertNotIn("!important", css)
+        self.assertIn("gap: 8px;", css)
+        self.assertIn("font-variant-numeric: tabular-nums;", css)
+        self.assertIn("max-width: clamp(", css)
+        self.assertIn(".stream-lag-badge[hidden]", css)
+        self.assertIn("visibility: hidden;", css)
+
+    def test_live_player_lag_hysteresis_and_p1_replay_suppression(self) -> None:
+        script = """
+        const hud = makeEl('stream-telemetry-hud'), lag = makeEl('stream-lag-badge', { hidden: true });
+        byId.set('stream-telemetry-hud', hud); byId.set('stream-lag-badge', lag);
+        const LP = sandbox.LivePlayer;
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P0', fps: 24, inference_lag_ms: 220 });
+        const h1 = lag.hidden;
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P0', fps: 24, inference_lag_ms: 220 });
+        const h2 = lag.hidden;
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P0', fps: 24, inference_lag_ms: 220 });
+        const h3 = lag.hidden, txt3 = lag.textContent;
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P1', target_fps: 1, motion_active: false, inference_lag_ms: 500 });
+        const hP1 = lag.hidden;
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P0', fps: 24, inference_lag_ms: 250 });
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P0', fps: 24, inference_lag_ms: 250 });
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'P0', fps: 24, inference_lag_ms: 250 });
+        LP.updateInferenceLagHud({ camera_id: 'cam_01', priority_tier: 'REPLAY', replay_active: true, inference_lag_ms: 400 });
+        console.log(JSON.stringify({ h1, h2, h3, txt3, hP1, hReplay: lag.hidden }));
+        """
+        out = _run_vm([STATIC_DIR / "js" / "live_player.js"], script)
+        self.assertTrue(out["h1"] and out["h2"] and not out["h3"])
+        self.assertTrue(out["txt3"].startswith("AI Lag:"))
+        self.assertTrue(out["hP1"] and out["hReplay"])
+
+    def test_multiview_tile_telemetry_boxes_armed_toggle_and_pool_alerts(self) -> None:
+        script = """
+        const fpsEl = makeEl('fps'), tracksEl = makeEl('tr'), armBtn = makeEl('arm', { dataset: { armed: 'false' } });
+        const canvas = makeEl('ov', { clientWidth: 320, clientHeight: 180 });
+        const tile = makeEl('tile', { attributes: { 'data-id': 'cam_02' }, querySelector: (s) => ({ '.tile-fps': fpsEl, '.tile-tracks': tracksEl, '.btn-tile-arm': armBtn, 'canvas.tile-overlay-canvas': canvas }[s] || null) });
+        tile.getAttribute = (k) => k === 'data-id' ? 'cam_02' : null;
+        const grid = makeEl('multi-grid-container', { querySelectorAll: () => [tile] });
+        byId.set('multi-grid-container', grid);
+        let renderedAlerts = null;
+        sandbox.TelemetryGateway = { renderMiniAlerts: (a) => { renderedAlerts = a; } };
+        sandbox.fetch = (url, opts) => { fetchCalls.push({ url, opts }); return Promise.resolve({ ok: true, json: async () => ({ events: [{ event_type: 'intrusion' }] }) }); };
+        sandbox.GridTileOverlay.handleTelemetry({ camera_id: 'cam_02', fps: 18.5, priority_tier: 'P0', armed: true, ai_active: true, source_resolution: [640, 480], tracks: [{ id: 7, bbox: [10, 20, 50, 80] }] }, grid);
+        const armedAfterTelemetry = armBtn.textContent;
+        (async () => {
+          await sandbox.GridTileOverlay.toggleCameraArmed('cam_02', armBtn, [{ id: 'cam_02', armed: true }]);
+          await sandbox.GridTileOverlay.refreshPoolAlerts();
+          console.log(JSON.stringify({ fps: fpsEl.textContent, tracks: tracksEl.textContent, armedAfterTelemetry, armedAfterToggle: armBtn.textContent, ctxCount: ctxCalls.length, urls: fetchCalls.map(c => c.url), alertsLen: renderedAlerts?.length || 0 }));
+        })();
+        """
+        out = _run_vm([STATIC_DIR / "js" / "unified_canvas_overlay.js", STATIC_DIR / "js" / "multiview" / "grid_tile_overlay.js"], script)
+        self.assertEqual(out["fps"], "18.5 FPS")
+        self.assertEqual(out["tracks"], "1 tracks")
+        self.assertEqual(out["armedAfterTelemetry"], "🛡 AI ON")
+        self.assertEqual(out["armedAfterToggle"], "🛡 AI OFF")
+        self.assertGreater(out["ctxCount"], 0)
+        self.assertIn("/api/cameras/cam_02", out["urls"])
+        self.assertEqual(out["alertsLen"], 1)
+
+    def test_cameras_router_supports_patch_and_put(self) -> None:
+        src = (ROOT_DIR / "dashboard" / "routers" / "cameras.py").read_text(encoding="utf-8")
+        self.assertIn('@router.patch("/api/cameras/{camera_id}")', src)
+        self.assertIn('@router.put("/api/cameras/{camera_id}")', src)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -42,6 +42,19 @@
     return { offsetX: baseLeft + renderLeft, offsetY: baseTop + renderTop, renderW, renderH, scale: renderW / mw };
   }
 
+  function computeCoverBox(elemRect, containerRect, mediaWidth, mediaHeight) {
+    const mw = Number(mediaWidth) > 0 ? Number(mediaWidth) : 1;
+    const mh = Number(mediaHeight) > 0 ? Number(mediaHeight) : 1;
+    const ew = Number(elemRect?.width) > 0 ? Number(elemRect.width) : mw;
+    const eh = Number(elemRect?.height) > 0 ? Number(elemRect.height) : mh;
+    const scale = Math.max(ew / mw, eh / mh);
+    const renderW = mw * scale;
+    const renderH = mh * scale;
+    const baseLeft = containerRect ? (elemRect.left - containerRect.left) : 0;
+    const baseTop = containerRect ? (elemRect.top - containerRect.top) : 0;
+    return { offsetX: baseLeft + (ew - renderW) / 2, offsetY: baseTop + (eh - renderH) / 2, renderW, renderH, scale };
+  }
+
   function syncCanvasDpr(canvas, ctx, cssWidth, cssHeight, dpr) {
     if (!canvas) return 1;
     const ratio = Number(dpr) > 0 ? Number(dpr) : (window.devicePixelRatio || 1);
@@ -218,7 +231,7 @@
   }
 
   window.UnifiedCanvasOverlay = {
-    PALETTES, DEFAULT_VISIBILITY, computeContainBox, syncCanvasDpr,
+    PALETTES, DEFAULT_VISIBILITY, computeContainBox, computeCoverBox, syncCanvasDpr,
     resolveScaleFactors, drawTrackBox, drawVelocityVector, drawZones,
     drawTripwires, drawHeatmapLayer, renderScene,
   };

@@ -8,10 +8,17 @@
 
   const STANDBY_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="40" fill="%231e293b" stroke="%23334155" stroke-width="2"/><polygon points="-10,-18 20,0 -10,18" fill="%2306b6d4"/><text y="70" fill="%2394a3b8" font-family="Inter,sans-serif" font-size="14" font-weight="500">Live Stream Paused &bull; Hibernating</text><text y="92" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Click Resume Feed to reconnect camera</text></g></svg>';
   const ANNOTATION_MODE_STORAGE_KEY = 'it_live_annotated_mode';
-  const LAG_THRESHOLD_MS = 120;
+  const LAG_SHOW_MS = 180;
+  const LAG_HIDE_MS = 110;
+  const LAG_CONSECUTIVE_SAMPLES = 3;
+  const LAG_EMA_ALPHA = 0.35;
 
   let streamPaused = false;
   let streamRetryTimer = null;
+  let lagEmaMs = null;
+  let lagHighStreak = 0;
+  let lagVisible = false;
+  let lagLastCamId = null;
   let burnedAnnotationMode = (() => {
     try { return window.localStorage?.getItem(ANNOTATION_MODE_STORAGE_KEY) === 'true'; } catch (e) { console.debug('localStorage read skipped:', e); return false; }
   })();
@@ -38,6 +45,39 @@
     window.dispatchEvent?.(new Event('resize'));
   }
 
+  function isThrottledCadence(telemetryData) {
+    const tier = String(telemetryData.priority_tier || '').toUpperCase();
+    const isReplay = Boolean(telemetryData.replay_active) || tier === 'REPLAY';
+    const targetFps = typeof telemetryData.target_fps === 'number' ? telemetryData.target_fps : null;
+    const isThrottledP1 = tier === 'P1' && !telemetryData.motion_active && (targetFps === null || targetFps <= 2);
+    const isNonLive = tier === 'P2' || tier === 'PAUSED' || tier === 'CAPTURE_ONLY' || tier === 'IDLE';
+    return burnedAnnotationMode || isReplay || isThrottledP1 || isNonLive;
+  }
+
+  function evaluateLagHysteresis(telemetryData, camLabel) {
+    if (isThrottledCadence(telemetryData)) {
+      lagEmaMs = null; lagHighStreak = 0; lagVisible = false;
+      return { show: false, emaMs: 0 };
+    }
+    if (camLabel !== lagLastCamId) {
+      lagLastCamId = camLabel; lagEmaMs = null; lagHighStreak = 0; lagVisible = false;
+    }
+    const rawLagMs = Math.max(0, Number(telemetryData.inference_lag_ms || 0));
+    lagEmaMs = lagEmaMs === null ? rawLagMs : (LAG_EMA_ALPHA * rawLagMs) + ((1 - LAG_EMA_ALPHA) * lagEmaMs);
+    if (!lagVisible) {
+      if (lagEmaMs >= LAG_SHOW_MS) {
+        lagHighStreak += 1;
+        if (lagHighStreak >= LAG_CONSECUTIVE_SAMPLES) lagVisible = true;
+      } else {
+        lagHighStreak = 0;
+      }
+    } else if (lagEmaMs <= LAG_HIDE_MS) {
+      lagVisible = false;
+      lagHighStreak = 0;
+    }
+    return { show: lagVisible, emaMs: lagEmaMs };
+  }
+
   function updateInferenceLagHud(telemetryData = {}) {
     const hud = document.getElementById('stream-telemetry-hud');
     const lagBadge = document.getElementById('stream-lag-badge');
@@ -47,12 +87,12 @@
     if (hud) hud.textContent = `${camLabel} • ${resStr} • ${fpsStr} FPS`;
     window.SchedulerHUD?.updateCamera?.(telemetryData);
     if (!lagBadge) return;
-    const lagMs = Number(telemetryData.inference_lag_ms || 0);
+    const { show, emaMs } = evaluateLagHysteresis(telemetryData, camLabel);
     const frameSeq = Number(telemetryData.frame_seq ?? telemetryData.frame_count ?? 0);
     const infSeq = Number(telemetryData.inference_frame_seq ?? frameSeq);
-    if (!burnedAnnotationMode && lagMs >= LAG_THRESHOLD_MS) {
+    if (show) {
       lagBadge.hidden = false;
-      lagBadge.textContent = `AI Lag: ${Math.round(lagMs)}ms`;
+      lagBadge.textContent = `AI Lag: ${Math.round(emaMs)}ms`;
       lagBadge.dataset.seqDelta = String(Math.max(0, frameSeq - infSeq));
     } else {
       lagBadge.hidden = true;

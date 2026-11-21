@@ -41,7 +41,7 @@
   font-weight: 600;
   color: var(--text-main);
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   overflow: hidden;
 }
 
@@ -51,7 +51,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-  max-width: 100%;
+  max-width: clamp(140px, 32vw, 380px);
 }
 
 .card-actions {
@@ -241,8 +241,10 @@
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
+  gap: 8px;
   text-align: center;
   min-width: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .hud-btn {
@@ -281,6 +283,32 @@
 .stream-telemetry-text {
   font-family: var(--font-mono);
   font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
+}
+
+.stream-lag-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 102px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+.stream-lag-badge[hidden] {
+  display: inline-flex;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
