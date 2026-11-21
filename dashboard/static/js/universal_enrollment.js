@@ -38,13 +38,49 @@
       const res = await fetch('/api/rsac/categories');
       if (res.ok) {
         const cats = await res.json();
-        selectElem.innerHTML = cats.map(c => 
-          `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.id)})</option>`
-        ).join('');
+        if (Array.isArray(cats) && cats.length > 0) {
+          selectElem.innerHTML = cats.map(c =>
+            `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.id)})</option>`
+          ).join('');
+        }
       }
     } catch (e) {
       console.warn('Failed to load RSAC categories:', e);
     }
+  }
+
+  async function populateCameraSelect() {
+    const camSelect = document.getElementById('enroll-camera-select');
+    if (!camSelect) return;
+    let cams = window.CameraManager?.getActiveCameras?.() || [];
+    if (!cams.length) {
+      try {
+        const res = await fetch('/api/cameras');
+        if (res.ok) cams = await res.json();
+      } catch (e) {
+        console.warn('Failed to load cameras for enrollment:', e);
+      }
+    }
+    const activeId = window.App?.getActiveCameraId?.() || '';
+    const opts = ['<option value="">Image Upload Only (No Camera)</option>'].concat(
+      (Array.isArray(cams) ? cams : []).map(c =>
+        `<option value="${escapeHtml(c.id)}" ${c.id === activeId ? 'selected' : ''}>${escapeHtml(c.name || c.id)} (${escapeHtml(c.id)})</option>`
+      )
+    );
+    camSelect.innerHTML = opts.join('');
+    if (activeId) camSelect.value = activeId;
+  }
+
+  function resetEnrollmentState(form, canvas, placeholder) {
+    enrollState.freezeFrameImg = null;
+    enrollState.freezeFrameDataUrl = null;
+    enrollState.selectedBbox = null;
+    enrollState.selectedCropBase64 = null;
+    if (form?.reset) form.reset();
+    const previewBox = document.getElementById('enroll-crop-preview-box');
+    if (previewBox) previewBox.style.display = 'none';
+    if (canvas) canvas.style.display = 'none';
+    if (placeholder) placeholder.style.display = 'block';
   }
 
   async function captureFreezeFrame(canvas, placeholder) {
@@ -94,59 +130,50 @@
     img.src = dataUrl;
   }
 
+  function getCanvasPoint(canvas, e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  }
+
+  function drawSelectionOverlay(canvas, x, y, w, h) {
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(enrollState.freezeFrameImg, 0, 0);
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
+    ctx.fillRect(x, y, w, h);
+  }
+
   function bindCanvasSelection(canvas) {
     if (!canvas) return;
     let isDrawing = false;
-    let startX = 0, startY = 0;
-
+    let startX = 0;
+    let startY = 0;
     canvas.addEventListener('mousedown', (e) => {
       if (!enrollState.freezeFrameImg) return;
       isDrawing = true;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      startX = (e.clientX - rect.left) * scaleX;
-      startY = (e.clientY - rect.top) * scaleY;
+      const pt = getCanvasPoint(canvas, e);
+      startX = pt.x;
+      startY = pt.y;
     });
-
     canvas.addEventListener('mousemove', (e) => {
       if (!isDrawing || !enrollState.freezeFrameImg) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const curX = (e.clientX - rect.left) * scaleX;
-      const curY = (e.clientY - rect.top) * scaleY;
-
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(enrollState.freezeFrameImg, 0, 0);
-
-      const x = Math.min(startX, curX);
-      const y = Math.min(startY, curY);
-      const w = Math.abs(curX - startX);
-      const h = Math.abs(curY - startY);
-
-      ctx.strokeStyle = '#06b6d4';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, w, h);
-      ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
-      ctx.fillRect(x, y, w, h);
+      const pt = getCanvasPoint(canvas, e);
+      drawSelectionOverlay(canvas, Math.min(startX, pt.x), Math.min(startY, pt.y), Math.abs(pt.x - startX), Math.abs(pt.y - startY));
     });
-
     canvas.addEventListener('mouseup', (e) => {
       if (!isDrawing || !enrollState.freezeFrameImg) return;
       isDrawing = false;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const endX = (e.clientX - rect.left) * scaleX;
-      const endY = (e.clientY - rect.top) * scaleY;
-
-      const x = Math.round(Math.min(startX, endX));
-      const y = Math.round(Math.min(startY, endY));
-      const w = Math.round(Math.abs(endX - startX));
-      const h = Math.round(Math.abs(endY - startY));
-
+      const pt = getCanvasPoint(canvas, e);
+      const x = Math.round(Math.min(startX, pt.x));
+      const y = Math.round(Math.min(startY, pt.y));
+      const w = Math.round(Math.abs(pt.x - startX));
+      const h = Math.round(Math.abs(pt.y - startY));
       if (w > 15 && h > 15) {
         enrollState.selectedBbox = [x, y, w, h];
         extractCropThumbnail(x, y, w, h);
@@ -175,127 +202,118 @@
     }
   }
 
-  function bindEnrollmentForm(form, modal) {
+  function buildEnrollmentPayload() {
+    const name = (document.getElementById('enroll-name-input')?.value || '').trim();
+    const category = document.getElementById('enroll-category-select')?.value || 'person';
+    const security_role = (document.getElementById('enroll-role-input')?.value || '').trim();
+    const camSelect = document.getElementById('enroll-camera-select');
+    const camera_id = camSelect?.value || window.App?.getActiveCameraId?.() || null;
+    const is_anchor = document.getElementById('enroll-locked-anchor-cb')?.checked ?? true;
+    const notes = (document.getElementById('enroll-notes-input')?.value || '').trim();
+    if (!camera_id && !enrollState.selectedCropBase64) {
+      showToast('Camera Required', 'Please select an active camera source or upload an image.', 'warning');
+      return null;
+    }
+    if (!name) {
+      showToast('Validation Required', 'Please enter an entity name.', 'warning');
+      return null;
+    }
+    if (!enrollState.selectedCropBase64 && !enrollState.selectedBbox) {
+      showToast('Selection Required', 'Please drag a bounding box on the freeze-frame image.', 'warning');
+      return null;
+    }
+    return {
+      name, category, security_role, notes, is_anchor, camera_id,
+      crop_base64: enrollState.selectedCropBase64,
+      bbox: enrollState.selectedBbox,
+    };
+  }
+
+  async function submitEnrollment(form, modal, canvas, placeholder) {
+    const payload = buildEnrollmentPayload();
+    if (!payload) return;
+    const submitBtn = document.getElementById('btn-submit-enrollment');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Extracting Biometrics...'; }
+    try {
+      const res = await fetch('/api/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Enrollment failed');
+      }
+      const result = await res.json();
+      if (modal) modal.style.display = 'none';
+      resetEnrollmentState(form, canvas, placeholder);
+      showToast('Enrollment Successful', `"${payload.name}" enrolled as ${payload.category.toUpperCase()} (ID #${result.entity_id})!`, 'success');
+      if (typeof window.loadGallery === 'function') window.loadGallery();
+    } catch (err) {
+      showToast('Enrollment Failed', err.message, 'error');
+    } finally {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✨ Enroll & Lock Anchor'; }
+    }
+  }
+
+  function bindEnrollmentForm(form, modal, canvas, placeholder) {
     if (!form) return;
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = (document.getElementById('enroll-name-input')?.value || '').trim();
-      const category = document.getElementById('enroll-category-select')?.value || 'person';
-      const role = (document.getElementById('enroll-role-input')?.value || '').trim();
-      const camSelect = document.getElementById('enroll-camera-select');
-      const camId = camSelect?.value || window.App?.getActiveCameraId?.() || null;
-      const isAnchor = document.getElementById('enroll-locked-anchor-cb')?.checked ?? true;
-      const notes = (document.getElementById('enroll-notes-input')?.value || '').trim();
-
-      if (!camId) {
-        showToast('Camera Required', 'Please select an active camera source.', 'warning');
-        return;
-      }
-
-      if (!name) {
-        showToast('Validation Required', 'Please enter an entity name.', 'warning');
-        return;
-      }
-      if (!enrollState.selectedCropBase64 && !enrollState.selectedBbox) {
-        showToast('Selection Required', 'Please drag a bounding box on the freeze-frame image.', 'warning');
-        return;
-      }
-
-      const submitBtn = document.getElementById('btn-submit-enrollment');
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Extracting Biometrics...';
-      }
-
-      try {
-        const payload = {
-          name, category, security_role: role, notes,
-          is_anchor: isAnchor, camera_id: camId,
-          crop_base64: enrollState.selectedCropBase64,
-          bbox: enrollState.selectedBbox,
-        };
-
-        const res = await fetch('/api/enroll', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.detail || 'Enrollment failed');
-        }
-
-        const result = await res.json();
-        if (modal) modal.style.display = 'none';
-        form.reset();
-        showToast('Enrollment Successful', `"${name}" enrolled as ${category.toUpperCase()} (ID #${result.entity_id})!`, 'success');
-
-        if (typeof window.loadGallery === 'function') window.loadGallery();
-      } catch (err) {
-        showToast('Enrollment Failed', err.message, 'error');
-      } finally {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = '✨ Enroll & Lock Anchor';
-        }
-      }
+      await submitEnrollment(form, modal, canvas, placeholder);
     });
   }
 
-  function initUniversalEnrollment() {
+  async function openModal() {
     const modal = document.getElementById('modal-universal-enrollment');
-    const openBtn = document.getElementById('btn-open-enrollment');
-    const closeBtn = document.getElementById('modal-enroll-close');
-    const cancelBtn = document.getElementById('modal-enroll-cancel');
-    const captureFreezeBtn = document.getElementById('btn-capture-freeze');
-    const uploadBtn = document.getElementById('btn-upload-enroll-crop');
-    const fileInput = document.getElementById('enroll-file-input');
     const canvas = document.getElementById('enroll-bbox-canvas');
     const placeholder = document.getElementById('enroll-canvas-placeholder');
     const form = document.getElementById('universal-enrollment-form');
     const categorySelect = document.getElementById('enroll-category-select');
+    if (!modal) return;
+    resetEnrollmentState(form, canvas, placeholder);
+    modal.style.display = 'flex';
+    await Promise.all([loadCategoriesDropdown(categorySelect), populateCameraSelect()]);
+    const camId = document.getElementById('enroll-camera-select')?.value || window.App?.getActiveCameraId?.();
+    if (camId) await captureFreezeFrame(canvas, placeholder);
+  }
 
+  function initUniversalEnrollment() {
+    const modal = document.getElementById('modal-universal-enrollment');
+    const canvas = document.getElementById('enroll-bbox-canvas');
+    const placeholder = document.getElementById('enroll-canvas-placeholder');
+    const form = document.getElementById('universal-enrollment-form');
+    const fileInput = document.getElementById('enroll-file-input');
     if (!modal) return;
 
-    if (openBtn) {
-      openBtn.addEventListener('click', async () => {
-        modal.style.display = 'flex';
-        await loadCategoriesDropdown(categorySelect);
-        captureFreezeFrame(canvas, placeholder);
-      });
-    }
-
-    const closeModal = () => { modal.style.display = 'none'; };
-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
+    const closeModal = () => {
+      modal.style.display = 'none';
+      resetEnrollmentState(form, canvas, placeholder);
+    };
+    document.getElementById('btn-open-enrollment')?.addEventListener('click', openModal);
+    document.getElementById('modal-enroll-close')?.addEventListener('click', closeModal);
+    document.getElementById('modal-enroll-cancel')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.getElementById('btn-capture-freeze')?.addEventListener('click', () => captureFreezeFrame(canvas, placeholder));
+    document.getElementById('btn-upload-enroll-crop')?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (re) => loadFreezeImage(re.target.result, canvas, placeholder);
+      reader.readAsDataURL(file);
     });
-
-    if (captureFreezeBtn) {
-      captureFreezeBtn.addEventListener('click', () => captureFreezeFrame(canvas, placeholder));
-    }
-
-    if (uploadBtn && fileInput) {
-      uploadBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (re) => loadFreezeImage(re.target.result, canvas, placeholder);
-        reader.readAsDataURL(file);
-      });
-    }
-
     bindCanvasSelection(canvas);
-    bindEnrollmentForm(form, modal);
+    bindEnrollmentForm(form, modal, canvas, placeholder);
   }
 
   window.UniversalEnrollment = {
     init: initUniversalEnrollment,
+    openModal: openModal,
     captureFreezeFrame: captureFreezeFrame,
     loadFreezeImage: loadFreezeImage,
+    populateCameraSelect: populateCameraSelect,
+    resetEnrollmentState: resetEnrollmentState,
   };
 })();
 

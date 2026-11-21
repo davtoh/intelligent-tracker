@@ -40,7 +40,7 @@ function runScript(relPath, extraWin = {}, els = {}, fetchImpl = async () => ({ 
   const win = {
     location: { protocol: 'http:', host: 'localhost:8000' },
     encodeURIComponent, decodeURIComponent, Math, Date, Number, String, Array, Object, JSON,
-    setTimeout, clearTimeout,
+    setTimeout, clearTimeout, addEventListener: () => {},
     ...extraWin,
   };
   win.window = win;
@@ -222,6 +222,115 @@ class TestStep4Milestone1FrontendContracts(unittest.TestCase):
         self.assertEqual(res["emptyCalls"], 0)
         self.assertIn("track_id=123", res["calls"][0]["u"])
         self.assertEqual(json.loads(res["calls"][1]["body"]), {"track_id": 123})
+
+
+class TestStep4Milestone2FrontendContracts(unittest.TestCase):
+    """Contract and Node VM checks for Milestone 2 camera & enrollment modals."""
+
+    def test_camera_manager_edit_preserves_enabled_type_and_cancel(self) -> None:
+        res = _run_node(r"""
+        const mk = (id, v = '') => Object.assign(makeEl(id), { value: v });
+        const els = {
+          'modal-camera-manager': mk('modal-camera-manager'), 'modal-cam-cancel': mk('modal-cam-cancel'),
+          'camera-config-form': mk('camera-config-form'), 'cam-id-input': mk('cam-id-input'),
+          'cam-name-input': mk('cam-name-input'), 'cam-source-input': mk('cam-source-input'),
+          'cam-type-select': mk('cam-type-select', 'rtsp'), 'cam-preset-select': mk('cam-preset-select', 'hikvision'),
+          'cam-detector-select': mk('cam-detector-select', 'yolov8'), 'cam-tracker-select': mk('cam-tracker-select', 'centroid'),
+          'cam-conf-input': mk('cam-conf-input', '0.40'), 'cam-classes-input': mk('cam-classes-input'),
+          'cam-armed-checkbox': Object.assign(mk('cam-armed-checkbox'), { checked: false }),
+        };
+        const sent = [], cams = [{ id: 'c1', name: 'USB Cam', source: '0', type: 'usb', enabled: false, detector: 'yolo11', tracker: 'sort', confidence: 0.75, device_name: 'HD Cam' }];
+        const fetchImpl = async (u, opts) => {
+          if (opts?.body) sent.push(JSON.parse(opts.body));
+          if (u.includes('/presets')) return { ok: true, json: async () => [] };
+          if (u === '/api/cameras') return { ok: true, json: async () => cams };
+          if (u === '/api/system/capabilities') return { ok: true, json: async () => ({ detectors: ['yolov8', 'yolo11'], trackers: ['centroid', 'sort'] }) };
+          return { ok: true, json: async () => ({}) };
+        };
+        const { win, doc } = runScript('dashboard/static/js/camera_form_helpers.js', { showToast() {} }, els, fetchImpl);
+        const ctx = vm.createContext({ window: win, document: doc, fetch: fetchImpl, console, ...win });
+        vm.runInContext(fs.readFileSync('dashboard/static/js/camera_ai_config.js', 'utf8'), ctx);
+        vm.runInContext(fs.readFileSync('dashboard/static/camera_manager.js', 'utf8'), ctx);
+        await new Promise((r) => setTimeout(r, 15));
+        await win.CameraManager.editCamera('c1');
+        const preset = els['cam-preset-select'].value, det = els['cam-detector-select'].value;
+        await els['camera-config-form'].listeners.submit[0]({ preventDefault() {} });
+        els['modal-cam-cancel'].click();
+        console.log(JSON.stringify({ n: win.CameraManager.getActiveCameras().length, preset, det, payload: sent[0], closed: els['modal-camera-manager'].style.display === 'none' }));
+        """)
+        self.assertEqual((res["n"], res["preset"], res["det"]), (1, "hikvision", "yolo11"))
+        self.assertFalse(res["payload"]["enabled"])
+        self.assertEqual(res["payload"]["type"], "usb")
+        self.assertNotIn("device_name", res["payload"])
+        self.assertTrue(res["closed"])
+
+    def test_discovery_forwards_type_and_ai_presets_scoped(self) -> None:
+        res = _run_node(r"""
+        const btnScan = makeEl('btn-scan-devices'), listEl = makeEl('discovered-devices-list');
+        const addBtn = makeEl('add');
+        addBtn.getAttribute = (k) => ({ 'data-id': 'usb_0', 'data-name': 'Logi', 'data-source': '0', 'data-type': 'usb', 'data-device-name': 'Logi C920' }[k] || '');
+        listEl.querySelectorAll = (s) => (s === '.btn-add-discovered' ? [addBtn] : []);
+        const batchBtn = makeEl('batch');
+        batchBtn.classList = { added: 0, add() { this.added++; }, remove() {}, toggle() {} };
+        const els = {
+          'btn-scan-devices': btnScan, 'discovered-devices-list': listEl,
+          'modal-camera-manager': makeEl('modal-camera-manager'), 'cam-classes-input': makeEl('cam-classes-input'),
+          '__q_#modal-camera-manager .btn-tag-preset:not([data-target])': [],
+          '__q_.btn-tag-preset': [batchBtn],
+        };
+        const fetchImpl = async () => ({ ok: true, json: async () => [{ id: 'usb_0', name: 'Logi', source: '0', type: 'usb' }] });
+        const { win, doc } = runScript('dashboard/static/js/camera_discovery.js', {}, els, fetchImpl);
+        const ctx = vm.createContext({ window: win, document: doc, fetch: fetchImpl, console, ...win });
+        vm.runInContext(fs.readFileSync('dashboard/static/js/camera_ai_config.js', 'utf8'), ctx);
+        let picked = null;
+        await win.CameraDiscovery.scanDevices((sel) => { picked = sel; });
+        addBtn.click();
+        win.CameraAIConfig.resetValues();
+        console.log(JSON.stringify({ picked, batchAdded: batchBtn.classList.added }));
+        """)
+        self.assertEqual(res["picked"], {"id": "usb_0", "name": "Logi", "source": "0", "type": "usb", "device_name": "Logi C920"})
+        self.assertEqual(res["batchAdded"], 0)
+
+    def test_universal_enrollment_image_only_categories_and_routing(self) -> None:
+        res = _run_node(r"""
+        const catSel = makeEl('enroll-category-select');
+        catSel.innerHTML = '<option value="person">Person</option>';
+        const els = {
+          'modal-universal-enrollment': makeEl('modal-universal-enrollment'),
+          'universal-enrollment-form': makeEl('universal-enrollment-form'),
+          'enroll-category-select': catSel, 'enroll-camera-select': makeEl('enroll-camera-select'),
+          'enroll-name-input': Object.assign(makeEl('enroll-name-input'), { value: 'Visitor X' }),
+          'enroll-bbox-canvas': makeEl('enroll-bbox-canvas'), 'enroll-canvas-placeholder': makeEl('enroll-canvas-placeholder'),
+          'enroll-crop-preview-box': makeEl('enroll-crop-preview-box'), 'enroll-crop-preview-img': makeEl('enroll-crop-preview-img'),
+          'btn-enroll-modal': makeEl('btn-enroll-modal'),
+        };
+        els['enroll-bbox-canvas'].getContext = () => ({ drawImage() {}, clearRect() {}, strokeRect() {}, fillRect() {} });
+        const posted = [];
+        const fetchImpl = async (u, opts) => {
+          if (u === '/api/enroll') { posted.push(JSON.parse(opts.body)); return { ok: true, json: async () => ({ entity_id: 9 }) }; }
+          if (u === '/api/rsac/categories') return { ok: true, json: async () => [] };
+          if (u === '/api/cameras') return { ok: true, json: async () => [{ id: 'cam_1', name: 'Lobby' }] };
+          return { ok: true, json: async () => ({}) };
+        };
+        class MockImg { set src(v) { this.naturalWidth = 100; this.naturalHeight = 100; this.onload?.(); } }
+        const { win, doc } = runScript('dashboard/static/js/universal_enrollment.js', { Image: MockImg, showToast() {} }, els, fetchImpl);
+        win.UniversalEnrollment.init();
+        await win.UniversalEnrollment.openModal();
+        const catsPreserved = catSel.innerHTML.includes('person');
+        const camPopulated = els['enroll-camera-select'].innerHTML.includes('cam_1');
+        win.UniversalEnrollment.loadFreezeImage('data:image/jpeg;base64,AA==', els['enroll-bbox-canvas'], els['enroll-canvas-placeholder']);
+        const fakeCanvas = { width: 10, height: 10, getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:image/jpeg;base64,CROP' };
+        doc.createElement = () => fakeCanvas;
+        els['enroll-bbox-canvas'].getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 });
+        els['enroll-bbox-canvas'].listeners.mousedown[0]({ clientX: 0, clientY: 0 });
+        els['enroll-bbox-canvas'].listeners.mouseup[0]({ clientX: 50, clientY: 50 });
+        await els['universal-enrollment-form'].listeners.submit[0]({ preventDefault() {} });
+        console.log(JSON.stringify({ catsPreserved, camPopulated, postedCount: posted.length, camId: posted[0]?.camera_id }));
+        """)
+        self.assertTrue(res["catsPreserved"])
+        self.assertTrue(res["camPopulated"])
+        self.assertEqual(res["postedCount"], 1)
+        self.assertIsNone(res["camId"])
 
 
 if __name__ == "__main__":

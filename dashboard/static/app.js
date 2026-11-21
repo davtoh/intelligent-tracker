@@ -269,7 +269,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('btn-quick-tag')?.addEventListener('click', () => {
-      window.InteractiveCanvas?.openTagModal(state.tracks[0] || null);
+      if (state.tracks[0]) window.InteractiveCanvas?.openTagModal?.(state.tracks[0]);
+      else if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal();
+      else window.InteractiveCanvas?.openTagModal?.(null);
     });
   }
 

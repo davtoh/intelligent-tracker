@@ -32,84 +32,62 @@
     setInterval(checkActiveCameraHealth, 3000);
   }
 
+  function bindDiagActionButton(btn, urlForCam, label, busyLabel, idleLabel, onSuccess) {
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!currentDiagCameraId) return;
+      btn.disabled = true;
+      btn.textContent = busyLabel;
+      try {
+        const resp = await fetch(urlForCam(encodeURIComponent(currentDiagCameraId)), { method: 'POST' });
+        const data = await resp.json();
+        if (resp.ok) {
+          onSuccess(data);
+          await openDiagnosticModal(currentDiagCameraId);
+        } else {
+          showToast(`${label} failed: ${data.detail || 'Error'}`, 'warning');
+        }
+      } catch (e) {
+        showToast(`Network error: ${e.message}`, 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = idleLabel;
+      }
+    });
+  }
+
   function bindEvents() {
     const modalDiag = document.getElementById('modal-camera-diagnostics');
-    const btnCloseDiag = document.getElementById('modal-diag-close');
-    const btnCancelDiag = document.getElementById('modal-diag-cancel');
-    const btnEditInManager = document.getElementById('diag-btn-edit-manager');
-    const btnReleaseLock = document.getElementById('diag-btn-release-lock');
-    const btnProbeChannel = document.getElementById('diag-btn-probe-channel');
-
-    if (btnCloseDiag) btnCloseDiag.addEventListener('click', closeDiagnosticModal);
-    if (btnCancelDiag) btnCancelDiag.addEventListener('click', closeDiagnosticModal);
-    if (modalDiag) {
-      modalDiag.addEventListener('click', (e) => {
-        if (e.target === modalDiag) closeDiagnosticModal();
-      });
-    }
-
-    if (btnEditInManager) {
-      btnEditInManager.addEventListener('click', () => {
-        const camId = currentDiagCameraId;
-        closeDiagnosticModal();
-        if (camId && window.CameraManager?.editCamera) {
-          window.CameraManager.editCamera(camId);
-        } else {
-          const modalCam = document.getElementById('modal-camera-manager');
-          if (modalCam) modalCam.style.display = 'flex';
-        }
-      });
-    }
-
-    if (btnReleaseLock) {
-      btnReleaseLock.addEventListener('click', async () => {
-        if (!currentDiagCameraId) return;
-        btnReleaseLock.disabled = true;
-        btnReleaseLock.textContent = '⏳ Releasing...';
-        try {
-          const resp = await fetch(`/api/cameras/${encodeURIComponent(currentDiagCameraId)}/release`, {
-            method: 'POST',
-          });
-          const data = await resp.json();
-          if (resp.ok) {
-            showToast(`Camera lock released: ${data.release_result?.status || 'Done'}`, 'success');
-            await openDiagnosticModal(currentDiagCameraId);
-          } else {
-            showToast(`Release failed: ${data.detail || 'Error'}`, 'warning');
-          }
-        } catch (e) {
-          showToast(`Network error: ${e.message}`, 'danger');
-        } finally {
-          btnReleaseLock.disabled = false;
-          btnReleaseLock.textContent = '🔓 Release Device Lock';
-        }
-      });
-    }
-
-    if (btnProbeChannel) {
-      btnProbeChannel.addEventListener('click', async () => {
-        if (!currentDiagCameraId) return;
-        btnProbeChannel.disabled = true;
-        btnProbeChannel.textContent = '⏳ Probing...';
-        try {
-          const resp = await fetch(`/api/cameras/${encodeURIComponent(currentDiagCameraId)}/probe`, {
-            method: 'POST',
-          });
-          const data = await resp.json();
-          if (resp.ok) {
-            showToast(`Probe complete: Operational=${data.probe?.operational}`, data.probe?.operational ? 'success' : 'warning');
-            await openDiagnosticModal(currentDiagCameraId);
-          } else {
-            showToast(`Probe failed: ${data.detail || 'Error'}`, 'warning');
-          }
-        } catch (e) {
-          showToast(`Probe error: ${e.message}`, 'danger');
-        } finally {
-          btnProbeChannel.disabled = false;
-          btnProbeChannel.textContent = '⚡ Probe Hardware';
-        }
-      });
-    }
+    document.getElementById('modal-diag-close')?.addEventListener('click', closeDiagnosticModal);
+    document.getElementById('modal-diag-cancel')?.addEventListener('click', closeDiagnosticModal);
+    modalDiag?.addEventListener('click', (e) => {
+      if (e.target === modalDiag) closeDiagnosticModal();
+    });
+    document.getElementById('diag-btn-edit-manager')?.addEventListener('click', () => {
+      const camId = currentDiagCameraId;
+      closeDiagnosticModal();
+      if (camId && window.CameraManager?.editCamera) window.CameraManager.editCamera(camId);
+      else {
+        const modalCam = document.getElementById('modal-camera-manager');
+        if (modalCam) modalCam.style.display = 'flex';
+      }
+    });
+    bindDiagActionButton(
+      document.getElementById('diag-btn-release-lock'),
+      (cid) => `/api/cameras/${cid}/release`,
+      'release',
+      '⏳ Releasing...',
+      '🔓 Release Device Lock',
+      (data) => showToast(`Camera lock released: ${data.release_result?.status || 'Done'}`, 'success')
+    );
+    bindDiagActionButton(
+      document.getElementById('diag-btn-probe-channel'),
+      (cid) => `/api/cameras/${cid}/probe`,
+      'probe',
+      '⏳ Probing...',
+      '⚡ Probe Hardware',
+      (data) => showToast(`Probe complete: Operational=${data.probe?.operational}`, data.probe?.operational ? 'success' : 'warning')
+    );
   }
 
   function isLoadedCameraId(activeSelect, camId) {
@@ -173,14 +151,7 @@
     }
   }
 
-  async function openDiagnosticModal(cameraId) {
-    currentDiagCameraId = cameraId;
-    const modal = document.getElementById('modal-camera-diagnostics');
-    if (!modal) return;
-
-    modal.style.display = 'flex';
-
-    // Elements
+  function renderDiagDetails(data) {
     const titleEl = document.getElementById('diag-modal-title');
     const statStatus = document.getElementById('diag-stat-status');
     const statCode = document.getElementById('diag-stat-code');
@@ -189,44 +160,42 @@
     const statFailures = document.getElementById('diag-stat-failures');
     const adviceBody = document.getElementById('diag-advice-body');
     const traceBox = document.getElementById('diag-traceback-box');
-
-    if (titleEl) titleEl.textContent = `Camera Diagnostics: ${cameraId}`;
+    if (titleEl) titleEl.textContent = `Camera Diagnostics: ${data.name || data.camera_id} (${data.camera_id})`;
     if (statStatus) {
-      statStatus.textContent = 'Loading...';
-      statStatus.className = 'diag-stat-value';
+      statStatus.textContent = (data.status || 'unknown').toUpperCase();
+      statStatus.className = `diag-stat-value status-${data.status === 'online' ? 'online' : 'error'}`;
     }
+    if (statCode) statCode.textContent = data.error_code || 'OK';
+    if (statSource) statSource.textContent = data.source || '-';
+    if (statDevice) statDevice.textContent = data.device_name || 'Generic / Unbound';
+    if (statFailures) statFailures.textContent = String(data.failure_count || 0);
+    if (adviceBody) adviceBody.textContent = data.suggested_action || 'System running normally.';
+    if (traceBox) {
+      const details = [];
+      if (data.last_error) details.push(`ERROR MESSAGE:\n${data.last_error}`);
+      if (data.attempted_paths?.length) details.push(`\nATTEMPTED FILE PATHS:\n${data.attempted_paths.join('\n')}`);
+      if (data.diagnostics && Object.keys(data.diagnostics).length) {
+        details.push(`\nHARDWARE PROBE DETAILS:\n${JSON.stringify(data.diagnostics, null, 2)}`);
+      }
+      if (data.traceback) details.push(`\nTRACEBACK:\n${data.traceback}`);
+      traceBox.textContent = details.length ? details.join('\n') : 'No active errors or tracebacks reported.';
+    }
+  }
 
+  async function openDiagnosticModal(cameraId) {
+    currentDiagCameraId = cameraId;
+    const modal = document.getElementById('modal-camera-diagnostics');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const titleEl = document.getElementById('diag-modal-title');
+    const statStatus = document.getElementById('diag-stat-status');
+    const adviceBody = document.getElementById('diag-advice-body');
+    if (titleEl) titleEl.textContent = `Camera Diagnostics: ${cameraId}`;
+    if (statStatus) { statStatus.textContent = 'Loading...'; statStatus.className = 'diag-stat-value'; }
     try {
       const resp = await fetch(`/api/cameras/${encodeURIComponent(cameraId)}/diagnostics`);
       if (!resp.ok) throw new Error('Could not fetch diagnostics');
-      const data = await resp.json();
-
-      if (titleEl) titleEl.textContent = `Camera Diagnostics: ${data.name || cameraId} (${cameraId})`;
-      if (statStatus) {
-        statStatus.textContent = (data.status || 'unknown').toUpperCase();
-        statStatus.className = `diag-stat-value status-${data.status === 'online' ? 'online' : 'error'}`;
-      }
-      if (statCode) statCode.textContent = data.error_code || 'OK';
-      if (statSource) statSource.textContent = data.source || '-';
-      if (statDevice) statDevice.textContent = data.device_name || 'Generic / Unbound';
-      if (statFailures) statFailures.textContent = String(data.failure_count || 0);
-
-      if (adviceBody) {
-        adviceBody.textContent = data.suggested_action || 'System running normally.';
-      }
-
-      if (traceBox) {
-        const details = [];
-        if (data.last_error) details.push(`ERROR MESSAGE:\n${data.last_error}`);
-        if (data.attempted_paths && data.attempted_paths.length) {
-          details.push(`\nATTEMPTED FILE PATHS:\n${data.attempted_paths.join('\n')}`);
-        }
-        if (data.diagnostics && Object.keys(data.diagnostics).length) {
-          details.push(`\nHARDWARE PROBE DETAILS:\n${JSON.stringify(data.diagnostics, null, 2)}`);
-        }
-        if (data.traceback) details.push(`\nTRACEBACK:\n${data.traceback}`);
-        traceBox.textContent = details.length ? details.join('\n') : 'No active errors or tracebacks reported.';
-      }
+      renderDiagDetails(await resp.json());
     } catch (e) {
       if (statStatus) statStatus.textContent = 'ERROR';
       if (adviceBody) adviceBody.textContent = e.message;

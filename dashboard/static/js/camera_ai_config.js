@@ -115,6 +115,12 @@
     }
   }
 
+  function getPresetButtons() {
+    const scoped = document.querySelectorAll('#modal-camera-manager .btn-tag-preset:not([data-target])');
+    if (scoped && scoped.length > 0) return scoped;
+    return document.getElementById('modal-camera-manager') ? [] : document.querySelectorAll('.btn-tag-preset:not([data-target])');
+  }
+
   function bindEvents() {
     const range = document.getElementById('cam-conf-range');
     const input = document.getElementById('cam-conf-input');
@@ -123,11 +129,11 @@
       input.addEventListener('input', (e) => syncConfidence(e.target.value));
       input.addEventListener('change', (e) => syncConfidence(e.target.value));
     }
-    document.querySelectorAll('.btn-tag-preset').forEach(btn => {
+    getPresetButtons().forEach(btn => {
       btn.addEventListener('click', (e) => {
         const classesInput = document.getElementById('cam-classes-input');
         if (classesInput) classesInput.value = e.currentTarget.getAttribute('data-classes') || '';
-        document.querySelectorAll('.btn-tag-preset').forEach(b => b.classList.remove('active'));
+        getPresetButtons().forEach(b => b.classList.remove('active'));
         e.currentTarget.classList.add('active');
       });
     });
@@ -183,7 +189,7 @@
     const armedCb = document.getElementById('cam-armed-checkbox');
     if (armedCb) armedCb.checked = Boolean(cam.armed);
     const activeClasses = classesInput ? classesInput.value.trim() : '';
-    document.querySelectorAll('.btn-tag-preset').forEach(btn => {
+    getPresetButtons().forEach(btn => {
       btn.classList.toggle('active', (btn.getAttribute('data-classes') || '').trim() === activeClasses);
     });
   }
@@ -198,7 +204,7 @@
     if (classesInput) classesInput.value = '';
     const armedCb = document.getElementById('cam-armed-checkbox');
     if (armedCb) armedCb.checked = false;
-    document.querySelectorAll('.btn-tag-preset').forEach(btn => btn.classList.remove('active'));
+    getPresetButtons().forEach(btn => btn.classList.remove('active'));
   }
 
   function resolveInitialCameraId(activeCameras, currentId = null) {

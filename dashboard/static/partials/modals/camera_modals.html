@@ -19,9 +19,7 @@
                   <tr><th>ID</th><th>Name</th><th>Source</th><th>Status</th><th>Toggle</th><th>Actions</th></tr>
                 </thead>
                 <tbody id="active-cameras-table-body">
-                  <tr>
-                    <td colspan="6" class="text-center">Loading cameras...</td>
-                  </tr>
+                  <tr><td colspan="6" class="text-center">Loading cameras...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -55,15 +53,26 @@
                 </div>
               </div>
 
-              <div class="form-group">
-                <label for="cam-preset-select">Vendor RTSP Preset Builder</label>
-                <select id="cam-preset-select" class="form-input">
-                  <option value="hikvision">Hikvision NVR / IP Camera</option>
-                  <option value="tapo">TP-Link Tapo (C200 / C310 / C500)</option>
-                  <option value="ezviz">EZVIZ Security Camera</option>
-                  <option value="dahua">Dahua / Imou IP Camera</option>
-                  <option value="generic">Generic RTSP / NVR Stream</option>
-                </select>
+              <div class="form-row">
+                <div class="form-group col-5">
+                  <label for="cam-type-select">Source Type</label>
+                  <select id="cam-type-select" class="form-input">
+                    <option value="rtsp">RTSP / Network</option>
+                    <option value="usb">USB / Local Cam</option>
+                    <option value="video_file">Video File</option>
+                    <option value="synthetic">Synthetic Demo</option>
+                  </select>
+                </div>
+                <div class="form-group col-7">
+                  <label for="cam-preset-select">Vendor RTSP Preset</label>
+                  <select id="cam-preset-select" class="form-input">
+                    <option value="hikvision">Hikvision NVR / IP Camera</option>
+                    <option value="tapo">TP-Link Tapo (C200 / C310 / C500)</option>
+                    <option value="ezviz">EZVIZ Security Camera</option>
+                    <option value="dahua">Dahua / Imou IP Camera</option>
+                    <option value="generic">Generic RTSP / NVR Stream</option>
+                  </select>
+                </div>
               </div>
 
               <div class="form-row">
@@ -163,8 +172,7 @@
                   <input type="text" id="cam-classes-input" class="form-input" placeholder="e.g. person, car" />
                   <div class="class-presets-bar">
                     <button type="button" class="btn-tag-preset" data-classes="person">👤 Person</button>
-                    <button type="button" class="btn-tag-preset" data-classes="car, motorcycle, bus, truck, bicycle">🚗
-                      Vehicles</button>
+                    <button type="button" class="btn-tag-preset" data-classes="car, motorcycle, bus, truck, bicycle">🚗 Vehicles</button>
                     <button type="button" class="btn-tag-preset" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
                     <button type="button" class="btn-tag-preset" data-classes="">🌐 All Classes</button>
                   </div>
@@ -174,10 +182,8 @@
               <!-- Live Snapshot Connection Preview Box -->
               <div class="connection-test-box glass-panel">
                 <div class="test-box-header">
-                  <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test
-                    Connection</button>
-                  <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify
-                    source.</span>
+                  <button type="button" class="btn btn-sm btn-outline" id="btn-test-connection">⚡ Test Connection</button>
+                  <span id="test-preview-meta" class="test-preview-meta">Click "Test Connection" to verify source.</span>
                 </div>
                 <img id="test-preview-img" src="" alt="Test Snapshot" style="display: none; max-height: 120px; width: auto; border-radius: 4px; margin-top: 8px;" />
               </div>
@@ -186,9 +192,8 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline" id="modal-cam-cancel" onclick="document.getElementById('modal-camera-manager').style.display='none'">Cancel</button>
-        <button type="submit" form="camera-config-form" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to
-          VMS</button>
+        <button type="button" class="btn btn-outline" id="modal-cam-cancel">Cancel</button>
+        <button type="submit" form="camera-config-form" class="btn btn-primary" id="btn-save-camera">💾 Save Camera to VMS</button>
       </div>
     </div>
   </div>

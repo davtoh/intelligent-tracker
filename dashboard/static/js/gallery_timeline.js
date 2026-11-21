@@ -115,7 +115,8 @@
       });
     });
     document.getElementById('btn-enroll-modal')?.addEventListener('click', () => {
-      window.InteractiveCanvas?.openTagModal?.(null);
+      if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal();
+      else window.InteractiveCanvas?.openTagModal?.(null);
     });
   }
 
