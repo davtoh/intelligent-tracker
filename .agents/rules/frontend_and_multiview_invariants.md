@@ -1,0 +1,39 @@
+---
+trigger: model_decision
+description: Apply when editing dashboard/static/ (HTML, CSS, JS), multiview (/ws/multiview, dashboard/services/multiview/, dashboard/static/js/multiview/), interactive_canvas.js, UnifiedCanvasOverlay, OverlayControlBar, processing_mode.js, scheduler_hud.js, studio.js, or writing Node.js vm.runInNewContext / CDP frontend tests.
+---
+
+# Frontend, Multiview & Node VM Test Invariants
+
+## 1. Component Reuse, Single-Control & Zero-CLS HUD Contract
+- **Component Reuse & Ask-Before-Creating-New-Component Rule**: Before creating any new UI component, toolbar, modal, or canvas renderer, inspect existing modules in `dashboard/static/js/` and `dashboard/static/partials/`. Reuse and parameterize existing components via presentation variants (e.g., `OverlayControlBar` with `variant: 'live'` / `'scrubber'`, `UnifiedCanvasOverlay`), keep one canonical control per action per view (zero duplicate/dead buttons), and **explicitly ask the user before creating a new UI component that overlaps an existing one**.
+- **Zero-CLS Dynamic HUD Contract**: Dynamic telemetry bars/badges (`AI Lag`, scheduler tiers, camera titles) must define explicit `>= 8px` gaps, `tabular-nums`, reserved slots with smoothing/hysteresis (no frame-by-frame `hidden` flicker), and `min-width: 0; overflow: hidden; text-overflow: ellipsis` truncation containment.
+- **HiDPI `<canvas>` Hit-Testing & Pointer Events**:
+  - When scaling an overlay `<canvas>` via `UnifiedCanvasOverlay.syncCanvasDpr(dpr)`, hover hit-testing and tooltip placement MUST divide by CSS layout dimensions (`canvas.style.width` / `canvas.style.height` or `getBoundingClientRect()`), never backing-store pixel dimensions (`canvas.width` / `canvas.height`).
+  - When attaching pointer/ROI handlers to an overlay `<canvas>` (`#interactive-canvas`, `#scrubber-overlay-canvas`), verify its CSS sets `pointer-events: auto` (not `none`).
+  - In `#scrubber-overlay-layers`, use `.overlay-feature-pill` for feature visibility toggles (`BBoxes`, `IDs`, `Dwell`, `Velocity`, `Zones`, `Tripwires`) and reserve `.overlay-layer-chip` exclusively for analysis run layer chips.
+
+## 2. Multiview Socket Budget & Viewing != Analytics
+- **Socket Budget**: Each SPA tab uses at most `1` `/ws/multiview` socket + `1` 1x1 MJPEG `/stream/{id}` (or `<= 4` MJPEG sockets on `2x2` pages during 3-failure degraded fallback), sending `unsubscribe_all` when leaving the grid and closing after 30 s idle or on `pagehide`. Always call `LivePlayer.detachGridStreams()` before `innerHTML` grid teardown.
+- **Viewing != Analytics**: Grid `/ws/multiview` subscriptions wake capture via `annotated=False` subscriber leases and share encoded `ThumbnailCache` tiers per camera/width, without ever altering `ProcessingModeService.should_run_vision_step()` (`armed` cameras stay awake except under `paused`).
+- **Clean vs. Annotated Stream Contract (`?annotated=false|true`)**: Preserve `annotated: bool = True` as the default on `GET /stream/{camera_id}` and `StreamManager.get_latest_frame_jpeg()`; pass `?annotated=false` explicitly on `#live`'s primary interactive viewport so freeze-frame ROI crops remain free of burned-in pixels.
+- **Zero Hardcoded `'cam_01'` Defaults**: Never default `ProcessingModeService.focused_camera_id` or frontend stream/WebSocket/studio/AI-config fallbacks to `'cam_01'`. `ProcessingModeUI.isValidCameraId()` must return `false` while `availableCameras` is `null` (before `/api/cameras` loads), and stream/WS/studio attach helpers must guard on a resolved non-empty camera ID.
+- **Cross-Video View Isolation & Auto-Switch**: In `video_batch.js` and `video_library.js`, all async job listeners (`job-started`, `job-update`, `job-finished`) must verify `currentBatchFilename === job.filename` before updating DOM containers, and auto-switch `videoPlayer.src` when `_h264.mp4` conversion finishes for `currentViewedFilename`.
+
+## 3. Enforced HTML/JS/CSS Line Budgets & Node VM Test Rules
+- **Strict File Line Caps** (enforced by `tests/test_step3_architecture_budgets.py`, `tests/test_step3_tag_modal_integration.py`, and legacy budget tests):
+  - `dashboard/static/index.html < 180` lines
+  - `dashboard/static/partials/tabs/live.html < 220` lines
+  - `dashboard/static/js/processing_mode.js < 220` lines (reading `data.camera_states` with `data.cameras` fallback)
+  - `dashboard/static/css/processing_mode.css < 140` lines
+  - `dashboard/static/js/scheduler_hud.js < 180` lines
+  - `dashboard/static/interactive_canvas.js < 240` lines (centralize scale-factor resolution in `getActiveScales()` and keep `live-stream-img || video-stream` fallback)
+  - `dashboard/static/camera_ai_config.js < 280` lines
+  - `dashboard/static/js/studio.js <= 350` lines
+  - `dashboard/static/camera_manager.js <= 366` lines
+- **WebIDL Timer Wrapping**: Wrap native timer methods (`window.setTimeout`, `window.clearTimeout`) in arrow functions (`(fn, ms) => setTimeout(fn, ms)`) rather than storing bare function references on class instances (`TypeError: Illegal invocation` in V8).
+- **Fetch Clone & HTML Asset Regex**: Shared `fetch` deduplication helpers MUST return `resp.clone()` before callers invoke `.json()` or `.text()`. Match real HTML asset tags with negative lookbehind `(?<!data-)src=` in static tests so lazy-loaded `data-src=` attributes do not trigger false failures.
+- **Node VM (`vm.runInNewContext`) Test Discipline**:
+  - Keep every test method strictly `<= 40` lines (`diagnose.py audit`).
+  - When testing `studio.js` incremental/delta list rendering, stub DOM creation/diff hooks (`document.createElement` with `children: []` and `appendChild`, row stubs, `StudioOverlays.renderScenarioListUI`/`renderTopologyLinksUI`) in small (`<= 40L`) helpers, and measure BEV minimap timer activity via delta renders across `_tickIntervals()`.
+  - When testing async `fetch().then(r => r.json())` flows in Node VM without timers, flush multiple microtask ticks (or await the returned init promise) before asserting DOM updates.
