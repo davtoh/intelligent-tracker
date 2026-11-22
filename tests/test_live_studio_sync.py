@@ -184,7 +184,7 @@ class TestLiveStudioSync(unittest.TestCase):
             "vm.runInNewContext(lpCode, sb); vm.runInNewContext(fsCode, sb);\n"
             "win.LivePlayer.attachLiveStream(img, 'cam_01', true);\n"
             "const defaultSrc = img.src;\n"
-            "win.LivePlayer.updateInferenceLagHud({ camera_id: 'cam_01', resolution: '1280x720', fps: 25, frame_seq: 20, inference_frame_seq: 16, inference_lag_ms: 185 });\n"
+            "for (let i = 0; i < 3; i += 1) { win.LivePlayer.updateInferenceLagHud({ camera_id: 'cam_01', resolution: '1280x720', fps: 25, frame_seq: 20 + i, inference_frame_seq: 16 + i, inference_lag_ms: 185 }); }\n"
             "const lagVisible = !lagBadge.hidden; const lagText = lagBadge.textContent;\n"
             "win.LivePlayer.setBurnedAnnotationMode(true, img, 'cam_01');\n"
             "const burnedSrc = img.src;\n"

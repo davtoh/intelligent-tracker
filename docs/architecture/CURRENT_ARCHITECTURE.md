@@ -1,7 +1,7 @@
 # Intelligent Tracker — Current Architecture & Alignment Audit
 
-> **Snapshot Basis**: Branch `feature/integration-remediations` (commit `400bc9f`, post-`integration_diagnostics_and_remediation_plan.md` Milestones 1–3 + FPS/replay hotfix).
-> **Measured Static & Test Baseline**: `diagnose.py arch-map` = `336` source files, `61,571` lines, `111` FastAPI route decorators across 15 routers + `dashboard/app.py`, `0` upward imports from `intelligent_tracker/` to `dashboard/` or `scripts/`, `0` CSS `!important` across `25` stylesheets; `diagnose.py tests` = `882` unit/integration tests passing (`OK`); `sphinx -W` = `0` warnings; `diagnose.py scan` = `0` active defects (`16` resolved); `diagnose.py surface --verify` = `0` reported mismatches (blind spots documented in Section 6); `diagnose.py traces` = `18` unique issues (`8` active, `10` resolved, `662` events).
+> **Snapshot Basis**: Branch `feature/integration-remediations` (post-Steps 1–4 of `integration_hardening_master_roadmap.md`: `P0-1`..`P0-5`, `P1-6`..`P1-13`, `P2-14`..`P2-26`, and `P3-1`..`P3-5` resolved).
+> **Measured Static & Test Baseline**: `diagnose.py arch-map` = `343` source files, `63,418` lines, `112` FastAPI route decorators across 15 routers + `dashboard/app.py`, `0` upward imports from `intelligent_tracker/` to `dashboard/` or `scripts/`, `0` CSS `!important` across `25` stylesheets; `sphinx -W` = `0` warnings; `diagnose.py scan` = `0` active defects (`44` resolved); `4` workspace probes passing (`cold_boot_world_probe`, `replay_pipeline_probe`, `video_studio_contract_probe`, `spa_nine_tab_cdp_probe`).
 > **Reference Target**: [Ideal World Architecture & Target Blueprint](IDEAL_WORLD_ARCHITECTURE.md) (`ADRs 01–06`, Layers 1–5).
 
 ### Pre-Run Verification One-Liners
@@ -16,33 +16,33 @@ python skills/system-diagnostics/scripts/diagnose.py arch-map --path .
 
 ## 1. Executive Alignment Verdict vs. `IDEAL_WORLD_ARCHITECTURE.md`
 
-- **Structural Convergence (~80–85%)**: All 5 target layers, ADRs 01–04, `PipelineEngine`, scoped `WorldGraph`, `ConfidenceEngine` / `EventFTSIndex` / `WorldQueryEngine`, `SQLiteConnectionCoordinator` (WAL + `RLock`), `/ws/multiview` binary tile transport, `AnalyticsScheduler`, and 15 modular FastAPI routers are implemented and pass `882` unit/integration tests.
-- **Operational End-to-End Integration (~55–60%)**: Cross-layer runtime seams still exhibit silent clock-domain corruption, an AB-BA lock-order deadlock during active recording, in-place coordinate mutation across `max_dim=1280` frames, broken heatmap rendering, split-brain `WorldGraph` / `ConfidenceEngine` instances, scenario wipe on stream restart, HUD layout-shift/multiview visibility gaps, and widespread frontend-backend JSON payload drift.
+- **Structural Convergence (~95%)**: All 5 target layers, ADRs 01–06, `PipelineEngine`, pool-scoped `WorldGraph` with `EventBus`, shared `ConfidenceEngine` / `EventFTSIndex` / `WorldQueryEngine`, `SQLiteConnectionCoordinator` (WAL + `RLock`), `/ws/multiview` binary + telemetry JSON transport, `AnalyticsScheduler`, unified `OverlayControlBar`, Zero-CLS HUD, and 15 modular FastAPI routers are implemented and verified.
+- **Operational End-to-End Integration (~95%)**: Steps 1–4 resolved all `P0-1`..`P0-5`, `P1-6`..`P1-13`, `P2-14`..`P2-26`, and `P3-1`..`P3-5` runtime seams (dual-clock domain boundary, AB-BA lock-order elimination, `max_dim` coordinate copy isolation, 16:9 heatmap rendering, pool-scoped singletons, scenario persistence across restarts, Zero-CLS HUD hysteresis, multiview AI boxes/alerts/toggle, and 9-tab headless CDP parity). Remaining debt is limited to legacy `high_objects.py` (`523L`) and optional CLI remote parity (`Section 3`).
 
 | ADR / Layer | Target Blueprint | Current Branch Status | What Is Genuinely Achieved | Remaining Drift / Gaps |
 | :--- | :--- | :--- | :--- | :--- |
-| **ADR-01: Unified Core Engine + Thin Adapters** | Single `PipelineEngine` + `FrameProcessor.step()` for CLI and Dashboard | **Mostly Achieved** | `PipelineConfig`, `PipelineEngine`, and `FrameProcessor.step()` unify CLI (`intelligent_tracker/cli/pipeline_builder.py:108`, `runner.py:76`) and Dashboard (`dashboard/services/pipeline_factory.py:95`, `stream_worker.py`); `pyproject.toml:59-62` defines all 3 `console_scripts`. | `intelligent_tracker/interactive.py:288-380` builds a separate manual detector/tracker/matcher loop; `VideoIndexer` (`intelligent_tracker/batch.py:153-195`) manually instantiates components instead of calling `PipelineEngine.build()`; `cli/runner.py:17-47` retains `run_legacy_forms_gui` using `high_objects.World`. |
-| **ADR-02: Scoped `WorldGraph` + Reactive Rules** | Instance-scoped `WorldGraph`, `WorldEntityBridge`, `GlobalCoordinateMapper`, retiring `MetaSpace`/`high_objects.py` | **Partial / Split-Brain** | `WorldGraph`, `WorldNode` subclasses, `WorldEntityBridge`, `GlobalCoordinateMapper`, `WorldTransitionRegistry`, `WorldRuleEngine`, and `WorldTacticalMinimap` operate with `RLock` scoping; `ScenarioManager` cold-boot DB/YAML sync landed in M2. | `CameraPool.world_graph` (`dashboard/camera_pool.py:51`) passes `event_bus=None` (and `pipeline/bundle.py:304` skips attaching one), so Dashboard mutations never emit reactive events; `WorldPolicy` (`world/nodes.py:182-197`) is unused in runtime; stream restart wipes `CameraNode` homography/pose (`world/graph.py:66-71`) and skips `ScenarioManager.apply_to_stream_manager()`; `DELETE /api/scenarios/homography/{id}` leaves stale matrices in `WorldGraph`/`GlobalCoordinateMapper`; legacy `high_objects.py` (`523L`) and `core/spaces.py` remain active via `--gui forms`. |
-| **ADR-03: Hybrid Local Memory + Pluggable Q&A** | `ConfidenceEngine`, `EventFTSIndex`, `WorldQueryEngine` + `SemanticProvider` | **Partial / Clock & Wiring Drift** | `ConfidenceEngine`, `EventFTSIndex` (FTS5 + `PRAGMA user_version = 1`), `WorldQueryEngine`, `PrivacyMaskingFilter`, and local/mock/Gemini providers are implemented in `intelligent_tracker/memory/` and bound onto `app.state`. | Live `dashboard/services/async_inference_worker.py:266` injects `time.monotonic()` and offline `intelligent_tracker/batch.py:254-256` injects `video_ts` (`0.0s`) as Unix epoch `timestamp` into `FrameProcessor.step()` -> instant 56-year confidence decay to `0.10` floor, `1970-01-01` sightings/FTS rows, and broken relative time queries (`"last 2 hours"`, `"today"`); `ConfidenceEngine` is instantiated per stream (`bundle.py:234`) instead of shared pool-wide; `_gallery_signals.py:153-157` drops `video_filename`/`media_offset_sec` on periodic FTS sightings; `query_engine.py:38-53` omits media fields from citations. |
-| **ADR-04: `arch-map` Verification & Modularity** | Zero active files `>= 500L`; `<= 12` methods/class; `<= 40L`/fn; zero `sys.modules` DI hacks | **Largely Achieved (with Legacy Debt)** | `0` upward imports from `intelligent_tracker/`, `0` CSS `!important`, `index.html` (`<180L`), `capture_worker.py` back `<350L`, Win32 `ctypes.Structure` audit warnings fixed, `0` active `scan` defects, `dependencies.py` uses `app.state`. | `1` hard overrun (`intelligent_tracker/high_objects.py` `523L`), `9` soft warnings (`350–499L`), `8` heavy classes (`>12` methods or `>300L`), `59` functions `>40L`, unused `import time` in `dashboard/services/stream_worker.py:9`. |
-| **ADR-05: Reusable Frontend SSOT, Zero-CLS HUD & Grid AI** | Shared variant UI components, single button per intent, zero-CLS HUD, multiview AI boxes/alerts/toggle | **Partial / Drift** | `UnifiedCanvasOverlay` shares rendering across 1x1 Live and Video Scrubber; `/ws/multiview` uses raw `annotated=False` server thumbnails. | Live Monitor (`live.html:111-157` + `studio_overlays.js`) and Video Studio (`videos.html:35-36` + `overlay_layer_toolbar.js`) duplicate `"Video Overlays"` toolbars; `live.html:35` leaves broken duplicate `#fullscreen-btn`; `.hud-center` (`player.css:239-246`) has `0px` gap and `live_player.js:53-60` flickers `AI Lag`; `camera_grid.js` lacks multiview AI boxes, live tile FPS/tracks, pool-wide alerts, and a per-tile AI toggle. |
-| **ADR-06: Dual-Clock Contract & Pool Singletons** | Monotonic timing vs. Unix epoch domain timestamps + shared pool `EventBus`/`WorldGraph`/`ConfidenceEngine`/`EventFTSIndex` | **Broken / Drift** | `AnalyticsScheduler` and `MotionGate` internally isolate monotonic intervals; `CameraPool` constructs one `WorldGraph`. | `P0-1` monotonic/relative clock leaks into domain timestamps; `P0-2` AB-BA lock inversion (`ProcessingModeService` <-> `StreamRecordingController`); `P0-5` split-brain `WorldGraph(event_bus=None)` and unshared per-stream `ConfidenceEngine`/`EventBus`. |
-| **Layer 1: SQLite Concurrency & Hardware** | `pyproject.toml` entrypoints + WAL pooled/serialized DB coordinator | **Mostly Achieved** | `SQLiteConnectionCoordinator` enforces WAL + per-path `RLock` + refcounted `TRUNCATE` checkpoint; `VideoSource` modularized with `frame_timing.py`. | Only `SignatureMixin` guards `self._conn is None` (9 other repository mixins do not); `BackupManager.restore_backup` lacks ZIP symlink rejection and SQLite WAL/SHM sidecar cleanup; `TRC-018` risk from unclosed `TrackerDB` in `ScenarioManager` / `VideoIndexer`; `CaptureReadGuard._wait_interruptible()` uses `time.time()` and `read()` mutates state outside lock; `journey.py:81-92` runs raw SQL on `db._conn`. |
-| **Layer 2: Identity, Learning & RSAC** | Unified Re-ID, Active Learning, RSAC & descriptor versioning | **Partial** | Locked anchors, bounded EMA, RSAC rules/categories, pet whitelist, Active Learning triage/actions, and FTS5 indexing work locally. | `RoiRecognitionService` and `EntityTaggerService` bypass `ConfidenceEngine`, `EventFTSIndex`, `DescriptorMixin`, and `is_anchor=1`; `post_detection_governance.py:115-119` drops `zone_id` when converting `EntityIdentifiedEvent`. |
-| **Layer 3 & 4: WorldGraph, Scheduler & Multiview** | Scoped graph, P0/P1/P2 scheduler, zero-GPU replay, binary `/ws/multiview` | **Partial** | `/ws/multiview` zero-extra-render leasing, `MotionGate`, `ReplayTrack`, `CachedReplayProvider` wrap-around reset, and `StreamPoolCoordinator` two-pass teardown work cleanly. | `ProcessingModeService` <-> `StreamRecordingController` AB-BA lock inversion; `FrameProcessor.step(max_dim=1280)` mutates `CentroidTracker` tracks in-place; `FrameOverlayRenderer` calls non-existent `draw_heatmap_overlay()`; `capture_only` freezes `annotated=True` MJPEG streams; `REPLAY` <-> `LIVE` transition races. |
-| **Layer 5: Thin Adapters & CLI <-> Dashboard Parity** | Full operational parity and thin routers | **Partial** | 15 domain routers cleanly split under `dashboard/routers/`; `dependencies.py` uses `app.state`. | `ctl.py` covers `list/stats/evict/prune/history/metrics/ask/world/models/record`, with zero CLI parity for camera CRUD, processing modes, scenarios/topology/journeys, RSAC/active learning, or video jobs; multiple backend endpoints (`/api/world/*`, `/api/rsac/rules`, `/api/pets/whitelist`, `/api/topology/world-map`, `/api/cameras/{id}/retry`, `/api/system/{processes,metrics,events,models}`) have zero Dashboard UI callers; widespread frontend-backend JSON drift (`Section 5 P2`). |
+| **ADR-01: Unified Core Engine + Thin Adapters** | Single `PipelineEngine` + `FrameProcessor.step()` for CLI and Dashboard | **Achieved (Legacy CLI Retained)** | `PipelineConfig`, `PipelineEngine`, and `FrameProcessor.step()` unify CLI (`intelligent_tracker/cli/pipeline_builder.py`, `runner.py`) and Dashboard (`dashboard/services/pipeline_factory.py`, `stream_worker.py`); `pyproject.toml:59-62` defines all 3 `console_scripts`. | `intelligent_tracker/interactive.py` and `cli/runner.py` retain legacy `--gui forms` (`high_objects.World`) for backward compatibility. |
+| **ADR-02: Scoped `WorldGraph` + Reactive Rules** | Instance-scoped `WorldGraph`, `WorldEntityBridge`, `GlobalCoordinateMapper` | **Achieved** | `CameraPool` shares a single `EventBus` into `WorldGraph` (`P0-5`); `ScenarioManager` syncs DB/YAML on boot and re-applies across `restart_stream`/`retry_camera_connection` (`P1-8`); `DELETE /api/scenarios/homography/{id}` clears stale matrices; disabled/offline cameras remain registered with `is_armed`. | `WorldPolicy` (`world/nodes.py`) and legacy `high_objects.py` (`523L`) remain optional/legacy paths. |
+| **ADR-03: Hybrid Local Memory + Pluggable Q&A** | `ConfidenceEngine`, `EventFTSIndex`, `WorldQueryEngine` + `SemanticProvider` | **Achieved** | Pool-shared `ConfidenceEngine` + `EventFTSIndex` bound on `app.state`; live `AsyncInferenceWorker` and offline `VideoIndexer` pass Unix epoch `time.time()` (`base_epoch + video_ts`) (`P0-1`); `_gallery_signals.py` and `query_engine.py` preserve `video_filename`/`media_offset_sec` citations (`P1-11`). | None in core runtime. |
+| **ADR-04: `arch-map` Verification & Modularity** | Zero active files `>= 500L`; `<= 12` methods/class; `<= 40L`/fn; zero `sys.modules` DI hacks | **Achieved (1 Legacy File)** | `0` upward imports from `intelligent_tracker/`, `0` CSS `!important`, `0` active `scan` defects (`44` resolved), `dependencies.py` uses `app.state`, Step 4 frontend modules split (`camera_form_helpers.js`, `video_jobs_ui.js`, `overlay_control_bar.js`, `grid_tile_overlay.js`). | `1` legacy hard overrun (`intelligent_tracker/high_objects.py` `523L`). |
+| **ADR-05: Reusable Frontend SSOT, Zero-CLS HUD & Grid AI** | Shared variant UI components, single button per intent, zero-CLS HUD, multiview AI boxes/alerts/toggle | **Achieved** | `OverlayControlBar` (`variant: 'live'|'scrubber'`) unifies Live Monitor & Video Studio (`P2-26`); single `#btn-fullscreen-toggle` (`P2-26`); `.hud-center` `8px` gap + `tabular-nums` + `#stream-lag-badge` EMA hysteresis + `P1` 1 FPS suppression (`P2-24`, `P3-5`); `GridTileOverlay` + `UnifiedCanvasOverlay` render multiview AI boxes, FPS/tier, pool-wide alerts, and per-tile `armed` toggle (`P2-25`); `P2-14`..`P2-22` contracts verified via Node VM & 9-tab CDP. | Optional unwired endpoints (`P2-23`: `/api/world/*` UI panels, `/api/rsac/rules` UI) remain available for future feature panels. |
+| **ADR-06: Dual-Clock Contract & Pool Singletons** | Monotonic timing vs. Unix epoch domain timestamps + shared pool `EventBus`/`WorldGraph`/`ConfidenceEngine`/`EventFTSIndex` | **Achieved** | Strict dual-clock separation (`time.monotonic()` for `AnalyticsScheduler`, `ProcessingModeService`, FPS pacing; Unix epoch `time.time()` for domain events/DB/FTS/ConfidenceEngine) (`P0-1`); lock-order inversion eliminated (`P0-2`); pool-scoped singletons wired across `CameraPool`, `StreamManager`, and `app.state` (`P0-5`). | None. |
+| **Layer 1: SQLite Concurrency & Hardware** | `pyproject.toml` entrypoints + WAL pooled/serialized DB coordinator | **Achieved** | `SQLiteConnectionCoordinator` enforces WAL + per-path `RLock` + refcounted `TRUNCATE` checkpoint; all repository mixins guard `self._conn is None`; `BackupManager.restore_backup` rejects ZIP symlinks/traversal and cleans WAL/SHM sidecars; `CaptureReadGuard` uses `time.monotonic()` (`P1-13`). | None. |
+| **Layer 2: Identity, Learning & RSAC** | Unified Re-ID, Active Learning, RSAC & descriptor versioning | **Achieved** | `RoiRecognitionService` and `EntityTaggerService` write `is_anchor=1, locked=1`, call `record_descriptor_version`, update `ConfidenceEngine`/`EventFTSIndex`, and sync live `Track`/`WorldEntityBridge` (`P1-12`); `post_detection_governance.py` preserves `zone_id`. | None. |
+| **Layer 3 & 4: WorldGraph, Scheduler & Multiview** | Scoped graph, P0/P1/P2 scheduler, zero-GPU replay, binary `/ws/multiview` | **Achieved** | `FrameProcessor.step(max_dim=1280)` isolates rescaling without mutating `CentroidTracker` (`P0-3`); `FrameOverlayRenderer` renders 16:9-safe `heatmap.draw()` (`P0-4`); `capture_only` falls back to `_latest_raw_jpeg` (`P1-6`); `vs.measured_fps` drives stream FPS (`P1-7`); `/ws/multiview` emits telemetry JSON + binary JPEG with per-camera timeout isolation (`P2-25`, `P3-3`). | None. |
+| **Layer 5: Thin Adapters & CLI <-> Dashboard Parity** | Full operational parity and thin routers | **Achieved (CLI Parity Partial)** | 15 domain routers cleanly split under `dashboard/routers/`; `dependencies.py` uses `app.state`; frontend-backend JSON contracts aligned (`P2-14`..`P2-22`). | `ctl.py` covers `list/stats/evict/prune/history/metrics/ask/world/models/record`; remote `ctl` parity for camera CRUD, scenarios, RSAC, and video jobs remains future work. |
 
 ---
 
 ## 2. Current Layered Architecture & Actual Runtime Data Flow
 
-Dependencies flow strictly downward (`dashboard/` and `intelligent_tracker/cli/` -> `intelligent_tracker/`): `arch-map` confirms **0** upward imports from `intelligent_tracker/` into `dashboard/` or `scripts/`. Solid edges show verified operational paths; dashed edges show confirmed runtime integration seams and drift.
+Dependencies flow strictly downward (`dashboard/` and `intelligent_tracker/cli/` -> `intelligent_tracker/`): `arch-map` confirms **0** upward imports from `intelligent_tracker/` into `dashboard/` or `scripts/`.
 
 ```mermaid
 flowchart TD
     subgraph L5["Layer 5: Thin Adapters (dashboard/ & intelligent_tracker/cli/)"]
-        SPA["SPA Dashboard (index.html + 9 tabs, FrameSurface, UnifiedCanvasOverlay, SchedulerHUD)"]
-        Routers["15 Domain APIRouters + app.py (111 routes, /ws/multiview, /ws/{id}, /stream/{id})"]
+        SPA["SPA Dashboard (index.html + 9 tabs, FrameSurface, UnifiedCanvasOverlay, OverlayControlBar, GridTileOverlay, SchedulerHUD)"]
+        Routers["15 Domain APIRouters + app.py (112 routes, /ws/multiview, /ws/{id}, /stream/{id})"]
         CLI["CLI Adapters (cli/runner.py, cli/ctl.py, cli/ask.py, cli/ctl_world.py, cli/ctl_record.py)"]
     end
 
@@ -51,17 +51,17 @@ flowchart TD
         SW["StreamWorker -> AsyncInferenceWorker + StreamRecordingController + FrameOverlayRenderer"]
         Replay["CachedReplayProvider -> FileDetectionReplayProvider + evaluate_tracks_governance"]
         PE["PipelineEngine -> PipelineConfig + PipelineBundle + FrameProcessor.step()"]
-        Bus["Per-Stream EventBus + AlertRuleEngine + EventFTSIndex"]
+        Bus["Pool-Shared EventBus + AlertRuleEngine + EventFTSIndex"]
     end
 
     subgraph L3["Layer 3: Scoped World Graph"]
-        WG["Pool WorldGraph (event_bus=None, CameraNode, ZoneNode, TripwireNode, WorldEntity, TransitionEdgeNode)"]
+        WG["Pool WorldGraph (Shared EventBus, CameraNode, ZoneNode, TripwireNode, WorldEntity, TransitionEdgeNode)"]
         Bridge["WorldEntityBridge + GlobalCoordinateMapper + MultiCameraHandoffCoordinator + WorldRuleEngine"]
     end
 
     subgraph L2["Layer 2: Identity, Learning & Semantic Memory"]
         ID["ReID (OSNet/Color), GalleryMatcher, UniversalEnrollment, ActiveLearning, RSACManager"]
-        Mem["Per-Stream ConfidenceEngine + EventFTSIndex (FTS5) + WorldQueryEngine (Local / Gemini)"]
+        Mem["Pool-Shared ConfidenceEngine + EventFTSIndex (FTS5) + WorldQueryEngine (Local / Gemini)"]
     end
 
     subgraph L1["Layer 1: Persistence & Hardware"]
@@ -69,24 +69,23 @@ flowchart TD
         CV["VideoSource (CaptureLifecycleMixin + CaptureWorkerMixin + CaptureReadGuard + frame_timing), Detectors, SORT/Centroid"]
     end
 
-    SPA -->|"HTTP / WS / MJPEG"| Routers
-    SPA -.->|"P2: JSON key & URL mismatches (review, alerts, studio, scrubber)"| Routers
+    SPA -->|"HTTP / WS / MJPEG (P2 Contracts Verified)"| Routers
     Routers --> Pool
     Routers --> Mem
-    Pool -->|"P0: AB-BA lock inversion with StreamRecordingController"| SW
-    SW -->|"/ws/multiview ThumbnailCache (annotated=False)"| Routers
-    SW -.->|"P0: time.monotonic() injected as Unix epoch"| PE
+    Pool -->|"Lock-Free Mode Snapshot"| SW
+    SW -->|"/ws/multiview ThumbnailCache + Telemetry JSON"| Routers
+    SW -->|"Unix Epoch time.time() + Monotonic Pacing"| PE
     SW -->|"zero-GPU replay + wrap reset"| Replay
     SW --> PE
     CLI --> PE
-    PE -->|"P0: max_dim=1280 mutates CentroidTracker tracks"| CV
+    PE -->|"Isolated Rescale Copy (1280px)"| CV
     PE --> Bus
     PE --> Bridge
     Replay -->|"sync_world_bridge (0 GPU)"| Bridge
     Bridge --> WG
-    WG -.->|"P0: event_bus=None drops reactive events; restart wipes homography"| Bus
+    WG -->|"Reactive Events + Restart Scenario Re-Apply"| Bus
     PE --> ID
-    ID -->|"P0: unshared per-stream ConfidenceEngine + 56yr monotonic decay"| Mem
+    ID -->|"Shared Pool Confidence + Unix Epoch"| Mem
     ID --> DB
     Mem --> DB
 ```
@@ -100,18 +99,16 @@ flowchart TD
 | Directory | Files | Lines | Primary Ownership |
 | :--- | ---: | ---: | :--- |
 | `.` | 2 | 161 | `main.py`, `setup.py` (`pyproject.toml` also at root) |
-| `dashboard` | 149 | 30,423 | FastAPI app (`app.py`, `dependencies.py`), 15 routers (`routers/`), orchestration/replay/multiview (`services/`), modular SPA (`static/js/`, `static/css/`, `static/partials/`) |
+| `dashboard` | 155 | 31,636 | FastAPI app (`app.py`, `dependencies.py`), 15 routers (`routers/`), orchestration/replay/multiview (`services/`), modular SPA (`static/js/`, `static/css/`, `static/partials/`) |
 | `documentation` | 1 | 180 | Sphinx `.rst` docs & `conf.py` |
-| `intelligent_tracker` | 178 | 29,971 | Core CV (`detectors/`, `tracker/`, `reid/`, `matching/`, `geometry/`), `pipeline/`, `world/`, `memory/`, `events/`, `analytics/`, `repositories/`, `video/`, `cli/` |
+| `intelligent_tracker` | 179 | 30,605 | Core CV (`detectors/`, `tracker/`, `reid/`, `matching/`, `geometry/`), `pipeline/`, `world/`, `memory/`, `events/`, `analytics/`, `repositories/`, `video/`, `cli/` |
 | `scripts` | 6 | 836 | `run_dashboard.py`, `stream_ctl.py`, `cdp_inspect.py`, `diagnostics.py`, `download_models.py`, `camera_manager.py` |
-| **Total** | **336** | **61,571** | **111 API route decorators across 16 Python modules** |
+| **Total** | **343** | **63,418** | **112 API route decorators across 16 Python modules** |
 
 ### Remaining Modularity Budget Overruns
 
-- **Hard Ceiling (`>= 500L`) — 1 file**: `intelligent_tracker/high_objects.py` (`523` lines; legacy `Scene` `25` methods).
-- **Soft Warning (`350–499L`) — 9 files**:
-  - Frontend JS (5): `dashboard/static/js/video_jobs.js` (`493`), `dashboard/static/js/video_library.js` (`471`), `dashboard/static/video_scrubber.js` (`389`), `dashboard/static/app.js` (`374`), `dashboard/static/camera_manager.js` (`366`).
-  - Python (4): `intelligent_tracker/interactive.py` (`451`), `scripts/cdp_inspect.py` (`436`), `intelligent_tracker/matching/gallery.py` (`425`), `intelligent_tracker/rsac.py` (`412`).
+- **Hard Ceiling (`>= 500L`) — 1 legacy file**: `intelligent_tracker/high_objects.py` (`523` lines; legacy `Scene` `25` methods).
+- **Soft Warning (`350–499L`) — 7 files**: `dashboard/static/js/video_library.js` (`471`), `intelligent_tracker/interactive.py` (`451`), `scripts/cdp_inspect.py` (`436`), `intelligent_tracker/matching/gallery.py` (`425`), `intelligent_tracker/rsac.py` (`412`), `dashboard/services/roi_recognition_service.py` (`407`), `dashboard/static/video_scrubber.js` (`389`). (Step 4 extracted `camera_form_helpers.js`, `video_jobs_ui.js`, `overlay_control_bar.js`, and `grid_tile_overlay.js` to bring `camera_manager.js`, `video_jobs.js`, `app.js`, and `camera_grid.js` below `350L`.)
 - **Heavy Classes (`> 12` methods or `> 300L`) — 8 classes**: `Scene` (`25`m, `269L`, `high_objects.py`), `TailItem` (`20`m, `172L`, `core/tails.py`), `Group` (`19`m, `149L`, `core/groups.py`), `EventFigure` (`19`m, `164L`, `forms.py`), `CaptureReadGuard` (`16`m, `251L`, `video/capture_guard.py`), `GroupMutationMixin` (`15`m, `164L`, `core/group_mutations.py`), `RSACManager` (`14`m, `210L`, `rsac.py`), `GalleryMatcher` (`10`m, `307L`, `matching/gallery.py`).
 - **Functions `> 40L` — 59 functions**: Top offenders include `run_interactive_app` (`151L`, `interactive.py:274`), `FrameOverlayRenderer.render` (`134L`, `dashboard/services/frame_overlay.py:25`), `apply_windows_iocp_patch` (`129L`, `dashboard/services/windows_resilience.py:31`), `main_async` (`111L`, `scripts/cdp_inspect.py:302`), `setup_event_pipeline` (`109L`, `intelligent_tracker/events/pipeline.py:12`), `build_generic_audit_js` (`100L`, `scripts/cdp_inspect.py:143`), `enroll` (`96L`, `intelligent_tracker/enrollment.py:51`), `create_backup` (`91L`, `intelligent_tracker/backup.py:78`), `cnt_intersection` (`91L`, `intelligent_tracker/geometry/intersections.py:171`), and `transcode_to_h264_async` (`84L`, `dashboard/services/video_transcoder.py:258`), plus `49` more.
 - **Unused Imports**: `dashboard/services/stream_worker.py:9` (`time` flagged by `arch-map`), plus `intelligent_tracker/video/legacy_camera.py:154` (`PiRGBArray` inside `try...except ImportError` fallback).
@@ -152,7 +149,9 @@ These fixes from `integration_diagnostics_and_remediation_plan.md` and commit `4
 
 ---
 
-## 5. Verified Remaining Integration Bugs & Missing Functionality (P0–P3)
+## 5. Integration Hardening Resolution Summary (`P0`–`P3`, Steps 1–4 Complete)
+
+> **Status**: All `P0-1`..`P0-5`, `P1-6`..`P1-13`, `P2-14`..`P2-26` (except optional future UI panels for `P2-23`), and `P3-1`..`P3-5` items below were resolved and verified across Steps 1–4 of `.TODO/integration_hardening_master_roadmap.md` (`cold_boot_world_probe`, `replay_pipeline_probe`, `video_studio_contract_probe`, and `spa_nine_tab_cdp_probe`).
 
 ### P0 — Critical Runtime, Data Corruption & Deadlock Bugs (5)
 

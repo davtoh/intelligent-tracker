@@ -8,6 +8,7 @@ import unittest
 
 STATIC_JS = Path(__file__).resolve().parents[1] / "dashboard" / "static" / "js"
 GRID_PAGINATION_JS = STATIC_JS / "grid_pagination.js"
+GRID_TILE_OVERLAY_JS = STATIC_JS / "multiview" / "grid_tile_overlay.js"
 CAMERA_GRID_JS = STATIC_JS / "camera_grid.js"
 
 
@@ -26,6 +27,7 @@ def _grid_vm_harness() -> str:
     return (
         "const fs = require('fs'), vm = require('vm');\n"
         f"const gpCode = fs.readFileSync({json.dumps(str(GRID_PAGINATION_JS))}, 'utf8');\n"
+        f"const gtoCode = fs.readFileSync({json.dumps(str(GRID_TILE_OVERLAY_JS))}, 'utf8');\n"
         f"const cgCode = fs.readFileSync({json.dumps(str(CAMERA_GRID_JS))}, 'utf8');\n"
         "const events = [];\n"
         "let gridHtml = '';\n"
@@ -55,8 +57,9 @@ def _grid_vm_harness() -> str:
         "  },\n"
         "  MjpegReconnect: { attach: () => {}, detachAll: () => events.push('detachAll') },\n"
         "};\n"
-        "const sb = { window: win, document: doc, Event: function(t){ this.type = t; }, encodeURIComponent, Math, Number, String, Array, Object, console };\n"
+        "const sb = { window: win, document: doc, Event: function(t){ this.type = t; }, encodeURIComponent, Math, Number, String, Boolean, Array, Object, fetch: async () => ({ ok: false }), setInterval: () => 0, clearInterval: () => {}, console };\n"
         "vm.runInNewContext(gpCode, sb);\n"
+        "vm.runInNewContext(gtoCode, sb);\n"
         "vm.runInNewContext(cgCode, sb);\n"
     )
 

@@ -48,14 +48,14 @@
 ---
 
 ## Step 4: P2 Frontend Contracts, Unified `OverlayControlBar`, Zero-CLS HUD, Multiview AI Boxes/Toggle & Final `/app-debugger` Sign-Off (`P2-14`..`P2-26`)
-- [ ] **Child Plan**: `.TODO/step_4_p2_frontend_contracts_and_multiview_ai.md`
-- [ ] **Goal**: Resolve every broken frontend-backend contract, eliminate HUD jitter/duplicate controls, unify `"Video Overlays"`, enable multi-camera grid AI boxes/alerts/toggles, and pass full headless (and optional live) `/app-debugger` sign-off.
-- [ ] **Target Scope**:
-  - [ ] **Schema & Wiring Contracts (`P2-14`..`P2-22`)**: Fix Review Queue (`similarity`, `suggested_name`, `timestamp`, `/crops/*`, placeholder asset), Video Studio click-to-tag (`track_id`), Alerts (`name`, `severity`, `message`), Live overlay target channel, Camera Manager preset/`enabled`/capabilities race/Cancel/`getActiveCameras`, Enroll & Quick-Tag modals, Scenario Studio/BEV Minimap coordinates & recorded-video re-entry, `#btn-snapshot-save` freeze-frame, `journey_search.js`, `rsac_versions.js`, scoped `.btn-tag-preset`, and SPA hash-boot/cache/`?token=`/WS cleanup.
-  - [ ] **Unified `OverlayControlBar` & Consolidation (`P2-26`)**: Replace duplicated Live Monitor checkboxes and Video Studio `overlay_layer_toolbar.js` with one reusable `OverlayControlBar` (`variant: 'live'` & `variant: 'scrubber'`) and remove duplicate broken header `#fullscreen-btn`.
-  - [ ] **Zero-CLS HUD & Multiview AI (`P2-24`, `P2-25`)**: Add `>= 8px` `.hud-center` gaps, `tabular-nums`, smoothing/hysteresis + reserved slot on `#stream-lag-badge`, fixed `#video-stream-title` truncation containment; mount `UnifiedCanvasOverlay` on `2x2`/`3x3`/`4x4` grid tiles with live FPS/tracks, pool-wide `Recent Alerts`, and per-tile AI toggle (`armed`).
-  - [ ] **Final Verification & Docs**: Pass `spa_nine_tab_cdp_probe.py` (0 CLS/gaps/dead buttons/duplicate labels/JS errors/HTTP>=400), full `unittest`, `sphinx -W`, refresh `docs/architecture/CURRENT_ARCHITECTURE.md`, and run `diagnose.py changelog add`.
-- [ ] **Definition of Done**: All 4 workspace probes + `surface --verify --strict` + `scan --strict` + `audit --typecheck` + `unittest` + `sphinx -W` 100% green.
+- [x] **Child Plan**: `.TODO/step_4_p2_frontend_contracts_and_multiview_ai.md`
+- [x] **Goal**: Resolve every broken frontend-backend contract, eliminate HUD jitter/duplicate controls, unify `"Video Overlays"`, enable multi-camera grid AI boxes/alerts/toggles, and pass full headless (and optional live) `/app-debugger` sign-off.
+- [x] **Target Scope**:
+  - [x] **Schema & Wiring Contracts (`P2-14`..`P2-22`)**: Fix Review Queue (`similarity`, `suggested_name`, `timestamp`, `/crops/*`, placeholder asset), Video Studio click-to-tag (`track_id`), Alerts (`name`, `severity`, `message`), Live overlay target channel, Camera Manager preset/`enabled`/capabilities race/Cancel/`getActiveCameras`, Enroll & Quick-Tag modals, Scenario Studio/BEV Minimap coordinates & recorded-video re-entry, `#btn-snapshot-save` freeze-frame, `journey_search.js`, `rsac_versions.js`, scoped `.btn-tag-preset`, and SPA hash-boot/cache/`?token=`/WS cleanup.
+  - [x] **Unified `OverlayControlBar` & Consolidation (`P2-26`)**: Replace duplicated Live Monitor checkboxes and Video Studio `overlay_layer_toolbar.js` with one reusable `OverlayControlBar` (`variant: 'live'` & `variant: 'scrubber'`) and remove duplicate broken header `#fullscreen-btn`.
+  - [x] **Zero-CLS HUD & Multiview AI (`P2-24`, `P2-25`)**: Add `>= 8px` `.hud-center` gaps, `tabular-nums`, smoothing/hysteresis + reserved slot on `#stream-lag-badge`, fixed `#video-stream-title` truncation containment; mount `UnifiedCanvasOverlay` on `2x2`/`3x3`/`4x4` grid tiles with live FPS/tracks, pool-wide `Recent Alerts`, and per-tile AI toggle (`armed`).
+  - [x] **Final Verification & Docs**: Pass `spa_nine_tab_cdp_probe.py` (0 CLS/gaps/dead buttons/duplicate labels/JS errors/HTTP>=400), full `unittest`, `sphinx -W`, refresh `docs/architecture/CURRENT_ARCHITECTURE.md`, and run `diagnose.py changelog add`.
+- [x] **Definition of Done**: All 4 workspace probes + `surface --verify --strict` + `scan --strict` + `audit --typecheck` + `unittest` + `sphinx -W` 100% green.
 
 ---
 

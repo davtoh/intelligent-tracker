@@ -63,7 +63,7 @@ class TestCameraGridMultiStreamLifecycle(unittest.TestCase):
             "const doc = { getElementById: (id) => elems[id] || null, querySelectorAll: () => [] };\n"
             "const events = [];\n"
             "const win = { dispatchEvent: () => {}, LivePlayer: { detachLiveStream: () => events.push('detach'), attachLiveStream: (_el, id) => events.push('attach:' + id) } };\n"
-            "const sb = { window: win, document: doc, Event: function(t){ this.type = t; }, encodeURIComponent, String, Array, console };\n"
+            "const sb = { window: win, document: doc, Event: function(t){ this.type = t; }, encodeURIComponent, Math, Number, String, Boolean, Array, Object, fetch: async () => ({ ok: false }), setInterval: () => 0, clearInterval: () => {}, console };\n"
             "vm.runInNewContext(code, sb);\n"
             "const cams = [{ id: 'cam_01', name: 'Gate', status: 'online', fps: 30 }, { id: 'cam_02', name: 'Dock', status: 'online', fps: 25 }];\n"
             "win.CameraGrid.setGridMode('2x2', cams, 'cam_01', () => {});\n"
@@ -79,6 +79,7 @@ class TestCameraGridMultiStreamLifecycle(unittest.TestCase):
     def test_grid_refresh_updates_existing_tiles_without_rebuilding_streams(self) -> None:
         script = (
             "const fs = require('fs'), vm = require('vm');\n"
+            f"const gtoCode = fs.readFileSync({json.dumps(str(CAMERA_GRID_JS.parent / 'multiview' / 'grid_tile_overlay.js'))}, 'utf8');\n"
             f"const code = fs.readFileSync({json.dumps(str(CAMERA_GRID_JS))}, 'utf8');\n"
             "const fpsEl = { textContent: '0 FPS' };\n"
             "const tile = { getAttribute: () => 'cam_01', classList: { toggle: () => {} }, querySelector: (s) => (s === '.tile-fps' ? fpsEl : null) };\n"
@@ -86,8 +87,8 @@ class TestCameraGridMultiStreamLifecycle(unittest.TestCase):
             "const elems = { 'multi-grid-container': multiGrid, 'video-wrapper': { style: {} } };\n"
             "const doc = { getElementById: (id) => elems[id] || null, querySelectorAll: () => [] };\n"
             "const win = { dispatchEvent: () => {} };\n"
-            "const sb = { window: win, document: doc, Event: function(t){ this.type = t; }, encodeURIComponent, String, Array, console };\n"
-            "vm.runInNewContext(code, sb);\n"
+            "const sb = { window: win, document: doc, Event: function(t){ this.type = t; }, encodeURIComponent, Math, Number, String, Boolean, Array, Object, fetch: async () => ({ ok: false }), setInterval: () => 0, clearInterval: () => {}, console };\n"
+            "vm.runInNewContext(gtoCode, sb); vm.runInNewContext(code, sb);\n"
             "win.CameraGrid.setGridMode('3x3', [{ id: 'cam_01', name: 'Gate', status: 'online', fps: 60 }], 'cam_01', () => {});\n"
             "process.stdout.write(JSON.stringify({ html: multiGrid.innerHTML, fps: fpsEl.textContent }));\n"
         )

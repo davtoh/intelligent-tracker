@@ -268,7 +268,7 @@ class TestCameraRecordingNodeVMRuntime(unittest.TestCase):
 
     def test_camera_id_mismatch_guard_and_grid_tile_isolation(self):
         """Background camera recording updates do not overwrite focused cam_01 recording bar."""
-        out = self._run_node_vm(["camera_grid.js", "telemetry.js", "camera_recording.js"], _JS_MISMATCH_TILE)
+        out = self._run_node_vm(["multiview/grid_tile_overlay.js", "camera_grid.js", "telemetry.js", "camera_recording.js"], _JS_MISMATCH_TILE)
         self.assertEqual(out["activeCamAfterTileClick"], "cam_01")
         self.assertEqual(out["barCamId"], "cam_01")
         self.assertEqual(out["barStatus"], "IDLE")

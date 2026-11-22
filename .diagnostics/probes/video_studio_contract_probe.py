@@ -172,12 +172,11 @@ def _check_js_payload_parity(failures: list[str], checks: dict[str, Any]) -> Non
     if checks["links_reads_occurrences"]:
         failures.append("video_timeline_links.js reads non-existent report.occurrences")
 
-    bad_rq = [k for k in ("similarity_score", "matched_entity_name", "created_at") if k in rsac_js]
-    checks["review_queue_js_key_mismatches"] = bad_rq
-    if bad_rq:
+    missing_rq = [k for k in ("similarity", "suggested_name", "timestamp") if f"item.{k}" not in rsac_js]
+    checks["review_queue_js_key_mismatches"] = missing_rq
+    if missing_rq:
         failures.append(
-            f"review_and_rsac.js uses mismatched review_queue keys {bad_rq} "
-            "(backend emits similarity/suggested_name/timestamp)"
+            f"review_and_rsac.js missing canonical review_queue keys {missing_rq}"
         )
 
     events_ok = all(

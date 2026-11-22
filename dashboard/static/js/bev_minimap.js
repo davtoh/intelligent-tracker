@@ -63,6 +63,7 @@
   }
 
   function updateScaleBadge(calibrated) {
+    if (typeof document === 'undefined') return;
     const badge = document.getElementById('bev-metric-scale');
     if (!badge) return;
     badge.textContent = calibrated ? 'Calibrated' : 'Pixel Est.';

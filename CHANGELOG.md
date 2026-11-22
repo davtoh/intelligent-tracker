@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-21] feat: Step 4 & Integration Hardening Master Roadmap Complete (P0-P3)
+- **Type**: feat
+- **Summary**: Hardened 9-tab headless CDP probe + Chrome-gated E2E test, aligned legacy Node VM suites with GridTileOverlay & Zero-CLS HUD hysteresis, and refreshed CURRENT_ARCHITECTURE.md.
+- **Files** (11):
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+  - `dashboard/static/js/bev_minimap.js`
+  - `dashboard/static/js/telemetry.js`
+  - `dashboard/static/studio.js`
+  - `docs/architecture/CURRENT_ARCHITECTURE.md`
+  - `tests/test_camera_grid_teardown.py`
+  - `tests/test_camera_recording_ui.py`
+  - `tests/test_dashboard_ui.py`
+  - ... (+3 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-21] feat: Step 3: P1 Pipeline, Multiview Telemetry, Video Studio & Persistence Hardening
 - **Type**: feat
 - **Summary**: Completed P1-6..P1-13, /ws/multiview JSON telemetry, P3 edge cases, and TRC-018
@@ -124,21 +139,6 @@
   - `dashboard/static/partials/tabs/live.html`
   - ... (+7 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-17] fix: Cold-Boot cam_01 SSOT & Focus Reconciliation
-- **Type**: fix
-- **Summary**: Removed remaining hardcoded cam_01 fallbacks and eager stream attributes across Studio, Recording, Enrollment, Interactive Canvas, Gallery Timeline, Scenario Modals, and StreamPoolCoordinator. Seeded initial focused_camera_id from the first enabled camera on StreamPoolCoordinator start/restore, delegated CameraAIConfig.resolveInitialCameraId to LivePlayer.attachLiveStream(), and reconciled null server focus in ProcessingModeUI.setAvailableCameras().
-- **Files** (21):
-  - `AGENTS.md`
-  - `dashboard/services/processing_mode_service.py`
-  - `dashboard/services/stream_pool_coordinator.py`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/camera_recording.js`
-  - `dashboard/static/js/gallery_timeline.js`
-  - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/live_player.js`
-  - ... (+13 more)
-- **Verification**: python -m unittest discover tests (779 tests OK) + diagnose.py ui --live --capture-runtime (0 exceptions, 0 networkErrors)
 
 ## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
 - **Type**: fix

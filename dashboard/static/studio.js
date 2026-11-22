@@ -291,7 +291,7 @@
     document.getElementById('btn-studio-clear')?.addEventListener('click', () => {
       setStudioMode('idle'); studioState.points = []; drawOverlay(); updateStudioStatus('Canvas cleared. Mode: Idle.');
     });
-    document.getElementById('studio-live-img')?.addEventListener('load', () => drawOverlay());
+    document.getElementById('studio-live-img')?.addEventListener?.('load', () => drawOverlay());
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
       const targetId = e.target.value;
       if (!targetId) return;

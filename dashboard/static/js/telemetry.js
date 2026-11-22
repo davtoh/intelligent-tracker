@@ -42,7 +42,7 @@
     closeWebSocket();
     if (!cameraId) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const token = window.MULTIVIEW_TOKEN ? `?token=${encodeURIComponent(window.MULTIVIEW_TOKEN)}` : '';
+    const token = globalThis.MULTIVIEW_TOKEN ? `?token=${encodeURIComponent(globalThis.MULTIVIEW_TOKEN)}` : '';
     const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(cameraId)}${token}`;
     try {
       activeWs = new WebSocket(wsUrl);
