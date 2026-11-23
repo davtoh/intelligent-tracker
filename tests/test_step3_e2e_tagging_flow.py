@@ -171,6 +171,7 @@ class TestStep3E2ETaggingFlow(unittest.TestCase):
 
     def test_single_stream_fallback_without_camera_pool(self) -> None:
         self.app.state.camera_pool = None
+        self.stream.camera_id = "cam_01"
         rec = self.client.post(
             "/api/tag/recognize-roi",
             json={"camera_id": "cam_01", "bbox": [10, 10, 40, 40]},

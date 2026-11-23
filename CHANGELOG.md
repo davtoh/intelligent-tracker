@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-23] fix: Step 1: Critical Bug Remediations & Tooling Elevation
+- **Type**: fix
+- **Summary**: Resolved Findings 1-7 and BE-1..BE-4 across backend/frontend, elevated SPA 9-tab CDP and Video Studio probes, and added broken-img, script wrap-order, query-param, and repo-rollback rules to system-diagnostics.
+- **Files** (8):
+  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+  - `tests/test_database_concurrency.py`
+  - `tests/test_live_studio_sync.py`
+  - `tests/test_step2_studio_minimap_gating.py`
+  - `tests/test_step2_tab_scoped_perf_integration.py`
+  - `tests/test_step3_e2e_tagging_flow.py`
+  - `tests/test_step4_m3_spa_and_video_contracts.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-21] feat: Step 4 & Integration Hardening Master Roadmap Complete (P0-P3)
 - **Type**: feat
 - **Summary**: Hardened 9-tab headless CDP probe + Chrome-gated E2E test, aligned legacy Node VM suites with GridTileOverlay & Zero-CLS HUD hysteresis, and refreshed CURRENT_ARCHITECTURE.md.
@@ -124,21 +138,6 @@
   - `dashboard/static/js/live_player.js`
   - ... (+6 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests (839 passed)
-
-## [2026-11-19] feat: Multi-View WebSocket Streaming & Grid Scalability (Milestone 4)
-- **Type**: feat
-- **Summary**: Added /ws/multiview frontend protocol/FrameSurface/client with canvas grid tiles, 3-failure MJPEG fallback with auto-restore, armed-paused overlay counter, static-before-wildcard WS router ordering fix, Hub/HTTP2 Sphinx docs, and Node VM + headless CDP E2E tests
-- **Files** (15):
-  - `AGENTS.md`
-  - `dashboard/app.py`
-  - `dashboard/static/css/grid_pagination.css`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/camera_grid.js`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `dashboard/static/partials/tabs/live.html`
-  - ... (+7 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
 
 ## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
 - **Type**: fix

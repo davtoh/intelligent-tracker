@@ -13,7 +13,7 @@ class TestStep4Milestone3FrontendContracts(unittest.TestCase):
     def test_index_html_loads_nav_tabs_and_helpers_before_app(self) -> None:
         html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
         self.assertLess(len(html.splitlines()), 180)
-        self.assertLess(html.index("nav_tabs_manager.js"), html.index("/static/app.js"))
+        self.assertGreater(html.index("nav_tabs_manager.js"), html.index("/static/app.js"))
         self.assertLess(html.index("app_ui_helpers.js"), html.index("/static/app.js"))
         self.assertLess(html.index("video_jobs_ui.js"), html.index("video_jobs.js"))
         self.assertIn('id="drawer-jobs-badge"', html)

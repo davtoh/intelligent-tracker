@@ -236,6 +236,10 @@ class TestRouterDatabaseEncapsulation(unittest.TestCase):
             def __init__(self, db):
                 self.db = db
 
+        from dashboard.dependencies import get_db
+
+        app.dependency_overrides[get_db] = lambda: self.db
+        self.addCleanup(lambda: app.dependency_overrides.pop(get_db, None))
         with patch(
             "dashboard.routers.analytics.get_active_stream_manager",
             return_value=_StubMgr(self.db),
