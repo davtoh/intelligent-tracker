@@ -52,6 +52,8 @@ class GalleryMatcher:
         self.auto_session_gallery = bool(auto_session_gallery)
         self.session_reid_threshold = float(session_reid_threshold)
         self.spatial_bonus_radius, self.spatial_bonus_max_dt = float(spatial_bonus_radius), float(spatial_bonus_max_dt)
+        self.negative_suppression_threshold = float(kwargs.get("negative_suppression_threshold", 0.78))
+        self.global_negative_threshold = float(kwargs.get("global_negative_threshold", 0.82))
         self._init_runtime_caches(kwargs.get("coast_grace_seconds", 2.0))
         self.reload_gallery()
 
@@ -76,6 +78,9 @@ class GalleryMatcher:
         self.gallery_entity_ids: List[int] = []
         self.gallery_names: List[str] = []
         self.gallery_categories: List[str] = []
+        self.negative_matrix = np.empty((0, 0), dtype=np.float32)
+        self.negative_entity_ids: List[Optional[int]] = []
+        self.negative_labels: List[str] = []
 
     @property
     def next_session_id(self) -> int:
@@ -88,6 +93,9 @@ class GalleryMatcher:
             self.gallery_entity_ids = []
             self.gallery_names = []
             self.gallery_categories = []
+            self.negative_matrix = np.empty((0, 0), dtype=np.float32)
+            self.negative_entity_ids = []
+            self.negative_labels = []
             return
         expected_dim = getattr(self.extractor, "embedding_dim", None)
         mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=expected_dim)
@@ -95,6 +103,11 @@ class GalleryMatcher:
         self.gallery_entity_ids = ids
         self.gallery_names = names
         self.gallery_categories = categories
+        if hasattr(self.db, "get_negative_embeddings"):
+            neg_mat, neg_ids, neg_labels = self.db.get_negative_embeddings(expected_dim=expected_dim)
+            self.negative_matrix = neg_mat
+            self.negative_entity_ids = neg_ids
+            self.negative_labels = neg_labels
 
         if expected_dim is not None and len(ids) == 0:
             try:

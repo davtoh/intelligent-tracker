@@ -63,14 +63,49 @@ def _notify_active_learning(
     )
 
 
+def _apply_negative_suppression(
+    matcher: Any, query_vec: np.ndarray, similarities: np.ndarray
+) -> tuple[np.ndarray, bool]:
+    """Suppress candidates matching negative exemplars or global false-positive clutter."""
+    neg_mat = getattr(matcher, "negative_matrix", None)
+    if neg_mat is None or neg_mat.size == 0:
+        return similarities, False
+    neg_sims = batch_cosine_similarity(neg_mat, query_vec)
+    neg_ids = getattr(matcher, "negative_entity_ids", [])
+    global_thresh = float(getattr(matcher, "global_negative_threshold", 0.82))
+    entity_thresh = float(getattr(matcher, "negative_suppression_threshold", 0.78))
+    suppressed_eids: set[int] = set()
+    for idx, sim in enumerate(neg_sims):
+        eid = neg_ids[idx] if idx < len(neg_ids) else None
+        if eid is None and float(sim) >= global_thresh:
+            return similarities, True
+        if eid is not None and float(sim) >= entity_thresh:
+            suppressed_eids.add(eid)
+    if suppressed_eids:
+        keep_mask = np.array([eid not in suppressed_eids for eid in matcher.gallery_entity_ids], dtype=bool)
+        similarities = np.where(keep_mask, similarities, -1.0)
+    return similarities, False
+
+
+def _confirm_gallery_match(
+    matcher: Any, track: Track, query_vec: np.ndarray, similarities: np.ndarray,
+    raw_similarities: Optional[np.ndarray], matched_priors: dict,
+    best_idx: int, best_score: float, source: str, now: float, zone_id: str,
+) -> Optional[EntityIdentifiedEvent]:
+    """Apply confidence signals, consume topology prior, and emit identification event."""
+    apply_track_confidence_signals(
+        track, extractor=matcher.extractor, query_vec=query_vec, gallery_matrix=matcher.gallery_matrix,
+        gallery_entity_ids=matcher.gallery_entity_ids, similarities=similarities,
+        raw_similarities=raw_similarities, matched_priors=matched_priors, best_idx=best_idx,
+    )
+    if matcher.topology is not None and best_idx in matched_priors:
+        matcher.topology.consume_prior(matched_priors[best_idx].prior_id)
+    return process_confirmed_identification(matcher, track, best_idx, best_score, query_vec, source, now, zone_id)
+
+
 def match_persistent_gallery(
-    matcher: Any,
-    track: Track,
-    query_vec: np.ndarray,
-    frame: np.ndarray,
-    source: str,
-    now: float,
-    zone_id: str,
+    matcher: Any, track: Track, query_vec: np.ndarray, frame: np.ndarray,
+    source: str, now: float, zone_id: str,
 ) -> Optional[EntityIdentifiedEvent]:
     """Query persistent database gallery with class compatibility, priors, and active learning."""
     similarities = batch_cosine_similarity(matcher.gallery_matrix, query_vec)
@@ -88,16 +123,17 @@ def match_persistent_gallery(
             matcher.topology, matcher.gallery_entity_ids, matcher.gallery_names, similarities, source, zone_id, now,
         )
         similarities = np.where(compatible_mask, similarities, -1.0)
+    similarities, globally_suppressed = _apply_negative_suppression(matcher, query_vec, similarities)
+    if globally_suppressed:
+        return None
     best_idx = int(np.argmax(similarities))
     best_score = float(similarities[best_idx])
-    if best_score >= matcher.reid_threshold:
-        apply_track_confidence_signals(
-            track, extractor=matcher.extractor, query_vec=query_vec, gallery_matrix=matcher.gallery_matrix,
-            gallery_entity_ids=matcher.gallery_entity_ids, similarities=similarities,
-            raw_similarities=raw_similarities, matched_priors=matched_priors, best_idx=best_idx,
-        )
-        if matcher.topology is not None and best_idx in matched_priors:
-            matcher.topology.consume_prior(matched_priors[best_idx].prior_id)
-        return process_confirmed_identification(matcher, track, best_idx, best_score, query_vec, source, now, zone_id)
-    _notify_active_learning(matcher, track, frame, best_idx, best_score, source, now)
-    return None
+    if best_score < 0.0:
+        return None
+    if best_score < matcher.reid_threshold:
+        _notify_active_learning(matcher, track, frame, best_idx, best_score, source, now)
+        return None
+    return _confirm_gallery_match(
+        matcher, track, query_vec, similarities, raw_similarities,
+        matched_priors, best_idx, best_score, source, now, zone_id,
+    )

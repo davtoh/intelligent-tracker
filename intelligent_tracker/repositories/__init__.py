@@ -22,6 +22,7 @@ from intelligent_tracker.repositories.whitelist_repo import WhitelistMixin
 from intelligent_tracker.repositories.telemetry_repo import TelemetryMixin
 from intelligent_tracker.repositories.memory_repo import MemoryMixin
 from intelligent_tracker.repositories.video_run_repo import VideoRunRepositoryMixin
+from intelligent_tracker.repositories.negative_exemplar_repo import NegativeExemplarMixin
 
 __all__ = [
     "SQLiteConnectionCoordinator",
@@ -38,5 +39,6 @@ __all__ = [
     "TelemetryMixin",
     "MemoryMixin",
     "VideoRunRepositoryMixin",
+    "NegativeExemplarMixin",
 ]
 

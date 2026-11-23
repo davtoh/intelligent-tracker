@@ -109,6 +109,7 @@
         box.querySelectorAll('.candidate-chip').forEach((c) => c.classList.remove('active'));
         btn.classList.add('active');
       });
+      window.TagFeedbackActions?.attachCandidateDiscourage?.(btn, cand, box, activeCameraGetter);
       box.appendChild(btn);
     });
   }
@@ -223,6 +224,7 @@
     }
     el('modal-tag-close')?.addEventListener('click', closeTagModal);
     el('modal-tag-cancel')?.addEventListener('click', closeTagModal);
+    el('btn-tag-discourage')?.addEventListener('click', () => window.TagFeedbackActions?.discourageFromModal?.(activeCameraGetter));
     el('tag-name-input')?.addEventListener('input', () => { if (el('tag-entity-id')) el('tag-entity-id').value = ''; });
     el('tag-category-select')?.addEventListener('change', () => { categoryTouched = true; });
     el('tag-entity-form')?.addEventListener('submit', submitTagForm);

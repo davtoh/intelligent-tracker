@@ -122,6 +122,13 @@ _LEARNING_TABLES_DDL = (
         badge_icon TEXT DEFAULT '', description TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );""",
+    """CREATE TABLE IF NOT EXISTS negative_exemplars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, entity_id INTEGER,
+        label TEXT DEFAULT '', embedding BLOB NOT NULL,
+        crop_path TEXT DEFAULT '', source TEXT DEFAULT '',
+        notes TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+    );""",
 )
 
 _TELEMETRY_TABLES_DDL = (
@@ -152,6 +159,7 @@ _INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_desc_versions_entity ON descriptor_versions(entity_id, version_num);",
     "CREATE INDEX IF NOT EXISTS idx_review_queue_status ON review_queue(status, timestamp);",
     "CREATE INDEX IF NOT EXISTS idx_rsac_zone_rules_cam ON rsac_zone_rules(camera_id, zone_id);",
+    "CREATE INDEX IF NOT EXISTS idx_negative_exemplars_entity ON negative_exemplars(entity_id);",
 )
 
 
