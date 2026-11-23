@@ -27,7 +27,10 @@ from dashboard.schemas import (
     CameraUpdateRequest,
     OverlayUpdateRequest,
 )
-from dashboard.services.camera_diagnostics import probe_camera_test_request
+from dashboard.services.camera_diagnostics import (
+    collect_active_usb_metadata,
+    probe_camera_test_request,
+)
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.discovery import (
     CAMERA_PRESETS,
@@ -96,6 +99,7 @@ async def add_camera(
         enabled=req.enabled if req.enabled is not None else True,
         autostart=True,
         details=req.details,
+        armed=bool(req.armed),
     )
     return {"status": "success", "camera": pool.camera_configs.get(req.id)}
 
@@ -105,13 +109,18 @@ async def discover_cameras_route(
     include_usb: bool = True,
     include_onvif: bool = True,
     include_lan_rtsp: bool = True,
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Probe physical USB webcams, ONVIF WS-Discovery, and local RTSP network cameras."""
+    active_indices = pool.get_active_usb_indices() if pool else None
+    active_devices = collect_active_usb_metadata(pool, active_indices) if (pool and active_indices) else None
     cams = discover_all_cameras(
         include_usb=include_usb,
         include_onvif=include_onvif,
         include_lan_rtsp=include_lan_rtsp,
         mock_fallback=True,
+        active_indices=active_indices,
+        active_devices=active_devices,
     )
     return [c.to_dict() for c in cams]
 
@@ -225,6 +234,7 @@ async def update_camera(
         tracker=req.tracker,
         confidence=req.confidence,
         classes=req.classes,
+        armed=req.armed,
     )
     return {
         "status": "success" if success else "failed",
@@ -257,6 +267,15 @@ async def toggle_camera_stream(
 
     new_state = pool.toggle_camera(camera_id, enabled)
     return {"status": "success", "camera_id": camera_id, "enabled": new_state}
+
+
+@router.post("/api/cameras/{camera_id}/retry")
+async def retry_camera_stream(camera_id: str, pool: Optional[CameraPool] = Depends(get_camera_pool)):
+    """Re-probe an offline or failed camera source and restart its stream if ready."""
+    from dashboard.services.camera_source_bootstrap import retry_camera_connection
+    if not pool or camera_id not in pool.camera_configs:
+        raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
+    return retry_camera_connection(pool, camera_id)
 
 
 @router.get("/api/cameras/{camera_id}/overlays")

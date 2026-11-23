@@ -6,7 +6,9 @@ Handles JPEG placeholder creation, overlay toggling, BEV minimap generation,
 heatmap encoding, telemetry reads, and interactive entity tagging.
 """
 
+import asyncio
 import logging
+import threading
 from typing import Any, Dict, List, Optional
 import cv2
 import numpy as np
@@ -14,6 +16,21 @@ import numpy as np
 from dashboard.services.entity_tagger import EntityTaggerService
 
 logger = logging.getLogger("intelligent_tracker.dashboard.media")
+
+
+def _ensure_waiter_registry(obj: Any) -> tuple[threading.Lock, list[tuple[Any, Any]]]:
+    """Lazily initialize thread-safe frame-ready waiter state on a StreamMediaMixin host."""
+    lock = getattr(obj, "_frame_waiter_lock", None)
+    if lock is None:
+        lock = threading.Lock()
+        obj._frame_waiter_lock = lock
+    waiters = getattr(obj, "_frame_waiters", None)
+    if waiters is None:
+        waiters = []
+        obj._frame_waiters = waiters
+    if not hasattr(obj, "_frame_seq"):
+        obj._frame_seq = 0
+    return lock, waiters
 
 
 class StreamMediaMixin:
@@ -115,4 +132,45 @@ class StreamMediaMixin:
             reid_extractor=self.reid_extractor,
             gallery_matcher=self.gallery_matcher,
         )
+
+    def register_frame_waiter(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        event: asyncio.Event,
+    ) -> None:
+        """Register an asyncio event waiter to be signaled when a new frame is encoded."""
+        lock, waiters = _ensure_waiter_registry(self)
+        entry = (loop, event)
+        with lock:
+            if entry not in waiters:
+                waiters.append(entry)
+
+    def unregister_frame_waiter(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        event: asyncio.Event,
+    ) -> None:
+        """Remove a previously registered asyncio frame waiter."""
+        lock, waiters = _ensure_waiter_registry(self)
+        entry = (loop, event)
+        with lock:
+            self._frame_waiters = [w for w in waiters if w != entry]
+
+    def notify_frame_ready(self) -> int:
+        """Advance monotonic frame sequence and wake all registered frame waiters."""
+        lock, waiters = _ensure_waiter_registry(self)
+        with lock:
+            self._frame_seq = int(getattr(self, "_frame_seq", 0)) + 1
+            seq = self._frame_seq
+            snapshot = list(waiters)
+
+        for loop, event in snapshot:
+            try:
+                is_closed = getattr(loop, "is_closed", None)
+                if callable(is_closed) and is_closed():
+                    continue
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                pass
+        return seq
 

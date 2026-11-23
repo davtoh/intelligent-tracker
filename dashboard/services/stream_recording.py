@@ -50,6 +50,7 @@ def _idle_status(camera_id: str) -> dict[str, Any]:
         "recording_id": None, "filename": None, "output_path": None, "codec": None,
         "fps": None, "width": None, "height": None, "frames_written": 0,
         "elapsed_s": 0.0, "size_bytes": 0, "annotated": True,
+        "processing_mode": None, "deferred_job_id": None,
     }
 
 
@@ -62,18 +63,26 @@ class StreamRecordingController:
         output_dir: str | None = None,
         writer_factory: Any = None,
         db_getter: Callable[[], Any] | None = None,
+        mode_service_getter: Callable[[], Any] | None = None,
     ) -> None:
         self.camera_id = camera_id
         self._explicit_output_dir = output_dir is not None
         self.output_dir = output_dir or _resolve_default_videos_dir()
         self._writer_factory = writer_factory or PipelineVideoWriter
         self._db_getter = db_getter
+        self._mode_service_getter = mode_service_getter
         self._lock = threading.RLock()
         self._writer: PipelineVideoWriter | None = None
         self._active_meta: dict[str, Any] | None = None
         self._last_meta: dict[str, Any] | None = None
         self._recorded_frames: list[dict[str, Any]] = []
         self._live_stats: dict[str, Any] = {}
+
+    def _current_processing_mode(self) -> tuple[Any, str | None]:
+        """Return (ProcessingModeService | None, active mode string | None)."""
+        svc = self._mode_service_getter() if callable(self._mode_service_getter) else None
+        mode = getattr(svc, "mode", None) if svc is not None else None
+        return svc, mode
 
     @property
     def is_recording(self) -> bool:
@@ -95,6 +104,7 @@ class StreamRecordingController:
             safe_name = sanitize_recording_filename(self.camera_id, filename)
             os.makedirs(target_dir, exist_ok=True)
             out_path = os.path.join(target_dir, safe_name)
+            _, proc_mode = self._current_processing_mode()
             self._writer = self._writer_factory(
                 out_path, fps=float(fps), resolution=resolution,
                 max_frames=max_frames, max_duration_s=max_duration_s,
@@ -102,8 +112,9 @@ class StreamRecordingController:
             self._active_meta = {
                 "recording_id": uuid.uuid4().hex[:12], "camera_id": self.camera_id,
                 "filename": safe_name, "output_path": out_path,
-                "fps": float(fps), "annotated": bool(annotated), "status": "recording",
-                "started_at": time.time(), "stopped_at": None,
+                "fps": float(fps), "annotated": False if proc_mode == "capture_only" else bool(annotated),
+                "status": "recording", "started_at": time.time(), "stopped_at": None,
+                "processing_mode": proc_mode, "deferred_job_id": None,
             }
             self._recorded_frames = []
             self._live_stats = {
@@ -122,9 +133,11 @@ class StreamRecordingController:
         with self._lock:
             if self._writer is None or self._active_meta is None:
                 return False
-            use_ann = self._active_meta.get("annotated", True) and annotated_frame is not None
+            _, curr_mode = self._current_processing_mode()
+            is_capture_only = curr_mode == "capture_only" or self._active_meta.get("processing_mode") == "capture_only"
+            use_ann = (not is_capture_only) and self._active_meta.get("annotated", True) and annotated_frame is not None
             written = self._writer.write(annotated_frame if use_ann else raw_frame)
-            if written and step_res is not None:
+            if written and step_res is not None and not is_capture_only:
                 self._capture_step_snapshot(step_res, raw_frame)
             if not self._writer.is_open:
                 self._finalize_locked(status="completed")
@@ -198,10 +211,26 @@ class StreamRecordingController:
         if self._writer is not None:
             self._writer.release()
             meta.update(self._writer.snapshot())
-        meta.update({"status": status, "is_recording": False, "stopped_at": time.time()})
-        run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
-        if run_rec and run_rec.get("run_id"):
-            meta["report_run_id"] = run_rec["run_id"]
+        svc, curr_mode = self._current_processing_mode()
+        final_mode = curr_mode or meta.get("processing_mode")
+        is_capture_only = final_mode == "capture_only" or meta.get("processing_mode") == "capture_only"
+        meta.update({"status": status, "is_recording": False, "stopped_at": time.time(), "processing_mode": final_mode})
+        if is_capture_only:
+            meta["annotated"] = False
+            if svc is not None and meta.get("filename") and hasattr(svc, "enqueue_deferred_indexing"):
+                try:
+                    opts = {"video_path": meta["output_path"]} if meta.get("output_path") else None
+                    entry = svc.enqueue_deferred_indexing(
+                        meta["filename"], camera_id=self.camera_id,
+                        recording_id=meta.get("recording_id") or "", opts=opts,
+                    )
+                    meta["deferred_job_id"] = entry.get("job_id")
+                except Exception as exc:
+                    logger.warning("Failed to enqueue deferred indexing for '%s': %s", meta.get("filename"), exc)
+        else:
+            run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
+            if run_rec and run_rec.get("run_id"):
+                meta["report_run_id"] = run_rec["run_id"]
         self._writer = None
         self._active_meta = None
         self._last_meta = meta

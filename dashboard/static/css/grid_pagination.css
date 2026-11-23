@@ -1,0 +1,130 @@
+/* ==========================================================================
+   Intelligent Tracker - Multi-Camera Grid Pagination & Standby Tile Styles
+   ========================================================================== */
+
+.multi-camera-grid.grid-4x4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+
+.multi-camera-grid.grid-4x4 .camera-grid-tile {
+  min-width: 0;
+  min-height: 0;
+}
+
+.grid-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.grid-pagination-bar[hidden] {
+  display: none;
+}
+
+.grid-page-btn {
+  min-height: 32px;
+  min-width: 72px;
+  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.grid-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.grid-page-indicator {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-standby-poster {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.9));
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.tile-standby-label {
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+}
+
+.btn-tile-view {
+  min-height: 32px;
+  min-width: 72px;
+  padding: 4px 10px;
+}
+
+.tile-video-container canvas.tile-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.grid-transport-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-transport-badge[hidden] {
+  display: none;
+}
+
+.grid-transport-badge.degraded {
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.tile-status-badge.hibernating {
+  background: rgba(100, 116, 139, 0.25);
+  color: #cbd5e1;
+}
+
+.tile-status-badge.reconnecting {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+}
+
+.tile-status-badge.error {
+  background: rgba(239, 68, 68, 0.22);
+  color: var(--crimson);
+}
+
+.tile-status-badge.disabled {
+  background: rgba(71, 85, 105, 0.25);
+  color: #94a3b8;
+}

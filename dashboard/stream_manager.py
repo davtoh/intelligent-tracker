@@ -20,6 +20,7 @@ from dashboard.services.stream_media import StreamMediaMixin
 from dashboard.services.stream_recording import StreamRecordingController, StreamRecordingMixin
 from dashboard.services.stream_worker import StreamWorker
 from dashboard.services.pipeline_factory import StreamPipelineFactory, load_stream_config
+from dashboard.services.multiview.thumbnail_cache import ThumbnailCache
 
 from intelligent_tracker.homography import GroundPlaneHomography
 from intelligent_tracker.world import WorldGraph
@@ -92,6 +93,9 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
     manager._latest_jpeg = None
     manager._latest_raw_jpeg = None
     manager._latest_raw_frame = None
+    manager._frame_seq = 0
+    manager._frame_waiters = []
+    manager._frame_waiter_lock = threading.Lock()
     manager._latest_telemetry = _default_telemetry(manager.camera_id)
     manager.draw_heatmap = False
     manager.start_time = time.time()
@@ -103,12 +107,14 @@ def _init_manager_runtime(manager: "StreamManager") -> None:
         lease_ttl=3.0,
     )
     manager._overlay_renderer = FrameOverlayRenderer()
+    manager.thumbnail_cache = ThumbnailCache(manager.camera_id)
     rec_cfg = manager.cfg.get("recording", {}) if isinstance(manager.cfg, dict) else {}
     rec_dir = rec_cfg.get("output_dir") if isinstance(rec_cfg, dict) else None
     manager._recording_controller = StreamRecordingController(
         manager.camera_id,
         output_dir=rec_dir,
         db_getter=lambda: getattr(manager, "db", None),
+        mode_service_getter=lambda: getattr(manager, "_processing_mode_service", None),
     )
     manager._subscribers = manager._subscriber_registry._subscribers
     manager._ws_subscribers = manager._subscriber_registry._ws_subscribers
@@ -131,11 +137,18 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         source_override: Optional[Any] = None,
         custom_cfg: Optional[Dict[str, Any]] = None,
         world_graph: Optional[WorldGraph] = None,
+        processing_mode_service: Optional[Any] = None,
     ) -> None:
         self.camera_id = camera_id
         self.name = name or f"Camera {camera_id.upper()}"
         self.source_override = source_override
         self.world_graph = world_graph
+        if processing_mode_service is None:
+            from dashboard.services.processing_mode_service import get_processing_mode_service
+
+            processing_mode_service = get_processing_mode_service()
+        self._processing_mode_service = processing_mode_service
+        self._in_camera_pool = False
         _init_manager_config(self, config_path, db_path, custom_cfg)
         _init_manager_runtime(self)
         self._init_subsystems()
@@ -196,6 +209,7 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         """Signal worker loop and video source to terminate immediately without waiting."""
         self._running = False
         self._stop_event.set()
+        self.notify_frame_ready()
         if self.video_source and hasattr(self.video_source, "signal_stop"):
             try:
                 self.video_source.signal_stop()
@@ -238,6 +252,13 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             if self.db and hasattr(self.db, "close"):
                 self.db.close()
             logger.info("StreamManager stopped for %s", self.camera_id)
+
+    def start_recording(self, **kwargs: Any) -> Dict[str, Any]:
+        """Start MP4 recording, wake hibernating source, and sync processing state."""
+        res = super().start_recording(**kwargs)
+        if getattr(self, "_processing_mode_service", None) is not None:
+            self._resume_video_source()
+        return res
 
     def _worker_loop(self) -> None:
         """Continuous pipeline loop executing detection, tracking, analytics, and frame drawing."""

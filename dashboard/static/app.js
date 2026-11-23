@@ -13,10 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
     zones: [],
     tripwires: [],
     heatmap: null,
+    sourceRes: null,
     hoveredTrack: null,
   };
 
-  let activeCameraId = 'cam_01';
+  let activeCameraId = (() => { try { return window.localStorage?.getItem('it_focused_camera_id') || null; } catch (_) { return null; } })();
   const videoImg = document.getElementById('live-stream-img');
   const canvas = document.getElementById('interactive-canvas');
   const ctx = canvas?.getContext('2d');
@@ -67,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function attachLiveStream(forceReconnect = false) {
-    window.LivePlayer?.attachLiveStream(videoImg, activeCameraId, forceReconnect);
+    if (activeCameraId) window.LivePlayer?.attachLiveStream(videoImg, activeCameraId, forceReconnect);
   }
 
   function escapeHtml(str) {
@@ -181,6 +182,12 @@ document.addEventListener('DOMContentLoaded', () => {
     state.zones = data.zones || state.zones;
     state.tripwires = data.tripwires || state.tripwires;
     if (data.heatmap !== undefined) state.heatmap = data.heatmap;
+    if (Array.isArray(data.source_resolution) && data.source_resolution.length >= 2) {
+      state.sourceRes = data.source_resolution;
+    } else if (typeof data.resolution === 'string' && data.resolution.includes('x')) {
+      const [rw, rh] = data.resolution.split('x').map(Number);
+      if (rw > 0 && rh > 0) state.sourceRes = [rw, rh];
+    }
     let totalCrossed = 0;
     if (data.tripwires) {
       data.tripwires.forEach(tw => { totalCrossed += (tw.in_count + tw.out_count); });
@@ -224,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
       zones: state.zones,
       tripwires: state.tripwires,
       heatmap: state.heatmap,
+      sourceRes: state.sourceRes,
     });
   }
 
@@ -351,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.GalleryTimeline?.initSnapshotModal();
   window.AnalyticsView?.initHeatmap();
 
-  window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
+  if (activeCameraId) window.TelemetryGateway?.initWebSocket(activeCameraId, onTelemetryReceived, onWsStatusChange);
   if (window.location.hash) handleHashRoute();
 
   // Global interfaces

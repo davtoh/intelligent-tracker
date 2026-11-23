@@ -1,143 +1,146 @@
 # Changelog
 
-## [2026-11-15] fix: Fix CI failures in camera config healing and journey_segmenter modularity budget
-- **Type**: fix
-- **Summary**: Guard test_repo_cameras_json_has_no_non_synthetic_mock_or_docker_notice with skipTest when gitignored configs/cameras.json is absent, and extract JourneyHop/EntityJourney dataclasses into intelligent_tracker/journey_models.py so journey_segmenter.py is 137 lines (< 160 budget).
-- **Files** (5):
-  - `.TODO/performance_and_processing_modes_master_roadmap.md`
-  - `.TODO/step_1_event_loop_and_on_demand_encoding.md`
-  - `intelligent_tracker/journey_segmenter.py`
-  - `tests/test_step1_camera_config_healing.py`
-  - `intelligent_tracker/journey_models.py`
-- **Verification**: python -m unittest discover -s tests -p test_*.py
-
-## [2026-11-15] test: Step 5 Milestone 4: End-to-End Closed-Loop Video Ecosystem Verification
-- **Type**: test
-- **Summary**: Added E2E integration tests covering FrameProcessor.step() offline indexing, 4-endpoint API parity (/sightings, /events, /api/active-learning/queue, /api/journey/search), and non-mocked fallback branches.
-- **Files** (1):
-  - `tests/test_step5_e2e_closed_loop_ecosystem.py`
-- **Verification**: python -m unittest discover -s tests -p test_step5_*.py
-
-## [2026-11-15] feat: Step 5 M3: Timeline Tick-Marks & Seek in Studio Deep-Links
+## [2026-11-19] feat: Step 2 Milestone 3: Scheduler HUD, Schema Telemetry & Docs
 - **Type**: feat
-- **Summary**: Added VideoTimelineLinks tick-mark rendering, video-seek-request bridge, JourneyHop media fields, and 1-click Seek in Studio buttons across #timeline, #alerts, #journey, and #review.
-- **Files** (12):
-  - `dashboard/static/css/scrubber_overlays.css`
+- **Summary**: Extended ProcessingModeStatusResponse with scheduler telemetry, fixed data.camera_states lookup in processing_mode.js, added scheduler_hud.js tier and load-shed pills, documented scheduler and CachedReplayProvider in dashboard.rst and AGENTS.md, and verified 858 tests plus Sphinx -W.
+- **Files** (10):
+  - `AGENTS.md`
+  - `dashboard/schemas.py`
+  - `dashboard/services/processing_mode_service.py`
+  - `dashboard/static/css/processing_mode.css`
   - `dashboard/static/index.html`
-  - `dashboard/static/js/analytics_view.js`
-  - `dashboard/static/js/gallery_timeline.js`
-  - `dashboard/static/js/journey_search.js`
-  - `dashboard/static/js/scrubber_library_bridge.js`
-  - `dashboard/static/partials/tabs/videos.html`
-  - `dashboard/static/review_and_rsac.js`
-  - ... (+4 more)
-- **Verification**: python -m unittest discover -s tests -p test_step5_timeline_ticks_and_deeplinks.py
-
-## [2026-11-15] feat: Step 5 M2: Offline Video Spatial Profile, RSAC Alerts & Active Learning
-- **Type**: feat
-- **Summary**: Added scenario_camera_id to VideoAnalyzeRequest, wired ScenarioManager/AnalyticsEngine/RSACManager/ActiveLearningManager/EventBus into VideoIndexer offline analysis with media_offset_sec event tagging, added #batch-scenario-select modal control, and wired #studio-camera-select in Scenario Studio.
-- **Files** (6):
-  - `dashboard/schemas.py`
-  - `dashboard/services/video_analytics_service.py`
-  - `dashboard/static/js/video_batch.js`
-  - `dashboard/static/partials/modals/video_modals.html`
-  - `dashboard/static/studio.js`
-  - `tests/test_step5_video_spatial_and_rsac.py`
-- **Verification**: python -m unittest discover -s tests -p test_step5_video_spatial_and_rsac.py
-
-## [2026-11-14] feat: Step 5 M1: FrameProcessor Batch Unification & Media Offset Persistence
-- **Type**: feat
-- **Summary**: Decomposed batch.py via batch_reporting.py and FrameProcessor.step(), added review_queue media offset columns, and persisted video_filename/media_offset_sec across sightings and active learning.
-- **Files** (11):
-  - `.TODO/step_5_closed_loop_video_ecosystem.md`
-  - `.agents/rules/pipeline_and_db_invariants.md`
-  - `intelligent_tracker/active_learning.py`
-  - `intelligent_tracker/active_learning_triage.py`
-  - `intelligent_tracker/batch.py`
-  - `intelligent_tracker/matching/_gallery_signals.py`
-  - `intelligent_tracker/repositories/analytics_repo.py`
-  - `intelligent_tracker/repositories/learning_repo.py`
-  - ... (+3 more)
-- **Verification**: python -m unittest discover -s tests -p test_step5_batch_frame_processor.py
-
-## [2026-11-14] feat: Step 4 Milestone 4: E2E Video SSOT, Backup/Restore & Live Handoff Sign-Off
-- **Type**: feat
-- **Summary**: Added E2E integration tests for live-record-to-Studio handoff, single-file SQLite TrackerDB backup/restore, and non-mocked fallback branches; exposed report_run_id in CameraRecordStatusResponse; verified 628/628 tests green.
-- **Files** (2):
-  - `dashboard/schemas.py`
-  - `tests/test_step4_e2e_video_ssot.py`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `documentation/dashboard.rst`
+  - ... (+2 more)
 - **Verification**: python -m unittest discover tests
 
-## [2026-11-14] feat: Step 4 M3: Live-Record FrameStepResult Handoff & Export UI
+## [2026-11-19] feat: Step 2 Milestone 2: Zero-GPU CachedReplayProvider & Runtime Pool Scheduler Wiring
 - **Type**: feat
-- **Summary**: Buffered time-indexed tracks in StreamRecordingController for instant live_capture TrackerDB persistence on stop(), wired step_res and db_getter in StreamWorker/StreamManager, and added Export JSON button and Live Capture badge to video_batch_reports.js.
-- **Files** (5):
-  - `dashboard/services/stream_recording.py`
+- **Summary**: Extracted shared post_detection_governance.py (FrameProcessor 14->7 methods), implemented zero-GPU CachedReplayProvider with live zone/tripwire/RSAC governance and loop wrap-around resets, wired AnalyticsScheduler & armed P1 gating into StreamWorker/AsyncInferenceWorker, and exposed scheduler/armed telemetry.
+- **Files** (9):
+  - `dashboard/services/async_inference_worker.py`
+  - `dashboard/services/cached_replay_provider.py`
+  - `dashboard/services/camera_pool_queries.py`
+  - `dashboard/services/file_detection_replay.py`
+  - `dashboard/services/stream_telemetry.py`
   - `dashboard/services/stream_worker.py`
-  - `dashboard/static/js/video_batch_reports.js`
-  - `dashboard/stream_manager.py`
-  - `tests/test_step4_live_recording_handoff.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_*.py
+  - `intelligent_tracker/pipeline/frame_processor.py`
+  - `intelligent_tracker/pipeline/post_detection_governance.py`
+  - ... (+1 more)
+- **Verification**: python -m unittest tests.test_cached_replay_and_pool_scheduler tests.test_live_studio_sync tests.test_step3_worker_hibernation_and_ai_gating tests.test_dashboard_di tests.test_step3_architecture_budgets tests.test_cross_platform_pipeline_hardening tests.test_analytics_scheduler
 
-## [2026-11-14] feat: Step 4 M2: TrackerDB Video Report SSOT & Export API
+## [2026-11-19] feat: Step 2 Milestone 1: Core AnalyticsScheduler, 64x36 MotionGate, dt-Aware Trackers & Armed P1
 - **Type**: feat
-- **Summary**: Refactored video_report_store.py to persist runs and detection streams in TrackerDB with transparent legacy JSON auto-migration (video_report_migration.py) and added GET /api/videos/{filename}/reports/{run_id}/export.
-- **Files** (4):
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/services/video_report_store.py`
-  - `dashboard/services/video_report_migration.py`
-  - `tests/test_step4_report_ssot_and_export.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_report_ssot_and_export.py
-
-## [2026-11-14] feat: Step 4 M1: TrackerDB Video Run Schema & VideoRunRepositoryMixin
-- **Type**: feat
-- **Summary**: Added video_runs table, media offset migrations on sightings/world_timeline_events, VideoRunRepositoryMixin, and compacted schema_manager.py below 240L
-- **Files** (7):
-  - `.TODO/step_4_trackerdb_video_ssot_and_live_handoff.md`
-  - `intelligent_tracker/database.py`
-  - `intelligent_tracker/repositories/__init__.py`
-  - `intelligent_tracker/repositories/schema_manager.py`
-  - `intelligent_tracker/repositories/video_run_repo.py`
-  - `intelligent_tracker/repositories/video_schema.py`
-  - `tests/test_step4_video_run_repo.py`
-- **Verification**: python -m unittest discover -s tests -p test_step4_video_run_repo.py
-
-## [2026-11-14] test: Step 3 Milestone 4: End-to-End ROI Tagging Verification & Sign-Off
-- **Type**: test
-- **Summary**: Added E2E ROI tagging integration tests covering live camera, recorded video timestamp seek, gallery reload, and single-stream/detector fallback branches; verified 610/610 repository tests pass.
-- **Files** (1):
-  - `tests/test_step3_e2e_tagging_flow.py`
-- **Verification**: python -m unittest discover tests
-
-## [2026-11-14] feat: Step 3 Milestone 3: ROI Tag Modal Preview, AI Auto-Select & Scrubber Wiring
-- **Type**: feat
-- **Summary**: Upgraded #modal-tag-entity with live ROI crop preview, AI class badge, and 1-click Re-ID candidate chips; wired InteractiveCanvas and ScrubberOverlay to RoiDrawTagger.openWithRecognition() and POST /api/tag/commit with gallery refresh.
+- **Summary**: Implemented 64x36 luma MotionGate, P0/P1/P2 AnalyticsScheduler with 3-stage load shedding and IdleRefinementHook, dt-aware persistence in SortTracker/CentroidTracker, and armed P1 vision gating in ProcessingModeService.
 - **Files** (6):
-  - `dashboard/static/css/scrubber.css`
-  - `dashboard/static/index.html`
+  - `dashboard/services/processing_mode_service.py`
+  - `intelligent_tracker/tracker/centroid.py`
+  - `intelligent_tracker/tracker/sort.py`
+  - `intelligent_tracker/pipeline/analytics_scheduler.py`
+  - `intelligent_tracker/pipeline/motion_gate.py`
+  - `tests/test_analytics_scheduler.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest tests.test_analytics_scheduler tests.test_tracker tests.test_processing_mode tests.test_processing_mode_invariants tests.test_step3_processing_mode_api tests.test_modernization
+
+## [2026-11-19] feat: Step 1.5 Milestone 2: Live Monitor vs Video Studio Synchronization & Diagnostic Clarity
+- **Type**: feat
+- **Summary**: Add AsyncInferenceWorker frame_seq/lag provenance, FileDetectionReplayProvider for pre-indexed video_file cameras, #live-stream-img ROI tagger fix, source_resolution scaling, and opt-in burned annotation toggle.
+- **Files** (14):
+  - `.TODO/realtime_multiview_master_roadmap.md`
+  - `.TODO/step_1_5_cross_platform_pipeline_hardening.md`
+  - `dashboard/services/async_inference_worker.py`
+  - `dashboard/services/stream_telemetry.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/static/app.js`
   - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/scrubber_overlay.js`
-  - `dashboard/static/partials/modals/entity_modals.html`
-  - `tests/test_step3_tag_modal_integration.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_*.py
+  - `dashboard/static/js/live_player.js`
+  - ... (+6 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (839 passed)
 
-## [2026-11-14] feat: Step 3 Milestone 2: Unified RoiDrawTagger Canvas Controller
+## [2026-11-19] feat: Multi-View WebSocket Streaming & Grid Scalability (Milestone 4)
 - **Type**: feat
-- **Summary**: Added dashboard/static/js/roi_draw_tagger.js (233L) for pointer click-to-tag (<6px) and freehand drag-to-draw (>=6px) ROI selection mapped via UnifiedCanvasOverlay.computeContainBox, registered in index.html, and verified with 6 Node VM unit tests.
-- **Files** (3):
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/roi_draw_tagger.js`
-  - `tests/test_step3_roi_draw_tagger.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_roi_draw_tagger.py
-
-## [2026-11-14] feat: Step 3 Milestone 1: On-Demand ROI Recognition & Tag Commit Backend
-- **Type**: feat
-- **Summary**: Added RoiRecognitionService and /api/tag/recognize-roi + /api/tag/commit endpoints with isolated unit tests
-- **Files** (6):
-  - `.agents/rules/pipeline_and_db_invariants.md`
+- **Summary**: Added /ws/multiview frontend protocol/FrameSurface/client with canvas grid tiles, 3-failure MJPEG fallback with auto-restore, armed-paused overlay counter, static-before-wildcard WS router ordering fix, Hub/HTTP2 Sphinx docs, and Node VM + headless CDP E2E tests
+- **Files** (15):
+  - `AGENTS.md`
   - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/routers/tagging.py`
-  - `dashboard/services/roi_recognition_service.py`
-  - `tests/test_step3_roi_recognition_api.py`
-- **Verification**: python -m unittest discover -s tests -p test_step3_roi_recognition_api.py
+  - `dashboard/static/css/grid_pagination.css`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/camera_grid.js`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `dashboard/static/partials/tabs/live.html`
+  - ... (+7 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
+## [2026-11-17] fix: Cold-Boot cam_01 SSOT & Focus Reconciliation
+- **Type**: fix
+- **Summary**: Removed remaining hardcoded cam_01 fallbacks and eager stream attributes across Studio, Recording, Enrollment, Interactive Canvas, Gallery Timeline, Scenario Modals, and StreamPoolCoordinator. Seeded initial focused_camera_id from the first enabled camera on StreamPoolCoordinator start/restore, delegated CameraAIConfig.resolveInitialCameraId to LivePlayer.attachLiveStream(), and reconciled null server focus in ProcessingModeUI.setAvailableCameras().
+- **Files** (21):
+  - `AGENTS.md`
+  - `dashboard/services/processing_mode_service.py`
+  - `dashboard/services/stream_pool_coordinator.py`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/camera_recording.js`
+  - `dashboard/static/js/gallery_timeline.js`
+  - `dashboard/static/js/interactive_canvas.js`
+  - `dashboard/static/js/live_player.js`
+  - ... (+13 more)
+- **Verification**: python -m unittest discover tests (779 tests OK) + diagnose.py ui --live --capture-runtime (0 exceptions, 0 networkErrors)
+
+## [2026-11-17] fix: Unify active camera SSOT across frontend modules and eliminate cam_01 stub leakage
+- **Type**: fix
+- **Summary**: Initialize app.js and camera_manager.js from it_focused_camera_id/null instead of cam_01, validate syncCameraFocus against ProcessingModeUI.setAvailableCameras(), and gate LivePlayer.syncCameraFocus on resolved camera IDs.
+- **Files** (7):
+  - `CHANGELOG.md`
+  - `dashboard/static/app.js`
+  - `dashboard/static/camera_manager.js`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/live_player.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation tests.test_step2_tab_scoped_streams tests.test_camera_grid_teardown
+
+## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
+- **Type**: fix
+- **Summary**: Initialize state.focusedCameraId from localStorage (it_focused_camera_id) instead of hardcoded cam_01 in processing_mode.js, omit focused_camera_id from init() when unset, and restore the last focused camera in CameraAIConfig.resolveInitialCameraId().
+- **Files** (3):
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation
+
+## [2026-11-17] fix: Stop init() from clobbering focused_camera_id and add no-cache for /static
+- **Type**: fix
+- **Summary**: Omit default cam_01 focused_camera_id from processing_mode.js init() POST so page load never overwrites the resolved camera, remove ?v=2 from index.html, and set Cache-Control: no-cache on /static/* in dashboard/app.py.
+- **Files** (5):
+  - `CHANGELOG.md`
+  - `dashboard/app.py`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step3_architecture_budgets tests.test_dashboard_di
+
+## [2026-11-17] fix: Fix stale hidden active_tab and browser-cache recovery in processing_mode.js
+- **Type**: fix
+- **Summary**: Unconditionally sync active_tab on visible setMode/syncCameraFocus/window-focus and cache-bust processing_mode.js?v=2 so background/other-tab hidden state never blocks vision overlays.
+- **Files** (4):
+  - `CHANGELOG.md`
+  - `dashboard/static/index.html`
+  - `dashboard/static/js/processing_mode.js`
+  - `tests/test_step4_processing_mode_ui.py`
+- **Verification**: MPLBACKEND=Agg .venv\\Scripts\\python.exe -m unittest discover tests
+
+## [2026-11-17] fix: Fix stale hidden active_tab blocking vision overlays on mode/grid switch
+- **Type**: fix
+- **Summary**: Track serverActiveTab/serverFocusedCameraId in processing_mode.js so visible tabs recover from stale server active_tab=hidden on init, setMode, and syncCameraFocus without requiring tab bounce.
+- **Files** (1):
+  - `dashboard/static/js/processing_mode.js`
+- **Verification**: python -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode
+
+## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
+- **Type**: fix
+- **Summary**: Fixed standalone StreamManager hibernation in ProcessingModeService.should_hibernate_camera and isolated FrameProcessor.step spy in test_step5_batch_frame_processor; verified 760/760 unit tests, 0 latent defects, and headless CDP layout + 1x1/2x2/3x3 grid streaming.
+- **Files** (2):
+  - `dashboard/services/processing_mode_service.py`
+  - `tests/test_step5_batch_frame_processor.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

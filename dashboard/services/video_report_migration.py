@@ -23,6 +23,30 @@ from dashboard.services.video_report_maintenance import (
 from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger(__name__)
+_MIGRATION_CACHE_LOCK = threading.Lock()
+_MIGRATED_REPORT_FILES: set[tuple[str, str, int]] = set()
+
+
+def clear_migration_cache() -> None:
+    """Clear the mtime-aware legacy report migration cache."""
+    with _MIGRATION_CACHE_LOCK:
+        _MIGRATED_REPORT_FILES.clear()
+
+
+def _db_cache_key(db: TrackerDB) -> str:
+    """Build a stable cache key distinguishing distinct TrackerDB targets."""
+    raw = str(getattr(db, "db_path", "") or "")
+    if not raw or raw == ":memory:":
+        return f"{raw}:{id(db)}"
+    return os.path.abspath(raw)
+
+
+def _stat_mtime_ns(path: str) -> int | None:
+    """Return file mtime in nanoseconds, or None if unavailable."""
+    try:
+        return os.stat(path).st_mtime_ns
+    except OSError:
+        return None
 
 
 def find_legacy_detections_path(
@@ -69,15 +93,9 @@ def _load_legacy_detections(
 
 
 def _migrate_single_legacy_run(
-    alias: str,
-    aliases: list[str],
-    reports_dir: str,
-    run: dict[str, Any],
-    safe_name: str,
-    db: TrackerDB,
-    resolve_base_fn: Callable[[str], str],
-    infer_res_fn: Callable[[str | None], list[int] | None],
-    lock: threading.RLock,
+    alias: str, aliases: list[str], reports_dir: str, run: dict[str, Any],
+    safe_name: str, db: TrackerDB, resolve_base_fn: Callable[[str], str],
+    infer_res_fn: Callable[[str | None], list[int] | None], lock: threading.RLock,
 ) -> None:
     """Upsert one legacy JSON run into TrackerDB when absent or incomplete."""
     rid = run.get("run_id") if isinstance(run, dict) else None
@@ -108,30 +126,33 @@ def _migrate_single_legacy_run(
 
 
 def migrate_legacy_json_for_aliases(
-    safe_name: str,
-    aliases: list[str],
-    reports_dir: str,
-    db: TrackerDB,
-    resolve_base_fn: Callable[[str], str],
-    infer_res_fn: Callable[[str | None], list[int] | None],
+    safe_name: str, aliases: list[str], reports_dir: str, db: TrackerDB,
+    resolve_base_fn: Callable[[str], str], infer_res_fn: Callable[[str | None], list[int] | None],
     lock: threading.RLock,
 ) -> None:
     """Import any legacy *_reports.json / *_detections.json files into TrackerDB."""
     if not os.path.isdir(reports_dir):
         return
+    db_key = _db_cache_key(db)
     probe_cache: dict[str, list[int] | None] = {}
     for alias in aliases:
         rep_path = os.path.join(reports_dir, f"{alias}_reports.json")
+        abs_rep = os.path.abspath(rep_path)
         with lock:
             if not os.path.isfile(rep_path):
                 continue
+            mtime_ns = _stat_mtime_ns(rep_path)
+            with _MIGRATION_CACHE_LOCK:
+                if mtime_ns is not None and (db_key, abs_rep, mtime_ns) in _MIGRATED_REPORT_FILES:
+                    continue
             runs = load_runs_file(rep_path)
-        if backfill_runs_resolution(
-            runs, alias, probe_cache, infer_res_fn, extract_source_metadata
-        ):
+        if backfill_runs_resolution(runs, alias, probe_cache, infer_res_fn, extract_source_metadata):
             persist_healed_runs(rep_path, runs, load_runs_file, lock)
         for run in runs:
             _migrate_single_legacy_run(
-                alias, aliases, reports_dir, run, safe_name, db,
-                resolve_base_fn, infer_res_fn, lock,
+                alias, aliases, reports_dir, run, safe_name, db, resolve_base_fn, infer_res_fn, lock,
             )
+        final_mtime = _stat_mtime_ns(rep_path) or mtime_ns
+        if final_mtime is not None:
+            with _MIGRATION_CACHE_LOCK:
+                _MIGRATED_REPORT_FILES.add((db_key, abs_rep, final_mtime))

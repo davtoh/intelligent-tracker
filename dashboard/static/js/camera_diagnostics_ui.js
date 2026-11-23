@@ -112,10 +112,20 @@
     }
   }
 
+  function isLoadedCameraId(activeSelect, camId) {
+    if (!camId) return false;
+    const options = activeSelect?.options;
+    if (options && typeof options.length === 'number') {
+      return Array.from(options).some(opt => opt && opt.value === camId);
+    }
+    const inventory = window.CameraManager?.getActiveCameras?.();
+    return Array.isArray(inventory) ? inventory.some(cam => cam && cam.id === camId) : false;
+  }
+
   async function checkActiveCameraHealth() {
     const activeSelect = document.getElementById('active-camera-select');
-    const camId = activeSelect ? activeSelect.value : 'cam_01';
-    if (!camId) return;
+    const camId = activeSelect ? activeSelect.value : '';
+    if (!isLoadedCameraId(activeSelect, camId)) return;
 
     try {
       const resp = await fetch(`/api/cameras/${encodeURIComponent(camId)}/diagnostics`);

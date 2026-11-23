@@ -13,7 +13,7 @@
   'use strict';
 
   const studioState = {
-    activeCamera: 'cam_01',
+    activeCamera: null,
     mode: 'idle',
     points: [],
     zones: [],
@@ -81,10 +81,14 @@
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
 
-    loadStudioChannels();
-    loadCameraScenario(studioState.activeCamera);
+    loadStudioChannels().then(() => {
+      if (studioState.activeCamera) {
+        loadCameraScenario(studioState.activeCamera);
+        window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+      }
+    });
     loadTopologyLinks();
-    window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+    syncStudioTabState(isStudioTabActive());
   }
 
   async function loadStudioChannels() {
@@ -103,9 +107,9 @@
     };
     appendGroup('Camera Profiles', cams, (c) => c?.id && Object.assign(document.createElement('option'), { value: c.id, textContent: c.name ? `${c.name} (${c.id})` : c.id }));
     appendGroup('Recorded Videos', vids, (v) => v?.filename && Object.assign(document.createElement('option'), { value: v.filename, textContent: `🎬 ${v.filename}` }));
-    if (!sel.options.length) sel.innerHTML = '<option value="cam_01">cam_01</option>';
-    if ([...sel.options].some((o) => o.value === studioState.activeCamera)) sel.value = studioState.activeCamera;
-    else studioState.activeCamera = sel.value || 'cam_01';
+    if (!sel.options.length) sel.innerHTML = '<option value="">No cameras available</option>';
+    if (studioState.activeCamera && [...sel.options].some((o) => o.value === studioState.activeCamera)) sel.value = studioState.activeCamera;
+    else studioState.activeCamera = sel.value || null;
   }
 
   function setupCanvasListeners() {
@@ -277,11 +281,16 @@
     });
 
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
-      const targetId = e.target.value || 'cam_01';
+      const targetId = e.target.value;
+      if (!targetId) return;
       studioState.activeCamera = targetId;
       const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
       const img = document.getElementById('studio-live-img');
-      if (img && !isVideo) img.src = `/stream/${encodeURIComponent(targetId)}`;
+      if (img && !isVideo) {
+        const streamBase = `/stream/${encodeURIComponent(targetId)}`;
+        if (img.dataset) img.dataset.activeStreamSrc = streamBase;
+        if (isStudioTabActive()) img.src = `${streamBase}?t=${Date.now()}`;
+      }
       updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
       loadCameraScenario(targetId);
       window.StudioOverlays?.loadCameraOverlays(targetId);
@@ -299,19 +308,34 @@
     });
   }
 
-  setInterval(() => {
-    if (document.getElementById('tab-studio')?.classList.contains('active') || studioState.overlays.bev_minimap) {
-      renderBEVMinimap();
-    }
-  }, 250);
+  let minimapTimer = null;
+  const isStudioTabActive = () => Boolean(document.getElementById('tab-studio')?.classList?.contains('active'));
+  function startMinimapLoop() {
+    if (minimapTimer !== null) return;
+    minimapTimer = setInterval(() => {
+      if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap();
+    }, 250);
+  }
+  function stopMinimapLoop() {
+    if (minimapTimer === null) return;
+    clearInterval(minimapTimer);
+    minimapTimer = null;
+  }
+  function syncStudioTabState(isActive) {
+    const active = typeof isActive === 'boolean' ? isActive : isStudioTabActive();
+    if (active) { renderBEVMinimap(); startMinimapLoop(); } else { stopMinimapLoop(); }
+  }
+  window.addEventListener('tab-changed', (ev) => {
+    const activeTab = ev?.detail?.activeTab;
+    syncStudioTabState(activeTab ? activeTab === 'tab-studio' : isStudioTabActive());
+  });
 
   window.Studio = {
-    init: initStudio,
-    setMode: setStudioMode,
-    deleteZone: deleteZone,
-    deleteTripwire: deleteTripwire,
-    deleteTopologyLink: deleteTopologyLink,
-    renderBEV: renderBEVMinimap,
+    init: initStudio, setMode: setStudioMode, deleteZone: deleteZone,
+    deleteTripwire: deleteTripwire, deleteTopologyLink: deleteTopologyLink,
+    renderBEV: renderBEVMinimap, startMinimapLoop: startMinimapLoop,
+    stopMinimapLoop: stopMinimapLoop, syncStudioTabState: syncStudioTabState,
+    syncTabVisibility: syncStudioTabState,
     searchJourney: (q) => window.JourneySearch?.search(q),
     exportJourney: (q) => window.JourneySearch?.exportVideo(q),
   };

@@ -45,6 +45,48 @@ class VideoJob:
         return data
 
 
+def _acquire_job_slot(mgr: "VideoJobManager", job: VideoJob, stop_event: threading.Event) -> bool:
+    """Acquire concurrency semaphore with responsive cancellation."""
+    while not stop_event.is_set():
+        if mgr.is_shutdown:
+            break
+        if mgr._semaphore.acquire(timeout=0.1):
+            return True
+    with mgr._lock:
+        job.status, job.stage, job.completed_at = JobStatus.CANCELLED, "cancelled_before_start", time.time()
+    return False
+
+
+def _run_job_body(
+    mgr: "VideoJobManager",
+    job: VideoJob,
+    stop_event: threading.Event,
+    runner_fn: Callable[[VideoJob, threading.Event, Callable[[Dict[str, Any]], None]], Dict[str, Any]],
+) -> None:
+    """Execute runner_fn and update job completion/failure status."""
+    with mgr._lock:
+        if stop_event.is_set():
+            job.status, job.stage, job.completed_at = JobStatus.CANCELLED, "cancelled_before_start", time.time()
+            return
+        job.status, job.started_at, job.stage = JobStatus.RUNNING, time.time(), "processing"
+
+    def progress_callback(update: Dict[str, Any]) -> None:
+        with mgr._lock:
+            if "percent" in update:
+                job.progress = min(100.0, max(0.0, float(update["percent"])))
+            if "stage" in update:
+                job.stage = str(update["stage"])
+            job.metrics.update(update)
+
+    result = runner_fn(job, stop_event, progress_callback)
+    with mgr._lock:
+        if stop_event.is_set():
+            job.status, job.stage = JobStatus.CANCELLED, "cancelled"
+        else:
+            job.status, job.progress, job.stage, job.result = JobStatus.COMPLETED, 100.0, "completed", result
+        job.completed_at = time.time()
+
+
 class VideoJobManager:
     """
     Thread-safe ledger and execution coordinator for offline video processing jobs.
@@ -61,6 +103,12 @@ class VideoJobManager:
         self._threads: Dict[str, threading.Thread] = {}
         self._is_shutdown = False
 
+    @property
+    def is_shutdown(self) -> bool:
+        """Return True if shutdown() has been requested on this manager."""
+        with self._lock:
+            return self._is_shutdown
+
     def submit_job(
         self,
         job_type: str,
@@ -68,40 +116,25 @@ class VideoJobManager:
         runner_fn: Callable[[VideoJob, threading.Event, Callable[[Dict[str, Any]], None]], Dict[str, Any]],
         initial_metrics: Optional[Dict[str, Any]] = None,
     ) -> VideoJob:
-        """
-        Submit a new video job. Raises ValueError if a job is already active for this video file.
-        """
+        """Submit a new video job. Raises ValueError if a job is already active for this video file."""
         safe_name = os.path.basename(filename)
         with self._lock:
             if self._is_shutdown:
                 raise RuntimeError("VideoJobManager is shut down")
-
-            # Check per-video mutual exclusion
             active = self._get_active_job_for_file_unlocked(safe_name)
             if active is not None:
                 raise ValueError(f"Job '{active.job_id}' is already active for video '{safe_name}'")
-
             job_id = f"job_{uuid.uuid4().hex[:12]}"
-            job = VideoJob(
-                job_id=job_id,
-                job_type=job_type,
-                filename=safe_name,
-                metrics=initial_metrics or {},
-            )
-            stop_event = threading.Event()
+            job = VideoJob(job_id=job_id, job_type=job_type, filename=safe_name, metrics=initial_metrics or {})
             self._jobs[job_id] = job
-            self._stop_events[job_id] = stop_event
+            self._stop_events[job_id] = threading.Event()
             self._prune_history_unlocked()
 
         worker_thread = threading.Thread(
-            target=self._execute_job,
-            args=(job_id, runner_fn),
-            daemon=True,
-            name=f"VideoWorker-{job_id}",
+            target=self._execute_job, args=(job.job_id, runner_fn), daemon=True, name=f"VideoWorker-{job.job_id}",
         )
         with self._lock:
-            self._threads[job_id] = worker_thread
-
+            self._threads[job.job_id] = worker_thread
         worker_thread.start()
         return job
 
@@ -112,71 +145,18 @@ class VideoJobManager:
     ) -> None:
         """Internal worker wrapper executing outside the ledger lock."""
         with self._lock:
-            job = self._jobs.get(job_id)
-            stop_event = self._stop_events.get(job_id)
-        if not job or not stop_event:
+            job, stop_event = self._jobs.get(job_id), self._stop_events.get(job_id)
+        if not job or not stop_event or not _acquire_job_slot(self, job, stop_event):
             return
-
-        # Acquire concurrency throttle semaphore with responsive cancellation
-        acquired = False
-        while not stop_event.is_set():
-            with self._lock:
-                if self._is_shutdown:
-                    break
-            if self._semaphore.acquire(timeout=0.1):
-                acquired = True
-                break
-
-        if not acquired:
-            with self._lock:
-                job.status = JobStatus.CANCELLED
-                job.stage = "cancelled_before_start"
-                job.completed_at = time.time()
-            return
-
         try:
-            with self._lock:
-                if stop_event.is_set():
-                    job.status = JobStatus.CANCELLED
-                    job.stage = "cancelled_before_start"
-                    job.completed_at = time.time()
-                    return
-                job.status = JobStatus.RUNNING
-                job.started_at = time.time()
-                job.stage = "processing"
-
-            def progress_callback(update: Dict[str, Any]) -> None:
-                with self._lock:
-                    if "percent" in update:
-                        job.progress = min(100.0, max(0.0, float(update["percent"])))
-                    if "stage" in update:
-                        job.stage = str(update["stage"])
-                    job.metrics.update(update)
-
-            # Execute work outside of lock
-            result = runner_fn(job, stop_event, progress_callback)
-
-            with self._lock:
-                if stop_event.is_set():
-                    job.status = JobStatus.CANCELLED
-                    job.stage = "cancelled"
-                else:
-                    job.status = JobStatus.COMPLETED
-                    job.progress = 100.0
-                    job.stage = "completed"
-                    job.result = result
-                job.completed_at = time.time()
-
+            _run_job_body(self, job, stop_event, runner_fn)
         except Exception as e:
             logger.error("Job %s execution failed: %s", job_id, e, exc_info=True)
             with self._lock:
                 if stop_event.is_set():
-                    job.status = JobStatus.CANCELLED
-                    job.stage = "cancelled"
+                    job.status, job.stage = JobStatus.CANCELLED, "cancelled"
                 else:
-                    job.status = JobStatus.FAILED
-                    job.stage = "failed"
-                    job.error = str(e)
+                    job.status, job.stage, job.error = JobStatus.FAILED, "failed", str(e)
                 job.completed_at = time.time()
         finally:
             self._semaphore.release()
@@ -265,4 +245,13 @@ def get_video_job_manager() -> VideoJobManager:
         if _default_manager is None:
             _default_manager = VideoJobManager(max_concurrent=2)
         return _default_manager
+
+
+def reset_video_job_manager() -> None:
+    """Shut down and clear the global VideoJobManager singleton for clean re-init."""
+    global _default_manager
+    with _manager_lock:
+        if _default_manager is not None:
+            _default_manager.shutdown()
+            _default_manager = None
 

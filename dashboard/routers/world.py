@@ -7,6 +7,7 @@ Exposes REST endpoints backed by ``WorldQueryEngine``, ``ConfidenceEngine``,
 and ``TrackerDB`` FTS5 timeline search.
 """
 
+import asyncio
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -71,7 +72,8 @@ async def query_world(
     clean_query = req.query.strip()
     if not clean_query:
         raise HTTPException(status_code=400, detail="Query string must not be empty")
-    result = engine.ask(
+    result = await asyncio.to_thread(
+        engine.ask,
         clean_query,
         entity_id=req.entity_id,
         camera_id=req.camera_id,
@@ -93,7 +95,7 @@ async def get_entity_confidence(
     db: TrackerDB = Depends(get_db),
 ) -> dict[str, Any]:
     """Return calibrated long-term confidence state for a tracked entity."""
-    return _build_confidence_payload(entity_id, engine, db, timestamp)
+    return await asyncio.to_thread(_build_confidence_payload, entity_id, engine, db, timestamp)
 
 
 @router.get("/timeline")
@@ -112,7 +114,8 @@ async def search_world_timeline(
 ) -> dict[str, Any]:
     """Search FTS5 semantic timeline events with optional structured filters."""
     search_text = (q or query or "").strip()
-    events = db.search_timeline_events(
+    events = await asyncio.to_thread(
+        db.search_timeline_events,
         query=search_text,
         entity_id=entity_id,
         camera_id=camera_id,

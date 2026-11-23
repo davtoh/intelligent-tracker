@@ -58,6 +58,8 @@ from dashboard.routers import (
     cameras_router,
     camera_diagnostics_router,
     camera_recording_router,
+    multiview_router,
+    processing_mode_router,
     rsac_router,
     scenarios_router,
     streaming_router,
@@ -95,6 +97,11 @@ from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
 )
+from dashboard.services.diagnostic_log_handler import (
+    install_diagnostic_log_handler,
+    remove_diagnostic_log_handler,
+)
+from dashboard.services.security_config import parse_allowed_origins
 from dashboard.services.process_supervisor import (
     set_parent_death_signal,
     start_parent_watchdog,
@@ -173,6 +180,7 @@ async def lifespan(application: FastAPI):
     install_shutdown_handlers()
     set_parent_death_signal()
     start_parent_watchdog()
+    log_handler = install_diagnostic_log_handler()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     pool, primary_sm, lifecycle_mgr, owned_db = _init_runtime_services(application)
 
@@ -188,7 +196,18 @@ async def lifespan(application: FastAPI):
     if owned_db is not None:
         owned_db.close()
     clear_app_state(application)
+    remove_diagnostic_log_handler(log_handler)
     stop_parent_watchdog()
+
+
+def _attach_static_no_cache(application: FastAPI) -> None:
+    """Ensure /static/* assets always revalidate with ETag so JS/CSS edits take effect on reload."""
+    @application.middleware("http")
+    async def _static_no_cache(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-cache")
+        return response
 
 
 def create_app() -> FastAPI:
@@ -202,31 +221,27 @@ def create_app() -> FastAPI:
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=parse_allowed_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     application.add_middleware(GracefulCancellationMiddleware)
     application.add_middleware(DiagnosticTraceMiddleware)
+    _attach_static_no_cache(application)
 
     # Mount static assets and crops
     application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     application.mount("/crops", StaticFiles(directory=CROPS_DIR), name="crops")
 
     # Mount domain APIRouters
-    application.include_router(system_router)
-    application.include_router(cameras_router)
-    application.include_router(camera_diagnostics_router)
-    application.include_router(camera_recording_router)
-    application.include_router(streaming_router)
-    application.include_router(scenarios_router)
-    application.include_router(rsac_router)
-    application.include_router(analytics_router)
-    application.include_router(tagging_router)
-    application.include_router(videos_router)
-    application.include_router(topology_router)
-    application.include_router(world_router)
+    for router in (
+        system_router, cameras_router, camera_diagnostics_router,
+        camera_recording_router, processing_mode_router, multiview_router,
+        streaming_router, scenarios_router, rsac_router, analytics_router,
+        tagging_router, videos_router, topology_router, world_router,
+    ):
+        application.include_router(router)
 
     return application
 

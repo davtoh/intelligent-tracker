@@ -87,7 +87,8 @@ class TestStep5BatchFrameProcessor(unittest.TestCase):
             summary = indexer.process_video(self.video_path, verbose=False)
 
         self.assertEqual(summary["processed_frames"], 6)
-        self.assertEqual(spy_step.call_count, 6)
+        indexer_calls = [c for c in spy_step.call_args_list if c.args[0].bundle.db is self.db]
+        self.assertEqual(len(indexer_calls), 6)
         sightings = self.db.get_sightings(entity_id=eid, limit=20)
         self.assertGreater(len(sightings), 0)
         self.assertTrue(all(s["video_filename"] == "lobby_clip.mp4" for s in sightings))

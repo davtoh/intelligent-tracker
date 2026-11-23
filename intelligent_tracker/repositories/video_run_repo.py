@@ -110,7 +110,11 @@ class VideoRunRepositoryMixin:
                 self._conn.commit()
             finally:
                 cur.close()
-        return self.get_video_run(rid, include_detections=frame_detections is not None) or {}
+        record = self.get_video_run(rid, include_detections=False) or {}
+        if record and frame_detections is not None:
+            record["frame_detections"] = frame_detections
+            record["has_detections"] = True
+        return record
 
     def get_video_run(
         self, run_id: str, video_filename: str | None = None, include_detections: bool = False

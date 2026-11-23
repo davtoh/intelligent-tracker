@@ -4,7 +4,6 @@ Executes the continuous frame ingestion, FrameProcessor vision stepping,
 overlay encoding, and telemetry distribution loop.
 """
 
-from dataclasses import asdict
 import logging
 import os
 import time
@@ -13,15 +12,32 @@ from typing import Any
 import cv2
 import numpy as np
 
-from dashboard.services.camera_diagnostics import CameraHealthManager
-from intelligent_tracker.pipeline import (
-    FrameProcessor,
-    FrameStepResult,
-    PipelineBundle,
-    PipelineConfig,
+from dashboard.services.async_inference_worker import (
+    AsyncInferenceWorker,
+    build_live_step_result,
+    build_worker_step_result,
 )
+from dashboard.services.cached_replay_provider import CachedReplayProvider
+from dashboard.services.camera_diagnostics import CameraHealthManager
+from dashboard.services.multiview.thumbnail_cache import maybe_update_manager_thumbnail
+from dashboard.services.stream_telemetry import (
+    _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
+    _extract_track_telemetry, _resolve_detector_telemetry, build_stream_telemetry,
+)
+from dashboard.services.stream_worker_recovery import handle_worker_exception, publish_error_placeholders
+from intelligent_tracker.pipeline import FrameProcessor, FrameStepResult, PipelineBundle, PipelineConfig
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
+
+__all__ = [
+    "StreamWorker",
+    "build_stream_telemetry",
+    "_build_tripwires_data",
+    "_build_zones_data",
+    "_extract_recent_alerts",
+    "_extract_track_telemetry",
+    "_resolve_detector_telemetry",
+]
 
 
 def _diagnose_source_error(vs: Any) -> tuple[str, str]:
@@ -33,96 +49,6 @@ def _diagnose_source_error(vs: Any) -> tuple[str, str]:
     if getattr(vs, "is_rtsp", False) and not getattr(vs, "_is_connected", False):
         return "RTSP_TIMEOUT", f"RTSP connection timed out: {vs.source}"
     return "NO_FRAMES_DECODED", "No video frames could be decoded from source"
-
-
-def _extract_recent_alerts(event_bus: Any) -> list[dict[str, Any]]:
-    """Extract serialized dictionary list from event bus."""
-    alerts: list[dict[str, Any]] = []
-    if event_bus:
-        for ev in event_bus.get_recent_events(limit=8):
-            if hasattr(ev, "to_dict"):
-                alerts.append(ev.to_dict())
-            elif hasattr(ev, "__dataclass_fields__"):
-                alerts.append(asdict(ev))
-            else:
-                alerts.append({"event_type": getattr(ev, "event_type", "event")})
-    return alerts
-
-
-def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[dict[str, Any]]:
-    """Map active vision tracks into telemetry dictionaries with homography coordinates."""
-    telemetry_tracks: list[dict[str, Any]] = []
-    for tid, trk in tracks.items():
-        gx, gy = homography.track_to_ground(trk.bbox)
-        telemetry_tracks.append({
-            "id": tid,
-            "bbox": [int(x) for x in trk.bbox],
-            "centroid": [float(trk.centroid[0]), float(trk.centroid[1])],
-            "ground_pos": [round(gx, 2), round(gy, 2)],
-            "velocity": [round(float(trk.velocity[0]), 2), round(float(trk.velocity[1]), 2)],
-            "label": trk.label,
-            "confidence": round(float(trk.confidence), 2),
-            "dwell_time": round(float(trk.dwell_time), 1),
-            "entity_name": getattr(trk, "entity_name", getattr(trk, "identity_label", None)),
-            "category": getattr(trk, "category", "person"),
-            "is_cluttered": bool(getattr(trk, "is_cluttered", False)),
-            "clutter_partner_id": getattr(trk, "clutter_partner_id", None),
-            "state": trk.state,
-        })
-    return telemetry_tracks
-
-
-def _build_zones_data(analytics: Any) -> list[dict[str, Any]]:
-    """Serialize zones from analytics engine."""
-    if not analytics:
-        return []
-    return [
-        {
-            "name": z.name,
-            "occupancy": z.occupancy,
-            "capacity_limit": getattr(z, "capacity_limit", None),
-            "dwell_threshold": z.dwell_threshold,
-            "is_breached": getattr(z, "_threshold_breached", False),
-            "polygon": z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon),
-        }
-        for z in list(analytics.zones.values())
-    ]
-
-
-def _build_tripwires_data(analytics: Any) -> list[dict[str, Any]]:
-    """Serialize tripwires from analytics engine."""
-    if not analytics:
-        return []
-    return [
-        {
-            "name": tw.name,
-            "in_count": tw.in_count,
-            "out_count": tw.out_count,
-            "line": list(tw.line_segment),
-        }
-        for tw in list(analytics.tripwires.values())
-    ]
-
-
-def _resolve_detector_telemetry(manager: Any) -> tuple[str, str]:
-    """Resolve ``(detector_model, detector_status)`` from bundle or fallback attrs."""
-    bundle = getattr(manager, "_pipeline_bundle", None)
-    if bundle is not None:
-        cfg = getattr(bundle, "config", None)
-        model = str(getattr(cfg, "detector_model", "") or "").strip().lower()
-        status = str(getattr(bundle, "detector_status", "ready") or "ready")
-        return model or "unknown", status
-
-    cfg_dict = getattr(manager, "cfg", None) or {}
-    det_cfg = cfg_dict.get("detector", {}) if isinstance(cfg_dict, dict) else {}
-    model = str(det_cfg.get("model", "") or "").strip().lower()
-    detector = getattr(manager, "detector", None)
-    if detector is None:
-        return model or "unknown", "unavailable"
-    if not model:
-        model = getattr(detector, "name", None) or type(detector).__name__.lower()
-    status = "simulation" if model == "mock" else "ready"
-    return str(model), status
 
 
 class StreamWorker:
@@ -137,24 +63,17 @@ class StreamWorker:
         if self._processor is None:
             bundle = getattr(self.manager, "_pipeline_bundle", None)
             if bundle is None:
+                m = self.manager
                 bundle = PipelineBundle(
-                    config=PipelineConfig(camera_id=getattr(self.manager, "camera_id", "default")),
-                    db=getattr(self.manager, "db", None),
-                    video_source=getattr(self.manager, "video_source", None),
-                    detector=getattr(self.manager, "detector", None),
-                    tracker=getattr(self.manager, "tracker", None),
-                    analytics=getattr(self.manager, "analytics", None),
-                    reid_extractor=getattr(self.manager, "reid_extractor", None),
-                    gallery_matcher=getattr(self.manager, "gallery_matcher", None),
-                    rsac_manager=getattr(self.manager, "rsac_manager", None),
-                    active_learning=getattr(self.manager, "active_learning", None),
-                    enrollment_manager=getattr(self.manager, "enrollment_manager", None),
-                    event_bus=getattr(self.manager, "event_bus", None),
-                    event_pipeline=getattr(self.manager, "event_pipeline", None),
-                    world_graph=getattr(self.manager, "world_graph", None),
-                    world_bridge=getattr(self.manager, "world_bridge", None),
-                    world_rule_engine=getattr(self.manager, "world_rule_engine", None),
-                    confidence_engine=getattr(self.manager, "confidence_engine", None),
+                    config=PipelineConfig(camera_id=getattr(m, "camera_id", "default")),
+                    db=getattr(m, "db", None), video_source=getattr(m, "video_source", None),
+                    detector=getattr(m, "detector", None), tracker=getattr(m, "tracker", None),
+                    analytics=getattr(m, "analytics", None), reid_extractor=getattr(m, "reid_extractor", None),
+                    gallery_matcher=getattr(m, "gallery_matcher", None), rsac_manager=getattr(m, "rsac_manager", None),
+                    active_learning=getattr(m, "active_learning", None), enrollment_manager=getattr(m, "enrollment_manager", None),
+                    event_bus=getattr(m, "event_bus", None), event_pipeline=getattr(m, "event_pipeline", None),
+                    world_graph=getattr(m, "world_graph", None), world_bridge=getattr(m, "world_bridge", None),
+                    world_rule_engine=getattr(m, "world_rule_engine", None), confidence_engine=getattr(m, "confidence_engine", None),
                 )
             self._processor = FrameProcessor(bundle, topology=getattr(self.manager, "topology", None))
 
@@ -168,60 +87,110 @@ class StreamWorker:
         bundle.world_bridge = getattr(self.manager, "world_bridge", bundle.world_bridge)
         return self._processor
 
+    def _should_run_vision_step(self, is_recording: bool) -> bool:
+        """Return True when FrameProcessor.step() AI inference should execute."""
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        if svc is None:
+            return True
+        is_armed = bool(getattr(self.manager, "is_armed", False))
+        return bool(svc.should_run_vision_step(self.manager.camera_id, is_recording=is_recording, is_armed=is_armed))
+
+    def _should_hibernate(self, is_recording: bool, frame_count: int) -> bool:
+        """Evaluate subscriber-count and ProcessingModeService hibernation rules."""
+        sub_count = int(getattr(self.manager, "subscriber_count", 0))
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        if svc is None:
+            return sub_count <= 0 and not is_recording and frame_count > 0
+        in_pool = bool(getattr(self.manager, "_in_camera_pool", False))
+        mode = getattr(svc, "mode", "focus_only")
+        focused = getattr(svc, "focused_camera_id", None)
+        is_unfocused = bool(in_pool and mode == "focus_only" and focused and self.manager.camera_id != focused)
+        should_hib = svc.should_hibernate_camera(
+            self.manager.camera_id,
+            subscriber_count=sub_count,
+            is_recording=is_recording,
+            in_camera_pool=in_pool,
+            is_armed=bool(getattr(self.manager, "is_armed", False)),
+        )
+        return bool(should_hib and (frame_count > 0 or mode == "paused" or is_unfocused))
+
     def run(self) -> None:
         """Continuous pipeline loop executing FrameProcessor, overlays, and telemetry."""
         if not self.manager.video_source:
             return
-
         processor = self._get_processor()
-        consecutive_empty = 0
-
-        with self.manager.video_source as vs:
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        replay = CachedReplayProvider(getattr(self.manager, "db", None), self.manager.video_source, processor=processor)
+        async_worker = AsyncInferenceWorker(
+            processor, replay_provider=replay, scheduler=getattr(svc, "scheduler", None),
+            camera_id=self.manager.camera_id, is_armed=bool(getattr(self.manager, "is_armed", False)),
+        )
+        async_worker.start()
+        consecutive_empty, consecutive_errors, frame_seq = 0, 0, 0
+        try:
             while self.manager._running and not self.manager._stop_event.is_set():
-                if self._handle_hibernation(vs, processor.frame_count):
-                    continue
-
-                ret, frame = vs.read(timeout=1.0)
-                if not ret or frame is None:
-                    consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
-                    if should_skip:
-                        continue
-
-                consecutive_empty = 0
-                step_res = processor.step(frame, timestamp=time.time(), max_dim=1280)
-                if step_res.frame_count % 30 == 1:
-                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
-
-                self._process_single_frame(step_res)
+                try:
+                    with self.manager.video_source as vs:
+                        while self.manager._running and not self.manager._stop_event.is_set():
+                            hib_frames = 0 if consecutive_errors > 0 else max(int(getattr(processor, "frame_count", 0) or 0), frame_seq)
+                            if self._handle_hibernation(vs, hib_frames):
+                                continue
+                            try:
+                                ret, frame = vs.read(timeout=1.0)
+                                if not ret or frame is None:
+                                    consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
+                                    if should_skip:
+                                        continue
+                                consecutive_empty, frame_seq = 0, frame_seq + 1
+                                is_rec = bool(getattr(self.manager, "is_recording", False))
+                                step_res = build_worker_step_result(self.manager, async_worker, frame, frame_seq, self._should_run_vision_step(is_rec), is_rec, step_fn=build_live_step_result)
+                                if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
+                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
+                                self._process_single_frame(step_res)
+                                consecutive_errors = 0
+                            except Exception as exc:
+                                consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="frame_step")
+                except Exception as exc:
+                    consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="source_enter")
+        finally:
+            async_worker.stop()
 
     def _process_single_frame(self, step_res: FrameStepResult) -> None:
-        """Store raw frame, encode overlays, and broadcast telemetry for a stepped frame."""
+        """Store raw frame, encode needed overlays, and broadcast telemetry."""
         with self.manager._lock:
             self.manager._latest_raw_frame = step_res.frame.copy()
+            raw_missing = getattr(self.manager, "_latest_raw_jpeg", None) is None
+            ann_missing = getattr(self.manager, "_latest_jpeg", None) is None
 
-        self._encode_raw_frame(step_res.frame)
-        annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+        if getattr(self.manager, "has_raw_subscribers", True) or raw_missing:
+            self._encode_raw_frame(step_res.frame)
+
         recorder = getattr(self.manager, "_recording_controller", None)
-        if recorder is not None and recorder.is_recording:
-            recorder.write_frame(step_res.frame, annotated, step_res=step_res)
+        is_rec = bool(recorder is not None and recorder.is_recording)
+        annotated = None
+        if getattr(self.manager, "has_annotated_subscribers", True) or is_rec or ann_missing:
+            annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
+            if is_rec:
+                recorder.write_frame(step_res.frame, annotated, step_res=step_res)
+
+        thumb_src = annotated if annotated is not None else step_res.frame
+        maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp)
 
         telemetry = self._build_telemetry(
-            step_res.tracks,
-            step_res.timestamp,
-            step_res.fps,
-            step_res.frame.shape,
-            step_res.frame_count,
+            step_res.tracks, step_res.timestamp, step_res.fps, step_res.frame.shape, step_res.frame_count,
+            step_res=step_res,
         )
         with self.manager._lock:
             self.manager._latest_telemetry = telemetry
 
         self.manager._broadcast_telemetry(telemetry)
-        self.manager._stop_event.wait(timeout=0.01)
+        if callable(notify := getattr(self.manager, "notify_frame_ready", None)):
+            notify()
 
     def _handle_hibernation(self, vs: Any, frame_count: int) -> bool:
-        """Pause video capture if zero viewers are connected to conserve compute."""
-        is_recording = getattr(self.manager, "is_recording", False)
-        if self.manager.subscriber_count <= 0 and not is_recording and frame_count > 0:
+        """Pause video capture if zero viewers are connected or mode requires hibernation."""
+        is_recording = bool(getattr(self.manager, "is_recording", False))
+        if self._should_hibernate(is_recording, frame_count):
             if not self.manager._is_hibernating:
                 self.manager._is_hibernating = True
                 if hasattr(vs, "pause"):
@@ -248,21 +217,7 @@ class StreamWorker:
         if consecutive_empty >= 4:
             err_code, err_msg = _diagnose_source_error(vs)
             CameraHealthManager().set_error(self.manager.camera_id, err_msg, error_code=err_code)
-            with self.manager._lock:
-                if self.manager._latest_jpeg is None or (
-                    self.manager._latest_telemetry and self.manager._latest_telemetry.get("status") != "error"
-                ):
-                    self.manager._latest_jpeg = CameraHealthManager().create_error_placeholder_jpeg(
-                        self.manager.camera_id,
-                        name=self.manager.name,
-                        width=self.manager.width,
-                        height=self.manager.height,
-                    )
-                if self.manager._latest_telemetry:
-                    self.manager._latest_telemetry["status"] = "error"
-                    self.manager._latest_telemetry["fps"] = 0.0
-                    self.manager._latest_telemetry["error_code"] = err_code
-                    self.manager._latest_telemetry["error_msg"] = err_msg
+            publish_error_placeholders(self.manager, err_code, err_msg)
             self.manager._stop_event.wait(timeout=0.5)
             return consecutive_empty, True
 
@@ -312,28 +267,10 @@ class StreamWorker:
         measured_fps: float,
         shape: tuple[int, ...],
         frame_count: int,
+        *,
+        step_res: Any = None,
     ) -> dict[str, Any]:
         """Construct comprehensive telemetry payload with ground plane projections."""
-        rec_status = (
-            self.manager.get_recording_status()
-            if hasattr(self.manager, "get_recording_status")
-            else {"is_recording": False}
+        return build_stream_telemetry(
+            self.manager, tracks, curr_t, measured_fps, shape, frame_count, step_res=step_res
         )
-        detector_model, detector_status = _resolve_detector_telemetry(self.manager)
-        return {
-            "camera_id": self.manager.camera_id,
-            "status": "online",
-            "detector_model": detector_model,
-            "detector_status": detector_status,
-            "timestamp": curr_t,
-            "fps": round(measured_fps, 1),
-            "resolution": f"{shape[1]}x{shape[0]}",
-            "frame_count": frame_count,
-            "homography_calibrated": self.manager.homography.is_calibrated,
-            "overlays": dict(self.manager.overlays),
-            "active_tracks": _extract_track_telemetry(tracks, self.manager.homography),
-            "zones": _build_zones_data(self.manager.analytics),
-            "tripwires": _build_tripwires_data(self.manager.analytics),
-            "recent_alerts": _extract_recent_alerts(self.manager.event_bus),
-            "recording": rec_status,
-        }

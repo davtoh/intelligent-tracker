@@ -6,10 +6,14 @@ Verifies zero-load hibernation, self-healing leased subscriber eviction,
 and VideoSource pause/resume lifecycle without deadlocks.
 """
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import threading
 import time
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 
+from dashboard.services.stream_subscribers import StreamSubscriberRegistry
 from intelligent_tracker.video import VideoSource
 from dashboard.stream_manager import StreamManager
 
@@ -129,6 +133,58 @@ class TestStreamManagerLeasedSubscribers(unittest.TestCase):
         )
         self.assertIsInstance(jpeg, bytes)
         self.assertGreater(len(jpeg), 100)
+
+
+class TestStreamSubscriberConcurrency(unittest.TestCase):
+    """Verify thread-safe is_hibernating access across worker threads and asyncio."""
+
+    def test_concurrent_hibernation_transitions_no_deadlock(self) -> None:
+        resumes = 0
+        resume_lock = threading.Lock()
+
+        def _on_resume() -> None:
+            nonlocal resumes
+            with resume_lock:
+                resumes += 1
+            _ = registry.is_hibernating
+
+        registry = StreamSubscriberRegistry(resume_callback=_on_resume, lease_ttl=0.05)
+
+        def _worker(idx: int) -> None:
+            for step in range(40):
+                registry.is_hibernating = (step % 2 == 0)
+                tok = registry.add_subscriber(f"sub_{idx}_{step}")
+                _ = registry.is_hibernating
+                _ = registry.subscriber_count
+                registry.remove_subscriber(tok)
+
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            futures = [pool.submit(_worker, i) for i in range(6)]
+            for fut in futures:
+                fut.result(timeout=5.0)
+        self.assertGreater(resumes, 0)
+        self.assertIsInstance(registry.is_hibernating, bool)
+
+    def test_concurrent_stream_worker_and_asyncio_hibernation_access(self) -> None:
+        sm = StreamManager(
+            camera_id="concurrent_hib_cam",
+            source_override="synthetic",
+            custom_cfg={"detector": {"model": "mock"}, "tracker": {"type": "centroid"}},
+        )
+        self.addCleanup(sm.stop)
+        sm.start()
+
+        async def _probe_async() -> list[bool]:
+            seen = []
+            for i in range(20):
+                tok = sm.add_subscriber(f"async_sub_{i}")
+                seen.append(sm.is_hibernating)
+                await asyncio.sleep(0.01)
+                sm.remove_subscriber(tok)
+            return seen
+
+        seen = asyncio.run(_probe_async())
+        self.assertEqual(len(seen), 20)
 
 
 if __name__ == "__main__":
