@@ -10,17 +10,13 @@ from typing import Dict, List, Optional, Any
 import numpy as np
 
 from intelligent_tracker.database import TrackerDB
-from intelligent_tracker.reid import BaseFeatureExtractor, batch_cosine_similarity
+from intelligent_tracker.reid import BaseFeatureExtractor
 from intelligent_tracker.tracker import Track, check_track_occlusions
 from intelligent_tracker.matching.types import EntityIdentifiedEvent
 from intelligent_tracker.matching.feature_buffer import TrackFeatureBuffer
 from intelligent_tracker.matching.session_gallery import SessionGalleryManager
 from intelligent_tracker.matching.adaptive_memory import apply_bounded_ema_update
-from intelligent_tracker.matching._gallery_signals import (
-    apply_topology_priors,
-    apply_track_confidence_signals,
-    process_confirmed_identification,
-)
+from intelligent_tracker.matching._gallery_matching import match_persistent_gallery
 
 logger = logging.getLogger(__name__)
 _COASTING_STATES = frozenset({"coasting", "occluded", "predicting"})
@@ -130,44 +126,8 @@ class GalleryMatcher:
         self, track: Track, query_vec: np.ndarray, frame: np.ndarray,
         source: str, now: float, zone_id: str,
     ) -> Optional[EntityIdentifiedEvent]:
-        """Query persistent database gallery with cross-camera priors and active learning."""
-        similarities = batch_cosine_similarity(self.gallery_matrix, query_vec)
-        if similarities.size == 0:
-            return None
-
-        matched_priors = {}
-        raw_similarities = None
-        if self.topology is not None:
-            raw_similarities = similarities.copy()
-            matched_priors = apply_topology_priors(
-                self.topology, self.gallery_entity_ids, self.gallery_names,
-                similarities, source, zone_id, now,
-            )
-
-        best_idx = int(np.argmax(similarities))
-        best_score = float(similarities[best_idx])
-        if best_score >= self.reid_threshold:
-            apply_track_confidence_signals(
-                track, extractor=self.extractor, query_vec=query_vec, gallery_matrix=self.gallery_matrix,
-                gallery_entity_ids=self.gallery_entity_ids, similarities=similarities,
-                raw_similarities=raw_similarities, matched_priors=matched_priors, best_idx=best_idx,
-            )
-            if self.topology is not None and best_idx in matched_priors:
-                self.topology.consume_prior(matched_priors[best_idx].prior_id)
-            return process_confirmed_identification(
-                self, track, best_idx, best_score, query_vec, source, now, zone_id
-            )
-
-        if self.active_learning is not None:
-            cand_eid = self.gallery_entity_ids[best_idx] if best_idx < len(self.gallery_entity_ids) else None
-            cand_name = self.gallery_names[best_idx] if best_idx < len(self.gallery_names) else ""
-            cand_cat = self.gallery_categories[best_idx] if best_idx < len(self.gallery_categories) else ""
-            self.active_learning.consider_candidate(
-                track=track, frame=frame, similarity=best_score,
-                suggested_entity_id=cand_eid, suggested_name=cand_name,
-                suggested_category=cand_cat, camera_id=source, timestamp=now,
-            )
-        return None
+        """Query persistent database gallery with class compatibility, priors, and active learning."""
+        return match_persistent_gallery(self, track, query_vec, frame, source, now, zone_id)
 
     def match_track(
         self,
@@ -185,7 +145,12 @@ class GalleryMatcher:
             self._feature_buffer.mark_active(track.track_id, now)
             self._feature_buffer.restore_track_identity(track)
             return None
-        if track.hits < self.min_track_hits or track.bbox[2] <= 4 or track.bbox[3] <= 4 or self.extractor is None:
+        if (
+            (track.hits < self.min_track_hits and getattr(track, "state", "") != "confirmed")
+            or track.bbox[2] <= 4
+            or track.bbox[3] <= 4
+            or self.extractor is None
+        ):
             return None
 
         source = source or self.camera_id
@@ -195,6 +160,7 @@ class GalleryMatcher:
         query_vec = self._get_smoothed_embedding(track.track_id)
         if query_vec is None:
             return None
+        track.last_embedding = query_vec
 
         if self.gallery_size > 0:
             ev = self._match_persistent_gallery(track, query_vec, frame, source, now, zone_id)

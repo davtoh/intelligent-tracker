@@ -9,6 +9,11 @@ import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 
+from intelligent_tracker.tracker.association import (
+    INVALID_ASSOCIATION_COST,
+    build_fused_cost_matrix,
+    extract_detection_embeddings,
+)
 from intelligent_tracker.tracker.track import Track
 from intelligent_tracker.tracker.utils import (
     _HAS_SCIPY,
@@ -122,8 +127,9 @@ class CentroidTracker:
         det_labels: List[str],
         det_classes: List[int],
         now: float,
+        det_embeddings: Optional[List[Optional[np.ndarray]]] = None,
     ) -> Tuple[Set[int], Set[int]]:
-        """Stage 1: IoU bipartite matching."""
+        """Stage 1: Class-consistent, appearance-assisted IoU bipartite matching."""
         track_boxes: List[Tuple[int, int, int, int]] = [self.tracks[tid].bbox for tid in track_ids]
         iou_mat = compute_iou_matrix(track_boxes, det_bboxes)
         matched_tracks: Set[int] = set()
@@ -131,17 +137,26 @@ class CentroidTracker:
         if iou_mat.size == 0:
             return matched_tracks, matched_dets
 
-        assignments = _solve_cost_assignment(1.0 - iou_mat, max_cost=1.0 - self.iou_threshold)
+        cost_mat = build_fused_cost_matrix(
+            [self.tracks[tid].label for tid in track_ids],
+            [self.tracks[tid].class_id for tid in track_ids],
+            [getattr(self.tracks[tid], "last_embedding", None) for tid in track_ids],
+            det_labels, det_classes, det_embeddings,
+            iou_mat=iou_mat,
+            appearance_weight=getattr(self, "appearance_weight", 0.35),
+        )
+        assignments = _solve_cost_assignment(cost_mat, max_cost=1.0 - self.iou_threshold)
         for r, c in assignments:
-            if iou_mat[r, c] >= self.iou_threshold:
-                self.tracks[track_ids[r]].update(
-                    det_bboxes[c],
-                    confidence=det_scores[c],
-                    label=det_labels[c],
-                    class_id=det_classes[c],
-                    timestamp=now,
-                    min_hits=self.min_hits,
+            if cost_mat[r, c] >= INVALID_ASSOCIATION_COST or iou_mat[r, c] <= 0.0:
+                continue
+            if (1.0 - cost_mat[r, c]) >= self.iou_threshold:
+                trk = self.tracks[track_ids[r]]
+                trk.update(
+                    det_bboxes[c], confidence=det_scores[c], label=det_labels[c],
+                    class_id=det_classes[c], timestamp=now, min_hits=self.min_hits,
                 )
+                if det_embeddings is not None and det_embeddings[c] is not None:
+                    trk.last_embedding = det_embeddings[c]
                 matched_tracks.add(r)
                 matched_dets.add(c)
         return matched_tracks, matched_dets
@@ -156,8 +171,9 @@ class CentroidTracker:
         matched_tracks: Set[int],
         matched_dets: Set[int],
         now: float,
+        det_embeddings: Optional[List[Optional[np.ndarray]]] = None,
     ) -> None:
-        """Stage 2: Centroid Euclidean distance matching for unmatched candidates."""
+        """Stage 2: Class-consistent centroid distance matching for unmatched candidates."""
         unmatched_t = [r for r in range(len(track_ids)) if r not in matched_tracks]
         unmatched_d = [c for c in range(len(det_bboxes)) if c not in matched_dets]
         if not unmatched_t or not unmatched_d:
@@ -169,19 +185,21 @@ class CentroidTracker:
             for c in unmatched_d
         ])
         dist_mat = np.linalg.norm(t_cents[:, None, :] - d_cents[None, :, :], axis=2)
-        assignments = _solve_cost_assignment(dist_mat, max_cost=self.max_distance)
-
-        for r, c in assignments:
-            if dist_mat[r, c] <= self.max_distance:
+        sub_embs = [det_embeddings[c] for c in unmatched_d] if det_embeddings is not None else None
+        cost_mat = build_fused_cost_matrix(
+            [self.tracks[track_ids[r]].label for r in unmatched_t],
+            [self.tracks[track_ids[r]].class_id for r in unmatched_t],
+            [getattr(self.tracks[track_ids[r]], "last_embedding", None) for r in unmatched_t],
+            [det_labels[c] for c in unmatched_d], [det_classes[c] for c in unmatched_d], sub_embs,
+            dist_mat=dist_mat, max_distance=self.max_distance, appearance_weight=getattr(self, "appearance_weight", 0.35),
+        )
+        for r, c in _solve_cost_assignment(cost_mat, max_cost=self.max_distance):
+            if cost_mat[r, c] <= self.max_distance:
                 ar, ac = unmatched_t[r], unmatched_d[c]
-                self.tracks[track_ids[ar]].update(
-                    det_bboxes[ac],
-                    confidence=det_scores[ac],
-                    label=det_labels[ac],
-                    class_id=det_classes[ac],
-                    timestamp=now,
-                    min_hits=self.min_hits,
-                )
+                trk = self.tracks[track_ids[ar]]
+                trk.update(det_bboxes[ac], confidence=det_scores[ac], label=det_labels[ac], class_id=det_classes[ac], timestamp=now, min_hits=self.min_hits)
+                if det_embeddings is not None and det_embeddings[ac] is not None:
+                    trk.last_embedding = det_embeddings[ac]
                 matched_tracks.add(ar)
                 matched_dets.add(ac)
 
@@ -283,10 +301,13 @@ class CentroidTracker:
         is_time_sliced = step_dt >= self.time_slice_dt_threshold
 
         bboxes, classes, scores, labels = parse_detections(detections)
+        det_embeddings = extract_detection_embeddings(detections)
 
         if len(self.tracks) == 0:
             for i in range(len(bboxes)):
-                self._register_track(bboxes[i], classes[i], scores[i], labels[i], now, is_time_sliced=is_time_sliced)
+                trk = self._register_track(bboxes[i], classes[i], scores[i], labels[i], now, is_time_sliced=is_time_sliced)
+                if det_embeddings is not None and det_embeddings[i] is not None:
+                    trk.last_embedding = det_embeddings[i]
             return self._get_active_tracks(confirmed_only)
 
         if len(bboxes) == 0:
@@ -294,10 +315,22 @@ class CentroidTracker:
             return self._get_active_tracks(confirmed_only)
 
         track_ids = list(self.tracks.keys())
-        matched_trks, matched_dets = self._match_iou(track_ids, bboxes, scores, labels, classes, now)
-        self._match_distance(track_ids, bboxes, scores, labels, classes, matched_trks, matched_dets, now)
+        matched_trks, matched_dets = self._match_iou(
+            track_ids, bboxes, scores, labels, classes, now, det_embeddings=det_embeddings
+        )
+        self._match_distance(
+            track_ids, bboxes, scores, labels, classes, matched_trks, matched_dets, now,
+            det_embeddings=det_embeddings,
+        )
         self._update_stale_tracks(track_ids, matched_trks, now, is_time_sliced=is_time_sliced)
         self._register_new_detections(bboxes, classes, scores, labels, matched_dets, now, is_time_sliced=is_time_sliced)
+        if det_embeddings is not None:
+            for trk in self.tracks.values():
+                if trk.hits == 1 and trk.last_embedding is None:
+                    for c in range(len(bboxes)):
+                        if c not in matched_dets and trk.bbox == bboxes[c] and det_embeddings[c] is not None:
+                            trk.last_embedding = det_embeddings[c]
+                            break
 
         return self._get_active_tracks(confirmed_only)
 

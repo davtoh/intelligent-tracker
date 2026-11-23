@@ -74,6 +74,7 @@ class Track:
         self.is_cluttered: bool = False
         self.clutter_partner_id: Optional[int] = None
         self.clutter_start_time: Optional[float] = None
+        self.last_embedding: Optional[Any] = None
 
     def update(
         self,

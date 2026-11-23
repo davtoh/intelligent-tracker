@@ -48,6 +48,33 @@ def reset_bundle_loop_state(bundle: Any, now: float, *, reset_tracker: bool = Fa
             )
 
 
+def _coast_replay_tracks(tracks: dict[int, ReplayTrack], dt: float) -> dict[int, ReplayTrack]:
+    """Return coasted ReplayTrack copies extrapolated by dt seconds."""
+    coasted: dict[int, ReplayTrack] = {}
+    for tid, trk in tracks.items():
+        vx, vy = trk.velocity
+        dx, dy = vx * dt, vy * dt
+        bx, by, bw, bh = trk.bbox
+        coasted[tid] = ReplayTrack(
+            id=trk.id,
+            bbox=(int(round(bx + dx)), int(round(by + dy)), bw, bh),
+            centroid=(trk.centroid[0] + dx, trk.centroid[1] + dy),
+            velocity=trk.velocity,
+            label=trk.label,
+            confidence=trk.confidence,
+            dwell_time=trk.dwell_time,
+            entity_id=trk.entity_id,
+            entity_name=trk.entity_name,
+            identity_label=trk.identity_label,
+            category=trk.category,
+            entity_category=trk.entity_category,
+            is_cluttered=trk.is_cluttered,
+            clutter_partner_id=trk.clutter_partner_id,
+            state="coasting",
+        )
+    return coasted
+
+
 class CachedReplayProvider:
     """Zero-GPU replay provider executing live rule governance on cached tracks."""
 
@@ -64,17 +91,23 @@ class CachedReplayProvider:
         run_id: str | None = None,
         tolerance_s: float = 0.45,
         run_reid: bool = False,
+        replay_coast_seconds: float | None = None,
     ) -> None:
         self._processor = processor
         self._bundle = bundle
         self._topology = topology
         self._world_bridge = world_bridge
         self._run_reid = bool(run_reid)
+        self._replay_coast_seconds = (
+            max(0.0, float(replay_coast_seconds)) if replay_coast_seconds is not None else None
+        )
         self.replay = replay_provider or FileDetectionReplayProvider(
             db, video_source, run_id=run_id, tolerance_s=tolerance_s
         )
         self._last_media_time_s: float | None = None
         self._last_frame_seq: int | None = None
+        self._last_nonempty_tracks: dict[int, ReplayTrack] = {}
+        self._last_nonempty_media_time_s: float | None = None
         self.loop_reset_count: int = 0
 
     def is_active(self) -> bool:
@@ -103,6 +136,8 @@ class CachedReplayProvider:
     def reset_loop_state(self, bundle: Any, now: float) -> None:
         """Clear per-track zone dwell and tripwire centroid state on video loop wrap."""
         self.loop_reset_count += 1
+        self._last_nonempty_tracks.clear()
+        self._last_nonempty_media_time_s = None
         reset_bundle_loop_state(bundle, now, reset_tracker=False)
         if bundle is None:
             return
@@ -111,6 +146,28 @@ class CachedReplayProvider:
             bridge.prune_stale_tracks(
                 camera_id=resolve_camera_id(bundle), active_track_ids=set(), timestamp=now
             )
+
+    def _resolve_coasted_tracks(
+        self, tracks: dict[int, ReplayTrack], resolved_t: float
+    ) -> dict[int, ReplayTrack]:
+        """Fill brief sampling/VFR gaps with coasted tracks within replay_coast_seconds."""
+        if tracks:
+            self._last_nonempty_tracks = tracks
+            self._last_nonempty_media_time_s = resolved_t
+            return tracks
+        coast_s = self._replay_coast_seconds
+        if coast_s is None:
+            stream = getattr(self.replay, "_stream", None) or {}
+            cfg = stream.get("config") if isinstance(stream, dict) else {}
+            coast_s = 0.5 if int((cfg or {}).get("sample_rate", 1) or 1) > 1 else 0.0
+        if coast_s <= 0.0 or not self._last_nonempty_tracks or self._last_nonempty_media_time_s is None:
+            return tracks
+        dt = resolved_t - self._last_nonempty_media_time_s
+        if 0.0 <= dt <= coast_s:
+            return _coast_replay_tracks(self._last_nonempty_tracks, dt)
+        self._last_nonempty_tracks.clear()
+        self._last_nonempty_media_time_s = None
+        return tracks
 
     def build_step_result(
         self,
@@ -132,12 +189,16 @@ class CachedReplayProvider:
             bundle._governance_lock = threading.Lock()
         if self._detect_loop_wrap(frame_seq, resolved_t):
             self.reset_loop_state(bundle, wall_now)
+        elif self._last_media_time_s is not None and abs(resolved_t - self._last_media_time_s) > 2.0:
+            self._last_nonempty_tracks.clear()
+            self._last_nonempty_media_time_s = None
         self._last_media_time_s, self._last_frame_seq = resolved_t, int(frame_seq)
-        tracks: dict[int, ReplayTrack] = self.replay.lookup_tracks(frame_seq, frame.shape, media_time_s=resolved_t) or {}
-        analytics_res, identifications = ({}, [])
+        raw_tracks = self.replay.lookup_tracks(frame_seq, frame.shape, media_time_s=resolved_t) or {}
+        tracks = self._resolve_coasted_tracks(raw_tracks, resolved_t)
+        analytics_res: dict[str, Any] = {}
+        identifications: list[Any] = []
         if bundle is not None:
-            lock = getattr(bundle, "_governance_lock", None)
-            with lock if lock is not None else nullcontext():
+            with (getattr(bundle, "_governance_lock", None) or nullcontext()):
                 analytics_res, identifications = evaluate_tracks_governance(
                     bundle, frame, tracks, wall_now, topology=topology, world_bridge=bridge, run_reid=self._run_reid
                 )
