@@ -24,6 +24,9 @@ def format_zone_event(event: ZoneEvent) -> dict[str, Any]:
     who = event.entity_name or (f"Entity {event.entity_id}" if event.entity_id is not None else f"Track {event.track_id}")
     action = str(event.action or "enter").lower()
     dwell = f" after {event.dwell_time:.1f}s" if action in ("exit", "dwell") and event.dwell_time > 0 else ""
+    meta: dict[str, Any] = {"track_id": event.track_id, "action": action, "dwell_time": event.dwell_time}
+    if event.bbox is not None:
+        meta["bbox"] = list(event.bbox)
     return {
         "event_type": event.event_type or f"zone_{action}",
         "entity_id": event.entity_id,
@@ -36,7 +39,7 @@ def format_zone_event(event: ZoneEvent) -> dict[str, Any]:
         "title": f"Zone {action}: {event.zone_id}",
         "summary": f"{who} {action}ed zone {event.zone_id} on {event.camera_id}{dwell}.",
         "tags": f"zone,{action},{event.zone_id}",
-        "metadata": {"track_id": event.track_id, "action": action, "dwell_time": event.dwell_time},
+        "metadata": meta,
     }
 
 

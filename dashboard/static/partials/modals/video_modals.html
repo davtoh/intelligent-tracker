@@ -6,7 +6,8 @@
         <button class="modal-close-btn" id="modal-snapshot-close">&times;</button>
       </div>
       <div class="modal-body-scroll snapshot-modal-body">
-        <img id="snapshot-modal-img" src="" alt="Alert Snapshot" />
+        <div class="snapshot-canvas-stage" style="position: relative; display: inline-block; width: 100%;"><img id="snapshot-modal-img" src="" alt="Alert Snapshot" /><canvas id="snapshot-modal-canvas" class="overlay-canvas" style="position: absolute; inset: 0; pointer-events: auto;"></canvas></div>
+        <div id="snapshot-modal-controls" class="overlay-layers-bar"></div>
         <div class="snapshot-modal-meta" id="snapshot-modal-meta"></div>
       </div>
       <div class="modal-footer">

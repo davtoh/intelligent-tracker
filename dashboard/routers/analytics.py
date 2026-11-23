@@ -8,18 +8,18 @@ Re-ID sightings search, EventBus notifications, click-to-tag enrollments, and cr
 """
 
 import asyncio
-from dataclasses import asdict
 import io
 import logging
 import os
 import time
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from dashboard.dependencies import get_active_stream_manager, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
+from dashboard.services.alerts_query_service import query_merged_events
 from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
 from intelligent_tracker.database import TrackerDB
 
@@ -254,35 +254,36 @@ async def query_sightings(
     )
 
 
-def _merge_recent_events(mgr, db: Optional[TrackerDB], limit: int) -> list[dict]:
-    """Merge live EventBus alerts with persisted timeline events ordered newest-first."""
-    out: list[dict] = []
-    seen: set[tuple[Any, Any, Any]] = set()
-    if mgr and getattr(mgr, "event_bus", None):
-        for ev in mgr.event_bus.get_recent_events(limit=limit):
-            item = ev.to_dict() if hasattr(ev, "to_dict") else (asdict(ev) if hasattr(ev, "__dataclass_fields__") else {"event_type": getattr(ev, "event_type", "event")})
-            key = (item.get("event_type"), item.get("camera_id"), round(float(item.get("timestamp") or 0.0), 3))
-            seen.add(key)
-            out.append(item)
-    if db is not None and hasattr(db, "search_timeline_events"):
-        for row in db.search_timeline_events(limit=limit):
-            key = (row.get("event_type"), row.get("camera_id"), round(float(row.get("timestamp") or 0.0), 3))
-            if key not in seen:
-                seen.add(key)
-                out.append(row)
-    out.sort(key=lambda e: float(e.get("timestamp") or 0.0), reverse=True)
-    return out[:max(1, int(limit))]
-
-
 @router.get("/events")
 async def list_recent_events(
     request: Request,
-    limit: int = 50,
+    camera_id: Optional[str] = None,
+    severity: Optional[str] = None,
+    event_type: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    paginated: bool = False,
     db: TrackerDB = Depends(get_db),
 ):
     """Get recent security and tracking alerts merged from EventBus and TrackerDB."""
-    mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_merge_recent_events, mgr, db, limit)
+    mgr = get_active_stream_manager(camera_id, conn=request) if camera_id else get_active_stream_manager(conn=request)
+    return await asyncio.to_thread(
+        query_merged_events,
+        mgr,
+        db,
+        camera_id=camera_id,
+        severity=severity,
+        event_type=event_type,
+        zone_id=zone_id,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+        offset=offset,
+        paginated=paginated,
+    )
 
 
 @router.post("/tag")

@@ -57,13 +57,13 @@
 
 ---
 
-## Milestone 2: `#alerts` Server-Side Filters/Pagination & Reused `UnifiedCanvasOverlay` Preview *(Deferred to Next Turn)*
+## Milestone 2: `#alerts` Server-Side Filters/Pagination & Reused `UnifiedCanvasOverlay` Preview
 
-- [ ] **intelligent_tracker/repositories/memory_repo.py & intelligent_tracker/memory/_event_formatters.py**: Add `severity` filter, `offset` pagination, and `count_timeline_events(...)` to `MemoryMixin`, and preserve `ZoneEvent.bbox` inside `metadata_json` in `format_zone_event()`.
-- [ ] **dashboard/services/alerts_query_service.py & dashboard/routers/analytics.py**: Create `alerts_query_service.py` (`<= 140L`) and extend `GET /events` with `camera_id`, `severity`, `event_type`, `zone_id`, `start_time`, `end_time`, `limit`, `offset`, `paginated` (keeping flat list default for legacy callers and `{ items, total, offset, limit, has_more }` when `paginated=true` or `offset > 0`).
-- [ ] **dashboard/static/partials/tabs/alerts.html & dashboard/static/partials/modals/video_modals.html**: Add `#alerts` filter bar and pagination controls, and layer `#snapshot-modal-canvas` + `#snapshot-modal-controls` inside existing `#modal-snapshot-view` (`video_modals.html <= 236L`).
-- [ ] **dashboard/static/js/alerts_view.js, dashboard/static/js/analytics_view.js & dashboard/static/index.html**: Extract `#alerts` filter/pagination controller into `window.AlertsView` (keeping `AnalyticsView.loadAlerts` delegating fallback), reuse `UnifiedCanvasOverlay` + `OverlayControlBar` (`variant: 'scrubber'`, `descriptors: []`) in `#modal-snapshot-view`, and load `alerts_view.js` in `index.html` (`<= 177L`).
-- [ ] **tests/test_step4_m2_alerts_and_canvas.py**: Add unit, FastAPI `TestClient`, and Node VM tests covering all `GET /events` filters, pagination envelope vs. legacy list compatibility, and `UnifiedCanvasOverlay` + `OverlayControlBar` reuse.
+- [x] **intelligent_tracker/repositories/memory_repo.py & intelligent_tracker/memory/_event_formatters.py**: Add `severity` filter, `offset` pagination, and `count_timeline_events(...)` to `MemoryMixin`, and preserve `ZoneEvent.bbox` inside `metadata_json` in `format_zone_event()`.
+- [x] **dashboard/services/alerts_query_service.py & dashboard/routers/analytics.py**: Create `alerts_query_service.py` (`<= 140L`) and extend `GET /events` with `camera_id`, `severity`, `event_type`, `zone_id`, `start_time`, `end_time`, `limit`, `offset`, `paginated` (keeping flat list default for legacy callers and `{ items, total, offset, limit, has_more }` when `paginated=true` or `offset > 0`).
+- [x] **dashboard/static/partials/tabs/alerts.html & dashboard/static/partials/modals/video_modals.html**: Add `#alerts` filter bar and pagination controls, and layer `#snapshot-modal-canvas` + `#snapshot-modal-controls` inside existing `#modal-snapshot-view` (`video_modals.html <= 236L`).
+- [x] **dashboard/static/js/alerts_view.js, dashboard/static/js/analytics_view.js & dashboard/static/index.html**: Extract `#alerts` filter/pagination controller into `window.AlertsView` (keeping `AnalyticsView.loadAlerts` delegating fallback), reuse `UnifiedCanvasOverlay` + `OverlayControlBar` (`variant: 'scrubber'`, `descriptors: []`) in `#modal-snapshot-view`, and load `alerts_view.js` in `index.html` (`<= 177L`).
+- [x] **tests/test_step4_m2_alerts_and_canvas.py**: Add unit, FastAPI `TestClient`, and Node VM tests covering all `GET /events` filters, pagination envelope vs. legacy list compatibility, and `UnifiedCanvasOverlay` + `OverlayControlBar` reuse.
 
 ---
 

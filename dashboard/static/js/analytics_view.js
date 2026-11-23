@@ -233,7 +233,10 @@
       </tr>`;
   }
 
-  async function loadAlertsTable() {
+  async function loadAlertsTable(opts) {
+    if (window.AlertsView?.loadAlerts) {
+      return window.AlertsView.loadAlerts(opts);
+    }
     const tbody = document.getElementById('alerts-table-body');
     const badge = document.getElementById('total-alerts-count');
     if (!tbody) return;
