@@ -85,7 +85,7 @@
 
   async function captureFreezeFrame(canvas, placeholder) {
     const camSelect = document.getElementById('enroll-camera-select');
-    const camId = camSelect?.value || window.App?.getActiveCameraId?.() || null;
+    const camId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
     if (!camId) {
       if (placeholder) placeholder.innerHTML = '<span style="color:#ef4444;">No active camera selected.</span>';
       return;
@@ -207,7 +207,7 @@
     const category = document.getElementById('enroll-category-select')?.value || 'person';
     const security_role = (document.getElementById('enroll-role-input')?.value || '').trim();
     const camSelect = document.getElementById('enroll-camera-select');
-    const camera_id = camSelect?.value || window.App?.getActiveCameraId?.() || null;
+    const camera_id = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
     const is_anchor = document.getElementById('enroll-locked-anchor-cb')?.checked ?? true;
     const notes = (document.getElementById('enroll-notes-input')?.value || '').trim();
     if (!camera_id && !enrollState.selectedCropBase64) {
@@ -274,7 +274,8 @@
     resetEnrollmentState(form, canvas, placeholder);
     modal.style.display = 'flex';
     await Promise.all([loadCategoriesDropdown(categorySelect), populateCameraSelect()]);
-    const camId = document.getElementById('enroll-camera-select')?.value || window.App?.getActiveCameraId?.();
+    const camSelect = document.getElementById('enroll-camera-select');
+    const camId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
     if (camId) await captureFreezeFrame(canvas, placeholder);
   }
 
@@ -294,6 +295,10 @@
     document.getElementById('modal-enroll-close')?.addEventListener('click', closeModal);
     document.getElementById('modal-enroll-cancel')?.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.getElementById('enroll-camera-select')?.addEventListener('change', (e) => {
+      if (e.target.value) captureFreezeFrame(canvas, placeholder);
+      else resetEnrollmentState(null, canvas, placeholder);
+    });
     document.getElementById('btn-capture-freeze')?.addEventListener('click', () => captureFreezeFrame(canvas, placeholder));
     document.getElementById('btn-upload-enroll-crop')?.addEventListener('click', () => fileInput?.click());
     fileInput?.addEventListener('change', (e) => {

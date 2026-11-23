@@ -7,6 +7,8 @@
   'use strict';
 
   const STANDBY_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="40" fill="%231e293b" stroke="%23334155" stroke-width="2"/><polygon points="-10,-18 20,0 -10,18" fill="%2306b6d4"/><text y="70" fill="%2394a3b8" font-family="Inter,sans-serif" font-size="14" font-weight="500">Live Stream Paused &bull; Hibernating</text><text y="92" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Click Resume Feed to reconnect camera</text></g></svg>';
+  const OFFLINE_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="38" fill="%231e293b" stroke="%23ef4444" stroke-width="2"/><line x1="-14" y1="-14" x2="14" y2="14" stroke="%23ef4444" stroke-width="3"/><line x1="14" y1="-14" x2="-14" y2="14" stroke="%23ef4444" stroke-width="3"/><text y="68" fill="%23f87171" font-family="Inter,sans-serif" font-size="14" font-weight="600">Camera Offline / Unavailable</text><text y="90" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Check camera source or reconnect in Cameras</text></g></svg>';
+  const OFFLINE_STATUSES = new Set(['offline', 'error', 'disabled']);
   const ANNOTATION_MODE_STORAGE_KEY = 'it_live_annotated_mode';
   const LAG_SHOW_MS = 180;
   const LAG_HIDE_MS = 110;
@@ -104,15 +106,16 @@
     const badge = document.getElementById('live-stream-status-badge');
     const badgeText = document.getElementById('live-stream-status-text');
     if (!badge || !badgeText) return;
-
     badge.className = `status-pill ${status}`;
-    if (status === 'online') {
-      badgeText.textContent = 'LIVE';
-    } else if (status === 'paused') {
-      badgeText.textContent = 'PAUSED';
-    } else if (status === 'reconnecting') {
-      badgeText.textContent = 'RECONNECTING...';
-    }
+    const labels = { online: 'LIVE', paused: 'PAUSED', offline: 'OFFLINE', reconnecting: 'RECONNECTING...' };
+    if (labels[status]) badgeText.textContent = labels[status];
+  }
+
+  function showOfflinePoster(videoImg, statusLabel = 'offline') {
+    if (!videoImg) return;
+    window.MjpegReconnect?.detach?.(videoImg);
+    videoImg.src = OFFLINE_POSTER_SVG;
+    setStreamStatus(OFFLINE_STATUSES.has(String(statusLabel || '').toLowerCase()) ? 'offline' : 'paused');
   }
 
   function detachGridStreams(options = {}) {
@@ -177,6 +180,11 @@
     if (!videoImg) return;
     if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     const resolvedCam = activeCameraId || window.App?.getActiveCameraId?.() || null;
+    const camObj = resolvedCam ? window.CameraManager?.getActiveCameras?.()?.find?.((c) => c.id === resolvedCam) : null;
+    if (camObj && OFFLINE_STATUSES.has(String(camObj.status || '').toLowerCase())) {
+      showOfflinePoster(videoImg, camObj.status);
+      return;
+    }
     const cleanBase = (resolvedCam ? `/stream/${encodeURIComponent(resolvedCam)}` : (videoImg.dataset?.activeStreamSrc || '')).split('?')[0];
     if (!cleanBase) return;
     if (videoImg.dataset) videoImg.dataset.activeStreamSrc = cleanBase;
@@ -216,9 +224,11 @@
 
   function attachHeatmapImage(heatmapImg) {
     if (!heatmapImg) return;
-    const baseSrc = heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap';
-    const cleanBase = baseSrc.split('?')[0];
-    heatmapImg.src = `${cleanBase}?t=${Date.now()}`;
+    const baseSrc = (heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap').split('?')[0];
+    const camId = window.App?.getActiveCameraId?.() || '';
+    heatmapImg.src = camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`;
+    const badge = document.getElementById('heatmap-camera-badge');
+    if (badge) badge.textContent = camId ? `Camera: ${camId}` : 'All Cameras';
   }
 
   function syncTabStreams(previousTabId, targetTabId) {
@@ -319,22 +329,11 @@
   }
 
   window.LivePlayer = {
-    STANDBY_POSTER_SVG: STANDBY_POSTER_SVG,
-    detachGridStreams: detachGridStreams,
-    attachGridStreams: attachGridStreams,
-    detachLiveStream: detachLiveStream,
-    attachLiveStream: attachLiveStream,
-    detachStudioStream: detachStudioStream,
-    attachStudioStream: attachStudioStream,
-    attachHeatmapImage: attachHeatmapImage,
-    syncTabStreams: syncTabStreams,
-    setStreamStatus: setStreamStatus,
-    toggleFullscreen: toggleFullscreen,
-    bindHudButtons: bindPlayerHudButtons,
-    isPaused: () => streamPaused,
-    isBurnedAnnotationMode: isBurnedAnnotationMode,
-    setBurnedAnnotationMode: setBurnedAnnotationMode,
-    updateInferenceLagHud: updateInferenceLagHud,
+    STANDBY_POSTER_SVG, OFFLINE_POSTER_SVG, showOfflinePoster,
+    detachGridStreams, attachGridStreams, detachLiveStream, attachLiveStream,
+    detachStudioStream, attachStudioStream, attachHeatmapImage, syncTabStreams,
+    setStreamStatus, toggleFullscreen, bindHudButtons: bindPlayerHudButtons,
+    isPaused: () => streamPaused, isBurnedAnnotationMode, setBurnedAnnotationMode, updateInferenceLagHud,
   };
 })();
 

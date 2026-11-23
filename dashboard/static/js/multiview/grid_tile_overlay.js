@@ -10,6 +10,9 @@
 
   let alertsPollTimer = null;
   let alertsPollInFlight = false;
+  const lastTelemetryByTile = new WeakMap();
+  const lastSeqByTile = new WeakMap();
+  const tileResizeObservers = new WeakMap();
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -63,16 +66,39 @@
     return tiles.find((t) => t.getAttribute?.('data-id') === camId) || null;
   }
 
+  function clearTileOverlay(tile) {
+    lastTelemetryByTile.delete(tile);
+    const canvas = tile?.querySelector?.('canvas.tile-overlay-canvas');
+    if (!canvas) return;
+    if (canvas.style) { canvas.style.width = ''; canvas.style.height = ''; }
+    const ctx = canvas.getContext?.('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width || 0, canvas.height || 0);
+  }
+
+  function ensureTileResizeObserver(tile) {
+    if (!tile || tileResizeObservers.has(tile) || typeof window.ResizeObserver !== 'function') return;
+    const container = tile.querySelector?.('.tile-video-container') || tile;
+    const ro = new window.ResizeObserver(() => {
+      const prev = lastTelemetryByTile.get(tile);
+      if (prev) renderTileTracks(tile, prev);
+    });
+    ro.observe(container);
+    tileResizeObservers.set(tile, ro);
+  }
+
   function renderTileTracks(tile, msg) {
     const canvas = tile?.querySelector?.('canvas.tile-overlay-canvas');
     if (!canvas || !window.UnifiedCanvasOverlay) return;
     const ctx = canvas.getContext?.('2d');
     if (!ctx) return;
-    const rect = canvas.getBoundingClientRect?.() || { left: 0, top: 0, width: canvas.clientWidth || 320, height: canvas.clientHeight || 180 };
-    const cssW = rect.width > 0 ? rect.width : (canvas.clientWidth || 320);
-    const cssH = rect.height > 0 ? rect.height : (canvas.clientHeight || 180);
+    const container = tile?.querySelector?.('.tile-video-container') || canvas.parentElement || canvas;
+    const rect = container.getBoundingClientRect?.() || canvas.getBoundingClientRect?.() || { left: 0, top: 0, width: container.clientWidth || 320, height: container.clientHeight || 180 };
+    const cssW = rect.width > 0 ? rect.width : (container.clientWidth || canvas.clientWidth || 320);
+    const cssH = rect.height > 0 ? rect.height : (container.clientHeight || canvas.clientHeight || 180);
     const res = Array.isArray(msg.source_resolution) && msg.source_resolution.length >= 2 ? msg.source_resolution : [640, 480];
-    window.UnifiedCanvasOverlay.syncCanvasDpr(canvas, ctx, cssW, cssH);
+    window.UnifiedCanvasOverlay.syncCanvasDpr(canvas, ctx, cssW, cssH, undefined, { responsive: true });
+    ensureTileResizeObserver(tile);
+    lastTelemetryByTile.set(tile, msg);
     const box = window.UnifiedCanvasOverlay.computeCoverBox({ left: 0, top: 0, width: cssW, height: cssH }, null, res[0], res[1]);
     window.UnifiedCanvasOverlay.renderScene(ctx, {
       tracks: Array.isArray(msg.tracks) ? msg.tracks : [],
@@ -97,6 +123,14 @@
     if (!msg || !msg.camera_id) return;
     const tile = findTile(gridContainer || document.getElementById('multi-grid-container'), msg.camera_id);
     if (!tile) return;
+    if (msg.paused || msg.stopped || (msg.status && msg.status !== 'online')) {
+      clearTileOverlay(tile);
+      return;
+    }
+    if (msg.seq != null && lastSeqByTile.get(tile) === msg.seq && (!msg.tracks || !msg.tracks.length)) {
+      clearTileOverlay(tile);
+    }
+    if (msg.seq != null) lastSeqByTile.set(tile, msg.seq);
     const fpsEl = tile.querySelector?.('.tile-fps');
     if (fpsEl) fpsEl.textContent = `${Number(msg.fps || 0).toFixed(1)} FPS`;
     const tracks = Array.isArray(msg.tracks) ? msg.tracks : [];
@@ -162,6 +196,7 @@
 
   function syncTileMeta(tile, cam, focusedCameraId, statusClass) {
     tile.classList?.toggle?.('focused-tile', cam.id === focusedCameraId);
+    if (statusClass !== 'online') clearTileOverlay(tile);
     const badge = tile.querySelector?.('.tile-status-badge');
     if (badge) { badge.className = `tile-status-badge ${statusClass}`; badge.textContent = statusClass.toUpperCase(); }
     const fpsEl = tile.querySelector?.('.tile-fps');
@@ -176,6 +211,7 @@
     buildGridTileHtml,
     handleTelemetry,
     renderTileTracks,
+    clearTileOverlay,
     applyArmedButtonUi,
     syncTileMeta,
     toggleCameraArmed,

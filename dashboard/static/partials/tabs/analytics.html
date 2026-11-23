@@ -17,6 +17,7 @@
           <div class="card-header">
             <h3>Cumulative Spatial Density Heatmap</h3>
             <div class="heatmap-actions">
+              <span class="panel-badge" id="heatmap-camera-badge">All Cameras</span>
               <button class="btn btn-sm btn-outline" id="btn-refresh-heatmap">🔄 Refresh Heatmap</button>
               <a class="btn btn-sm btn-secondary" id="btn-download-heatmap" href="/analytics/heatmap" target="_blank">📥
                 Export High-Res</a>
@@ -24,6 +25,11 @@
           </div>
           <div class="heatmap-viewport">
             <img id="static-heatmap-img" data-src="/analytics/heatmap" alt="Accumulated Density Heatmap" />
+          </div>
+          <div class="heatmap-legend" id="heatmap-colorbar-legend">
+            <span>Low</span>
+            <span class="heatmap-colorbar" aria-hidden="true"></span>
+            <span>High</span>
           </div>
         </div>
       </div>

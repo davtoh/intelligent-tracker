@@ -122,8 +122,12 @@
 
     refreshBtn?.addEventListener('click', () => {
       const img = document.getElementById('static-heatmap-img');
-      if (img) img.src = `/analytics/heatmap?t=${Date.now()}`;
+      if (window.LivePlayer?.attachHeatmapImage) window.LivePlayer.attachHeatmapImage(img);
+      else if (img) img.src = `/analytics/heatmap?t=${Date.now()}`;
     });
+    if (document.getElementById('tab-analytics')?.classList?.contains('active')) {
+      window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
+    }
   }
 
   window.AnalyticsView = {

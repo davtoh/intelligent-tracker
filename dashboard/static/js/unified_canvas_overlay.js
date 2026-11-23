@@ -55,7 +55,7 @@
     return { offsetX: baseLeft + (ew - renderW) / 2, offsetY: baseTop + (eh - renderH) / 2, renderW, renderH, scale };
   }
 
-  function syncCanvasDpr(canvas, ctx, cssWidth, cssHeight, dpr) {
+  function syncCanvasDpr(canvas, ctx, cssWidth, cssHeight, dpr, options = {}) {
     if (!canvas) return 1;
     const ratio = Number(dpr) > 0 ? Number(dpr) : (window.devicePixelRatio || 1);
     const w = Math.max(0, Number(cssWidth) || 0);
@@ -65,7 +65,10 @@
     if (canvas.width !== pixelW || canvas.height !== pixelH) {
       canvas.width = pixelW; canvas.height = pixelH;
     }
-    if (canvas.style) { canvas.style.width = `${w}px`; canvas.style.height = `${h}px`; }
+    if (canvas.style) {
+      canvas.style.width = options?.responsive ? '' : `${w}px`;
+      canvas.style.height = options?.responsive ? '' : `${h}px`;
+    }
     if (ctx && typeof ctx.setTransform === 'function') ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     return ratio;
   }

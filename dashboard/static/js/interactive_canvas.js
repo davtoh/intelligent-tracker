@@ -186,12 +186,13 @@
     const name = (el('tag-name-input')?.value || '').trim();
     if (!name) return;
     const category = el('tag-category-select')?.value || 'person', sourceType = el('tag-source-type')?.value || 'live', tsVal = el('tag-timestamp-sec')?.value;
+    const cropBase64 = el('tag-crop-base64')?.value || null;
     const payload = {
       entity_name: name, category,
       entity_id: el('tag-entity-id')?.value ? parseInt(el('tag-entity-id').value, 10) : null,
       track_id: el('tag-track-id')?.value ? parseInt(el('tag-track-id').value, 10) : null,
-      bbox: el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null,
-      crop_base64: el('tag-crop-base64')?.value || null, notes: (el('tag-notes-input')?.value || '').trim(),
+      bbox: cropBase64 ? null : (el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null),
+      crop_base64: cropBase64, notes: (el('tag-notes-input')?.value || '').trim(),
       camera_id: sourceType === 'video' ? null : (activeCameraGetter?.() || null),
       video_filename: sourceType === 'video' ? ((el('tag-video-filename')?.value || '').trim() || null) : null,
       timestamp_sec: sourceType === 'video' && tsVal !== '' ? parseFloat(tsVal) : null,

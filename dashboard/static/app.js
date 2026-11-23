@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window.GalleryTimeline?.loadSightings();
     } else if (targetTabId === 'tab-analytics') {
       window.AnalyticsView?.initChart();
+      window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
     } else if (targetTabId === 'tab-alerts') {
       window.AnalyticsView?.loadAlerts();
     } else if (targetTabId === 'tab-studio') {
@@ -213,11 +214,13 @@ document.addEventListener('DOMContentLoaded', () => {
       heatmap: state.heatmap,
       sourceRes: state.sourceRes,
     });
+    window.RoiDrawTagger?.redrawDragOverlay?.(canvas);
   }
 
   function bindCanvasEvents() {
     if (!canvas) return;
     canvas.addEventListener('mousemove', (e) => {
+      if (window.RoiDrawTagger?.isDragging?.(canvas)) return;
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;

@@ -1,12 +1,5 @@
 /**
  * Intelligent Tracker - World Scenario Studio, Space Awareness & Homography Controller.
- * Milestone 8 Implementation.
- * 
- * Coordinates:
- * - Studio Canvas polygon and tripwire drawing modes
- * - 2D Bird's-Eye-View (BEV) minimap rendering
- * - Dedicated in-page modal dialog forms
- * - Trajectory Journey Search & Video Export
  */
 
 (function () {
@@ -75,6 +68,13 @@
     );
   }
 
+  function applyStudioChannel(targetId, isVideo) {
+    if (!targetId) return;
+    window.StudioCanvas?.attachStudioMedia?.(targetId, isVideo, isStudioTabActive());
+    if (isVideo) clearStudioLiveImage();
+    else window.StudioOverlays?.loadCameraOverlays(targetId);
+  }
+
   function initStudio() {
     studioState.canvas = document.getElementById('studio-drawing-canvas');
     if (studioState.canvas) {
@@ -92,8 +92,7 @@
       if (studioState.activeCamera) {
         const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
         loadCameraScenario(studioState.activeCamera);
-        if (isVideo) clearStudioLiveImage();
-        else window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+        applyStudioChannel(studioState.activeCamera, isVideo);
       }
     });
     loadTopologyLinks();
@@ -292,21 +291,16 @@
       setStudioMode('idle'); studioState.points = []; drawOverlay(); updateStudioStatus('Canvas cleared. Mode: Idle.');
     });
     document.getElementById('studio-live-img')?.addEventListener?.('load', () => drawOverlay());
+    document.getElementById('studio-video-player')?.addEventListener?.('loadedmetadata', () => drawOverlay());
+    document.getElementById('studio-video-player')?.addEventListener?.('seeked', () => drawOverlay());
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
       const targetId = e.target.value;
       if (!targetId) return;
       studioState.activeCamera = targetId;
       const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
-      const img = document.getElementById('studio-live-img');
-      if (isVideo) clearStudioLiveImage();
-      else if (img) {
-        const streamBase = `/stream/${encodeURIComponent(targetId)}`;
-        if (img.dataset) img.dataset.activeStreamSrc = streamBase;
-        if (isStudioTabActive()) img.src = `${streamBase}?t=${Date.now()}`;
-      }
       updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
       loadCameraScenario(targetId);
-      if (!isVideo) window.StudioOverlays?.loadCameraOverlays(targetId);
+      applyStudioChannel(targetId, isVideo);
     });
     document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
       window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);
@@ -331,7 +325,13 @@
   function stopMinimapLoop() { if (minimapTimer !== null) { clearInterval(minimapTimer); minimapTimer = null; } }
   function syncStudioTabState(isActive) {
     const active = typeof isActive === 'boolean' ? isActive : isStudioTabActive();
-    if (active) { renderBEVMinimap(); startMinimapLoop(); } else { stopMinimapLoop(); }
+    if (active) {
+      if (studioState.activeCamera) {
+        const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
+        window.StudioCanvas?.attachStudioMedia?.(studioState.activeCamera, isVideo, true);
+      }
+      renderBEVMinimap(); startMinimapLoop();
+    } else { stopMinimapLoop(); }
   }
   window.addEventListener('tab-changed', (ev) => {
     const activeTab = ev?.detail?.activeTab;
