@@ -106,7 +106,10 @@ class TestDashboardDIAndCameraPoolSplit(unittest.TestCase):
         mock_scen = MagicMock(spec=ScenarioManager)
         mock_lm = MagicMock()
 
+        import tempfile
         with (
+            tempfile.TemporaryDirectory() as tmp_dir,
+            patch.dict(os.environ, {"TRACKER_DB_PATH": os.path.join(tmp_dir, "test.db")}),
             patch("dashboard.app.CameraPool", return_value=mock_pool),
             patch("dashboard.app.ScenarioManager", return_value=mock_scen),
             patch("dashboard.app.StreamLifecycleManager", return_value=mock_lm),
@@ -120,7 +123,8 @@ class TestDashboardDIAndCameraPoolSplit(unittest.TestCase):
                 self.assertIs(app.state.stream_manager, mock_sm)
                 self.assertIs(app.state.scenario_manager, mock_scen)
                 self.assertIs(app.state.lifecycle_manager, mock_lm)
-                self.assertIs(app.state.db, mock_db)
+                self.assertIsInstance(app.state.db, TrackerDB)
+                self.assertIsNot(app.state.db, mock_db)
                 mock_scen.apply_to_stream_manager.assert_called_once_with(mock_sm)
 
             mock_lm.stop_sampler.assert_called_once()

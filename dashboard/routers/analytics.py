@@ -87,25 +87,15 @@ def _fetch_entities_summary(db, category: Optional[str]) -> list[dict]:
     return result
 
 
-def _resolve_analytics_db(request: Request, db: Optional[TrackerDB]) -> Optional[TrackerDB]:
-    """Prefer active stream DB (for test stubs), falling back to injected TrackerDB."""
-    mgr = get_active_stream_manager(conn=request)
-    if mgr is not None and getattr(mgr, "db", None) is not None:
-        return mgr.db
-    return db
-
-
 @router.get("/entities")
 async def list_entities(
-    request: Request,
     category: Optional[str] = None,
     db: TrackerDB = Depends(get_db),
 ):
     """List enrolled gallery identities with appearance counters and sample thumbnails."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         return []
-    return await asyncio.to_thread(_fetch_entities_summary, resolved_db, category)
+    return await asyncio.to_thread(_fetch_entities_summary, db, category)
 
 
 def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
@@ -122,15 +112,13 @@ def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
 
 @router.post("/entities")
 async def create_entity(
-    request: Request,
     req: EntityCreateRequest,
     db: TrackerDB = Depends(get_db),
 ):
     """Enroll a new identity into the persistent Re-ID gallery database."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_create_entity_sync, resolved_db, req)
+    return await asyncio.to_thread(_create_entity_sync, db, req)
 
 
 def _fetch_entity_details(db, entity_id: int) -> dict:
@@ -147,14 +135,12 @@ def _fetch_entity_details(db, entity_id: int) -> dict:
 @router.get("/entities/{entity_id}")
 async def get_entity_details(
     entity_id: int,
-    request: Request,
     db: TrackerDB = Depends(get_db),
 ):
     """Get single enrolled entity details with signatures and recent sightings."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_fetch_entity_details, resolved_db, entity_id)
+    return await asyncio.to_thread(_fetch_entity_details, db, entity_id)
 
 
 def _delete_entity_sync(db, mgr, entity_id: int) -> dict:
@@ -173,11 +159,10 @@ async def delete_entity(
     db: TrackerDB = Depends(get_db),
 ):
     """Remove entity and its signatures from the gallery."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
     mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_delete_entity_sync, resolved_db, mgr, entity_id)
+    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id)
 
 
 def _enrich_sighting(s: dict, db) -> dict:
@@ -225,7 +210,6 @@ def _fetch_sightings_sync(
 
 @router.get("/sightings")
 async def query_sightings(
-    request: Request,
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
     zone_id: Optional[str] = None,
@@ -235,12 +219,11 @@ async def query_sightings(
     db: TrackerDB = Depends(get_db),
 ):
     """Search historical sighting timeline records with entity, zone, and time filters."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         return []
     return await asyncio.to_thread(
         _fetch_sightings_sync,
-        resolved_db,
+        db,
         entity_id,
         entity_name,
         zone_id,
@@ -278,8 +261,7 @@ async def list_recent_events(
 ):
     """Get recent security and tracking alerts merged from EventBus and TrackerDB."""
     mgr = get_active_stream_manager(conn=request)
-    resolved_db = _resolve_analytics_db(request, db)
-    return await asyncio.to_thread(_merge_recent_events, mgr, resolved_db, limit)
+    return await asyncio.to_thread(_merge_recent_events, mgr, db, limit)
 
 
 @router.post("/tag")

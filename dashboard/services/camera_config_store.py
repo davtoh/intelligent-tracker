@@ -112,12 +112,13 @@ class CameraConfigStore:
     def save_cameras(self) -> None:
         """Persist current camera configurations atomically to JSON."""
         with self._lock:
-            os.makedirs(os.path.dirname(self.config_file) or ".", exist_ok=True)
-            try:
-                with open(self.config_file, "w", encoding="utf-8") as f:
-                    json.dump(list(self.camera_configs.values()), f, indent=2)
-            except Exception as exc:
-                logger.error("Failed to save camera configuration to %s: %s", self.config_file, exc)
+            snapshot = [dict(cfg) for cfg in self.camera_configs.values()]
+        os.makedirs(os.path.dirname(self.config_file) or ".", exist_ok=True)
+        try:
+            with open(self.config_file, "w", encoding="utf-8") as f:
+                json.dump(snapshot, f, indent=2)
+        except Exception as exc:
+            logger.error("Failed to save camera configuration to %s: %s", self.config_file, exc)
 
     def build_and_store_entry(
         self,

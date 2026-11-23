@@ -10,7 +10,8 @@ Video Studio playback.
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.params import Depends as DependsParam
 from pydantic import BaseModel, Field
 
 from dashboard.dependencies import (
@@ -28,6 +29,7 @@ from dashboard.services.roi_recognition_service import (
 )
 
 router = APIRouter(tags=["tagging"])
+_UNSET = object()
 
 
 class RoiRecognizeRequest(BaseModel):
@@ -56,20 +58,25 @@ class TagCommitRequest(BaseModel):
     track_id: int | None = None
 
 
-def _build_service(request: Request, camera_id: str | None) -> RoiRecognitionService:
-    """Construct RoiRecognitionService bound to request app state."""
-    db = get_db(conn=request)
-    if db is None:
+def _build_service(
+    request: Request,
+    camera_id: str | None,
+    db: object = _UNSET,
+    pool: object = _UNSET,
+) -> RoiRecognitionService:
+    """Construct RoiRecognitionService bound to request app state or injected DI."""
+    resolved_db = get_db(conn=request) if (db is _UNSET or isinstance(db, DependsParam)) else db
+    if resolved_db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    pool = get_camera_pool(conn=request)
+    resolved_pool = get_camera_pool(conn=request) if (pool is _UNSET or isinstance(pool, DependsParam)) else pool
     mgr = get_active_stream_manager(camera_id, conn=request) if camera_id else None
     app_state = getattr(getattr(request, "app", None), "state", None)
-    ce = getattr(mgr, "confidence_engine", None) or getattr(pool, "confidence_engine", None) or getattr(app_state, "confidence_engine", None)
-    fts = getattr(mgr, "event_fts_index", None) or getattr(pool, "event_fts_index", None) or getattr(app_state, "event_fts_index", None)
+    ce = getattr(mgr, "confidence_engine", None) or getattr(resolved_pool, "confidence_engine", None) or getattr(app_state, "confidence_engine", None)
+    fts = getattr(mgr, "event_fts_index", None) or getattr(resolved_pool, "event_fts_index", None) or getattr(app_state, "event_fts_index", None)
     return RoiRecognitionService(
-        db=db,
+        db=resolved_db,
         stream_manager=mgr,
-        camera_pool=pool,
+        camera_pool=resolved_pool,
         videos_dir=VIDEOS_DIR,
         crops_dir=CROPS_DIR,
         confidence_engine=ce,
@@ -78,9 +85,14 @@ def _build_service(request: Request, camera_id: str | None) -> RoiRecognitionSer
 
 
 @router.post("/api/tag/recognize-roi")
-async def recognize_roi_endpoint(req: RoiRecognizeRequest, request: Request):
+async def recognize_roi_endpoint(
+    req: RoiRecognizeRequest,
+    request: Request,
+    db=Depends(get_db),
+    pool=Depends(get_camera_pool),
+):
     """Classify an ROI crop and return top-K Re-ID gallery candidates."""
-    svc = _build_service(request, req.camera_id)
+    svc = _build_service(request, req.camera_id, db=db, pool=pool)
     try:
         data = await asyncio.to_thread(
             svc.recognize_roi,
@@ -101,9 +113,14 @@ async def recognize_roi_endpoint(req: RoiRecognizeRequest, request: Request):
 
 
 @router.post("/api/tag/commit")
-async def commit_roi_tag_endpoint(req: TagCommitRequest, request: Request):
+async def commit_roi_tag_endpoint(
+    req: TagCommitRequest,
+    request: Request,
+    db=Depends(get_db),
+    pool=Depends(get_camera_pool),
+):
     """Commit an ROI tag, persist crop/signature/sighting, and reload galleries."""
-    svc = _build_service(request, req.camera_id)
+    svc = _build_service(request, req.camera_id, db=db, pool=pool)
     try:
         data = await asyncio.to_thread(
             svc.commit_roi_tag,

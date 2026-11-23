@@ -28,12 +28,8 @@ class SignatureMixin:
         return np.frombuffer(blob, dtype=np.float32)
 
     def add_signature(
-        self,
-        entity_id: int,
-        embedding: np.ndarray,
-        crop_path: str = "",
-        is_anchor: int = 0,
-        locked: int = 0,
+        self, entity_id: int, embedding: np.ndarray, crop_path: str = "",
+        is_anchor: int = 0, locked: int = 0,
     ) -> int:
         """
         Add a feature signature embedding for an entity.
@@ -54,15 +50,16 @@ class SignatureMixin:
             cursor = self._conn.cursor()
             try:
                 cursor.execute(
-                    """
-                    INSERT INTO entity_signatures (entity_id, embedding, crop_path, is_anchor, locked, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """,
+                    "INSERT INTO entity_signatures (entity_id, embedding, crop_path, is_anchor, locked, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
                     (entity_id, blob, crop_path.strip(), int(is_anchor), int(locked), now),
                 )
                 sig_id = cursor.lastrowid
                 self._conn.commit()
                 return sig_id
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cursor.close()
 
@@ -114,6 +111,9 @@ class SignatureMixin:
                 cur.execute(f"UPDATE entity_signatures SET {', '.join(updates)} WHERE id = ?", params)
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 

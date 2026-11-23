@@ -121,7 +121,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
                 device_name=device_name,
                 armed=armed,
             )
-            self.save_cameras()
+        self.save_cameras()
         return self._coordinator.register_camera_stream(
             camera_id=camera_id,
             cam_entry=cam_entry,
@@ -153,7 +153,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             )
             if not found or cfg is None:
                 return False
-            self.save_cameras()
+        self.save_cameras()
 
         if armed is not None:
             with self._lock:
@@ -172,7 +172,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         """Stop and remove a camera stream dynamically from the pool."""
         with self._lock:
             removed_cfg = self._config_store.remove_entry(camera_id)
-            self.save_cameras()
+        self.save_cameras()
         self._coordinator.remove_stream(camera_id)
         logger.info("Removed camera [%s] from pool", camera_id)
         return removed_cfg is not None

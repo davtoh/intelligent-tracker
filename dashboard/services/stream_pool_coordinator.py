@@ -115,6 +115,7 @@ class StreamPoolCoordinator:
     ) -> None:
         self.db_path, self.base_config_path, self.world_graph = db_path, base_config_path, world_graph
         self.event_bus, self.confidence_engine, self.event_fts_index = event_bus, confidence_engine, event_fts_index
+        self.scenario_manager: Any = None
         self._lock = lock or threading.RLock()
         if processing_mode_service is None:
             from dashboard.services.processing_mode_service import get_processing_mode_service

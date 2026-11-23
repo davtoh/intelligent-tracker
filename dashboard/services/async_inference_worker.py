@@ -91,11 +91,7 @@ class AsyncInferenceWorker:
     ) -> None:
         """Queue the latest frame for inference, overwriting any unconsumed frame."""
         wall_ts = _wall_now() if timestamp is None else float(timestamp)
-        mono_ts = (
-            float(mono_timestamp)
-            if mono_timestamp is not None
-            else (time.monotonic() if timestamp is None else float(timestamp))
-        )
+        mono_ts = float(mono_timestamp) if mono_timestamp is not None else time.monotonic()
         frame_copy = frame.copy()
         with self._lock:
             self._pending = (frame_copy, wall_ts, mono_ts, int(frame_seq))
@@ -209,7 +205,8 @@ def _merge_cached_step_result(
                 scheduler.promote_alarm(camera_id, now=mono_now)
         inf_seq = int(getattr(cached, "inference_frame_seq", getattr(cached, "frame_count", frame_seq)) or frame_seq)
         inf_ts = float(getattr(cached, "inference_timestamp", getattr(cached, "timestamp", wall_now)) or wall_now)
-        inf_mono = float(getattr(cached, "_inference_monotonic_ts", inf_ts) or inf_ts)
+        raw_mono = getattr(cached, "_inference_monotonic_ts", None)
+        inf_mono = float(raw_mono) if raw_mono is not None else mono_now
         merged = FrameStepResult(
             frame=frame, tracks=cached.tracks, analytics=cached.analytics,
             identifications=cached.identifications, timestamp=wall_now, fps=cached.fps, frame_count=frame_seq,
@@ -243,6 +240,19 @@ def _try_replay_step(
     return replayed
 
 
+def _schedule_step(
+    scheduler: Any, camera_id: str | None, frame: np.ndarray, mono_ts: float,
+    mode: str, is_focused: bool, is_recording: bool, is_armed: bool, active_tab: str,
+) -> Any:
+    """Query AnalyticsScheduler for the current frame when scheduler and camera_id are bound."""
+    if scheduler is None or not camera_id:
+        return None
+    return scheduler.should_schedule_frame(
+        camera_id, frame, mono_ts, mode=mode, is_focused=is_focused,
+        is_recording=is_recording, is_armed=is_armed, active_tab=active_tab,
+    )
+
+
 def build_live_step_result(
     async_worker: AsyncInferenceWorker, frame: np.ndarray, now: float | None = None, frame_seq: int = 0,
     run_vision: bool = True, replay_provider: Any = None, *, scheduler: Any = None,
@@ -255,14 +265,7 @@ def build_live_step_result(
     wall_ts = float(wall_now) if wall_now is not None else (_wall_now() if now is None else float(now))
     if not run_vision:
         _clear_worker_cache(async_worker)
-        decision = (
-            scheduler.should_schedule_frame(
-                camera_id, frame, mono_ts, mode=mode, is_focused=is_focused,
-                is_recording=is_recording, is_armed=is_armed, active_tab=active_tab,
-            )
-            if (scheduler is not None and camera_id)
-            else None
-        )
+        decision = _schedule_step(scheduler, camera_id, frame, mono_ts, mode, is_focused, is_recording, is_armed, active_tab)
         return _stamp_step_provenance(
             FrameStepResult(frame=frame, timestamp=wall_ts, fps=0.0, frame_count=frame_seq),
             frame_seq, wall_ts, 0.0, decision=decision,
@@ -274,14 +277,7 @@ def build_live_step_result(
     if replayed is not None:
         _clear_worker_cache(async_worker)
         return replayed
-    decision = (
-        scheduler.should_schedule_frame(
-            camera_id, frame, mono_ts, mode=mode, is_focused=is_focused,
-            is_recording=is_recording, is_armed=is_armed, active_tab=active_tab,
-        )
-        if (scheduler is not None and camera_id)
-        else None
-    )
+    decision = _schedule_step(scheduler, camera_id, frame, mono_ts, mode, is_focused, is_recording, is_armed, active_tab)
     if decision is None or decision.should_run:
         try:
             async_worker.submit(frame, wall_ts, frame_seq=frame_seq, mono_timestamp=mono_ts)

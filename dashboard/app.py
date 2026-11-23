@@ -150,11 +150,8 @@ def _init_runtime_services(application: FastAPI):
     scen_file = os.getenv("SCENARIOS_CONFIG_PATH") or "configs/scenarios.yaml"
     pool = CameraPool(config_file=cfg_file, db_path=db_file)
     primary_sm = pool.primary_stream
-    db = primary_sm.db if primary_sm else None
-    owned_db: Optional[TrackerDB] = None
-    if db is None:
-        owned_db = TrackerDB(db_file)
-        db = owned_db
+    db = TrackerDB(db_file)
+    owned_db: Optional[TrackerDB] = db
     scen_mgr = ScenarioManager(
         config_path=scen_file,
         db=db,

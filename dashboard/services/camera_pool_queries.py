@@ -151,11 +151,12 @@ class CameraPoolQueryMixin:
     def reload_all_galleries(self) -> None:
         """Reload Re-ID galleries and RSAC policies across all active streams."""
         with self._lock:
-            for sm in self.streams.values():
-                if sm.gallery_matcher:
-                    sm.gallery_matcher.reload_gallery()
-                if sm.rsac_manager:
-                    sm.rsac_manager.reload()
+            streams = list(self.streams.values())
+        for sm in streams:
+            if sm.gallery_matcher:
+                sm.gallery_matcher.reload_gallery()
+            if sm.rsac_manager:
+                sm.rsac_manager.reload()
 
     def get_stream(self, camera_id: str | None = None) -> StreamManager | None:
         """Retrieve StreamManager for ``camera_id``, or primary stream when omitted."""

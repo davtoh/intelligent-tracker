@@ -107,7 +107,7 @@ def get_shutdown_event() -> asyncio.Event:
     if _shutdown_event is None:
         _shutdown_event = asyncio.Event()
     elif current_loop is not None and getattr(_shutdown_event, "_loop", None) is not None:
-        if _shutdown_event._loop is not current_loop:
+        if getattr(_shutdown_event, "_loop", None) is not current_loop:
             _shutdown_event = asyncio.Event()
 
     if _is_shutting_down and not _shutdown_event.is_set():
@@ -139,7 +139,7 @@ def set_shutting_down(shutting_down: bool = True) -> None:
             pass
 
 
-def get_camera_pool(conn: HTTPConnection = None) -> Optional[CameraPool]:
+def get_camera_pool(conn: HTTPConnection = None) -> Optional[CameraPool]:  # type: ignore[assignment]
     """Resolve active CameraPool from ``app.state`` or standalone fallback."""
     return _from_app_state(conn, "camera_pool", _camera_pool)
 
@@ -152,7 +152,7 @@ def set_camera_pool(pool: Optional[CameraPool], app: Optional[FastAPI] = None) -
         app.state.camera_pool = pool
 
 
-def get_stream_manager(conn: HTTPConnection = None) -> Optional[StreamManager]:
+def get_stream_manager(conn: HTTPConnection = None) -> Optional[StreamManager]:  # type: ignore[assignment]
     """Resolve active StreamManager from ``app.state`` or standalone fallback."""
     return _from_app_state(conn, "stream_manager", _stream_manager)
 
@@ -165,7 +165,7 @@ def set_stream_manager(mgr: Optional[StreamManager], app: Optional[FastAPI] = No
         app.state.stream_manager = mgr
 
 
-def get_scenario_manager(conn: HTTPConnection = None) -> Optional[ScenarioManager]:
+def get_scenario_manager(conn: HTTPConnection = None) -> Optional[ScenarioManager]:  # type: ignore[assignment]
     """Resolve ScenarioManager from ``app.state`` or standalone fallback."""
     return _from_app_state(conn, "scenario_manager", _scenario_manager)
 
@@ -178,7 +178,7 @@ def set_scenario_manager(mgr: Optional[ScenarioManager], app: Optional[FastAPI] 
         app.state.scenario_manager = mgr
 
 
-def get_scenario_mgr(conn: HTTPConnection = None) -> ScenarioManager:
+def get_scenario_mgr(conn: HTTPConnection = None) -> ScenarioManager:  # type: ignore[assignment]
     """Ensure and return active ScenarioManager singleton."""
     global _scenario_manager
     mgr = get_scenario_manager(conn)
@@ -190,7 +190,7 @@ def get_scenario_mgr(conn: HTTPConnection = None) -> ScenarioManager:
     return mgr
 
 
-def get_lifecycle_manager(conn: HTTPConnection = None) -> StreamLifecycleManager:
+def get_lifecycle_manager(conn: HTTPConnection = None) -> StreamLifecycleManager:  # type: ignore[assignment]
     """Ensure and return active StreamLifecycleManager instance."""
     global _lifecycle_manager
     lm = _from_app_state(conn, "lifecycle_manager", _lifecycle_manager)
@@ -234,10 +234,14 @@ def resolve_stream_manager(
                 return mgr
     if sm and (not camera_id or getattr(sm, "camera_id", None) == camera_id):
         return sm
+    if camera_id:
+        return None
     return getattr(pool, "primary_stream", None) if pool is not None else sm
 
 
-def get_active_stream_manager(camera_id: Optional[str] = None, conn: HTTPConnection = None) -> Optional[StreamManager]:
+def get_active_stream_manager(
+    camera_id: Optional[str] = None, conn: HTTPConnection = None,  # type: ignore[assignment]
+) -> Optional[StreamManager]:
     """Resolve active StreamManager for a camera ID or default primary channel."""
     return resolve_stream_manager(camera_id=camera_id, pool=get_camera_pool(conn), sm=get_stream_manager(conn))
 
@@ -247,16 +251,16 @@ def _db_open(db: Any) -> bool:
     return db is not None and getattr(db, "_conn", None) is not None
 
 
-def get_db(conn: HTTPConnection = None) -> TrackerDB:
+def get_db(conn: HTTPConnection = None) -> TrackerDB:  # type: ignore[assignment]
     """Retrieve TrackerDB instance from active stream, ``app.state``, or managed fallback."""
     global _owned_fallback_db
     state_db = _from_app_state(conn, "db", _db)
-    if state_db is not _owned_fallback_db and _db_open(state_db):
+    if state_db is not None and state_db is not _owned_fallback_db and _db_open(state_db):
         return state_db
     mgr = get_active_stream_manager(conn=conn)
-    if mgr and _db_open(getattr(mgr, "db", None)):
+    if mgr and mgr.db is not None and _db_open(mgr.db):
         return mgr.db
-    if _db_open(state_db):
+    if state_db is not None and _db_open(state_db):
         return state_db
     if not _db_open(_owned_fallback_db):
         pool = get_camera_pool(conn)
@@ -264,10 +268,11 @@ def get_db(conn: HTTPConnection = None) -> TrackerDB:
         _owned_fallback_db = TrackerDB(pool_db if isinstance(pool_db, str) else "data/tracker.db")
     if conn is not None:
         conn.app.state.db = _owned_fallback_db
+    assert _owned_fallback_db is not None
     return _owned_fallback_db
 
 
-def get_rsac_mgr(conn: HTTPConnection = None) -> RSACManager:
+def get_rsac_mgr(conn: HTTPConnection = None) -> RSACManager:  # type: ignore[assignment]
     """Retrieve RSACManager from camera pool, stream, or initialize new."""
     pool = get_camera_pool(conn)
     if pool and pool.rsac_manager:
@@ -278,7 +283,7 @@ def get_rsac_mgr(conn: HTTPConnection = None) -> RSACManager:
     return RSACManager(db=get_db(conn))
 
 
-def get_active_learning_mgr(conn: HTTPConnection = None) -> ActiveLearningManager:
+def get_active_learning_mgr(conn: HTTPConnection = None) -> ActiveLearningManager:  # type: ignore[assignment]
     """Retrieve ActiveLearningManager from camera pool, stream, or initialize."""
     pool = get_camera_pool(conn)
     if pool and pool.active_learning:
@@ -289,7 +294,7 @@ def get_active_learning_mgr(conn: HTTPConnection = None) -> ActiveLearningManage
     return ActiveLearningManager(db=get_db(conn))
 
 
-def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManager:
+def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManager:  # type: ignore[assignment]
     """Retrieve UniversalEnrollmentManager from camera pool, stream, or initialize."""
     pool = get_camera_pool(conn)
     if pool and pool.enrollment_manager:
@@ -300,7 +305,7 @@ def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManage
     return UniversalEnrollmentManager(db=get_db(conn))
 
 
-def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:
+def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:  # type: ignore[assignment]
     """Resolve WorldQueryEngine from ``app.state`` or build from active DB and WorldGraph."""
     state_engine = _from_app_state(conn, "world_query_engine", _world_query_engine)
     if state_engine is not None:
@@ -318,7 +323,7 @@ def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:
     return WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
 
 
-def reload_all_galleries(conn: HTTPConnection = None) -> None:
+def reload_all_galleries(conn: HTTPConnection = None) -> None:  # type: ignore[assignment]
     """Reload visual Re-ID matchers and RSAC categories across all active streams."""
     pool = get_camera_pool(conn)
     if pool:
