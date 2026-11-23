@@ -206,6 +206,7 @@ def build_reid(
             extractor=extractor,
             reid_threshold=config.reid_threshold,
             camera_id=config.camera_id,
+            tracked_categories=config.tracked_categories,
         )
         return extractor, matcher
     except Exception as exc:

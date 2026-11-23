@@ -26,13 +26,15 @@ logger = logging.getLogger("intelligent_tracker.stream_pool_coordinator")
 
 
 def _build_custom_cfg(cfg: dict[str, Any]) -> dict[str, Any] | None:
-    """Extract detector and tracker override sections from a camera config entry."""
+    """Extract detector, tracker, and Re-ID override sections from a camera config entry."""
     custom_cfg: dict[str, Any] = {}
     det_dict = {k: cfg[src] for src, k in (("detector", "model"), ("confidence", "confidence"), ("classes", "classes")) if cfg.get(src) is not None and (src != "detector" or cfg.get(src))}
     if det_dict:
         custom_cfg["detector"] = det_dict
     if cfg.get("tracker"):
         custom_cfg["tracker"] = {"type": cfg["tracker"]}
+    if cfg.get("tracked_categories") is not None:
+        custom_cfg["reid"] = {"tracked_categories": cfg["tracked_categories"]}
     return custom_cfg or None
 
 
@@ -123,18 +125,11 @@ class StreamPoolCoordinator:
         self.processing_mode_service = processing_mode_service
         self.streams: dict[str, StreamManager] = {}
 
-    def create_and_register_stream(
-        self, camera_id: str, cfg: dict[str, Any], start: bool = True,
-    ) -> StreamManager | None:
+    def create_and_register_stream(self, camera_id: str, cfg: dict[str, Any], start: bool = True) -> StreamManager | None:
         """Probe source readiness and safely instantiate/register a StreamManager."""
         return bootstrap_camera_stream(
-            self,
-            camera_id,
-            cfg,
-            start=start,
-            resolver=CameraPathResolver,
-            stream_manager_cls=StreamManager,
-            custom_cfg_builder=_build_custom_cfg,
+            self, camera_id, cfg, start=start, resolver=CameraPathResolver,
+            stream_manager_cls=StreamManager, custom_cfg_builder=_build_custom_cfg,
             start_stream_fn=_start_stream_if_ready,
         )
 
@@ -155,8 +150,7 @@ class StreamPoolCoordinator:
                 config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
                 name=cam_entry.get("name", f"Camera {camera_id.upper()}"), source_override=cam_entry.get("source", "synthetic"),
                 world_graph=self.world_graph, processing_mode_service=self.processing_mode_service,
-                event_bus=self.event_bus, confidence_engine=self.confidence_engine,
-                event_fts_index=self.event_fts_index,
+                event_bus=self.event_bus, confidence_engine=self.confidence_engine, event_fts_index=self.event_fts_index,
             )
             mgr._in_camera_pool = True
             with self._lock:

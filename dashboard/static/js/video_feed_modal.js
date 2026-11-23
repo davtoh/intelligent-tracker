@@ -78,6 +78,8 @@
 
     const classesInput = document.getElementById('feed-classes-input');
     if (classesInput) classesInput.value = '';
+    const catsInput = document.getElementById('feed-tracked-categories-input');
+    if (catsInput) catsInput.value = '';
 
     document.querySelectorAll('.btn-tag-preset[data-target="feed"]').forEach(b => {
       b.classList.remove('active');
@@ -179,6 +181,8 @@
         const classes = classesRaw
           ? classesRaw.split(',').map(s => s.trim()).filter(Boolean)
           : null;
+        const catsRaw = (document.getElementById('feed-tracked-categories-input')?.value || '').trim();
+        const tracked_categories = catsRaw ? catsRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
 
         promoteVideoToCamera(currentPromotionFilename, {
           camera_id: camId,
@@ -187,6 +191,7 @@
           tracker: tracker,
           confidence: confidence,
           classes: classes,
+          tracked_categories: tracked_categories,
         });
       });
     }

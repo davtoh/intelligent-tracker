@@ -90,18 +90,11 @@ async def add_camera(
         raise HTTPException(status_code=503, detail="Camera pool not initialized")
 
     pool.add_camera(
-        camera_id=req.id,
-        name=req.name,
-        source=req.source,
-        cam_type=req.type or "rtsp",
-        detector=req.detector,
-        tracker=req.tracker,
-        confidence=req.confidence,
-        classes=req.classes,
-        enabled=req.enabled if req.enabled is not None else True,
-        autostart=True,
-        details=req.details,
-        armed=bool(req.armed),
+        camera_id=req.id, name=req.name, source=req.source, cam_type=req.type or "rtsp",
+        detector=req.detector, tracker=req.tracker, confidence=req.confidence,
+        classes=req.classes, tracked_categories=req.tracked_categories,
+        enabled=req.enabled if req.enabled is not None else True, autostart=True,
+        details=req.details, armed=bool(req.armed),
     )
     return {"status": "success", "camera": pool.camera_configs.get(req.id)}
 
@@ -237,6 +230,7 @@ async def update_camera(
         tracker=req.tracker,
         confidence=req.confidence,
         classes=req.classes,
+        tracked_categories=req.tracked_categories,
         armed=req.armed,
     )
     return {

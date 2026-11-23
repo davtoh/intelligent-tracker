@@ -113,6 +113,12 @@ def match_persistent_gallery(
         return None
     t_label = getattr(track, "label", "object")
     compatible_mask = np.array([is_gallery_category_compatible(t_label, c) for c in matcher.gallery_categories], dtype=bool)
+    allowed_cats = getattr(matcher, "tracked_categories", None)
+    if allowed_cats:
+        allowed_set = {str(c).strip().lower() for c in allowed_cats if str(c).strip()}
+        if allowed_set:
+            cat_mask = np.array([str(c or "").strip().lower() in allowed_set for c in matcher.gallery_categories], dtype=bool)
+            compatible_mask = compatible_mask & cat_mask
     if not np.any(compatible_mask):
         return None
     similarities = np.where(compatible_mask, similarities, -1.0)

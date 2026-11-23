@@ -54,6 +54,12 @@ class GalleryMatcher:
         self.spatial_bonus_radius, self.spatial_bonus_max_dt = float(spatial_bonus_radius), float(spatial_bonus_max_dt)
         self.negative_suppression_threshold = float(kwargs.get("negative_suppression_threshold", 0.78))
         self.global_negative_threshold = float(kwargs.get("global_negative_threshold", 0.82))
+        raw_cats = kwargs.get("tracked_categories")
+        self.tracked_categories: Optional[List[str]] = (
+            [str(c).strip().lower() for c in raw_cats if str(c).strip()] or None
+            if raw_cats is not None
+            else None
+        )
         self._init_runtime_caches(kwargs.get("coast_grace_seconds", 2.0))
         self.reload_gallery()
 

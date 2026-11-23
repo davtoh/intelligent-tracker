@@ -34,12 +34,12 @@
 ---
 
 ## Step 3: Supervised Re-ID Learning, Negative Feedback, Dynamic Semantic Badges & Unified Enrollment (`Idea 1`, `Finding 5`, `ADR-08`)
-- [ ] **Goal**: Enable draw-anywhere ROI teaching and click-to-discourage/correct false detections, provide full Semantic Category Badge CRUD with pre-enrollment descriptor collision warnings, split COCO vs. gallery filters, and reuse Video Studio's scrubber inside Enrollment.
-- [ ] **Target Scope**:
-  - [ ] **Negative/Correction Exemplars & Draw-Anywhere Tagging**: Allow arbitrary ROI draw-to-teach in Live Monitor & Video Studio plus click-to-correct/discourage false labels on tracked/detected objects (persisting negative/override exemplars in SQLite + `GalleryMatcher` suppression).
-  - [ ] **Dynamic Semantic Category Badges & Collision Guard**: Add `/api/rsac/categories` CRUD synced across Enrollment, Tag, Quick-Enroll, and Gallery filters; add pre-enrollment cosine-similarity collision check against `db.get_gallery_embeddings()` surfacing `Merge vs. Create New` before commit.
-  - [ ] **Target Class Filter Split & Extracted Enrollment Scrubber**: Separate `Detector Classes (COCO)` from `Tracked Gallery Entities/Categories` in UI config/filters; extract reusable `scrubber-timeline-slider` component and mount it in Universal Enrollment when a recorded video source is chosen.
-- [ ] **Definition of Done**: End-to-end tests verify negative-exemplar suppression, pre-enrollment collision detection, badge CRUD sync, and Enrollment video-frame scrubbing.
+- [x] **Goal**: Enable draw-anywhere ROI teaching and click-to-discourage/correct false detections, provide full Semantic Category Badge CRUD with pre-enrollment descriptor collision warnings, split COCO vs. gallery filters, and reuse Video Studio's scrubber inside Enrollment.
+- [x] **Target Scope**:
+  - [x] **Negative/Correction Exemplars & Draw-Anywhere Tagging**: Allow arbitrary ROI draw-to-teach in Live Monitor & Video Studio plus click-to-correct/discourage false labels on tracked/detected objects (persisting negative/override exemplars in SQLite + `GalleryMatcher` suppression).
+  - [x] **Dynamic Semantic Category Badges & Collision Guard**: Add `/api/rsac/categories` CRUD synced across Enrollment, Tag, Quick-Enroll, and Gallery filters; add pre-enrollment cosine-similarity collision check against `db.get_gallery_embeddings()` surfacing `Merge vs. Create New` before commit.
+  - [x] **Target Class Filter Split & Extracted Enrollment Scrubber**: Separate `Detector Classes (COCO)` from `Tracked Gallery Entities/Categories` in UI config/filters; extract reusable `scrubber-timeline-slider` component and mount it in Universal Enrollment when a recorded video source is chosen.
+- [x] **Definition of Done**: End-to-end tests verify negative-exemplar suppression, pre-enrollment collision detection, badge CRUD sync, and Enrollment video-frame scrubbing.
 
 ---
 

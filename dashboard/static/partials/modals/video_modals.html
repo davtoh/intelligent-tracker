@@ -112,7 +112,7 @@
           </div>
 
           <div class="form-group">
-            <label for="batch-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+            <label for="batch-classes-input">Detector Classes (COCO) (comma-separated, empty for all)</label>
             <input type="text" id="batch-classes-input" class="form-input" placeholder="e.g. person, car" />
             <div class="class-presets-bar">
               <button type="button" class="btn-tag-preset" data-target="batch" data-classes="person">👤 Person</button>
@@ -120,6 +120,11 @@
               <button type="button" class="btn-tag-preset" data-target="batch" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
               <button type="button" class="btn-tag-preset" data-target="batch" data-classes="">🌐 All Classes</button>
             </div>
+          </div>
+
+          <div class="form-group">
+            <label for="batch-tracked-categories-input">Tracked Gallery Categories (semantic Re-ID filter, empty for all)</label>
+            <input type="text" id="batch-tracked-categories-input" class="form-input" placeholder="e.g. vip, staff, restricted" />
           </div>
         </div>
 
@@ -202,7 +207,7 @@
             </div>
 
             <div class="form-group">
-              <label for="feed-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+              <label for="feed-classes-input">Detector Classes (COCO) (comma-separated, empty for all)</label>
               <input type="text" id="feed-classes-input" class="form-input" placeholder="e.g. person, car" />
               <div class="class-presets-bar">
                 <button type="button" class="btn-tag-preset" data-target="feed" data-classes="person">👤 Person</button>
@@ -210,6 +215,11 @@
                 <button type="button" class="btn-tag-preset" data-target="feed" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
                 <button type="button" class="btn-tag-preset" data-target="feed" data-classes="">🌐 All Classes</button>
               </div>
+            </div>
+
+            <div class="form-group">
+              <label for="feed-tracked-categories-input">Tracked Gallery Categories (semantic Re-ID filter, empty for all)</label>
+              <input type="text" id="feed-tracked-categories-input" class="form-input" placeholder="e.g. vip, staff, restricted" />
             </div>
           </div>
         </div>

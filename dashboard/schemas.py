@@ -55,11 +55,12 @@ class CameraAddRequest(BaseModel):
     tracker: Optional[str] = Field("centroid", description="Tracking algorithm (centroid, sort)")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold (0.01 - 1.0)")
     classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list (e.g. ['person', 'car'])")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Allowed gallery semantic categories filter")
     enabled: Optional[bool] = True
     armed: Optional[bool] = False
     details: Optional[Dict[str, Any]] = None
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -75,8 +76,9 @@ class CameraUpdateRequest(BaseModel):
     tracker: Optional[str] = None
     confidence: Optional[float] = Field(None, ge=0.01, le=1.0, description="Updated confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Updated target class filters")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Updated gallery semantic categories filter")
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -87,10 +89,11 @@ class VideoAnalyzeRequest(BaseModel):
     detector: Optional[str] = Field("yolov8", description="Detector model name (yolov8, mock, etc.)")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Optional target class filters")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Optional gallery semantic categories filter")
     async_mode: Optional[bool] = Field(None, description="Run analysis asynchronously in background")
     scenario_camera_id: Optional[str] = Field(None, description="Optional camera/profile ID whose ScenarioManager zones/tripwires apply")
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -103,8 +106,9 @@ class VideoAddAsCameraRequest(BaseModel):
     tracker: Optional[str] = Field("centroid", description="Tracker algorithm")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Allowed gallery semantic categories filter")
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)

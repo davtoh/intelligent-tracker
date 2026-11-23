@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-23] feat: Step 3 Milestone 3: Target Class Filter Split, Enrollment Scrubber & Sign-Off
+- **Type**: feat
+- **Summary**: Split COCO detector_classes vs gallery tracked_categories across API/pipeline/UI and extracted ScrubberTimelineSlider for video_scrubber and Universal Enrollment.
+- **Files** (26):
+  - `dashboard/camera_pool.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/routers/videos.py`
+  - `dashboard/schemas.py`
+  - `dashboard/services/camera_config_store.py`
+  - `dashboard/services/stream_pool_coordinator.py`
+  - ... (+18 more)
+- **Verification**: python -m unittest discover tests
+
 ## [2026-11-23] feat: Step 2 Milestone 3: Person+Bag WorldGraph Ownership and Unattended-Item Alerts
 - **Type**: feat
 - **Summary**: Added WorldEdge/WorldEdgeRegistry, OwnershipAssociationEngine, UnattendedItemAlert with EventFTSIndex formatting, and live governance/telemetry wiring.
@@ -126,24 +141,3 @@
   - `intelligent_tracker/pipeline/post_detection_governance.py`
   - ... (+1 more)
 - **Verification**: python -m unittest tests.test_cached_replay_and_pool_scheduler tests.test_live_studio_sync tests.test_step3_worker_hibernation_and_ai_gating tests.test_dashboard_di tests.test_step3_architecture_budgets tests.test_cross_platform_pipeline_hardening tests.test_analytics_scheduler
-
-## [2026-11-19] feat: Step 2 Milestone 1: Core AnalyticsScheduler, 64x36 MotionGate, dt-Aware Trackers & Armed P1
-- **Type**: feat
-- **Summary**: Implemented 64x36 luma MotionGate, P0/P1/P2 AnalyticsScheduler with 3-stage load shedding and IdleRefinementHook, dt-aware persistence in SortTracker/CentroidTracker, and armed P1 vision gating in ProcessingModeService.
-- **Files** (6):
-  - `dashboard/services/processing_mode_service.py`
-  - `intelligent_tracker/tracker/centroid.py`
-  - `intelligent_tracker/tracker/sort.py`
-  - `intelligent_tracker/pipeline/analytics_scheduler.py`
-  - `intelligent_tracker/pipeline/motion_gate.py`
-  - `tests/test_analytics_scheduler.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest tests.test_analytics_scheduler tests.test_tracker tests.test_processing_mode tests.test_processing_mode_invariants tests.test_step3_processing_mode_api tests.test_modernization
-
-## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
-- **Type**: fix
-- **Summary**: Initialize state.focusedCameraId from localStorage (it_focused_camera_id) instead of hardcoded cam_01 in processing_mode.js, omit focused_camera_id from init() when unset, and restore the last focused camera in CameraAIConfig.resolveInitialCameraId().
-- **Files** (3):
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation

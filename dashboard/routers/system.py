@@ -23,12 +23,14 @@ from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     get_camera_pool,
     get_lifecycle_manager,
+    get_rsac_mgr,
     get_stream_manager,
     resolve_stream_manager,
 )
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.backup import BackupManager
 from intelligent_tracker.lifecycle import StreamLifecycleManager
+from intelligent_tracker.rsac import RSACManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.system")
 
@@ -161,13 +163,21 @@ def _discover_registered_backends() -> Dict[str, Any]:
 
 
 @router.get("/api/system/capabilities")
-async def get_system_capabilities():
+async def get_system_capabilities(
+    rsac: Optional[RSACManager] = Depends(get_rsac_mgr),
+):
     """Expose available detectors, trackers, Re-ID extractors, target classes, and presets."""
     from intelligent_tracker.detectors.coco_classes import COCO_CLASSES
+
+    if rsac is not None and hasattr(rsac, "list_categories"):
+        tracked_categories = rsac.list_categories()
+    else:
+        tracked_categories = RSACManager(db=None).list_categories()
 
     return {
         **_discover_registered_backends(),
         "coco_classes": COCO_CLASSES,
+        "tracked_categories": tracked_categories,
         "default_classes": [
             "person", "car", "bicycle", "motorcycle", "bus", "truck", "dog", "cat"
         ],

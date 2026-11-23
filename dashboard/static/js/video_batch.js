@@ -99,6 +99,8 @@
     syncBatchConfidence(0.40);
     const classesInput = document.getElementById('batch-classes-input');
     if (classesInput) classesInput.value = '';
+    const catsInput = document.getElementById('batch-tracked-categories-input');
+    if (catsInput) catsInput.value = '';
 
     document.querySelectorAll('.btn-tag-preset[data-target="batch"]').forEach(btn => {
       btn.classList.remove('active');
@@ -176,6 +178,7 @@
       detector: options.detector || 'yolov8',
       confidence: options.confidence !== undefined ? options.confidence : 0.40,
       classes: options.classes || null,
+      tracked_categories: options.trackedCategories || null,
       scenario_camera_id: options.scenarioCameraId || null,
     };
     setCurrentBatchFilename(filename);
@@ -215,6 +218,8 @@
     const confVal = parseFloat(confInputEl?.value || '0.40');
     const classesRaw = (classesInputEl?.value || '').trim();
     const classes = classesRaw ? classesRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+    const catsRaw = (document.getElementById('batch-tracked-categories-input')?.value || '').trim();
+    const trackedCategories = catsRaw ? catsRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
     const scenarioCameraId = (scenarioSelectEl?.value || '').trim() || null;
 
     closeBatchModal();
@@ -223,6 +228,7 @@
       sampleRate: parseInt(sampleSelect?.value || '1', 10),
       confidence: isNaN(confVal) ? 0.40 : Math.min(Math.max(confVal, 0.05), 1.00),
       classes,
+      trackedCategories,
       scenarioCameraId,
     });
   }

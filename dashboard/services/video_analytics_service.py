@@ -38,18 +38,22 @@ def parse_analyze_options(
     async_mode: bool | None,
     req: VideoAnalyzeRequest | None,
     scenario_camera_id: str | None = None,
+    tracked_categories: str | None = None,
 ) -> dict[str, Any]:
     """Normalize query and JSON body options for batch video analytics."""
     sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
     det = req.detector if (req and req.detector is not None) else (detector or "yolov8")
     conf = req.confidence if (req and req.confidence is not None) else (confidence if confidence is not None else 0.40)
-    raw_classes = (req.classes if req and req.classes is not None else None) or classes
-    if isinstance(raw_classes, str):
-        target_classes = [c.strip() for c in raw_classes.split(",") if c.strip()]
-    elif isinstance(raw_classes, (list, tuple, set)):
-        target_classes = [str(c).strip() for c in raw_classes if str(c).strip()]
-    else:
-        target_classes = None
+
+    def _norm_list(raw: Any) -> list[str] | None:
+        if isinstance(raw, str):
+            return [c.strip() for c in raw.split(",") if c.strip()] or None
+        if isinstance(raw, (list, tuple, set)):
+            return [str(c).strip() for c in raw if str(c).strip()] or None
+        return None
+
+    target_classes = _norm_list((req.classes if req and req.classes is not None else None) or classes)
+    target_cats = _norm_list((req.tracked_categories if req and req.tracked_categories is not None else None) or tracked_categories)
     is_async = req.async_mode if (req and req.async_mode is not None) else None
     is_async = bool(async_mode) if is_async is None else is_async
     raw_scen = req.scenario_camera_id if (req and req.scenario_camera_id is not None) else scenario_camera_id
@@ -59,6 +63,7 @@ def parse_analyze_options(
         "detector": det,
         "confidence": conf,
         "classes": target_classes,
+        "tracked_categories": target_cats,
         "is_async": is_async,
         "scenario_camera_id": scen_cam,
     }
@@ -151,7 +156,8 @@ def create_video_indexer(db: TrackerDB, opts: dict[str, Any], safe_name: str = "
     det = opts["detector"]
     kwargs: dict[str, Any] = {
         "db": db, "sample_rate": opts["sample_rate"], "conf_threshold": opts["confidence"],
-        "classes": opts["classes"], "analytics": analytics, "rsac_manager": rsac_mgr,
+        "classes": opts["classes"], "tracked_categories": opts.get("tracked_categories"),
+        "analytics": analytics, "rsac_manager": rsac_mgr,
         "active_learning": al_mgr, "event_bus": event_bus, "video_filename": safe_name,
         "fts_index": fts_index,
     }

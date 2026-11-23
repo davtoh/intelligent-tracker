@@ -16,14 +16,8 @@
     forceCreateNew: false,
   };
 
-  function escapeHtml(str) {
-    return str ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
-  }
-
-  function showToast(title, body, type = 'info') {
-    if (typeof window.showToast === 'function') window.showToast(title, body, type);
-    else alert(`${title}: ${body}`);
-  }
+  function escapeHtml(str) { return str ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : ''; }
+  function showToast(title, body, type = 'info') { if (typeof window.showToast === 'function') window.showToast(title, body, type); else alert(`${title}: ${body}`); }
 
   async function loadCategoriesDropdown(selectElem) {
     if (!selectElem) return;
@@ -51,21 +45,28 @@
     const camSelect = document.getElementById('enroll-camera-select');
     if (!camSelect) return;
     let cams = window.CameraManager?.getActiveCameras?.() || [];
-    if (!cams.length) {
-      try {
-        const res = await fetch('/api/cameras');
-        if (res.ok) cams = await res.json();
-      } catch (e) {
-        console.warn('Failed to load cameras for enrollment:', e);
+    let videos = [];
+    try {
+      const fetches = [!cams.length ? fetch('/api/cameras') : Promise.resolve(null), fetch('/api/videos')];
+      const [camRes, vidRes] = await Promise.all(fetches);
+      if (camRes?.ok) cams = await camRes.json();
+      if (vidRes?.ok) {
+        const vData = await vidRes.json();
+        videos = Array.isArray(vData) ? vData : (Array.isArray(vData?.videos) ? vData.videos : []);
       }
-    }
+    } catch (e) { console.warn('Failed to load enrollment sources:', e); }
     const activeId = window.App?.getActiveCameraId?.() || '';
-    const opts = ['<option value="">Image Upload Only (No Camera)</option>'].concat(
-      (Array.isArray(cams) ? cams : []).map(c =>
-        `<option value="${escapeHtml(c.id)}" ${c.id === activeId ? 'selected' : ''}>${escapeHtml(c.name || c.id)} (${escapeHtml(c.id)})</option>`
-      )
-    );
-    camSelect.innerHTML = opts.join('');
+    const camOpts = (Array.isArray(cams) ? cams : []).map(c =>
+      `<option value="${escapeHtml(c.id)}" ${c.id === activeId ? 'selected' : ''}>${escapeHtml(c.name || c.id)} (${escapeHtml(c.id)})</option>`
+    ).join('');
+    const vidOpts = videos.map(v => {
+      const fn = v.filename || v.name || '';
+      const url = v.video_url || `/videos/${encodeURIComponent(fn)}`;
+      return `<option value="video:${escapeHtml(fn)}" data-video-url="${escapeHtml(url)}">${escapeHtml(fn)}</option>`;
+    }).join('');
+    camSelect.innerHTML = '<option value="">Image Upload Only (No Camera)</option>'
+      + (camOpts ? `<optgroup label="Camera Profiles">${camOpts}</optgroup>` : '')
+      + (vidOpts ? `<optgroup label="Recorded Videos">${vidOpts}</optgroup>` : '');
     if (activeId) camSelect.value = activeId;
   }
 
@@ -76,6 +77,7 @@
     enrollState.selectedCropBase64 = null;
     enrollState.mergeEntityId = null;
     enrollState.forceCreateNew = false;
+    window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.();
     if (form?.reset) form.reset();
     const banner = document.getElementById('enroll-collision-banner');
     if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
@@ -88,26 +90,26 @@
   async function captureFreezeFrame(canvas, placeholder) {
     const camSelect = document.getElementById('enroll-camera-select');
     const camId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
+    if (camId && camId.startsWith('video:')) {
+      const opt = camSelect?.options?.[camSelect.selectedIndex];
+      const url = opt?.getAttribute?.('data-video-url') || `/videos/${encodeURIComponent(camId.slice(6))}`;
+      window.ScrubberTimelineSlider?.mountEnrollmentScrubber?.(url, canvas, placeholder, (dataUrl) => loadFreezeImage(dataUrl, canvas, placeholder));
+      return;
+    }
+    window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.();
     if (!camId) {
       if (placeholder) placeholder.innerHTML = '<span style="color:#ef4444;">No active camera selected.</span>';
       return;
     }
-
-    if (placeholder) {
-      placeholder.style.display = 'block';
-      placeholder.innerHTML = 'Capturing live freeze-frame...';
-    }
+    if (placeholder) { placeholder.style.display = 'block'; placeholder.innerHTML = 'Capturing live freeze-frame...'; }
     if (canvas) canvas.style.display = 'none';
-
     try {
       const res = await fetch(`/api/cameras/${encodeURIComponent(camId)}/freeze_frame`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       loadFreezeImage(data.image_base64, canvas, placeholder);
     } catch (err) {
-      if (placeholder) {
-        placeholder.innerHTML = `<span style="color:#ef4444;">Failed to capture frame: ${escapeHtml(err.message)}</span>`;
-      }
+      if (placeholder) placeholder.innerHTML = `<span style="color:#ef4444;">Failed to capture frame: ${escapeHtml(err.message)}</span>`;
     }
   }
 
@@ -209,7 +211,8 @@
     const category = document.getElementById('enroll-category-select')?.value || 'person';
     const security_role = (document.getElementById('enroll-role-input')?.value || '').trim();
     const camSelect = document.getElementById('enroll-camera-select');
-    const camera_id = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
+    const rawCamId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
+    const camera_id = rawCamId && rawCamId.startsWith('video:') ? null : rawCamId;
     const is_anchor = document.getElementById('enroll-locked-anchor-cb')?.checked ?? true;
     const notes = (document.getElementById('enroll-notes-input')?.value || '').trim();
     if (!camera_id && !enrollState.selectedCropBase64) {

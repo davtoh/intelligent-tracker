@@ -256,6 +256,7 @@
       tracker: aiConfig?.tracker || 'centroid',
       confidence: aiConfig?.confidence !== undefined ? aiConfig.confidence : 0.40,
       classes: aiConfig?.classes ?? null,
+      tracked_categories: aiConfig?.tracked_categories ?? null,
       armed: Boolean(aiConfig?.armed),
       enabled: editingCameraObj ? editingCameraObj.enabled !== false : true,
     };

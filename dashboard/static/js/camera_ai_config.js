@@ -81,6 +81,7 @@
       ).join('');
       trackerSelect.value = currentVal;
     }
+    window.CameraFormHelpers?.syncTrackedCategoriesUI?.(capabilities);
   }
 
   function syncConfidence(val) {
@@ -165,11 +166,13 @@
     const armedCb = document.getElementById('cam-armed-checkbox');
     const confVal = parseFloat(confInput?.value || '0.40');
     const classesRaw = (classesInput?.value || '').trim();
+    const catsRaw = (document.getElementById('cam-tracked-categories-input')?.value || '').trim();
     return {
       detector: detSelect?.value || 'yolov8',
       tracker: trackerSelect?.value || 'centroid',
       confidence: isNaN(confVal) ? 0.40 : Math.min(Math.max(confVal, 0.05), 1.00),
       classes: classesRaw ? classesRaw.split(',').map(s => s.trim()).filter(Boolean) : null,
+      tracked_categories: catsRaw ? catsRaw.split(',').map(s => s.trim()).filter(Boolean) : null,
       armed: Boolean(armedCb?.checked),
     };
   }
@@ -186,12 +189,12 @@
     syncConfidence(cam.confidence !== undefined && cam.confidence !== null ? cam.confidence : 0.40);
     const classesInput = document.getElementById('cam-classes-input');
     if (classesInput) classesInput.value = Array.isArray(cam.classes) ? cam.classes.join(', ') : (cam.classes || '');
+    const catsInput = document.getElementById('cam-tracked-categories-input');
+    if (catsInput) catsInput.value = Array.isArray(cam.tracked_categories) ? cam.tracked_categories.join(', ') : (cam.tracked_categories || '');
     const armedCb = document.getElementById('cam-armed-checkbox');
     if (armedCb) armedCb.checked = Boolean(cam.armed);
     const activeClasses = classesInput ? classesInput.value.trim() : '';
-    getPresetButtons().forEach(btn => {
-      btn.classList.toggle('active', (btn.getAttribute('data-classes') || '').trim() === activeClasses);
-    });
+    getPresetButtons().forEach(btn => btn.classList.toggle('active', (btn.getAttribute('data-classes') || '').trim() === activeClasses));
   }
 
   function resetValues() {
@@ -200,8 +203,7 @@
     const trackerSelect = document.getElementById('cam-tracker-select');
     if (trackerSelect) trackerSelect.value = 'centroid';
     syncConfidence(0.40);
-    const classesInput = document.getElementById('cam-classes-input');
-    if (classesInput) classesInput.value = '';
+    ['cam-classes-input', 'cam-tracked-categories-input'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const armedCb = document.getElementById('cam-armed-checkbox');
     if (armedCb) armedCb.checked = false;
     getPresetButtons().forEach(btn => btn.classList.remove('active'));
