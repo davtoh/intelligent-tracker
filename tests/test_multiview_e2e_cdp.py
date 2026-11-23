@@ -18,6 +18,7 @@ import websockets
 import dashboard.app as app_module
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import bind_app_state, clear_app_state, set_shutting_down
+from dashboard.services.multiview.session import get_active_session_count
 from intelligent_tracker.lifecycle import StreamLifecycleManager
 from intelligent_tracker.scenarios import ScenarioManager
 from scripts.cdp_inspect import find_chrome_executable
@@ -142,6 +143,7 @@ def _start_isolated_server(tmp_dir: str) -> tuple[uvicorn.Server, threading.Thre
 
 
 def _stop_isolated_server(srv: uvicorn.Server, th: threading.Thread, refs: dict[str, object], orig_init: object) -> None:
+    set_shutting_down(True)
     srv.should_exit = True
     th.join(timeout=5.0)
     app_module._init_runtime_services = orig_init
@@ -173,3 +175,4 @@ class TestMultiviewE2ECDP(unittest.TestCase):
             self.assertGreater(val.get("restoredDims", {}).get("w", 0), 0)
         finally:
             _stop_isolated_server(srv, th, refs, orig_init)
+        self.assertEqual(get_active_session_count(), 0)
