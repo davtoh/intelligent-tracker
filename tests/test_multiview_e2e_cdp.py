@@ -47,7 +47,7 @@ def _seed_isolated_configs(tmp_dir: str) -> tuple[str, str, str]:
     return cfg, db_p, scen
 
 
-def _wait_port_file(profile_dir: Path, timeout_s: float = 10.0) -> tuple[int, str]:
+def _wait_port_file(profile_dir: Path, proc: subprocess.Popen, timeout_s: float = 20.0) -> tuple[int, str]:
     port_file = profile_dir / "DevToolsActivePort"
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
@@ -55,8 +55,18 @@ def _wait_port_file(profile_dir: Path, timeout_s: float = 10.0) -> tuple[int, st
             lines = [ln.strip() for ln in port_file.read_text(encoding="utf-8").splitlines() if ln.strip()]
             if len(lines) >= 2:
                 return int(lines[0]), lines[1]
+        if proc.poll() is not None:
+            break
         time.sleep(0.1)
-    raise TimeoutError("Headless Chrome did not publish DevToolsActivePort")
+    stderr_out = ""
+    if proc.stderr is not None:
+        try:
+            stderr_out = proc.stderr.read().decode("utf-8", errors="replace").strip()
+        except Exception:
+            pass
+    raise TimeoutError(
+        f"Headless Chrome did not publish DevToolsActivePort (rc={proc.poll()}): {stderr_out[:500]}"
+    )
 
 
 async def _run_cdp_eval(url: str, js_code: str) -> dict:
@@ -64,11 +74,12 @@ async def _run_cdp_eval(url: str, js_code: str) -> dict:
         cmd = [
             CHROME_EXE, "--headless=new", "--remote-debugging-port=0", f"--user-data-dir={prof}",
             "--window-size=1440,900", "--autoplay-policy=no-user-gesture-required",
-            "--disable-gpu", "--no-sandbox", "--no-first-run", "--no-default-browser-check", url,
+            "--disable-gpu", "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+            "--no-first-run", "--no-default-browser-check", url,
         ]
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
-            port, ws_path = _wait_port_file(Path(prof))
+            port, ws_path = _wait_port_file(Path(prof), proc)
             async with websockets.connect(f"ws://127.0.0.1:{port}{ws_path}", max_size=20 * 1024 * 1024) as ws:
                 return await _eval_on_first_page(ws, js_code)
         finally:
@@ -77,6 +88,8 @@ async def _run_cdp_eval(url: str, js_code: str) -> dict:
                 proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 proc.kill()
+            if proc.stderr is not None:
+                proc.stderr.close()
 
 
 async def _eval_on_first_page(ws, js_code: str) -> dict:
