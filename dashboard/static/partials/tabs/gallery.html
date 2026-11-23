@@ -15,12 +15,15 @@
               <button class="filter-pill" data-category="person">Customer / Guest</button>
             </div>
           </div>
-          <div class="toolbar-right">
+          <div class="toolbar-right" style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-outline" id="btn-manage-categories">🏷️ Badges</button>
             <button class="btn btn-primary" id="btn-enroll-modal">
               ➕ Enroll New Identity
             </button>
           </div>
         </div>
+
+        <div id="gallery-category-crud-panel" class="glass-panel" style="display: none; padding: 12px 16px; margin-bottom: 12px;"></div>
 
         <!-- Gallery Cards Grid -->
         <div class="gallery-grid" id="entity-gallery-grid">

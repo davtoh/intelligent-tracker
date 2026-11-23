@@ -33,13 +33,14 @@
   function buildEntityCardHtml(ent) {
     const thumb = ent.thumbnail_url || '/static/avatar-placeholder.svg';
     const cat = ent.category || 'person';
+    const badgeHtml = window.CategoryBadgeManager?.renderBadgeHtml ? window.CategoryBadgeManager.renderBadgeHtml(cat) : `<span class="badge-category ${cat}">${escapeHtml(cat)}</span>`;
     return `
       <div class="glass-panel entity-card" data-id="${ent.id}">
         <div class="entity-card-top">
           <img class="entity-avatar" src="${thumb}" onerror="this.onerror=null;this.src='/static/avatar-placeholder.svg';" alt="${escapeHtml(ent.name)}" />
           <div class="entity-meta">
             <div class="entity-name">${escapeHtml(ent.name)}</div>
-            <span class="badge-category ${cat}">${escapeHtml(cat)}</span>
+            ${badgeHtml}
           </div>
         </div>
         <div class="entity-stats">
@@ -118,6 +119,7 @@
       if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal();
       else window.InteractiveCanvas?.openTagModal?.(null);
     });
+    window.CategoryBadgeManager?.init?.(renderGalleryGrid);
   }
 
   async function loadTimelineFilters() {

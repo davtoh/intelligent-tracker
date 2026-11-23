@@ -190,6 +190,18 @@ class EnrollmentRequest(BaseModel):
     camera_id: Optional[str] = Field("cam_01", description="Camera channel identifier for freeze-frame crop")
     bbox: Optional[List[int]] = Field(None, description="Bounding box [x, y, w, h] from freeze-frame")
     crop_base64: Optional[str] = Field(None, description="Optional Base64-encoded image crop")
+    merge_entity_id: Optional[int] = Field(None, description="Optional existing entity ID to merge signature into")
+    force_create_new: Optional[bool] = Field(False, description="Force creating a new entity even if name/visual collides")
+
+
+class CollisionCheckRequest(BaseModel):
+    camera_id: Optional[str] = Field(None, description="Optional camera channel identifier")
+    video_filename: Optional[str] = Field(None, description="Optional recorded video filename")
+    timestamp_sec: Optional[float] = Field(None, description="Optional timestamp in recorded video")
+    bbox: Optional[List[int]] = Field(None, description="Bounding box [x, y, w, h]")
+    crop_base64: Optional[str] = Field(None, description="Optional Base64-encoded image crop")
+    threshold: float = Field(0.72, ge=0.0, le=1.0, description="Cosine similarity collision threshold")
+    top_k: int = Field(3, ge=1, le=20, description="Maximum collision candidates to return")
 
 
 class ReviewConfirmRequest(BaseModel):
@@ -214,6 +226,13 @@ class ReviewDismissRequest(BaseModel):
 
 class CustomCategoryCreateRequest(BaseModel):
     id: str = Field(..., min_length=1, description="Unique category slug")
+    name: str = Field(..., min_length=1, description="Human readable category name")
+    color: Optional[str] = Field("#3B82F6", description="HEX color string")
+    badge_icon: Optional[str] = Field("", description="Badge icon identifier")
+    description: Optional[str] = Field("", description="Category description")
+
+
+class CustomCategoryUpdateRequest(BaseModel):
     name: str = Field(..., min_length=1, description="Human readable category name")
     color: Optional[str] = Field("#3B82F6", description="HEX color string")
     badge_icon: Optional[str] = Field("", description="Badge icon identifier")

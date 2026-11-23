@@ -149,6 +149,7 @@
     if (!options.fromRoi && Date.now() - lastRoiPointerMs < 250) return;
     const modalTag = el('modal-tag-entity');
     if (!modalTag) return;
+    window.CategoryBadgeManager?.syncSelect?.(el('tag-category-select'));
     categoryTouched = false;
     modalTag.style.display = 'flex';
     const bbox = options.bbox || track?.bbox || null;

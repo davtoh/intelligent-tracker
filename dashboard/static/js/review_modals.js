@@ -28,6 +28,7 @@
     const modal = document.getElementById('modal-quick-enroll-entity');
     const inputId = document.getElementById('quick-enroll-item-id');
     const inputName = document.getElementById('quick-enroll-name-input');
+    window.CategoryBadgeManager?.syncSelect?.(document.getElementById('quick-enroll-category-select'));
     if (inputId) inputId.value = itemId;
     if (inputName) {
       inputName.value = '';

@@ -12,28 +12,26 @@
     freezeFrameDataUrl: null,
     selectedBbox: null,
     selectedCropBase64: null,
+    mergeEntityId: null,
+    forceCreateNew: false,
   };
 
   function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return str ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
   }
 
   function showToast(title, body, type = 'info') {
-    if (typeof window.showToast === 'function') {
-      window.showToast(title, body, type);
-    } else {
-      alert(`${title}: ${body}`);
-    }
+    if (typeof window.showToast === 'function') window.showToast(title, body, type);
+    else alert(`${title}: ${body}`);
   }
 
   async function loadCategoriesDropdown(selectElem) {
     if (!selectElem) return;
+    if (window.CategoryBadgeManager?.fetchCategories) {
+      await window.CategoryBadgeManager.fetchCategories();
+      window.CategoryBadgeManager.syncSelect(selectElem);
+      return;
+    }
     try {
       const res = await fetch('/api/rsac/categories');
       if (res.ok) {
@@ -76,7 +74,11 @@
     enrollState.freezeFrameDataUrl = null;
     enrollState.selectedBbox = null;
     enrollState.selectedCropBase64 = null;
+    enrollState.mergeEntityId = null;
+    enrollState.forceCreateNew = false;
     if (form?.reset) form.reset();
+    const banner = document.getElementById('enroll-collision-banner');
+    if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
     const previewBox = document.getElementById('enroll-crop-preview-box');
     if (previewBox) previewBox.style.display = 'none';
     if (canvas) canvas.style.display = 'none';
@@ -224,14 +226,30 @@
     }
     return {
       name, category, security_role, notes, is_anchor, camera_id,
-      crop_base64: enrollState.selectedCropBase64,
-      bbox: enrollState.selectedBbox,
+      crop_base64: enrollState.selectedCropBase64, bbox: enrollState.selectedBbox,
+      merge_entity_id: enrollState.mergeEntityId, force_create_new: enrollState.forceCreateNew,
     };
+  }
+
+  async function runCollisionGuard(payload, form, modal, canvas, placeholder) {
+    if (enrollState.mergeEntityId || enrollState.forceCreateNew) return false;
+    try {
+      const cRes = await fetch('/api/enroll/check-collision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ camera_id: payload.camera_id, bbox: payload.bbox, crop_base64: payload.crop_base64 }) });
+      const col = cRes.ok ? await cRes.json() : null;
+      const top = col?.has_collision ? col.matches?.[0] : null;
+      const banner = top ? document.getElementById('enroll-collision-banner') : null;
+      if (!banner) return false;
+      banner.style.display = 'block';
+      banner.innerHTML = `<strong>Possible duplicate:</strong> ${escapeHtml(top.name)} (${Math.round(top.similarity * 100)}%) <button type="button" class="btn btn-xs btn-primary" id="btn-enroll-merge-existing">Merge into ${escapeHtml(top.name)}</button> <button type="button" class="btn btn-xs btn-outline" id="btn-enroll-create-new">Create New</button>`;
+      document.getElementById('btn-enroll-merge-existing')?.addEventListener('click', () => { enrollState.mergeEntityId = top.entity_id; banner.style.display = 'none'; submitEnrollment(form, modal, canvas, placeholder); });
+      document.getElementById('btn-enroll-create-new')?.addEventListener('click', () => { enrollState.forceCreateNew = true; banner.style.display = 'none'; submitEnrollment(form, modal, canvas, placeholder); });
+      return true;
+    } catch (e) { console.warn('Collision check skipped:', e); return false; }
   }
 
   async function submitEnrollment(form, modal, canvas, placeholder) {
     const payload = buildEnrollmentPayload();
-    if (!payload) return;
+    if (!payload || await runCollisionGuard(payload, form, modal, canvas, placeholder)) return;
     const submitBtn = document.getElementById('btn-submit-enrollment');
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Extracting Biometrics...'; }
     try {
