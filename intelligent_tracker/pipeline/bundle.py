@@ -22,6 +22,7 @@ from intelligent_tracker.tracker import TrackerFactory
 from intelligent_tracker.video import PipelineVideoWriter, VideoSource
 from intelligent_tracker.world import (
     CameraNode,
+    OwnershipAssociationEngine,
     WorldEntityBridge,
     WorldGraph,
     WorldRuleEngine,
@@ -336,6 +337,8 @@ def build_world(
     if gallery_matcher is not None:
         gallery_matcher.camera_id = config.camera_id
         gallery_matcher.world_bridge = bridge
+    if getattr(graph, "ownership_engine", None) is None:
+        graph.ownership_engine = OwnershipAssociationEngine(graph)
     rule_engine: WorldRuleEngine | None = None
     if event_bus is not None:
         rule_engine = WorldRuleEngine(graph, event_bus)

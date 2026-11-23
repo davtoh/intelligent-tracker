@@ -24,12 +24,12 @@
 ---
 
 ## Step 2: Hybrid Persistent-Entity Tracking, Occlusion Coasting & Person+Bag Ownership (`Ideas 2–4`, `BE-3`, `ADR-07`)
-- [ ] **Goal**: Eliminate detection/identity flickering during brief misses and occlusions, enforce class & appearance consistency during track association, and track person+bag ownership and dropped/left-behind items in `WorldGraph`.
-- [ ] **Target Scope**:
-  - [ ] **Persistent Coasting & Re-ID Retention**: Enable configurable Kalman/SORT coasting (`confirmed | coasting | occluded`, ~1.5s grace) in `SortTracker`/`CentroidTracker`; preserve `Track` attributes (`is_cluttered`, `clutter_partner_id`) across frames instead of reinstantiating fresh `Track` objects; keep `GalleryMatcher._track_features` and `WorldEntityBridge` bindings alive while coasting/occluded.
-  - [ ] **Class-Consistency & Appearance-Assisted Association**: Prevent class swaps (`person` <-> `chair`) and integrate lightweight appearance similarity + `SessionGalleryManager` re-linking across frames and `VideoIndexer` / `CachedReplayProvider` sampling gaps.
-  - [ ] **Person+Bag `WorldGraph` Associations**: Add `CARRIES` / `OWNED_BY` edges in `WorldGraph` linking person tracks to carry-on items (`backpack`, `handbag`, `suitcase`) and emit unattended/dropped-item events with location & timestamp when separated beyond threshold.
-- [ ] **Definition of Done**: Multi-frame dropout, occlusion cross-over, and person+bag drop regression tests + probes pass without premature Re-ID purges or ID swaps.
+- [x] **Goal**: Eliminate detection/identity flickering during brief misses and occlusions, enforce class & appearance consistency during track association, and track person+bag ownership and dropped/left-behind items in `WorldGraph`.
+- [x] **Target Scope**:
+  - [x] **Persistent Coasting & Re-ID Retention**: Enable configurable Kalman/SORT coasting (`confirmed | coasting | occluded`, ~1.5s grace) in `SortTracker`/`CentroidTracker`; preserve `Track` attributes (`is_cluttered`, `clutter_partner_id`) across frames instead of reinstantiating fresh `Track` objects; keep `GalleryMatcher._track_features` and `WorldEntityBridge` bindings alive while coasting/occluded.
+  - [x] **Class-Consistency & Appearance-Assisted Association**: Prevent class swaps (`person` <-> `chair`) and integrate lightweight appearance similarity + `SessionGalleryManager` re-linking across frames and `VideoIndexer` / `CachedReplayProvider` sampling gaps.
+  - [x] **Person+Bag `WorldGraph` Associations**: Add `CARRIES` / `OWNED_BY` edges in `WorldGraph` linking person tracks to carry-on items (`backpack`, `handbag`, `suitcase`) and emit unattended/dropped-item events with location & timestamp when separated beyond threshold.
+- [x] **Definition of Done**: Multi-frame dropout, occlusion cross-over, and person+bag drop regression tests + probes pass without premature Re-ID purges or ID swaps.
 
 ---
 

@@ -19,6 +19,7 @@ from intelligent_tracker.events.types import (
     RestrictedEntityAlert,
     ReviewItemQueuedEvent,
     TripwireCrossEvent,
+    UnattendedItemAlert,
     ZoneEvent,
     crop_to_base64,
     decode_snapshot_base64,
@@ -42,6 +43,7 @@ __all__ = [
     "RSACViolationEvent",
     "PetActivityEvent",
     "ReviewItemQueuedEvent",
+    "UnattendedItemAlert",
     # Event Bus
     "EventBus",
     # Dispatchers

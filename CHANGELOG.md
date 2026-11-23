@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-23] feat: Step 2 Milestone 3: Person+Bag WorldGraph Ownership and Unattended-Item Alerts
+- **Type**: feat
+- **Summary**: Added WorldEdge/WorldEdgeRegistry, OwnershipAssociationEngine, UnattendedItemAlert with EventFTSIndex formatting, and live governance/telemetry wiring.
+- **Files** (13):
+  - `dashboard/services/stream_telemetry.py`
+  - `intelligent_tracker/events/__init__.py`
+  - `intelligent_tracker/events/types.py`
+  - `intelligent_tracker/memory/_event_formatters.py`
+  - `intelligent_tracker/pipeline/bundle.py`
+  - `intelligent_tracker/pipeline/post_detection_governance.py`
+  - `intelligent_tracker/world/__init__.py`
+  - `intelligent_tracker/world/_lifecycle.py`
+  - ... (+5 more)
+- **Verification**: .venv/Scripts/python.exe -m unittest discover tests
+
 ## [2026-11-23] fix: Step 1: Critical Bug Remediations & Tooling Elevation
 - **Type**: fix
 - **Summary**: Resolved Findings 1-7 and BE-1..BE-4 across backend/frontend, elevated SPA 9-tab CDP and Video Studio probes, and added broken-img, script wrap-order, query-param, and repo-rollback rules to system-diagnostics.
@@ -123,21 +138,6 @@
   - `intelligent_tracker/pipeline/motion_gate.py`
   - `tests/test_analytics_scheduler.py`
 - **Verification**: MPLBACKEND=Agg python -m unittest tests.test_analytics_scheduler tests.test_tracker tests.test_processing_mode tests.test_processing_mode_invariants tests.test_step3_processing_mode_api tests.test_modernization
-
-## [2026-11-19] feat: Step 1.5 Milestone 2: Live Monitor vs Video Studio Synchronization & Diagnostic Clarity
-- **Type**: feat
-- **Summary**: Add AsyncInferenceWorker frame_seq/lag provenance, FileDetectionReplayProvider for pre-indexed video_file cameras, #live-stream-img ROI tagger fix, source_resolution scaling, and opt-in burned annotation toggle.
-- **Files** (14):
-  - `.TODO/realtime_multiview_master_roadmap.md`
-  - `.TODO/step_1_5_cross_platform_pipeline_hardening.md`
-  - `dashboard/services/async_inference_worker.py`
-  - `dashboard/services/stream_telemetry.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/static/app.js`
-  - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/live_player.js`
-  - ... (+6 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (839 passed)
 
 ## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
 - **Type**: fix

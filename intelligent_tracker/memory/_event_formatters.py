@@ -13,6 +13,7 @@ from intelligent_tracker.events.types import (
     RestrictedEntityAlert,
     ReviewItemQueuedEvent,
     TripwireCrossEvent,
+    UnattendedItemAlert,
     ZoneEvent,
 )
 from intelligent_tracker.world.events import EntityStateChangedEvent
@@ -160,6 +161,41 @@ def format_generic_event(event: BaseEvent) -> dict[str, Any]:
     }
 
 
+def format_unattended_item_event(event: UnattendedItemAlert) -> dict[str, Any]:
+    """Normalize an UnattendedItemAlert into a timeline document payload."""
+    loc = event.location or event.camera_id
+    who = event.owner_name or (f"Entity {event.owner_entity_id}" if event.owner_entity_id is not None else "Unknown owner")
+    summary = (
+        event.message
+        or f"Unattended {event.item_label} (track {event.bag_track_id}) left at {loc} by {who} for {event.unattended_duration_s:.1f}s."
+    )
+    return {
+        "event_type": event.event_type or "unattended_item",
+        "entity_id": event.owner_entity_id,
+        "entity_name": event.owner_name,
+        "category": "unattended_item",
+        "camera_id": event.camera_id,
+        "zone_id": loc,
+        "timestamp": event.timestamp,
+        "confidence": 1.0,
+        "title": f"Unattended {event.item_label}: {loc}",
+        "summary": summary,
+        "tags": f"unattended,alert,{event.item_label},{loc}",
+        "metadata": {
+            "location": loc,
+            "global_xy": event.global_xy,
+            "bbox": event.bbox,
+            "owner_entity_id": event.owner_entity_id,
+            "owner_world_entity_id": event.owner_world_entity_id,
+            "owner_name": event.owner_name,
+            "bag_track_id": event.bag_track_id,
+            "item_label": event.item_label,
+            "unattended_duration_s": event.unattended_duration_s,
+            "severity": event.severity,
+        },
+    }
+
+
 def normalize_event_doc(event: Any) -> dict[str, Any] | None:
     """Convert any supported pipeline/world event into a timeline document dict."""
     doc: dict[str, Any] | None = None
@@ -171,6 +207,8 @@ def normalize_event_doc(event: Any) -> dict[str, Any] | None:
         doc = format_entity_state_event(event)
     elif isinstance(event, EntityIdentifiedEvent):
         doc = format_identified_event(event)
+    elif isinstance(event, UnattendedItemAlert):
+        doc = format_unattended_item_event(event)
     elif isinstance(event, (RSACViolationEvent, IntrusionAlert, RestrictedEntityAlert)):
         doc = format_security_event(event)
     elif isinstance(event, (PetActivityEvent, OccupancyThresholdEvent, ReviewItemQueuedEvent, BaseEvent)):
