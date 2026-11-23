@@ -6,6 +6,8 @@ RSAC, pet-whitelist, EventBus, and WorldEntityBridge governance and resetting
 per-track dwell/crossing state cleanly on video loop wrap-around.
 """
 
+from contextlib import nullcontext
+import threading
 import time
 from typing import Any
 
@@ -15,6 +17,35 @@ from intelligent_tracker.pipeline.post_detection_governance import (
     evaluate_tracks_governance,
     resolve_camera_id,
 )
+
+
+def reset_bundle_loop_state(bundle: Any, now: float, *, reset_tracker: bool = False) -> None:
+    """Clear per-track zone dwell, tripwire centroid, and optional tracker state on loop wrap."""
+    if bundle is None:
+        return
+    lock = getattr(bundle, "_governance_lock", None)
+    with lock if lock is not None else nullcontext():
+        if reset_tracker:
+            tracker = getattr(bundle, "tracker", None)
+            if tracker is not None:
+                if hasattr(tracker, "reset") and callable(tracker.reset):
+                    tracker.reset()
+                elif isinstance(getattr(tracker, "tracks", None), dict):
+                    tracker.tracks.clear()
+        analytics = getattr(bundle, "analytics", None)
+        if analytics is not None:
+            prev = getattr(analytics, "_prev_centroids", None)
+            if isinstance(prev, dict):
+                prev.clear()
+            for zone in getattr(analytics, "zones", {}).values():
+                occ = getattr(zone, "current_occupants", None)
+                if isinstance(occ, dict):
+                    occ.clear()
+        bridge = getattr(bundle, "world_bridge", None)
+        if bridge is not None and hasattr(bridge, "prune_stale_tracks"):
+            bridge.prune_stale_tracks(
+                camera_id=resolve_camera_id(bundle), active_track_ids=set(), timestamp=now
+            )
 
 
 class CachedReplayProvider:
@@ -72,29 +103,19 @@ class CachedReplayProvider:
     def reset_loop_state(self, bundle: Any, now: float) -> None:
         """Clear per-track zone dwell and tripwire centroid state on video loop wrap."""
         self.loop_reset_count += 1
+        reset_bundle_loop_state(bundle, now, reset_tracker=False)
         if bundle is None:
             return
-        analytics = getattr(bundle, "analytics", None)
-        if analytics is not None:
-            prev = getattr(analytics, "_prev_centroids", None)
-            if isinstance(prev, dict):
-                prev.clear()
-            for zone in getattr(analytics, "zones", {}).values():
-                occ = getattr(zone, "current_occupants", None)
-                if isinstance(occ, dict):
-                    occ.clear()
-        bridge = self._world_bridge or getattr(self._processor, "world_bridge", None) or getattr(bundle, "world_bridge", None)
-        if bridge is not None and hasattr(bridge, "prune_stale_tracks"):
+        bridge = self._world_bridge or getattr(self._processor, "world_bridge", None)
+        if bridge is not None and bridge is not getattr(bundle, "world_bridge", None) and hasattr(bridge, "prune_stale_tracks"):
             bridge.prune_stale_tracks(
-                camera_id=resolve_camera_id(bundle),
-                active_track_ids=set(),
-                timestamp=now,
+                camera_id=resolve_camera_id(bundle), active_track_ids=set(), timestamp=now
             )
 
     def build_step_result(
         self,
         frame: Any,
-        now: float,
+        now: float | None,
         frame_seq: int,
         fps: float = 0.0,
         *,
@@ -103,34 +124,30 @@ class CachedReplayProvider:
         """Return zero-GPU FrameStepResult with live rule governance, or None if unindexed."""
         if not self.replay.ensure_loaded():
             return None
+        wall_now = time.time() if now is None else float(now)
         t_start = time.perf_counter()
         resolved_t = self.replay.resolve_media_time(frame_seq, media_time_s=media_time_s)
         bundle, topology, bridge = self._resolve_context()
+        if bundle is not None and getattr(bundle, "_governance_lock", None) is None:
+            bundle._governance_lock = threading.Lock()
         if self._detect_loop_wrap(frame_seq, resolved_t):
-            self.reset_loop_state(bundle, now)
-        self._last_media_time_s = resolved_t
-        self._last_frame_seq = int(frame_seq)
-
-        tracks: dict[int, ReplayTrack] = (
-            self.replay.lookup_tracks(frame_seq, frame.shape, media_time_s=resolved_t) or {}
-        )
+            self.reset_loop_state(bundle, wall_now)
+        self._last_media_time_s, self._last_frame_seq = resolved_t, int(frame_seq)
+        tracks: dict[int, ReplayTrack] = self.replay.lookup_tracks(frame_seq, frame.shape, media_time_s=resolved_t) or {}
         analytics_res, identifications = ({}, [])
         if bundle is not None:
-            analytics_res, identifications = evaluate_tracks_governance(
-                bundle, frame, tracks, now, topology=topology, world_bridge=bridge, run_reid=self._run_reid
-            )
-
+            lock = getattr(bundle, "_governance_lock", None)
+            with lock if lock is not None else nullcontext():
+                analytics_res, identifications = evaluate_tracks_governance(
+                    bundle, frame, tracks, wall_now, topology=topology, world_bridge=bridge, run_reid=self._run_reid
+                )
         elapsed_ms = max(0.0, (time.perf_counter() - t_start) * 1000.0)
         resolved_fps = float(fps) if float(fps or 0.0) > 0 else float(getattr(self.replay, "_source_fps", 0.0) or 0.0)
-        return _stamp_replay_result(
-            FrameStepResult(
-                frame=frame, tracks=tracks, analytics=analytics_res,
-                identifications=identifications, timestamp=now, fps=resolved_fps,
-                frame_count=frame_seq, processing_ms=elapsed_ms,
-            ),
-            frame_seq=frame_seq,
-            now=now,
+        res = FrameStepResult(
+            frame=frame, tracks=tracks, analytics=analytics_res, identifications=identifications,
+            timestamp=wall_now, fps=resolved_fps, frame_count=frame_seq, processing_ms=elapsed_ms,
         )
+        return _stamp_replay_result(res, frame_seq=frame_seq, now=wall_now)
 
 
 def _stamp_replay_result(res: FrameStepResult, *, frame_seq: int, now: float) -> FrameStepResult:

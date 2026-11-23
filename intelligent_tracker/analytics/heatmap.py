@@ -151,6 +151,13 @@ class OccupancyHeatmap:
         if not np.any(mask):
             return frame
 
+        target_h, target_w = frame.shape[:2]
+        if norm_uint8.shape[:2] != (target_h, target_w):
+            norm_uint8 = cv2.resize(norm_uint8, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+            mask = cv2.resize(
+                mask.astype(np.uint8), (target_w, target_h), interpolation=cv2.INTER_NEAREST
+            ) > 0
+
         heat_bgr = cv2.applyColorMap(norm_uint8, cmap)
         # Alpha blend only in active heat mask regions to preserve clean background
         out_frame = frame.copy()

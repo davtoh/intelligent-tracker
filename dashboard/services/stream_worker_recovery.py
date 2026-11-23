@@ -8,8 +8,12 @@ dual-buffer (annotated + raw) diagnostic error-card publishing for StreamWorker.
 """
 
 import logging
+import sys
+import time
 from typing import Any
 
+from dashboard.services.async_inference_worker import build_live_step_result, build_worker_step_result
+from dashboard.services.cached_replay_provider import reset_bundle_loop_state
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.services.diagnostic_bridge import capture_runtime_exception
 
@@ -80,3 +84,40 @@ def handle_worker_exception(
         )
     manager._stop_event.wait(timeout=0.05)
     return consecutive_errors
+
+
+def step_worker_vs_frame(
+    worker: Any,
+    vs: Any,
+    async_worker: Any,
+    processor: Any,
+    replay: Any,
+    frame_seq: int,
+    last_loop_count: int,
+    consecutive_empty: int,
+    consecutive_errors: int,
+) -> tuple[int, int, int, int]:
+    """Read one VideoSource frame, handle loop wraps, and step the StreamWorker pipeline."""
+    ret, frame = vs.read(timeout=1.0)
+    if not ret or frame is None:
+        consecutive_empty, _ = worker._handle_empty_frame(vs, consecutive_empty)
+        return frame_seq, last_loop_count, consecutive_empty, consecutive_errors
+    consecutive_empty, frame_seq = 0, frame_seq + 1
+    raw_loops = getattr(vs, "loop_count", 0)
+    vs_loops = raw_loops if isinstance(raw_loops, int) and not isinstance(raw_loops, bool) else 0
+    if vs_loops > last_loop_count:
+        last_loop_count = vs_loops
+        if not replay.is_active():
+            reset_bundle_loop_state(getattr(processor, "bundle", None), time.time(), reset_tracker=True)
+    is_rec = bool(getattr(worker.manager, "is_recording", False))
+    sw_mod = sys.modules.get("dashboard.services.stream_worker")
+    live_step_fn = getattr(sw_mod, "build_live_step_result", build_live_step_result)
+    step_res = build_worker_step_result(
+        worker.manager, async_worker, frame, frame_seq, worker._should_run_vision_step(is_rec),
+        is_rec, step_fn=live_step_fn,
+    )
+    if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
+        vs_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)
+        CameraHealthManager().set_online(worker.manager.camera_id, fps=vs_fps if vs_fps > 0 else (step_res.fps or 0.0))
+    worker._process_single_frame(step_res)
+    return frame_seq, last_loop_count, consecutive_empty, 0

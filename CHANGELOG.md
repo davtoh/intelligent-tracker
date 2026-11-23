@@ -1,5 +1,73 @@
 # Changelog
 
+## [2026-11-21] feat: Step 4 & Integration Hardening Master Roadmap Complete (P0-P3)
+- **Type**: feat
+- **Summary**: Hardened 9-tab headless CDP probe + Chrome-gated E2E test, aligned legacy Node VM suites with GridTileOverlay & Zero-CLS HUD hysteresis, and refreshed CURRENT_ARCHITECTURE.md.
+- **Files** (11):
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+  - `dashboard/static/js/bev_minimap.js`
+  - `dashboard/static/js/telemetry.js`
+  - `dashboard/static/studio.js`
+  - `docs/architecture/CURRENT_ARCHITECTURE.md`
+  - `tests/test_camera_grid_teardown.py`
+  - `tests/test_camera_recording_ui.py`
+  - `tests/test_dashboard_ui.py`
+  - ... (+3 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
+## [2026-11-21] feat: Step 3: P1 Pipeline, Multiview Telemetry, Video Studio & Persistence Hardening
+- **Type**: feat
+- **Summary**: Completed P1-6..P1-13, /ws/multiview JSON telemetry, P3 edge cases, and TRC-018
+- **Files** (32):
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+  - `dashboard/routers/analytics.py`
+  - `dashboard/routers/tagging.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/services/entity_tagger.py`
+  - `dashboard/services/roi_recognition_service.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+24 more)
+
+## [2026-11-21] fix: Step 2 M2: Lock-Order Deadlock Elimination, Pool-Scoped Singletons & CameraConfigStore Hardening
+- **Type**: fix
+- **Summary**: Eliminated ProcessingModeService<->StreamRecordingController AB-BA deadlock (P0-2), guarded all pool.streams accesses with snapshot_pool_streams/_snapshot_pool_streams, hardened CameraConfigStore.load_cameras() for {'cameras': ...} payloads (TRC-017), wired pool-scoped EventBus/WorldGraph/ConfidenceEngine/EventFTSIndex singletons into CameraPool/PipelineEngine/app.state (P0-5), added SQLite rollback-on-error in memory_repo.py, and upgraded cold_boot_world_probe.py + test_step2_pool_singletons_and_locks.py.
+- **Files** (24):
+  - `.diagnostics/probes/cold_boot_world_probe.py`
+  - `dashboard/app.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/dependencies.py`
+  - `dashboard/routers/camera_recording.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/videos.py`
+  - ... (+16 more)
+- **Verification**: 893/893 unittest discover tests OK; cold_boot_world_probe PASS; test_step2_pool_singletons_and_locks + test_dashboard_di + test_step3_architecture_budgets 18/18 OK
+
+## [2026-11-21] feat: Step 1: Diagnostics Upgrades, Unmocked Probes & Red Baseline
+- **Type**: feat
+- **Summary**: Upgraded system-diagnostics/frontier-architect tooling, added ruff/mypy dev tooling, hardened 4 unmocked workspace probes (including spa_nine_tab_cdp_probe), resolved stale test traces, and captured verified Red baseline.
+- **Files** (3):
+  - `.diagnostics/probes/cold_boot_world_probe.py`
+  - `.diagnostics/probes/replay_pipeline_probe.py`
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+- **Verification**: python -m unittest discover tests
+
+## [2026-11-20] fix: Integration Diagnostics Remediation Milestone 3
+- **Type**: fix
+- **Summary**: Fixed scrubber reports/media URLs, entities+alerts timeline extraction, BEV telemetry wiring, Studio video overlay gating, armed UI/AsyncInferenceWorker sync, boot stream gating, and zero active scan/surface defects
+- **Files** (22):
+  - `.TODO/integration_diagnostics_and_remediation_plan.md`
+  - `dashboard/camera_pool.py`
+  - `dashboard/services/async_inference_worker.py`
+  - `dashboard/services/process_supervisor.py`
+  - `dashboard/services/stream_worker.py`
+  - `dashboard/static/app.js`
+  - `dashboard/static/camera_manager.js`
+  - `dashboard/static/js/bev_minimap.js`
+  - ... (+14 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-19] feat: Step 2 Milestone 3: Scheduler HUD, Schema Telemetry & Docs
 - **Type**: feat
 - **Summary**: Extended ProcessingModeStatusResponse with scheduler telemetry, fixed data.camera_states lookup in processing_mode.js, added scheduler_hud.js tier and load-shed pills, documented scheduler and CachedReplayProvider in dashboard.rst and AGENTS.md, and verified 858 tests plus Sphinx -W.
@@ -72,34 +140,6 @@
   - ... (+7 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
 
-## [2026-11-17] fix: Cold-Boot cam_01 SSOT & Focus Reconciliation
-- **Type**: fix
-- **Summary**: Removed remaining hardcoded cam_01 fallbacks and eager stream attributes across Studio, Recording, Enrollment, Interactive Canvas, Gallery Timeline, Scenario Modals, and StreamPoolCoordinator. Seeded initial focused_camera_id from the first enabled camera on StreamPoolCoordinator start/restore, delegated CameraAIConfig.resolveInitialCameraId to LivePlayer.attachLiveStream(), and reconciled null server focus in ProcessingModeUI.setAvailableCameras().
-- **Files** (21):
-  - `AGENTS.md`
-  - `dashboard/services/processing_mode_service.py`
-  - `dashboard/services/stream_pool_coordinator.py`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/camera_recording.js`
-  - `dashboard/static/js/gallery_timeline.js`
-  - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/live_player.js`
-  - ... (+13 more)
-- **Verification**: python -m unittest discover tests (779 tests OK) + diagnose.py ui --live --capture-runtime (0 exceptions, 0 networkErrors)
-
-## [2026-11-17] fix: Unify active camera SSOT across frontend modules and eliminate cam_01 stub leakage
-- **Type**: fix
-- **Summary**: Initialize app.js and camera_manager.js from it_focused_camera_id/null instead of cam_01, validate syncCameraFocus against ProcessingModeUI.setAvailableCameras(), and gate LivePlayer.syncCameraFocus on resolved camera IDs.
-- **Files** (7):
-  - `CHANGELOG.md`
-  - `dashboard/static/app.js`
-  - `dashboard/static/camera_manager.js`
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation tests.test_step2_tab_scoped_streams tests.test_camera_grid_teardown
-
 ## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
 - **Type**: fix
 - **Summary**: Initialize state.focusedCameraId from localStorage (it_focused_camera_id) instead of hardcoded cam_01 in processing_mode.js, omit focused_camera_id from init() when unset, and restore the last focused camera in CameraAIConfig.resolveInitialCameraId().
@@ -108,39 +148,3 @@
   - `dashboard/static/js/processing_mode.js`
   - `tests/test_step4_processing_mode_ui.py`
 - **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation
-
-## [2026-11-17] fix: Stop init() from clobbering focused_camera_id and add no-cache for /static
-- **Type**: fix
-- **Summary**: Omit default cam_01 focused_camera_id from processing_mode.js init() POST so page load never overwrites the resolved camera, remove ?v=2 from index.html, and set Cache-Control: no-cache on /static/* in dashboard/app.py.
-- **Files** (5):
-  - `CHANGELOG.md`
-  - `dashboard/app.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step3_architecture_budgets tests.test_dashboard_di
-
-## [2026-11-17] fix: Fix stale hidden active_tab and browser-cache recovery in processing_mode.js
-- **Type**: fix
-- **Summary**: Unconditionally sync active_tab on visible setMode/syncCameraFocus/window-focus and cache-bust processing_mode.js?v=2 so background/other-tab hidden state never blocks vision overlays.
-- **Files** (4):
-  - `CHANGELOG.md`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: MPLBACKEND=Agg .venv\\Scripts\\python.exe -m unittest discover tests
-
-## [2026-11-17] fix: Fix stale hidden active_tab blocking vision overlays on mode/grid switch
-- **Type**: fix
-- **Summary**: Track serverActiveTab/serverFocusedCameraId in processing_mode.js so visible tabs recover from stale server active_tab=hidden on init, setMode, and syncCameraFocus without requiring tab bounce.
-- **Files** (1):
-  - `dashboard/static/js/processing_mode.js`
-- **Verification**: python -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode
-
-## [2026-11-16] fix: Step 4 Milestone 2: Closed-Loop Full-Suite, Modularity & Browser CDP Verification
-- **Type**: fix
-- **Summary**: Fixed standalone StreamManager hibernation in ProcessingModeService.should_hibernate_camera and isolated FrameProcessor.step spy in test_step5_batch_frame_processor; verified 760/760 unit tests, 0 latent defects, and headless CDP layout + 1x1/2x2/3x3 grid streaming.
-- **Files** (2):
-  - `dashboard/services/processing_mode_service.py`
-  - `tests/test_step5_batch_frame_processor.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

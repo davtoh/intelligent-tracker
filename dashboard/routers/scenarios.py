@@ -273,6 +273,12 @@ async def delete_homography_route(
     if mgr:
         mgr.homography = c_entry["homography"]
 
+    from intelligent_tracker.world.coordinates import clear_homography_from_world
+
+    wg = getattr(sm, "world_graph", None) or getattr(request.app.state, "world_graph", None)
+    cm = getattr(sm, "coordinate_mapper", None) or getattr(wg, "coordinate_mapper", None)
+    clear_homography_from_world(wg, cm, camera_id)
+
     return {"status": "success", "deleted": camera_id}
 
 

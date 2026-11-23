@@ -79,12 +79,13 @@
 
     async pushFrame(jpegBytes, seq, captureTsMs = 0) {
       if (this.destroyed || !this.canvas || !this.ctx) return false;
-      if (!isNewerSeq(seq, this.lastDrawnSeq)) return false;
+      const isRestartReset = this.lastDrawnSeq !== null && seq < this.lastDrawnSeq && captureTsMs > this.lastTsMs;
+      if (!isRestartReset && !isNewerSeq(seq, this.lastDrawnSeq)) return false;
 
       let bitmap = null;
       try {
         bitmap = await this._decodeFn(jpegBytes);
-        if (this.destroyed || !bitmap || !isNewerSeq(seq, this.lastDrawnSeq)) {
+        if (this.destroyed || !bitmap || (!isRestartReset && !isNewerSeq(seq, this.lastDrawnSeq))) {
           return false;
         }
         this._drawBitmapCover(bitmap);

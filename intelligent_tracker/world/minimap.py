@@ -39,9 +39,13 @@ def _homography_from_camera(cid: str, cam_snap: dict[str, Any], mapper: GlobalCo
     extra = cam_snap.get("extra") or {}
     profile = extra.get("homography_profile") if isinstance(extra, dict) else None
     if isinstance(profile, dict) and profile.get("src_points"):
-        return GroundPlaneHomography.from_dict(profile)
+        homo = GroundPlaneHomography.from_dict(profile)
+        return homo if homo.is_calibrated else None
     matrix = cam_snap.get("homography")
-    return homography_from_matrix(matrix, camera_id=cid) if matrix is not None else None
+    if matrix is None:
+        return None
+    homo = homography_from_matrix(matrix, camera_id=cid)
+    return homo if homo is not None and homo.is_calibrated else None
 
 
 def _polygon_centroid(pts: list[list[float]] | list[tuple[float, float]]) -> list[float] | None:
@@ -71,12 +75,14 @@ class WorldTacticalMinimap:
         """Project camera-space polygon points into global world (X, Y) meters."""
         if not points:
             return []
-        pts = [(float(p[0]), float(p[1])) for p in points]
-        if self.coordinate_mapper is not None and self.coordinate_mapper.has_camera(camera_id):
-            return [[round(gx, 4), round(gy, 4)] for gx, gy in self.coordinate_mapper.project_polygon(camera_id, pts)]
         homo = _homography_from_camera(camera_id, cam_snap, self.coordinate_mapper)
+        if homo is None or not homo.is_calibrated:
+            return []
+        pts = [(float(p[0]), float(p[1])) for p in points]
+        if self.coordinate_mapper is not None and self.coordinate_mapper.get_homography(camera_id) is not None:
+            return [[round(gx, 4), round(gy, 4)] for gx, gy in self.coordinate_mapper.project_polygon(camera_id, pts)]
         pose = _pose_from_camera(camera_id, cam_snap, self.coordinate_mapper)
-        local_pts = homo.transform_polygon(pts) if homo is not None else pts
+        local_pts = homo.transform_polygon(pts)
         return [[round(gx, 4), round(gy, 4)] for gx, gy in (pose.to_global(pt) for pt in local_pts)]
 
     def _build_cameras_telemetry(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:

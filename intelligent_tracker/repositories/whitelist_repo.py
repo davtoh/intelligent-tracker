@@ -10,12 +10,44 @@ from typing import Optional, Dict, Any, List, Union
 import numpy as np
 
 
+_UPSERT_WHITELIST_SQL = """
+INSERT INTO local_whitelist (
+    credential_id, entity_name, clearance_tier, plate_number,
+    embedding, valid_from, valid_until, is_banned, sync_version, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+ON CONFLICT(credential_id) DO UPDATE SET
+    entity_name = excluded.entity_name,
+    clearance_tier = excluded.clearance_tier,
+    plate_number = excluded.plate_number,
+    embedding = coalesce(excluded.embedding, local_whitelist.embedding),
+    valid_from = excluded.valid_from,
+    valid_until = excluded.valid_until,
+    is_banned = excluded.is_banned,
+    sync_version = excluded.sync_version,
+    updated_at = CURRENT_TIMESTAMP
+"""
+
+
+def _serialize_whitelist_embedding(embedding: Optional[Union[np.ndarray, bytes]]) -> Optional[bytes]:
+    """Convert numpy array or bytes embedding to raw bytes."""
+    if isinstance(embedding, np.ndarray):
+        return embedding.astype(np.float32).tobytes()
+    if isinstance(embedding, (bytes, bytearray)):
+        return bytes(embedding)
+    return None
+
+
 class WhitelistMixin:
     """Provides local whitelist credentials, cloud sync state, and offline outbox queuing."""
+
+    _conn: Any
+    _lock: Any
 
     def get_sync_state(self, sync_key: str = "default") -> Optional[Dict[str, Any]]:
         """Retrieve synchronization state and ETag for Cloud Hub delta sync."""
         with self._lock:
+            if self._conn is None:
+                return None
             cur = self._conn.cursor()
             try:
                 cur.execute("SELECT * FROM tracker_sync_state WHERE sync_key = ?", (sync_key,))
@@ -42,6 +74,8 @@ class WhitelistMixin:
         """Update or insert Cloud Hub synchronization checkpoint state."""
         meta_json = json.dumps(metadata or {})
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -60,6 +94,9 @@ class WhitelistMixin:
                 )
                 self._conn.commit()
                 return True
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -76,56 +113,31 @@ class WhitelistMixin:
         sync_version: int = 1,
     ) -> int:
         """Insert or update an authoritative credential in the local offline whitelist."""
-        blob = None
-        if embedding is not None:
-            if isinstance(embedding, np.ndarray):
-                blob = embedding.astype(np.float32).tobytes()
-            elif isinstance(embedding, (bytes, bytearray)):
-                blob = bytes(embedding)
-
+        blob = _serialize_whitelist_embedding(embedding)
         norm_plate = plate_number.strip().upper().replace(" ", "").replace("-", "") if plate_number else ""
-        tier = clearance_tier.strip().upper()
-
+        params = (
+            credential_id.strip(), entity_name.strip(), clearance_tier.strip().upper(),
+            norm_plate, blob, valid_from, valid_until, 1 if is_banned else 0, int(sync_version),
+        )
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
-                cur.execute(
-                    """
-                    INSERT INTO local_whitelist (
-                        credential_id, entity_name, clearance_tier, plate_number,
-                        embedding, valid_from, valid_until, is_banned, sync_version, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT(credential_id) DO UPDATE SET
-                        entity_name = excluded.entity_name,
-                        clearance_tier = excluded.clearance_tier,
-                        plate_number = excluded.plate_number,
-                        embedding = coalesce(excluded.embedding, local_whitelist.embedding),
-                        valid_from = excluded.valid_from,
-                        valid_until = excluded.valid_until,
-                        is_banned = excluded.is_banned,
-                        sync_version = excluded.sync_version,
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (
-                        credential_id.strip(),
-                        entity_name.strip(),
-                        tier,
-                        norm_plate,
-                        blob,
-                        valid_from,
-                        valid_until,
-                        1 if is_banned else 0,
-                        int(sync_version),
-                    ),
-                )
+                cur.execute(_UPSERT_WHITELIST_SQL, params)
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_whitelist_entry(self, credential_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a single local whitelist entry by credential ID."""
         with self._lock:
+            if self._conn is None:
+                return None
             cur = self._conn.cursor()
             try:
                 cur.execute("SELECT * FROM local_whitelist WHERE credential_id = ?", (credential_id.strip(),))
@@ -152,10 +164,10 @@ class WhitelistMixin:
             params.append(clearance_tier.strip().upper())
         if active_only:
             query += " AND is_banned = 0 AND (valid_until IS NULL OR valid_until >= CURRENT_TIMESTAMP)"
-
         query += " ORDER BY updated_at DESC"
-
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 cur.execute(query, params)
@@ -166,11 +178,16 @@ class WhitelistMixin:
     def delete_whitelist_entry(self, credential_id: str) -> bool:
         """Remove a credential from local whitelist cache."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM local_whitelist WHERE credential_id = ?", (credential_id.strip(),))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
@@ -186,6 +203,8 @@ class WhitelistMixin:
     ) -> int:
         """Buffer a gate access attempt in the offline outbox queue."""
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -207,12 +226,17 @@ class WhitelistMixin:
                 )
                 self._conn.commit()
                 return cur.lastrowid
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_pending_offline_access(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retrieve unsynced access logs waiting to be flushed to Cloud Hub."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -229,6 +253,8 @@ class WhitelistMixin:
             return 0
         placeholders = ",".join("?" for _ in event_uuids)
         with self._lock:
+            if self._conn is None:
+                return 0
             cur = self._conn.cursor()
             try:
                 cur.execute(
@@ -237,6 +263,9 @@ class WhitelistMixin:
                 )
                 self._conn.commit()
                 return cur.rowcount
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 

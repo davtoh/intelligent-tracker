@@ -100,6 +100,8 @@ class EventFTSIndex:
             "title": doc["title"],
             "tags": doc["tags"],
             "metadata": doc["metadata"],
+            "video_filename": doc.get("video_filename", ""),
+            "media_offset_sec": float(doc.get("media_offset_sec", 0.0) or 0.0),
         }
         try:
             return int(self.db.index_timeline_event(**kwargs))
@@ -135,6 +137,8 @@ class EventFTSIndex:
         summary: str = "",
         tags: str = "sighting",
         metadata: dict[str, Any] | None = None,
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
     ) -> int | None:
         """Explicitly index a sighting observation into the searchable timeline."""
         who = entity_name or (f"Entity {entity_id}" if entity_id is not None else "Unknown entity")
@@ -153,6 +157,8 @@ class EventFTSIndex:
             "summary": text,
             "tags": tags,
             "metadata": dict(metadata or {}),
+            "video_filename": str(video_filename or "").strip(),
+            "media_offset_sec": float(media_offset_sec or 0.0),
         })
 
     def index_clip_caption(
@@ -169,6 +175,8 @@ class EventFTSIndex:
         title: str = "",
         tags: str = "clip,caption",
         metadata: dict[str, Any] | None = None,
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
     ) -> int | None:
         """Index a semantic clip caption into the searchable timeline."""
         clean_caption = str(caption or "").strip()
@@ -187,4 +195,6 @@ class EventFTSIndex:
             "summary": clean_caption,
             "tags": tags,
             "metadata": dict(metadata or {}),
+            "video_filename": str(video_filename or "").strip(),
+            "media_offset_sec": float(media_offset_sec or 0.0),
         })

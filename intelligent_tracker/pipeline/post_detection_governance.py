@@ -71,13 +71,14 @@ def sync_world_bridge(
     timestamp: float,
     *,
     world_bridge: Any = None,
+    run_reid: bool = True,
 ) -> None:
     """Push throttled track/zone state and stale prunes into WorldEntityBridge."""
     bridge = world_bridge if world_bridge is not None else getattr(bundle, "world_bridge", None)
     if bridge is None:
         return
     matcher = bundle.gallery_matcher
-    if matcher is not None and tracks and getattr(matcher, "world_bridge", None) is bridge:
+    if run_reid and matcher is not None and tracks and getattr(matcher, "world_bridge", None) is bridge:
         return
     camera_id = resolve_camera_id(bundle)
     try:
@@ -106,15 +107,17 @@ def publish_id_events(
             snap_b64 = getattr(ev, "snapshot_base64", None)
             if snap_b64 is None and trk is not None and getattr(trk, "bbox", None) is not None:
                 snap_b64 = crop_to_base64(frame, trk.bbox)
+            zone_id = getattr(ev, "zone_id", None) or getattr(trk, "current_zone", None)
             if isinstance(ev, EntityIdentifiedEvent):
                 ev.camera_id = ev.camera_id or camera_id
+                ev.zone_id = ev.zone_id or zone_id
                 ev.snapshot_base64 = ev.snapshot_base64 if ev.snapshot_base64 is not None else snap_b64
                 id_ev = ev
             else:
                 id_ev = EntityIdentifiedEvent(
                     camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
                     name=ev.name, category=ev.category, similarity=ev.similarity,
-                    snapshot_base64=snap_b64, timestamp=timestamp,
+                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp,
                 )
             bus.publish(id_ev)
             if str(getattr(ev, "category", "")).lower() in _RESTRICTED_CATEGORIES:
@@ -122,7 +125,7 @@ def publish_id_events(
                     camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
                     name=ev.name, category=ev.category, severity="critical",
                     message=f"Restricted entity '{ev.name}' detected",
-                    snapshot_base64=snap_b64, timestamp=timestamp,
+                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp,
                 ))
         except Exception as exc:
             logger.debug("Event publish error: %s", exc)
@@ -166,5 +169,5 @@ def evaluate_tracks_governance(
             publish_id_events(bundle, frame, tracks, identifications, timestamp)
         except Exception as exc:
             logger.debug("Re-ID matching error: %s", exc)
-    sync_world_bridge(bundle, tracks, zone_lookup, timestamp, world_bridge=bridge)
+    sync_world_bridge(bundle, tracks, zone_lookup, timestamp, world_bridge=bridge, run_reid=run_reid)
     return analytics_res, identifications

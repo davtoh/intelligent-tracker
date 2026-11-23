@@ -19,60 +19,46 @@
       .replace(/'/g, '&#39;');
   }
 
-  function initWebSocket(cameraId, onMessage, onStatusChange) {
+  function clearReconnectTimer() {
     if (wsReconnectTimer) {
       clearTimeout(wsReconnectTimer);
       wsReconnectTimer = null;
     }
-    if (!cameraId) return;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(cameraId)}`;
+  }
 
+  function closeWebSocket() {
+    clearReconnectTimer();
     if (activeWs) {
       activeWs.onclose = null;
       activeWs.onerror = null;
-      try { activeWs.close(); } catch (e) {
-        console.debug('[Telemetry] Clean close of existing WebSocket ignored error:', e);
+      try { activeWs.close(); } catch (err) {
+        console.debug('[Telemetry] WebSocket shutdown close ignored error:', err);
       }
+      activeWs = null;
     }
+  }
 
+  function initWebSocket(cameraId, onMessage, onStatusChange) {
+    closeWebSocket();
+    if (!cameraId) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const token = globalThis.MULTIVIEW_TOKEN ? `?token=${encodeURIComponent(globalThis.MULTIVIEW_TOKEN)}` : '';
+    const wsUrl = `${protocol}//${window.location.host}/ws/${encodeURIComponent(cameraId)}${token}`;
     try {
       activeWs = new WebSocket(wsUrl);
     } catch (e) {
       console.warn('WebSocket init error:', e);
       return;
     }
-
-    activeWs.onopen = () => {
-      onStatusChange?.(true);
-    };
-
+    activeWs.onopen = () => onStatusChange?.(true);
     activeWs.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        onMessage?.(data);
-      } catch (err) {
-        console.error('WS parse error:', err);
-      }
+      try { onMessage?.(JSON.parse(event.data)); } catch (err) { console.error('WS parse error:', err); }
     };
-
     activeWs.onclose = () => {
       onStatusChange?.(false);
       wsReconnectTimer = setTimeout(() => initWebSocket(cameraId, onMessage, onStatusChange), 2000);
     };
-
-    activeWs.onerror = () => {
-      activeWs?.close();
-    };
-  }
-
-  function closeWebSocket() {
-    if (activeWs) {
-      try { activeWs.close(); } catch (err) {
-        console.debug('[Telemetry] WebSocket shutdown close ignored error:', err);
-      }
-      activeWs = null;
-    }
+    activeWs.onerror = () => activeWs?.close();
   }
 
   function renderZones(zones) {
@@ -140,15 +126,17 @@
     }
     liveAlertsFeed.innerHTML = alerts.slice(0, 5).map(a => {
       const type = a.event_type || 'alert';
-      const isDanger = type.includes('intrusion') || type.includes('restricted') || type.includes('breach');
+      const sev = String(a.severity || '').toUpperCase();
+      const isDanger = sev === 'CRITICAL' || sev === 'HIGH' || type.includes('intrusion') || type.includes('restricted') || type.includes('breach');
       const timeStr = a.timestamp ? new Date(a.timestamp * 1000).toLocaleTimeString() : '--:--';
+      const subText = a.message || a.reason || a.title || a.summary || a.name || a.entity_name || a.suggested_name || a.zone_id || 'Security event';
       return `
         <div class="alert-mini-card ${isDanger ? 'intrusion' : ''}">
           <div class="alert-mini-header">
             <span>${escapeHtml(type.toUpperCase())}</span>
             <span class="alert-mini-time">${timeStr}</span>
           </div>
-          <div class="alert-mini-sub">${escapeHtml(a.entity_name || a.zone_id || 'Security event')}</div>
+          <div class="alert-mini-sub">${escapeHtml(subText)}</div>
         </div>
       `;
     }).join('');

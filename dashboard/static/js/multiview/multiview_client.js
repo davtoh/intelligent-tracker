@@ -109,6 +109,8 @@
       client._serverHello = msg;
     } else if (msg.type === 'source_status') {
       client.onSourceStatus?.(msg.camera_id, msg.status, msg.reason || '');
+    } else if (msg.type === 'telemetry') {
+      client.onTelemetry?.(msg);
     } else if (msg.type === 'subscribed' && msg.rejected) {
       Object.entries(msg.rejected).forEach(([cid, reason]) => {
         const mapped = reason === 'disabled' ? 'disabled' : 'offline';
@@ -206,6 +208,7 @@
 
       this.onFrame = options.onFrame || null;
       this.onSourceStatus = options.onSourceStatus || null;
+      this.onTelemetry = options.onTelemetry || null;
       this.onTransportChange = options.onTransportChange || null;
       this.onControl = options.onControl || null;
 
@@ -245,7 +248,7 @@
       ws.onmessage = (ev) => dispatchWsMessage(this, ev?.data);
       ws.onerror = () => {
         if (ws.readyState === WS_OPEN && typeof ws.close === 'function') {
-          try { ws.close(); } catch (_) {}
+          try { ws.close(); } catch (err) { console.debug('[MultiviewClient] Error closing failed WS:', err); }
         }
       };
       ws.onclose = (ev) => handleWsClose(this, ev, ws);
@@ -317,7 +320,7 @@
         ws.onerror = null;
         ws.onclose = null;
         if (typeof ws.close === 'function' && (ws.readyState === undefined || ws.readyState < WS_CLOSING)) {
-          try { ws.close(1000, reason); } catch (_) {}
+          try { ws.close(1000, reason); } catch (err) { console.debug('[MultiviewClient] Error closing WS:', err); }
         }
       }
       this._intentionalClose = false;

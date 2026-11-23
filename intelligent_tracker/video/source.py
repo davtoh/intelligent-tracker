@@ -46,25 +46,12 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self.target_width = width
         self.target_height = height
         self.read_timeout = float(read_timeout)
-        self.warmup_timeout = (
-            float(warmup_timeout)
-            if warmup_timeout is not None
-            else max(self.read_timeout, self.read_timeout * 2.5)
-        )
+        self.warmup_timeout = float(warmup_timeout) if warmup_timeout is not None else max(self.read_timeout, self.read_timeout * 2.5)
         self.max_reconnect_backoff = float(max_reconnect_backoff)
-
-        self.is_synthetic = False
-        self.is_rtsp = False
-        self.is_file = False
-        self.is_webcam = False
-        self.is_libcamera = False
-
+        self.is_synthetic = self.is_rtsp = self.is_file = self.is_webcam = self.is_libcamera = False
         self._classify_source()
         self._init_state_and_queues()
-
-        self.width = self.target_width or 640
-        self.height = self.target_height or 480
-        self.source_fps = 30.0
+        self.width, self.height, self.source_fps = self.target_width or 640, self.target_height or 480, 30.0
 
     def _init_state_and_queues(self) -> None:
         """Initialize concurrency synchronization events, lock, queue, and telemetry."""
@@ -83,6 +70,8 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
         self._frames_read = 0
         self._frames_dropped = 0
         self._reconnections = 0
+        self._loop_count = 0
+        self._eof = False
         self._is_connected = False
         self._needs_warmup = True
         self._start_time: Optional[float] = None
@@ -93,6 +82,8 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
 
     def read(self, timeout: float = 1.0) -> Tuple[bool, Optional[np.ndarray]]:
         """Retrieve latest frame from buffer, waiting up to timeout seconds."""
+        if getattr(self, "_eof", False) and not self.loop_video:
+            return False, None
         if not self._running:
             self.start()
 
@@ -147,6 +138,11 @@ class VideoSource(StreamHibernationMixin, CaptureLifecycleMixin, CaptureWorkerMi
     def measured_fps(self) -> float:
         """Return the measured sliding-window capture FPS."""
         return float(getattr(self, "_measured_fps", 0.0) or 0.0)
+
+    @property
+    def loop_count(self) -> int:
+        """Return number of times a looping video source has wrapped."""
+        return int(getattr(self, "_loop_count", 0) or 0)
 
     @property
     def last_media_time_s(self) -> Optional[float]:

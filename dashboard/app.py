@@ -117,6 +117,7 @@ from dashboard.services.windows_resilience import apply_windows_iocp_patch
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.lifecycle import StreamLifecycleManager
+from intelligent_tracker.memory import ConfidenceEngine, GeminiSemanticProvider, WorldQueryEngine
 from intelligent_tracker.scenarios import ScenarioManager
 
 logger = logging.getLogger("intelligent_tracker.dashboard")
@@ -144,32 +145,42 @@ _probe_video_file = VideoTranscodeService.probe_video
 
 def _init_runtime_services(application: FastAPI):
     """Initialize CameraPool, ScenarioManager, TrackerDB, and StreamLifecycleManager."""
-    pool = CameraPool()
+    cfg_file = os.getenv("CAMERAS_CONFIG_PATH") or "configs/cameras.json"
+    db_file = os.getenv("TRACKER_DB_PATH") or "data/tracker.db"
+    scen_file = os.getenv("SCENARIOS_CONFIG_PATH") or "configs/scenarios.yaml"
+    pool = CameraPool(config_file=cfg_file, db_path=db_file)
     primary_sm = pool.primary_stream
+    db = primary_sm.db if primary_sm else None
+    owned_db: Optional[TrackerDB] = None
+    if db is None:
+        owned_db = TrackerDB(db_file)
+        db = owned_db
     scen_mgr = ScenarioManager(
+        config_path=scen_file,
+        db=db,
+        db_path=db_file,
         world_graph=getattr(pool, "world_graph", None),
         coordinate_mapper=getattr(pool, "coordinate_mapper", None),
     )
     handoff = getattr(pool, "handoff_coordinator", None)
     if handoff is not None:
-        handoff.topology = scen_mgr.topology
-        handoff.transition_registry = scen_mgr.world_transitions
-    db = primary_sm.db if primary_sm else None
-    owned_db: Optional[TrackerDB] = None
-    if db is None:
-        db_path = getattr(pool, "db_path", None)
-        owned_db = TrackerDB(db_path if isinstance(db_path, str) else "data/tracker.db")
-        db = owned_db
+        handoff.topology, handoff.transition_registry = scen_mgr.topology, scen_mgr.world_transitions
+    if getattr(pool, "_coordinator", None) is not None:
+        pool._coordinator.scenario_manager = scen_mgr
     lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
+    world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None)
+    event_bus = getattr(pool, "event_bus", None) or getattr(primary_sm, "event_bus", None)
+    event_fts_index = getattr(pool, "event_fts_index", None) or getattr(primary_sm, "event_fts_index", None)
+    conf_engine = getattr(pool, "confidence_engine", None) or getattr(primary_sm, "confidence_engine", None) or ConfidenceEngine(db=db)
+    provider = GeminiSemanticProvider() if os.getenv("WORLD_QUERY_PROVIDER", "").strip().lower() == "gemini" else None
+    world_query_engine = WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
     bind_app_state(
-        application,
-        camera_pool=pool,
-        stream_manager=primary_sm,
-        scenario_manager=scen_mgr,
-        lifecycle_manager=lifecycle_mgr,
-        db=db,
+        application, camera_pool=pool, stream_manager=primary_sm, scenario_manager=scen_mgr,
+        lifecycle_manager=lifecycle_mgr, db=db, confidence_engine=conf_engine, world_query_engine=world_query_engine,
+        world_graph=world_graph, event_bus=event_bus, event_fts_index=event_fts_index,
     )
-    for sm in pool.streams.values():
+    from dashboard.services.camera_pool_queries import snapshot_pool_streams
+    for sm in snapshot_pool_streams(pool).values():
         scen_mgr.apply_to_stream_manager(sm)
     return pool, primary_sm, lifecycle_mgr, owned_db
 

@@ -32,9 +32,6 @@
               <button class="btn btn-sm btn-outline" id="toggle-heatmap-btn" title="Toggle Heatmap Overlay">
                 🔥 Heatmap: OFF
               </button>
-              <button class="btn btn-sm btn-outline" id="fullscreen-btn" title="Fullscreen">
-                ⛶ Fullscreen
-              </button>
             </div>
           </div>
 
@@ -44,6 +41,8 @@
             <img id="live-stream-img" alt="Live Camera Stream" />
             <!-- Transparent Overlay Canvas for Interactive Click-to-Tag -->
             <canvas id="interactive-canvas"></canvas>
+            <!-- Client-Side BEV Minimap PiP -->
+            <canvas id="live-bev-pip-canvas" class="live-bev-pip-canvas" width="200" height="200" hidden></canvas>
             <!-- Processing Mode Paused Overlay -->
             <div id="live-paused-overlay" class="live-paused-overlay" hidden>
               <div class="live-paused-card glass-panel">
@@ -107,54 +106,8 @@
 
           {% include "partials/camera_recording_bar.html" %}
 
-          <!-- Floating Overlays Control Toolbar (Milestone 8) -->
-          <div class="floating-overlay-toolbar glass-panel">
-            <div class="overlay-toolbar-label">
-              <span>👁️ Video Overlays:</span>
-            </div>
-            <div class="overlay-toggles-row">
-              <label class="overlay-toggle-chip" title="Toggle Object Bounding Boxes">
-                <input type="checkbox" id="overlay-toggle-bboxes" checked />
-                <span>📦 Boxes</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Track IDs and Recognized Names">
-                <input type="checkbox" id="overlay-toggle-track_ids" checked />
-                <span>🏷️ IDs</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Zone Dwell Time Timers">
-                <input type="checkbox" id="overlay-toggle-dwell_timers" checked />
-                <span>⏱️ Dwell</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Kinematic Velocity Movement Vectors">
-                <input type="checkbox" id="overlay-toggle-velocity" checked />
-                <span>↗️ Velocity</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Spatial Polygonal Zones">
-                <input type="checkbox" id="overlay-toggle-zones" checked />
-                <span>🟢 Zones</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Directional Virtual Tripwires">
-                <input type="checkbox" id="overlay-toggle-tripwires" checked />
-                <span>⚡ Tripwires</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Real-Time Density Heatmap Overlay">
-                <input type="checkbox" id="overlay-toggle-heatmap" />
-                <span>🔥 Heatmap</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle 2D Bird's-Eye Minimap Picture-in-Picture">
-                <input type="checkbox" id="overlay-toggle-bev_minimap" />
-                <span>🗺️ BEV Minimap</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Top Status HUD Information Bar">
-                <input type="checkbox" id="overlay-toggle-hud_bar" checked />
-                <span>ℹ️ Top HUD</span>
-              </label>
-              <label class="overlay-toggle-chip" title="Toggle Real-Time Toast Alert Notifications">
-                <input type="checkbox" id="overlay-toggle-toast_prompts" checked />
-                <span>🔔 Live Toasts</span>
-              </label>
-            </div>
-          </div>
+          <!-- Floating Overlays Control Toolbar (Unified OverlayControlBar) -->
+          <div id="live-overlay-control-bar" class="floating-overlay-toolbar glass-panel"></div>
         </div>
 
         <!-- Live Telemetry Sidebar -->

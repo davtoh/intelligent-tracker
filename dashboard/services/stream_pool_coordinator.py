@@ -13,7 +13,11 @@ import logging
 import threading
 from typing import Any
 
-from dashboard.services.camera_source_bootstrap import bootstrap_camera_stream
+from dashboard.services.camera_source_bootstrap import (
+    bootstrap_camera_stream,
+    reapply_stream_scenario,
+    register_disabled_world_node,
+)
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.camera_resolver import CameraPathResolver
 from intelligent_tracker.world import WorldGraph
@@ -86,12 +90,15 @@ def _seed_initial_focused_camera(pms: Any, camera_configs: dict[str, dict[str, A
 
 def _start_enabled_streams(coord: Any, camera_configs: dict[str, dict[str, Any]], autostart: bool, reuse_existing: bool) -> None:
     """Register and optionally start all enabled streams outside the coordinator lock."""
-    with coord._lock:
-        to_start = [
-            ((coord.streams.get(cid) if reuse_existing else None) or coord.create_and_register_stream(cid, cfg, start=False),
-             cid, cfg.get("name", f"Camera {cid.upper()}"), cfg.get("source", "synthetic"))
-            for cid, cfg in list(camera_configs.items()) if cfg.get("enabled", True)
-        ]
+    to_start = []
+    for cid, cfg in list(camera_configs.items()):
+        if not cfg.get("enabled", True):
+            register_disabled_world_node(coord, cid, cfg)
+            continue
+        with coord._lock:
+            existing = coord.streams.get(cid) if reuse_existing else None
+        mgr = existing or coord.create_and_register_stream(cid, cfg, start=False)
+        to_start.append((mgr, cid, cfg.get("name", f"Camera {cid.upper()}"), cfg.get("source", "synthetic")))
     if autostart:
         _seed_initial_focused_camera(coord.processing_mode_service, camera_configs)
         for mgr, cam_id, name, raw_source in to_start:
@@ -104,8 +111,10 @@ class StreamPoolCoordinator:
     def __init__(
         self, db_path: str, base_config_path: str, world_graph: WorldGraph,
         lock: Any = None, processing_mode_service: Any = None,
+        event_bus: Any = None, confidence_engine: Any = None, event_fts_index: Any = None,
     ) -> None:
         self.db_path, self.base_config_path, self.world_graph = db_path, base_config_path, world_graph
+        self.event_bus, self.confidence_engine, self.event_fts_index = event_bus, confidence_engine, event_fts_index
         self._lock = lock or threading.RLock()
         if processing_mode_service is None:
             from dashboard.services.processing_mode_service import get_processing_mode_service
@@ -136,18 +145,22 @@ class StreamPoolCoordinator:
         """Replace any existing stream for ``camera_id`` and start if enabled."""
         with self._lock:
             old_mgr = self.streams.pop(camera_id, None)
-            if enabled:
-                mgr = self.create_and_register_stream(camera_id, cam_entry, start=False)
-            else:
-                mgr = StreamManager(
-                    config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
-                    name=cam_entry.get("name", f"Camera {camera_id.upper()}"), source_override=cam_entry.get("source", "synthetic"),
-                    world_graph=self.world_graph, processing_mode_service=self.processing_mode_service,
-                )
-                mgr._in_camera_pool = True
-                self.streams[camera_id] = mgr
         if old_mgr:
             _stop_manager_safely(old_mgr, "add_camera")
+        if enabled:
+            mgr = self.create_and_register_stream(camera_id, cam_entry, start=False)
+        else:
+            mgr = StreamManager(
+                config_path=self.base_config_path, db_path=self.db_path, camera_id=camera_id,
+                name=cam_entry.get("name", f"Camera {camera_id.upper()}"), source_override=cam_entry.get("source", "synthetic"),
+                world_graph=self.world_graph, processing_mode_service=self.processing_mode_service,
+                event_bus=self.event_bus, confidence_engine=self.confidence_engine,
+                event_fts_index=self.event_fts_index,
+            )
+            mgr._in_camera_pool = True
+            with self._lock:
+                self.streams[camera_id] = mgr
+        reapply_stream_scenario(self, old_mgr, mgr)
         if enabled and autostart and mgr is not None:
             _start_stream_if_ready(mgr, camera_id, cam_entry.get("name", f"Camera {camera_id.upper()}"), cam_entry.get("source", ""))
         return mgr
@@ -156,9 +169,10 @@ class StreamPoolCoordinator:
         """Stop any existing stream outside the lock and start a fresh one if enabled."""
         with self._lock:
             old_mgr = self.streams.pop(camera_id, None)
-            new_mgr = self.create_and_register_stream(camera_id, cfg, start=False) if cfg.get("enabled", True) else None
         if old_mgr:
             _stop_manager_safely(old_mgr, "update_camera")
+        new_mgr = self.create_and_register_stream(camera_id, cfg, start=False) if cfg.get("enabled", True) else None
+        reapply_stream_scenario(self, old_mgr, new_mgr)
         if cfg.get("enabled", True) and new_mgr:
             _start_stream_if_ready(new_mgr, camera_id, cfg.get("name", f"Camera {camera_id.upper()}"), cfg.get("source", ""))
 

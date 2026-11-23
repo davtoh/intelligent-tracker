@@ -21,9 +21,9 @@
     homography: null,
     topologyLinks: [],
     overlays: {
-      bboxes: true, track_ids: true, dwell_timers: true, velocity: true,
+      bboxes: true, track_ids: true, dwell_timers: true, velocity: false,
       zones: true, tripwires: true, heatmap: false, bev_minimap: false,
-      hud_bar: true, toast_prompts: true,
+      hud_bar: true, clutter: false,
     },
     canvas: null,
     ctx: null,
@@ -64,8 +64,15 @@
     drawOverlay();
   }
 
+  function clearStudioLiveImage() {
+    const img = document.getElementById('studio-live-img');
+    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; img.removeAttribute?.('src'); img.src = ''; }
+  }
   function drawOverlay(cursorPt) {
-    window.StudioCanvas?.drawOverlay(studioState.ctx, studioState.canvas, studioState.mode, studioState.points, cursorPt);
+    window.StudioCanvas?.drawOverlay(
+      studioState.ctx, studioState.canvas, studioState.mode, studioState.points, cursorPt,
+      { zones: studioState.zones, tripwires: studioState.tripwires }
+    );
   }
 
   function initStudio() {
@@ -83,8 +90,10 @@
 
     loadStudioChannels().then(() => {
       if (studioState.activeCamera) {
+        const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
         loadCameraScenario(studioState.activeCamera);
-        window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
+        if (isVideo) clearStudioLiveImage();
+        else window.StudioOverlays?.loadCameraOverlays(studioState.activeCamera);
       }
     });
     loadTopologyLinks();
@@ -162,23 +171,28 @@
   }
 
   async function loadCameraScenario(cameraId) {
+    if (!cameraId) return;
     try {
-      const res = await fetch(`/api/scenarios/${cameraId}`);
+      const res = await fetch(`/api/scenarios/${encodeURIComponent(cameraId)}`);
       if (!res.ok) return;
       const data = await res.json();
       studioState.zones = data.zones || [];
       studioState.tripwires = data.tripwires || [];
       studioState.homography = data.homography || null;
-
       window.StudioOverlays?.renderScenarioListUI();
+      drawOverlay();
       renderBEVMinimap();
-    } catch (err) {
-      console.warn('Failed to load scenario:', err);
-    }
+    } catch (err) { console.warn('Failed to load scenario:', err); }
   }
 
   function renderBEVMinimap() {
     window.BEVMinimap?.render(studioState.bevCanvas, studioState.homography, studioState.zones, studioState.activeCamera);
+  }
+
+  function requireActiveCamera() {
+    if (studioState.activeCamera) return true;
+    showToast('No Channel Selected', 'Select a camera or video channel first.', 'warning');
+    return false;
   }
 
   async function studioRequest(url, options, okTitle, okBody, errTitle, onSuccess) {
@@ -189,12 +203,11 @@
         if (okTitle) showToast(okTitle, okBody, options?.method === 'DELETE' ? 'info' : 'success');
         if (onSuccess) onSuccess(data);
       }
-    } catch (err) {
-      showToast(errTitle, err.message, 'error');
-    }
+    } catch (err) { showToast(errTitle, err.message, 'error'); }
   }
 
   function saveZone(zoneData) {
+    if (!zoneData?.camera_id && !requireActiveCamera()) return Promise.resolve();
     return studioRequest('/api/scenarios/zones', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(zoneData),
     }, 'Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'Error saving zone', () => {
@@ -204,8 +217,8 @@
   }
 
   function deleteZone(camera_id, zone_name) {
-    if (!confirm(`Delete zone '${zone_name}'?`)) return;
-    return studioRequest(`/api/scenarios/zones/${camera_id}/${encodeURIComponent(zone_name)}`, {
+    if (!camera_id || !confirm(`Delete zone '${zone_name}'?`)) return;
+    return studioRequest(`/api/scenarios/zones/${encodeURIComponent(camera_id)}/${encodeURIComponent(zone_name)}`, {
       method: 'DELETE',
     }, 'Zone Deleted', `Zone '${zone_name}' removed.`, 'Error deleting zone', () => {
       updateStudioStatus(`Deleted zone '${zone_name}'.`);
@@ -214,6 +227,7 @@
   }
 
   function saveTripwire(tripwireData) {
+    if (!tripwireData?.camera_id && !requireActiveCamera()) return Promise.resolve();
     return studioRequest('/api/scenarios/tripwires', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tripwireData),
     }, 'Tripwire Saved', `Directional tripwire '${tripwireData.name}' saved.`, 'Error saving tripwire', () => {
@@ -223,8 +237,8 @@
   }
 
   function deleteTripwire(camera_id, tripwire_name) {
-    if (!confirm(`Delete tripwire '${tripwire_name}'?`)) return;
-    return studioRequest(`/api/scenarios/tripwires/${camera_id}/${encodeURIComponent(tripwire_name)}`, {
+    if (!camera_id || !confirm(`Delete tripwire '${tripwire_name}'?`)) return;
+    return studioRequest(`/api/scenarios/tripwires/${encodeURIComponent(camera_id)}/${encodeURIComponent(tripwire_name)}`, {
       method: 'DELETE',
     }, 'Tripwire Deleted', `Tripwire '${tripwire_name}' removed.`, 'Error deleting tripwire', () => {
       updateStudioStatus(`Deleted tripwire '${tripwire_name}'.`);
@@ -233,6 +247,7 @@
   }
 
   function saveHomographyCalibration(data) {
+    if (!data?.camera_id && !requireActiveCamera()) return Promise.resolve();
     return studioRequest('/api/scenarios/homography', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     }, 'Calibration Saved', `Homography calibrated for ${data.camera_id}.`, 'Calibration Error', (result) => {
@@ -274,35 +289,32 @@
     document.getElementById('btn-mode-draw-tripwire')?.addEventListener('click', () => setStudioMode('draw_tripwire'));
     document.getElementById('btn-mode-homography')?.addEventListener('click', () => setStudioMode('calibrate_homography'));
     document.getElementById('btn-studio-clear')?.addEventListener('click', () => {
-      setStudioMode('idle');
-      studioState.points = [];
-      drawOverlay();
-      updateStudioStatus('Canvas cleared. Mode: Idle.');
+      setStudioMode('idle'); studioState.points = []; drawOverlay(); updateStudioStatus('Canvas cleared. Mode: Idle.');
     });
-
+    document.getElementById('studio-live-img')?.addEventListener?.('load', () => drawOverlay());
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
       const targetId = e.target.value;
       if (!targetId) return;
       studioState.activeCamera = targetId;
       const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
       const img = document.getElementById('studio-live-img');
-      if (img && !isVideo) {
+      if (isVideo) clearStudioLiveImage();
+      else if (img) {
         const streamBase = `/stream/${encodeURIComponent(targetId)}`;
         if (img.dataset) img.dataset.activeStreamSrc = streamBase;
         if (isStudioTabActive()) img.src = `${streamBase}?t=${Date.now()}`;
       }
       updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
       loadCameraScenario(targetId);
-      window.StudioOverlays?.loadCameraOverlays(targetId);
+      if (!isVideo) window.StudioOverlays?.loadCameraOverlays(targetId);
     });
     document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
       window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);
     });
-
     window.ScenarioModals?.init({
-      onSaveZone: (data) => saveZone({ ...data, camera_id: studioState.activeCamera }),
-      onSaveTripwire: (data) => saveTripwire({ ...data, camera_id: studioState.activeCamera }),
-      onSaveHomography: (data) => saveHomographyCalibration({ ...data, camera_id: studioState.activeCamera }),
+      onSaveZone: (data) => requireActiveCamera() && saveZone({ ...data, camera_id: studioState.activeCamera }),
+      onSaveTripwire: (data) => requireActiveCamera() && saveTripwire({ ...data, camera_id: studioState.activeCamera }),
+      onSaveHomography: (data) => requireActiveCamera() && saveHomographyCalibration({ ...data, camera_id: studioState.activeCamera }),
       onSaveTransition: (data) => saveTopologyLink(data),
       onCancel: () => setStudioMode('idle'),
     });
@@ -316,11 +328,7 @@
       if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap();
     }, 250);
   }
-  function stopMinimapLoop() {
-    if (minimapTimer === null) return;
-    clearInterval(minimapTimer);
-    minimapTimer = null;
-  }
+  function stopMinimapLoop() { if (minimapTimer !== null) { clearInterval(minimapTimer); minimapTimer = null; } }
   function syncStudioTabState(isActive) {
     const active = typeof isActive === 'boolean' ? isActive : isStudioTabActive();
     if (active) { renderBEVMinimap(); startMinimapLoop(); } else { stopMinimapLoop(); }
@@ -329,16 +337,11 @@
     const activeTab = ev?.detail?.activeTab;
     syncStudioTabState(activeTab ? activeTab === 'tab-studio' : isStudioTabActive());
   });
-
   window.Studio = {
-    init: initStudio, setMode: setStudioMode, deleteZone: deleteZone,
-    deleteTripwire: deleteTripwire, deleteTopologyLink: deleteTopologyLink,
-    renderBEV: renderBEVMinimap, startMinimapLoop: startMinimapLoop,
-    stopMinimapLoop: stopMinimapLoop, syncStudioTabState: syncStudioTabState,
-    syncTabVisibility: syncStudioTabState,
-    searchJourney: (q) => window.JourneySearch?.search(q),
-    exportJourney: (q) => window.JourneySearch?.exportVideo(q),
+    init: initStudio, setMode: setStudioMode, deleteZone, deleteTripwire, deleteTopologyLink,
+    renderBEV: renderBEVMinimap, startMinimapLoop, stopMinimapLoop,
+    syncStudioTabState, syncTabVisibility: syncStudioTabState,
+    searchJourney: (q) => window.JourneySearch?.search(q), exportJourney: (q) => window.JourneySearch?.exportVideo(q),
   };
-
   document.addEventListener('DOMContentLoaded', initStudio);
 })();

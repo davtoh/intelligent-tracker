@@ -6,10 +6,40 @@
 (function () {
   'use strict';
 
+  function resolveStudioMediaElement() {
+    return document.getElementById('studio-live-img') || null;
+  }
+
+  function syncCanvasBox(canvas, mediaEl) {
+    if (!canvas) return null;
+    const media = mediaEl || resolveStudioMediaElement();
+    const mw = Number(media?.naturalWidth || media?.videoWidth) || 0;
+    const mh = Number(media?.naturalHeight || media?.videoHeight) || 0;
+    if (!mw || !mh) return null;
+    if (canvas.width !== mw || canvas.height !== mh) {
+      canvas.width = mw;
+      canvas.height = mh;
+    }
+    const overlay = window.UnifiedCanvasOverlay;
+    if (!overlay?.computeContainBox || !media.getBoundingClientRect) return null;
+    const elemRect = media.getBoundingClientRect();
+    const containerRect = media.parentElement?.getBoundingClientRect?.() || { left: 0, top: 0 };
+    if (!elemRect.width || !elemRect.height) return null;
+    const box = overlay.computeContainBox(elemRect, containerRect, mw, mh);
+    if (canvas.style) {
+      canvas.style.left = `${box.offsetX}px`;
+      canvas.style.top = `${box.offsetY}px`;
+      canvas.style.width = `${box.renderW}px`;
+      canvas.style.height = `${box.renderH}px`;
+    }
+    return box;
+  }
+
   function getCanvasCoords(evt, canvas) {
+    syncCanvasBox(canvas);
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const scaleX = rect.width > 0 ? canvas.width / rect.width : 1;
+    const scaleY = rect.height > 0 ? canvas.height / rect.height : 1;
     return {
       x: Math.round((evt.clientX - rect.left) * scaleX),
       y: Math.round((evt.clientY - rect.top) * scaleY),
@@ -101,9 +131,24 @@
     }
   }
 
-  function drawStudioOverlay(ctx, canvas, mode, pts, cursorPt) {
+  function drawSavedScenario(ctx, canvas, saved) {
+    const overlay = window.UnifiedCanvasOverlay;
+    if (!overlay || !saved) return;
+    const transform = { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1, renderW: canvas.width, renderH: canvas.height };
+    if (Array.isArray(saved.zones) && saved.zones.length > 0) {
+      overlay.drawZones?.(ctx, saved.zones, transform);
+    }
+    if (Array.isArray(saved.tripwires) && saved.tripwires.length > 0) {
+      const normalized = saved.tripwires.map((tw) => ({ ...tw, line: tw.line || tw.line_segment }));
+      overlay.drawTripwires?.(ctx, normalized, transform);
+    }
+  }
+
+  function drawStudioOverlay(ctx, canvas, mode, pts, cursorPt, saved = null) {
     if (!ctx || !canvas) return;
+    syncCanvasBox(canvas);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawSavedScenario(ctx, canvas, saved);
     if (!pts || pts.length === 0) return;
 
     ctx.save();
@@ -133,6 +178,7 @@
   }
 
   window.StudioCanvas = {
+    syncCanvasBox: syncCanvasBox,
     getCanvasCoords: getCanvasCoords,
     drawOverlay: drawStudioOverlay,
     setupListeners: setupCanvasEventListeners,

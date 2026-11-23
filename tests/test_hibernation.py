@@ -53,6 +53,22 @@ class TestVideoSourceHibernation(unittest.TestCase):
         vs.stop()
         self.assertFalse(vs.is_paused)
 
+    def test_resume_clears_last_frame_time_preventing_fps_dip(self):
+        """Resuming VideoSource from pause/hibernation clears _last_frame_time so measured_fps does not dip."""
+        vs = VideoSource(source="synthetic", fps_limit=30)
+        try:
+            vs._record_fps_telemetry(100.0)
+            vs._record_fps_telemetry(100.0 + 1.0 / 30.0)
+            self.assertAlmostEqual(vs.measured_fps, 30.0, delta=0.5)
+            vs.pause()
+            vs.resume()
+            self.assertIsNone(vs._last_frame_time)
+            vs._record_fps_telemetry(250.0)
+            vs._record_fps_telemetry(250.0 + 1.0 / 30.0)
+            self.assertAlmostEqual(vs.measured_fps, 30.0, delta=0.5)
+        finally:
+            vs.stop()
+
 
 class TestStreamManagerLeasedSubscribers(unittest.TestCase):
     """Verifies StreamManager leased subscriber registry and auto-pruning."""

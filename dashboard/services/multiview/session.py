@@ -26,6 +26,7 @@ from dashboard.services.multiview.protocol import (
     pack_frame,
     parse_control_message,
 )
+from dashboard.services.multiview.telemetry_sender import MultiviewTelemetrySender
 
 _session_lock = threading.Lock()
 _active_sessions = 0
@@ -106,6 +107,29 @@ def _build_hello_payload(limits: MultiviewLimits) -> dict[str, Any]:
     }
 
 
+def _rebind_stream_leases(session: Any, cam_id: str, old_mgr: Any, new_mgr: Any) -> Any:
+    """Migrate subscriber lease and frame waiter from a restarted StreamManager to ``new_mgr``."""
+    width = session._desired[2] if session._desired else 640
+    fps = session._desired[1] if session._desired else 15
+    if getattr(old_mgr, "thumbnail_cache", None) is not None:
+        old_mgr.thumbnail_cache.release_lease(session._session_id)
+    if session._loop is not None and session._frame_event is not None:
+        with contextlib.suppress(Exception):
+            old_mgr.unregister_frame_waiter(session._loop, session._frame_event)
+    with contextlib.suppress(Exception):
+        old_mgr.remove_subscriber(session._sub_id(cam_id))
+    tier = width
+    if getattr(new_mgr, "thumbnail_cache", None) is not None:
+        tier = new_mgr.thumbnail_cache.acquire_lease(session._session_id, width, fps)
+    new_mgr.add_subscriber(session._sub_id(cam_id), annotated=False)
+    if session._loop is not None and session._frame_event is not None:
+        new_mgr.register_frame_waiter(session._loop, session._frame_event)
+    session._active[cam_id] = (new_mgr, tier)
+    session._last_sent_seq.pop(cam_id, None)
+    session._sender.clear_camera(cam_id)
+    return new_mgr
+
+
 class MultiviewSession:
     """Async WebSocket session driving multiplexed camera thumbnail delivery."""
 
@@ -134,6 +158,7 @@ class MultiviewSession:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._frame_event: asyncio.Event | None = None
         self._send_lock: asyncio.Lock | None = None
+        self._sender = MultiviewTelemetrySender()
 
     def _sub_id(self, camera_id: str) -> str:
         return f"{self._session_id}:{camera_id}"
@@ -143,12 +168,14 @@ class MultiviewSession:
         self._loop = asyncio.get_running_loop()
         self._frame_event = asyncio.Event()
         self._send_lock = asyncio.Lock()
+        self._sender.bind_loop()
         await self._ws.accept()
         await self._send_json(_build_hello_payload(self._limits))
 
         tasks: set[asyncio.Task[Any]] = {
             asyncio.create_task(self._receive_loop()),
             asyncio.create_task(self._sender_loop()),
+            asyncio.create_task(self._sender.writer_loop(self)),
         }
         shutdown_task: asyncio.Task[Any] | None = None
         if self._shutdown_event is not None:
@@ -257,6 +284,7 @@ class MultiviewSession:
     def _release_camera(self, cam_id: str) -> None:
         entry = self._active.pop(cam_id, None)
         self._last_sent_seq.pop(cam_id, None)
+        self._sender.clear_camera(cam_id)
         if entry is None:
             return
         mgr, _tier = entry
@@ -285,42 +313,33 @@ class MultiviewSession:
                 await self._flush_camera(cam_id, mgr, tier)
 
     async def _flush_camera(self, cam_id: str, mgr: Any, tier: int) -> None:
-        """Emit status changes and the latest unseen thumbnail for ``cam_id``."""
+        """Emit status/rebind updates, throttled telemetry, and latest unseen thumbnail."""
         resolved, _ = _resolve_stream(cam_id, self._pool, self._stream_manager)
         if resolved is None:
             if self._last_status.get(cam_id) != "offline":
                 self._last_status[cam_id] = "offline"
-                await self._send_json({
-                    "v": 1, "type": "source_status",
-                    "camera_id": cam_id, "status": "offline", "reason": "removed",
-                })
+                self._sender.enqueue_json({"v": 1, "type": "source_status", "camera_id": cam_id, "status": "offline", "reason": "removed"})
             self._release_camera(cam_id)
             return
 
+        rebound = resolved is not mgr
+        if rebound:
+            mgr = _rebind_stream_leases(self, cam_id, mgr, resolved)
+            tier = self._active[cam_id][1]
         with contextlib.suppress(Exception):
             mgr.heartbeat_subscriber(self._sub_id(cam_id))
 
         status = resolve_camera_status(cam_id, mgr, self._pool)
-        if status != self._last_status.get(cam_id):
+        if rebound or status != self._last_status.get(cam_id):
             self._last_status[cam_id] = status
-            await self._send_json({
-                "v": 1, "type": "source_status",
-                "camera_id": cam_id, "status": status, "reason": "",
+            self._sender.enqueue_json({
+                "v": 1, "type": "source_status", "camera_id": cam_id,
+                "status": status, "reason": "rebound" if rebound else "",
             })
 
         cache = getattr(mgr, "thumbnail_cache", None)
         slot = cache.get_latest(tier) if cache is not None else None
         if slot is None or slot.seq == self._last_sent_seq.get(cam_id):
             return
-
-        payload = pack_frame(cam_id, slot.seq, slot.ts_ms, slot.data)
-        if self._send_lock is None:
-            return
-        async with self._send_lock:
-            try:
-                await asyncio.wait_for(self._ws.send_bytes(payload), timeout=self._limits.send_timeout_s)
-                self._last_sent_seq[cam_id] = slot.seq
-            except asyncio.TimeoutError:
-                self._slow_skips += 1
-            except (WebSocketDisconnect, RuntimeError):
-                self._stopped = True
+        self._sender.enqueue_frame(cam_id, slot.seq, pack_frame(cam_id, slot.seq, slot.ts_ms, slot.data))
+        self._sender.maybe_enqueue_telemetry(cam_id, mgr, seq=slot.seq)

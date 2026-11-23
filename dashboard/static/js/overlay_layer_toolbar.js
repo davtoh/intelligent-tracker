@@ -120,41 +120,50 @@
     });
   }
 
-  function renderToolbar({ descriptors, activeRunIds, hasLiveJob, featureVisibility, onToggle, onSetAll, onToggleFeature }) {
+  function renderToolbar(opts = {}) {
     const container = document.getElementById('scrubber-overlay-layers');
     if (!container) return;
+    const { descriptors, activeRunIds, hasLiveJob, featureVisibility, onToggle, onSetAll, onToggleFeature } = opts;
 
-    if ((!descriptors || descriptors.length === 0) && !hasLiveJob) {
-      container.innerHTML = '';
-      container.hidden = true;
-      return;
+    if (window.OverlayControlBar?.mount) {
+      window.OverlayControlBar.mount({
+        container,
+        variant: 'scrubber',
+        descriptors,
+        activeRunIds,
+        hasLiveJob,
+        featureVisibility,
+        onToggle,
+        onSetAll,
+        onToggleFeature,
+        onAnnounce: announceStatus,
+      });
+    } else {
+      if ((!descriptors || descriptors.length === 0) && !hasLiveJob) {
+        container.innerHTML = '';
+        container.hidden = true;
+        return;
+      }
+      const chipsHtml = (descriptors || []).map((d) => renderChipHtml(d, activeRunIds.has(d.runId))).join('');
+      const liveHtml = hasLiveJob
+        ? '<span class="overlay-layer-live-pill" title="Live progressive detection stream active">● Live Stream</span>'
+        : '';
+      const bulkHtml = descriptors.length >= 2
+        ? '<span role="separator" aria-orientation="vertical" class="overlay-layers-separator"></span>'
+          + '<div role="group" aria-label="Layer bulk actions" class="overlay-layers-actions">'
+          + '<button type="button" class="btn btn-xs btn-outline overlay-layer-action-btn" data-layer-action="all" title="Show all detection layers">All</button>'
+          + '<button type="button" class="btn btn-xs btn-outline overlay-layer-action-btn" data-layer-action="none" title="Hide all detection layers">Clear</button></div>'
+        : '';
+      container.innerHTML = `<span class="overlay-layers-label">👁️ Layers:</span>`
+        + `<div role="group" aria-label="Detection run layers" class="overlay-layers-chips">${chipsHtml}${liveHtml}</div>`
+        + `${bulkHtml}${renderFeaturePillsHtml(featureVisibility)}`;
+      container.hidden = false;
+      bindToolbarEvents(container, { onToggle, onSetAll, onToggleFeature });
     }
-
-    const chipsHtml = (descriptors || []).map((d) => renderChipHtml(d, activeRunIds.has(d.runId))).join('');
-    const liveHtml = hasLiveJob
-      ? '<span class="overlay-layer-live-pill" title="Live progressive detection stream active">● Live Stream</span>'
-      : '';
-    const bulkHtml = descriptors.length >= 2
-      ? `
-        <span role="separator" aria-orientation="vertical" class="overlay-layers-separator"></span>
-        <div role="group" aria-label="Layer bulk actions" class="overlay-layers-actions">
-          <button type="button" class="btn btn-xs btn-outline overlay-layer-action-btn" data-layer-action="all" title="Show all detection layers">All</button>
-          <button type="button" class="btn btn-xs btn-outline overlay-layer-action-btn" data-layer-action="none" title="Hide all detection layers">Clear</button>
-        </div>
-      `
-      : '';
-
-    container.innerHTML = `
-      <span class="overlay-layers-label">👁️ Layers:</span>
-      <div role="group" aria-label="Detection run layers" class="overlay-layers-chips">${chipsHtml}${liveHtml}</div>
-      ${bulkHtml}
-      ${renderFeaturePillsHtml(featureVisibility)}
-    `;
-    container.hidden = false;
-
-    bindToolbarEvents(container, { onToggle, onSetAll, onToggleFeature });
-    setupToolbarKeyboardFallback(container);
-    syncToolbarTabIndices(container);
+    if (!container.hidden) {
+      setupToolbarKeyboardFallback(container);
+      syncToolbarTabIndices(container);
+    }
   }
 
   function updateChipStates(activeRunIds) {

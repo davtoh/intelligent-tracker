@@ -26,6 +26,7 @@ class _CameraMotionState:
     bg_luma: np.ndarray | None = None
     motion_until: float = 0.0
     was_active: bool = False
+    last_evaluated_at: float | None = None
     last_sample: MotionSample | None = None
 
 
@@ -77,10 +78,16 @@ class MotionGate:
         luma = _to_luma_grid(frame)
         with self._lock:
             state = self._states.setdefault(camera_id, _CameraMotionState())
-            if state.bg_luma is None:
+            gap_limit = max(self.hold_seconds, 2.0)
+            gap_exceeded = state.last_evaluated_at is not None and (ts - state.last_evaluated_at) > gap_limit
+            if state.bg_luma is None or gap_exceeded:
                 state.bg_luma = luma.astype(np.float32)
+                state.motion_until = 0.0
+                state.was_active = False
+                state.last_evaluated_at = ts
                 state.last_sample = MotionSample(False, 0.0, 0.0, False)
                 return state.last_sample
+            state.last_evaluated_at = ts
 
             diff = cv2.absdiff(luma, cv2.convertScaleAbs(state.bg_luma))
             changed_ratio = float(np.mean(diff >= self.pixel_delta_threshold))

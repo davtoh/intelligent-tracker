@@ -52,6 +52,28 @@ def _default_overlays() -> Dict[str, bool]:
     }
 
 
+def _fallback_close_manager_resources(manager: "StreamManager") -> None:
+    """Release StreamManager resources when no PipelineBundle is attached."""
+    if getattr(manager, "video_source", None):
+        manager.video_source.release()
+    if getattr(manager, "world_rule_engine", None) is not None:
+        manager.world_rule_engine.stop()
+    pipe_bus = None
+    if getattr(manager, "event_pipeline", None):
+        rule_eng = manager.event_pipeline.get("rule_engine")
+        if rule_eng is not None and hasattr(rule_eng, "stop"):
+            rule_eng.stop()
+        pipe_bus = manager.event_pipeline.get("event_bus")
+        if pipe_bus and hasattr(pipe_bus, "stop"):
+            pipe_bus.stop(timeout=0.2)
+    if getattr(manager, "event_fts_index", None) is not None:
+        manager.event_fts_index.detach()
+    if getattr(manager, "event_bus", None) and manager.event_bus is not pipe_bus and hasattr(manager.event_bus, "stop"):
+        manager.event_bus.stop(timeout=0.2)
+    if getattr(manager, "db", None) and hasattr(manager.db, "close"):
+        manager.db.close()
+
+
 def _init_manager_config(
     manager: "StreamManager",
     config_path: Optional[str],
@@ -138,11 +160,17 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         custom_cfg: Optional[Dict[str, Any]] = None,
         world_graph: Optional[WorldGraph] = None,
         processing_mode_service: Optional[Any] = None,
+        event_bus: Optional[Any] = None,
+        confidence_engine: Optional[Any] = None,
+        event_fts_index: Optional[Any] = None,
     ) -> None:
         self.camera_id = camera_id
         self.name = name or f"Camera {camera_id.upper()}"
         self.source_override = source_override
         self.world_graph = world_graph
+        self._injected_event_bus = event_bus
+        self._injected_confidence_engine = confidence_engine
+        self._injected_event_fts_index = event_fts_index
         if processing_mode_service is None:
             from dashboard.services.processing_mode_service import get_processing_mode_service
 
@@ -155,6 +183,15 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
 
     def _resume_video_source(self) -> None:
         """Callback to resume video capture when subscribers reconnect."""
+        svc = getattr(self, "_processing_mode_service", None)
+        if svc is not None and svc.should_hibernate_camera(
+            self.camera_id,
+            subscriber_count=getattr(self, "subscriber_count", 0),
+            is_recording=bool(getattr(self, "is_recording", False)),
+            in_camera_pool=bool(getattr(self, "_in_camera_pool", False)),
+            is_armed=bool(getattr(self, "is_armed", False)),
+        ):
+            return
         if self.video_source and hasattr(self.video_source, "resume"):
             self.video_source.resume()
 
@@ -183,8 +220,12 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             cfg=self.cfg,
             db_path=self.db_path,
             camera_id=self.camera_id,
+            camera_name=self.name,
             source_override=self.source_override,
             world_graph=self.world_graph,
+            event_bus=self._injected_event_bus,
+            confidence_engine=self._injected_confidence_engine,
+            event_fts_index=self._injected_event_fts_index,
         )
         self.db = bundle.db
         self.video_source = bundle.video_source
@@ -202,8 +243,16 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
         self.world_graph = bundle.world_graph
         self.world_bridge = bundle.world_bridge
         self.world_rule_engine = bundle.world_rule_engine
+        self.event_fts_index = bundle.event_fts_index
         self._pipeline_bundle = bundle.pipeline_bundle
         self._latest_jpeg = self._create_placeholder_jpeg("Camera Initializing...")
+
+    def set_armed(self, armed: bool) -> None:
+        """Propagate dynamic armed status to manager and active AsyncInferenceWorker."""
+        self.is_armed = bool(armed)
+        async_worker = getattr(getattr(self, "_worker", None), "_async_worker", None)
+        if async_worker is not None and hasattr(async_worker, "set_armed"):
+            async_worker.set_armed(self.is_armed)
 
     def signal_stop(self) -> None:
         """Signal worker loop and video source to terminate immediately without waiting."""
@@ -228,30 +277,25 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             logger.info("StreamManager background worker started for %s", self.camera_id)
 
     def stop(self) -> None:
-        """Stop background worker cleanly."""
+        """Stop background worker cleanly and release owned pipeline resources outside self._lock."""
         self.signal_stop()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=0.6)
         recorder = getattr(self, "_recording_controller", None)
         if recorder is not None:
             recorder.finalize_if_active()
-        with self._lock:
-            if self.video_source:
-                self.video_source.release()
-            if getattr(self, "world_rule_engine", None) is not None:
-                self.world_rule_engine.stop()
-            pipe_bus = None
-            if self.event_pipeline:
-                if "rule_engine" in self.event_pipeline and hasattr(self.event_pipeline["rule_engine"], "stop"):
-                    self.event_pipeline["rule_engine"].stop()
-                pipe_bus = self.event_pipeline.get("event_bus")
-                if pipe_bus and hasattr(pipe_bus, "stop"):
-                    pipe_bus.stop(timeout=0.2)
-            if self.event_bus and self.event_bus is not pipe_bus and hasattr(self.event_bus, "stop"):
-                self.event_bus.stop(timeout=0.2)
-            if self.db and hasattr(self.db, "close"):
-                self.db.close()
-            logger.info("StreamManager stopped for %s", self.camera_id)
+        bundle = getattr(self, "_pipeline_bundle", None)
+        if bundle is not None and hasattr(bundle, "close"):
+            ep = getattr(self, "event_pipeline", None)
+            if isinstance(ep, dict) and ep is not getattr(bundle, "event_pipeline", None):
+                if (re_obj := ep.get("rule_engine")) is not None and hasattr(re_obj, "stop"):
+                    re_obj.stop()
+                if (eb_obj := ep.get("event_bus")) is not None and eb_obj is not getattr(bundle, "event_bus", None) and hasattr(eb_obj, "stop"):
+                    eb_obj.stop(timeout=0.2)
+            bundle.close()
+        else:
+            _fallback_close_manager_resources(self)
+        logger.info("StreamManager stopped for %s", self.camera_id)
 
     def start_recording(self, **kwargs: Any) -> Dict[str, Any]:
         """Start MP4 recording, wake hibernating source, and sync processing state."""

@@ -13,8 +13,19 @@ from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.stream_manager import StreamManager
 
 
-def _resolve_health_status(cam_id: str, cfg: dict[str, Any], is_running: bool):
-    """Resolve effective camera health status label and CameraHealth snapshot."""
+def snapshot_pool_streams(pool: Any) -> dict[str, Any]:
+    """Return a thread-safe shallow copy of ``pool.streams``."""
+    if pool is None:
+        return {}
+    lock = getattr(pool, "_lock", None)
+    if lock is not None and hasattr(lock, "__enter__"):
+        with lock:
+            return dict(getattr(pool, "streams", None) or {})
+    return dict(getattr(pool, "streams", None) or {})
+
+
+def _resolve_health_status(cam_id: str, cfg: dict[str, Any], is_running: bool, mgr: Any = None) -> tuple[str, Any, bool]:
+    """Resolve effective camera health status label, CameraHealth snapshot, and hibernation flag."""
     health = CameraHealthManager().get_health(cam_id)
     health_status = (
         "paused"
@@ -23,7 +34,14 @@ def _resolve_health_status(cam_id: str, cfg: dict[str, Any], is_running: bool):
     )
     if is_running and health.status == "error":
         health_status = "error"
-    return health_status, health
+    is_hib = bool(getattr(mgr, "is_hibernating", False)) if mgr else False
+    if is_hib and cfg.get("enabled", True):
+        svc = getattr(mgr, "_processing_mode_service", None)
+        if getattr(svc, "mode", None) == "paused":
+            health_status = "paused"
+        elif health_status not in ("error", "offline"):
+            health_status = "hibernating"
+    return health_status, health, is_hib
 
 
 def build_camera_status_row(
@@ -34,13 +52,9 @@ def build_camera_status_row(
     """Assemble the public status and telemetry dictionary for one camera channel."""
     telemetry = mgr.get_latest_telemetry() if mgr else {}
     is_running = mgr.is_running if mgr else False
-    res_str = "640x480"
-    is_synth = False
-    if mgr and mgr.video_source:
-        res_str = f"{mgr.video_source.width}x{mgr.video_source.height}"
-        is_synth = mgr.video_source.is_synthetic
-
-    health_status, health = _resolve_health_status(cam_id, cfg, is_running)
+    res_str = f"{mgr.video_source.width}x{mgr.video_source.height}" if (mgr and mgr.video_source) else "640x480"
+    is_synth = bool(mgr and mgr.video_source and mgr.video_source.is_synthetic)
+    health_status, health, is_hib = _resolve_health_status(cam_id, cfg, is_running, mgr=mgr)
     rec_state = telemetry.get("recording") or {"camera_id": cam_id, "is_recording": False, "status": "idle"}
 
     return {
@@ -54,6 +68,7 @@ def build_camera_status_row(
         "classes": cfg.get("classes"),
         "enabled": cfg.get("enabled", True),
         "status": health_status,
+        "is_hibernating": is_hib,
         "error_code": health.error_code if health.error_code != "OK" else None,
         "error_message": health.last_error,
         "suggested_action": health.suggested_action,
@@ -64,6 +79,7 @@ def build_camera_status_row(
         "source_type": "synthetic" if is_synth else "physical",
         "recording": rec_state,
         "armed": bool(getattr(mgr, "is_armed", cfg.get("armed", False))),
+        "is_armed": bool(getattr(mgr, "is_armed", cfg.get("armed", False))),
     }
 
 
@@ -126,7 +142,7 @@ class CameraPoolQueryMixin:
         sm = self.primary_stream
         if sm is not None and getattr(sm, "confidence_engine", None) is not None:
             return sm.confidence_engine
-        for stream in (getattr(self, "streams", None) or {}).values():
+        for stream in snapshot_pool_streams(self).values():
             eng = getattr(stream, "confidence_engine", None)
             if eng is not None:
                 return eng

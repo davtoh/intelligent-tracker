@@ -1,3 +1,8 @@
+---
+trigger: model_decision
+description: Apply when integrating intelligent-tracker with enterprise-website (POST /api/v1/security/events/, video_gallery uploads, clearance sync) or adding inter-repository GitHub documentation links.
+---
+
 # Rule: Cross-Project Ecosystem & Link Hygiene
 
 ## Purpose

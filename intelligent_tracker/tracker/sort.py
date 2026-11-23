@@ -151,6 +151,12 @@ class SortTracker:
         self.track_metadata.clear()
         self._last_update_time = None
 
+    @property
+    def tracks(self) -> Dict[int, Track]:
+        """Return currently active tracks keyed by track ID."""
+        now = self._last_update_time if self._last_update_time is not None else time.time()
+        return self._format_active_tracks(now, confirmed_only=False)
+
     def _parse_detections(self, detections: List[Any]) -> Tuple[list, list, list, list]:
         """Parse detections into standardized tuples."""
         det_bboxes, det_classes, det_scores, det_labels = [], [], [], []

@@ -63,6 +63,9 @@
       tileSurfaces.get(frame.cameraId)?.pushFrame(frame.payload, frame.seq, frame.captureTsMs);
     };
     client.onSourceStatus = (camId, status, reason) => applyTileSourceStatus(camId, status, reason);
+    client.onTelemetry = (msg) => {
+      window.GridTileOverlay?.handleTelemetry?.(msg, document.getElementById('multi-grid-container'));
+    };
     client.onTransportChange = () => {
       if (currentGridMode !== '1x1') {
         renderGrid(lastRenderArgs.activeCameras, lastRenderArgs.focusedCameraId, lastRenderArgs.onFocus);
@@ -81,48 +84,26 @@
     renderGrid(activeCameras, focusedCameraId, onFocus);
   }
 
-  function buildTileMediaHtml(cam, index, useWs) {
-    const idAttr = escapeHtml(cam.id);
-    if (useWs) {
-      return `<canvas class="tile-canvas" data-camera-id="${idAttr}" aria-label="${escapeHtml(cam.name)} live feed"></canvas>`;
-    }
-    if (index < MAX_MJPEG_TILES_PER_PAGE) {
-      return `<img src="/stream/${encodeURIComponent(cam.id)}?annotated=true" alt="${escapeHtml(cam.name)}" />`;
-    }
-    return `
-      <div class="tile-standby-poster" data-standby-tile="true">
-        <span class="tile-standby-label">Standby (4 live/page cap)</span>
-        <button type="button" class="btn btn-xs btn-primary btn-tile-view" data-id="${idAttr}">🔍 View</button>
-      </div>
-    `;
-  }
-
   function buildGridTileHtml(cam, focusedCameraId, index, useWs) {
-    const idAttr = escapeHtml(cam.id);
     const statusClass = normalizeTileStatus(cam.status);
-    return `
-      <div class="camera-grid-tile glass-panel ${cam.id === focusedCameraId ? 'focused-tile' : ''}" data-id="${idAttr}">
-        <div class="tile-header">
-          <span class="tile-title">${escapeHtml(cam.name)}</span>
-          <div class="tile-header-badges">
-            <span class="tile-rec-badge" data-camera-id="${idAttr}" hidden>REC</span>
-            <span class="tile-status-badge ${statusClass}">${escapeHtml(statusClass.toUpperCase())}</span>
-          </div>
-        </div>
-        <div class="tile-video-container">${buildTileMediaHtml(cam, index, useWs)}</div>
-        <div class="tile-footer">
-          <span class="tile-fps">${cam.fps ?? 0} FPS</span>
-          <span class="tile-tracks">${cam.active_tracks_count || 0} tracks</span>
-          <div class="tile-actions">
-            <button type="button" class="btn btn-xs btn-outline btn-tile-record" data-camera-id="${idAttr}" title="Start/Stop MP4 Recording">⏺ Rec</button>
-            <button type="button" class="btn btn-xs btn-primary btn-tile-focus" data-id="${idAttr}">🔍 View 1x1</button>
-          </div>
-        </div>
-      </div>
-    `;
+    if (window.GridTileOverlay?.buildGridTileHtml) {
+      return window.GridTileOverlay.buildGridTileHtml(cam, focusedCameraId, index, useWs, statusClass, MAX_MJPEG_TILES_PER_PAGE);
+    }
+    const idAttr = escapeHtml(cam.id);
+    const media = useWs
+      ? `<canvas class="tile-canvas" data-camera-id="${idAttr}"></canvas>`
+      : (index < MAX_MJPEG_TILES_PER_PAGE ? `<img src="/stream/${encodeURIComponent(cam.id)}?annotated=true" />` : '<div class="tile-standby-poster"></div>');
+    return `<div class="camera-grid-tile ${cam.id === focusedCameraId ? 'focused-tile' : ''}" data-id="${idAttr}"><div class="tile-video-container">${media}</div></div>`;
   }
 
   function bindGridTileEvents(multiGridContainer, onFocus) {
+    multiGridContainer.querySelectorAll('.btn-tile-arm').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const camId = btn.getAttribute('data-camera-id');
+        if (camId) window.GridTileOverlay?.toggleCameraArmed?.(camId, btn, lastRenderArgs.activeCameras);
+      });
+    });
     multiGridContainer.querySelectorAll('.btn-tile-record').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -168,16 +149,11 @@
     tiles.forEach((tile, i) => {
       const cam = cameras[i];
       const statusClass = normalizeTileStatus(cam.status);
-      tile.classList?.toggle?.('focused-tile', cam.id === focusedCameraId);
-      const badge = tile.querySelector?.('.tile-status-badge');
-      if (badge) {
-        badge.className = `tile-status-badge ${statusClass}`;
-        badge.textContent = statusClass.toUpperCase();
+      if (window.GridTileOverlay?.syncTileMeta) {
+        window.GridTileOverlay.syncTileMeta(tile, cam, focusedCameraId, statusClass);
+      } else {
+        tile.classList?.toggle?.('focused-tile', cam.id === focusedCameraId);
       }
-      const fpsEl = tile.querySelector?.('.tile-fps');
-      if (fpsEl) fpsEl.textContent = `${cam.fps ?? 0} FPS`;
-      const tracksEl = tile.querySelector?.('.tile-tracks');
-      if (tracksEl) tracksEl.textContent = `${cam.active_tracks_count || 0} tracks`;
     });
     return true;
   }
@@ -234,29 +210,58 @@
 
   function syncMultiviewSubscription(cameras) {
     if (!hasWsStack()) return;
-    const ids = getPageSlice(cameras, currentGridMode).items.map((c) => c.id).filter(Boolean);
+    const layout = getEffectiveLayout();
+    const ids = getPageSlice(cameras, layout).items.map((c) => c.id).filter(Boolean);
     if (ids.length === 0) {
       lastSubscribedKey = '';
       window.MultiviewWsClient.unsubscribeAll();
       return;
     }
-    const key = `${currentGridMode}:${ids.join(',')}`;
+    const key = `${layout}:${ids.join(',')}`;
     const st = window.MultiviewWsClient.getState?.();
     if (key !== lastSubscribedKey || (!st?.connected && !st?.degraded)) {
       lastSubscribedKey = key;
-      window.MultiviewWsClient.subscribe(ids, currentGridMode);
+      window.MultiviewWsClient.subscribe(ids, layout);
     }
   }
 
   function resubscribeActiveGrid() {
     if (currentGridMode === '1x1' || !useWsTransport()) return false;
-    const ids = getPageSlice(lastRenderArgs.activeCameras || [], currentGridMode).items
+    const layout = getEffectiveLayout();
+    const ids = getPageSlice(lastRenderArgs.activeCameras || [], layout).items
       .map((c) => c.id)
       .filter(Boolean);
-    lastSubscribedKey = ids.length ? `${currentGridMode}:${ids.join(',')}` : '';
+    lastSubscribedKey = ids.length ? `${layout}:${ids.join(',')}` : '';
     if (ids.length === 0) window.MultiviewWsClient.unsubscribeAll();
-    else window.MultiviewWsClient.subscribe(ids, currentGridMode);
+    else window.MultiviewWsClient.subscribe(ids, layout);
     return true;
+  }
+
+  function renderMultiGridView(multiGridContainer, singleVideoWrapper, cameras, focusedCameraId, onFocus) {
+    window.LivePlayer?.detachLiveStream?.(document.getElementById('live-stream-img'), { keepGrid: true });
+    singleVideoWrapper.style.display = 'none';
+    const effectiveLayout = getEffectiveLayout();
+    const useWs = useWsTransport();
+    const desiredTransport = useWs ? 'ws' : 'mjpeg';
+    multiGridContainer.style.display = 'grid';
+    multiGridContainer.className = `multi-camera-grid grid-${effectiveLayout}`;
+    const pageInfo = getPageSlice(cameras, effectiveLayout);
+    updatePaginationBar(pageInfo);
+    updateDegradedBadge();
+    if (!syncExistingTiles(multiGridContainer, pageInfo.items, focusedCameraId, desiredTransport)) {
+      teardownGridContainer(multiGridContainer, { keepWsSubscription: hasWsStack() });
+      multiGridContainer.innerHTML = pageInfo.items
+        .map((c, idx) => buildGridTileHtml(c, focusedCameraId, idx, useWs))
+        .join('');
+      bindGridTileEvents(multiGridContainer, onFocus);
+      const liveTab = document.getElementById('tab-live');
+      const isLiveActive = !liveTab || Boolean(liveTab.classList?.contains('active'));
+      if (useWs) mountCanvasSurfaces(multiGridContainer, pageInfo.items);
+      else if (isLiveActive) multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
+      renderedTransport = desiredTransport;
+    }
+    const liveTab = document.getElementById('tab-live');
+    if (!liveTab || liveTab.classList?.contains('active')) syncMultiviewSubscription(cameras);
   }
 
   function renderGrid(activeCameras, focusedCameraId, onFocus) {
@@ -270,6 +275,7 @@
 
     if (currentGridMode === '1x1') {
       teardownGridContainer(multiGridContainer);
+      window.GridTileOverlay?.stopAlertsPoll?.();
       multiGridContainer.style.display = 'none';
       singleVideoWrapper.style.display = 'flex';
       updatePaginationBar({ page: 1, totalPages: 1, totalItems: 0 });
@@ -277,27 +283,8 @@
       window.LivePlayer?.attachLiveStream?.(document.getElementById('live-stream-img'), focusedCameraId);
       window.dispatchEvent(new Event('resize'));
     } else {
-      window.LivePlayer?.detachLiveStream?.(document.getElementById('live-stream-img'), { keepGrid: true });
-      singleVideoWrapper.style.display = 'none';
-      const effectiveLayout = getEffectiveLayout();
-      const useWs = useWsTransport();
-      const desiredTransport = useWs ? 'ws' : 'mjpeg';
-      multiGridContainer.style.display = 'grid';
-      multiGridContainer.className = `multi-camera-grid grid-${effectiveLayout}`;
-      const pageInfo = getPageSlice(cameras, effectiveLayout);
-      updatePaginationBar(pageInfo);
-      updateDegradedBadge();
-      if (!syncExistingTiles(multiGridContainer, pageInfo.items, focusedCameraId, desiredTransport)) {
-        teardownGridContainer(multiGridContainer, { keepWsSubscription: hasWsStack() });
-        multiGridContainer.innerHTML = pageInfo.items
-          .map((c, idx) => buildGridTileHtml(c, focusedCameraId, idx, useWs))
-          .join('');
-        bindGridTileEvents(multiGridContainer, onFocus);
-        if (useWs) mountCanvasSurfaces(multiGridContainer, pageInfo.items);
-        else multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
-        renderedTransport = desiredTransport;
-      }
-      syncMultiviewSubscription(cameras);
+      renderMultiGridView(multiGridContainer, singleVideoWrapper, cameras, focusedCameraId, onFocus);
+      window.GridTileOverlay?.startAlertsPoll?.();
     }
     window.CameraRecording?.hydrateFromCameraList?.(cameras);
   }

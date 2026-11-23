@@ -63,12 +63,17 @@ def _build_service(request: Request, camera_id: str | None) -> RoiRecognitionSer
         raise HTTPException(status_code=503, detail="Database unavailable")
     pool = get_camera_pool(conn=request)
     mgr = get_active_stream_manager(camera_id, conn=request) if camera_id else None
+    app_state = getattr(getattr(request, "app", None), "state", None)
+    ce = getattr(mgr, "confidence_engine", None) or getattr(pool, "confidence_engine", None) or getattr(app_state, "confidence_engine", None)
+    fts = getattr(mgr, "event_fts_index", None) or getattr(pool, "event_fts_index", None) or getattr(app_state, "event_fts_index", None)
     return RoiRecognitionService(
         db=db,
         stream_manager=mgr,
         camera_pool=pool,
         videos_dir=VIDEOS_DIR,
         crops_dir=CROPS_DIR,
+        confidence_engine=ce,
+        fts_index=fts,
     )
 
 

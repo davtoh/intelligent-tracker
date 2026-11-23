@@ -38,8 +38,9 @@ ON CONFLICT(entity_id) DO UPDATE SET
 _INSERT_TIMELINE_SQL = """
 INSERT INTO world_timeline_events (
     event_type, entity_id, entity_name, category, camera_id, zone_id,
-    timestamp, confidence, title, summary, tags, metadata_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    timestamp, confidence, title, summary, tags, metadata_json,
+    video_filename, media_offset_sec
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -112,9 +113,14 @@ def _build_timeline_query(
 class MemoryMixin:
     """Provides confidence state persistence and FTS5 timeline operations."""
 
+    _conn: Any
+    _lock: Any
+
     def get_schema_version(self) -> int:
         """Return the SQLite ``PRAGMA user_version`` integer."""
         with self._lock:
+            if self._conn is None:
+                return 0
             cur = self._conn.cursor()
             try:
                 row = cur.execute("PRAGMA user_version;").fetchone()
@@ -138,10 +144,15 @@ class MemoryMixin:
             str(last_camera_id), str(last_zone_id), seen_ts, json.dumps(evidence or {}, sort_keys=True),
         )
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(_UPSERT_CONFIDENCE_SQL, values)
                 self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
         return self.get_entity_confidence(int(entity_id)) or {}
@@ -153,6 +164,8 @@ class MemoryMixin:
             "FROM entity_confidence_state c LEFT JOIN entities e ON e.id = c.entity_id WHERE c.entity_id = ?"
         )
         with self._lock:
+            if self._conn is None:
+                return None
             cur = self._conn.cursor()
             try:
                 row = cur.execute(sql, (int(entity_id),)).fetchone()
@@ -163,6 +176,8 @@ class MemoryMixin:
     def _fetch_hydrated_rows(self, sql: str, params: list[Any], json_col: str, out_key: str) -> list[dict[str, Any]]:
         """Execute a SELECT under lock and hydrate JSON column on each row."""
         with self._lock:
+            if self._conn is None:
+                return []
             cur = self._conn.cursor()
             try:
                 rows = cur.execute(sql, params).fetchall()
@@ -186,26 +201,38 @@ class MemoryMixin:
         entity_name: str = "", category: str = "", camera_id: str = "", zone_id: str = "",
         timestamp: float | None = None, confidence: float = 1.0, title: str = "",
         tags: str = "", metadata: dict[str, Any] | None = None,
+        video_filename: str = "", media_offset_sec: float | None = None,
     ) -> int:
         """Insert a timeline event and automatically index it into ``world_timeline_fts``."""
         ts = float(timestamp) if timestamp is not None else time.time()
+        meta = dict(metadata or {})
+        v_fn = str(video_filename or meta.get("video_filename") or "").strip()
+        m_off = float(media_offset_sec if media_offset_sec is not None else (meta.get("media_offset_sec") or 0.0))
         values = (
             event_type.strip(), entity_id, entity_name.strip(), category.strip(),
             camera_id.strip(), zone_id.strip(), ts, float(confidence),
-            title.strip(), summary.strip(), tags.strip(), json.dumps(metadata or {}, sort_keys=True),
+            title.strip(), summary.strip(), tags.strip(), json.dumps(meta, sort_keys=True),
+            v_fn, m_off,
         )
         with self._lock:
+            if self._conn is None:
+                raise RuntimeError("Database connection is closed")
             cur = self._conn.cursor()
             try:
                 cur.execute(_INSERT_TIMELINE_SQL, values)
                 self._conn.commit()
                 return int(cur.lastrowid)
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
     def get_timeline_event(self, event_id: int) -> dict[str, Any] | None:
         """Retrieve a single timeline event by ID."""
         with self._lock:
+            if self._conn is None:
+                return None
             cur = self._conn.cursor()
             try:
                 row = cur.execute("SELECT * FROM world_timeline_events WHERE id = ?", (int(event_id),)).fetchone()
@@ -216,11 +243,16 @@ class MemoryMixin:
     def delete_timeline_event(self, event_id: int) -> bool:
         """Delete a timeline event and remove its entry from ``world_timeline_fts``."""
         with self._lock:
+            if self._conn is None:
+                return False
             cur = self._conn.cursor()
             try:
                 cur.execute("DELETE FROM world_timeline_events WHERE id = ?", (int(event_id),))
                 self._conn.commit()
                 return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 

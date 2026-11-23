@@ -33,6 +33,26 @@ from intelligent_tracker.world.nodes import (
 _POLICY_FIELDS = frozenset({"quiet_hours", "dwell_override", "alert_sensitivity", "extra"})
 
 
+def _merge_existing_camera(
+    existing: CameraNode, stored: CameraNode, preserve_defaults: bool = True,
+) -> None:
+    """Merge child edges and optionally preserve homography, pose, extra, and friendly name."""
+    stored.created_at = existing.created_at
+    stored.zone_ids = set(existing.zone_ids) | set(stored.zone_ids)
+    stored.tripwire_ids = set(existing.tripwire_ids) | set(stored.tripwire_ids)
+    if not preserve_defaults:
+        return
+    if stored.homography is None and existing.homography is not None:
+        stored.homography = deepcopy(existing.homography)
+    if tuple(stored.world_pose) == (0.0, 0.0, 0.0) and tuple(existing.world_pose) != (0.0, 0.0, 0.0):
+        stored.world_pose = existing.world_pose
+    merged_extra = dict(existing.extra or {})
+    merged_extra.update(stored.extra or {})
+    stored.extra = merged_extra
+    if (not stored.name or stored.name == stored.camera_id) and existing.name:
+        stored.name = existing.name
+
+
 class WorldGraph:
     """Instance-scoped, thread-safe graph of cameras, zones, tripwires, entities, and policy."""
 
@@ -54,8 +74,8 @@ class WorldGraph:
         self._transitions: dict[str, TransitionEdgeNode] = {}
         self._policy: WorldPolicy = policy.clone() if policy is not None else WorldPolicy()
 
-    def register_camera(self, camera: CameraNode) -> CameraNode:
-        """Register or update a CameraNode while preserving existing child edges."""
+    def register_camera(self, camera: CameraNode, *, preserve_defaults: bool = True) -> CameraNode:
+        """Register or update a CameraNode while preserving existing child edges and calibration."""
         if not camera.camera_id:
             raise ValueError("CameraNode.camera_id must be non-empty")
 
@@ -66,9 +86,7 @@ class WorldGraph:
             stored = deepcopy(camera)
             stored.updated_at = now
             if existing is not None:
-                stored.created_at = existing.created_at
-                stored.zone_ids = set(existing.zone_ids) | set(stored.zone_ids)
-                stored.tripwire_ids = set(existing.tripwire_ids) | set(stored.tripwire_ids)
+                _merge_existing_camera(existing, stored, preserve_defaults=preserve_defaults)
             else:
                 events.append(
                     NodeAddedEvent(

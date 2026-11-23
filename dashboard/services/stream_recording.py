@@ -54,6 +54,22 @@ def _idle_status(camera_id: str) -> dict[str, Any]:
     }
 
 
+def _enqueue_deferred_recording(svc: Any, meta: dict[str, Any], camera_id: str) -> str | None:
+    """Enqueue deferred VideoIndexer job outside StreamRecordingController._lock."""
+    if svc is None or not meta.get("filename") or not hasattr(svc, "enqueue_deferred_indexing"):
+        return None
+    try:
+        opts = {"video_path": meta["output_path"]} if meta.get("output_path") else None
+        entry = svc.enqueue_deferred_indexing(
+            meta["filename"], camera_id=camera_id,
+            recording_id=meta.get("recording_id") or "", opts=opts,
+        )
+        return entry.get("job_id")
+    except Exception as exc:
+        logger.warning("Failed to enqueue deferred indexing for '%s': %s", meta.get("filename"), exc)
+        return None
+
+
 class StreamRecordingController:
     """Thread-safe controller managing per-camera MP4 recording via PipelineVideoWriter."""
 
@@ -97,6 +113,7 @@ class StreamRecordingController:
         output_dir: str | None = None,
     ) -> dict[str, Any]:
         """Start MP4 recording for the camera stream."""
+        _, proc_mode = self._current_processing_mode()
         with self._lock:
             if self._writer is not None and self._writer.is_open:
                 raise RuntimeError(f"Camera '{self.camera_id}' is already recording")
@@ -104,7 +121,6 @@ class StreamRecordingController:
             safe_name = sanitize_recording_filename(self.camera_id, filename)
             os.makedirs(target_dir, exist_ok=True)
             out_path = os.path.join(target_dir, safe_name)
-            _, proc_mode = self._current_processing_mode()
             self._writer = self._writer_factory(
                 out_path, fps=float(fps), resolution=resolution,
                 max_frames=max_frames, max_duration_s=max_duration_s,
@@ -130,18 +146,27 @@ class StreamRecordingController:
         step_res: Any = None,
     ) -> bool:
         """Write raw or annotated frame to active recording and auto-finalize on limit."""
+        svc, curr_mode = self._current_processing_mode()
+        deferred_meta: dict[str, Any] | None = None
         with self._lock:
             if self._writer is None or self._active_meta is None:
                 return False
-            _, curr_mode = self._current_processing_mode()
             is_capture_only = curr_mode == "capture_only" or self._active_meta.get("processing_mode") == "capture_only"
             use_ann = (not is_capture_only) and self._active_meta.get("annotated", True) and annotated_frame is not None
             written = self._writer.write(annotated_frame if use_ann else raw_frame)
             if written and step_res is not None and not is_capture_only:
                 self._capture_step_snapshot(step_res, raw_frame)
             if not self._writer.is_open:
-                self._finalize_locked(status="completed")
-            return written
+                meta, should_defer = self._finalize_locked(status="completed", curr_mode=curr_mode)
+                if should_defer:
+                    deferred_meta = meta
+        if deferred_meta is not None:
+            job_id = _enqueue_deferred_recording(svc, deferred_meta, self.camera_id)
+            if job_id:
+                with self._lock:
+                    if self._last_meta is not None:
+                        self._last_meta["deferred_job_id"] = job_id
+        return written
 
     def _capture_step_snapshot(self, step_res: Any, raw_frame: np.ndarray) -> None:
         """Buffer time-indexed tracks and sighting tallies for instant Video Studio handoff."""
@@ -201,32 +226,20 @@ class StreamRecordingController:
             logger.warning("Failed to persist live_capture run for '%s': %s", meta.get("filename"), exc)
             return None
 
-    def _finalize_locked(self, status: str) -> dict[str, Any]:
+    def _finalize_locked(self, status: str, curr_mode: str | None = None) -> tuple[dict[str, Any], bool]:
         """Release active writer and persist final metadata snapshot under lock."""
         meta = dict(self._active_meta or _idle_status(self.camera_id))
         recorded_frames = list(self._recorded_frames)
         stats = dict(self._live_stats)
-        self._recorded_frames = []
-        self._live_stats = {}
+        self._recorded_frames, self._live_stats = [], {}
         if self._writer is not None:
             self._writer.release()
             meta.update(self._writer.snapshot())
-        svc, curr_mode = self._current_processing_mode()
         final_mode = curr_mode or meta.get("processing_mode")
         is_capture_only = final_mode == "capture_only" or meta.get("processing_mode") == "capture_only"
         meta.update({"status": status, "is_recording": False, "stopped_at": time.time(), "processing_mode": final_mode})
         if is_capture_only:
             meta["annotated"] = False
-            if svc is not None and meta.get("filename") and hasattr(svc, "enqueue_deferred_indexing"):
-                try:
-                    opts = {"video_path": meta["output_path"]} if meta.get("output_path") else None
-                    entry = svc.enqueue_deferred_indexing(
-                        meta["filename"], camera_id=self.camera_id,
-                        recording_id=meta.get("recording_id") or "", opts=opts,
-                    )
-                    meta["deferred_job_id"] = entry.get("job_id")
-                except Exception as exc:
-                    logger.warning("Failed to enqueue deferred indexing for '%s': %s", meta.get("filename"), exc)
         else:
             run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
             if run_rec and run_rec.get("run_id"):
@@ -234,19 +247,39 @@ class StreamRecordingController:
         self._writer = None
         self._active_meta = None
         self._last_meta = meta
-        return dict(meta)
+        return dict(meta), is_capture_only
 
     def stop(self) -> dict[str, Any]:
         """Stop an active recording and return finalized file telemetry."""
+        svc, curr_mode = self._current_processing_mode()
         with self._lock:
             if self._writer is None:
                 raise RuntimeError(f"No active recording for camera '{self.camera_id}'")
-            return self._finalize_locked(status="stopped")
+            meta, should_defer = self._finalize_locked(status="stopped", curr_mode=curr_mode)
+        if should_defer:
+            job_id = _enqueue_deferred_recording(svc, meta, self.camera_id)
+            if job_id:
+                meta["deferred_job_id"] = job_id
+                with self._lock:
+                    if self._last_meta is not None:
+                        self._last_meta["deferred_job_id"] = job_id
+        return meta
 
     def finalize_if_active(self) -> dict[str, Any] | None:
         """Idempotently finalize any active recording during stream teardown."""
+        svc, curr_mode = self._current_processing_mode()
         with self._lock:
-            return None if self._writer is None else self._finalize_locked(status="stopped")
+            if self._writer is None:
+                return None
+            meta, should_defer = self._finalize_locked(status="stopped", curr_mode=curr_mode)
+        if should_defer:
+            job_id = _enqueue_deferred_recording(svc, meta, self.camera_id)
+            if job_id:
+                meta["deferred_job_id"] = job_id
+                with self._lock:
+                    if self._last_meta is not None:
+                        self._last_meta["deferred_job_id"] = job_id
+        return meta
 
     def status(self) -> dict[str, Any]:
         """Return active, last completed, or idle recording status snapshot."""
@@ -272,7 +305,11 @@ class StreamRecordingMixin:
 
     def start_recording(self, **kwargs: Any) -> dict[str, Any]:
         """Start MP4 recording and wake a hibernating video source if needed."""
-        src_fps = getattr(self.video_source, "fps", None)
+        src_fps = (
+            getattr(self.video_source, "source_fps", None)
+            or getattr(self.video_source, "measured_fps", None)
+            or getattr(self.video_source, "fps", None)
+        )
         cfg_fps = self.cfg.get("video", {}).get("framerate", 20.0)
         if kwargs.get("fps") is None:
             kwargs["fps"] = float(src_fps if src_fps and src_fps > 0 else cfg_fps)

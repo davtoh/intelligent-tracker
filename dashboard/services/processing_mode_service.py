@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from dashboard.dependencies import VIDEOS_DIR
+from dashboard.services.camera_pool_queries import snapshot_pool_streams
 from dashboard.services.video_analytics_service import submit_async_analytics_job
 from dashboard.services.video_jobs_service import get_video_job_manager
 from intelligent_tracker.pipeline.analytics_scheduler import AnalyticsScheduler
@@ -74,7 +75,7 @@ class ProcessingModeService:
             if active_tab is not None:
                 self._active_tab = active_tab.strip().lower() or "live"
             self._updated_at = time.time()
-            return self.get_state()
+        return self.get_state()
 
     def should_hibernate_camera(
         self,
@@ -123,7 +124,7 @@ class ProcessingModeService:
 
     def _build_camera_states(self, pool: Any) -> dict[str, dict[str, Any]]:
         """Build per-camera policy and runtime state snapshot from CameraPool."""
-        streams = getattr(pool, "streams", {}) or {} if pool is not None else {}
+        streams = snapshot_pool_streams(pool)
         states: dict[str, dict[str, Any]] = {}
         for cam_id, sm in streams.items():
             sub_count = int(getattr(sm, "subscriber_count", 0))
@@ -153,7 +154,7 @@ class ProcessingModeService:
         if hasattr(pool, "sync_processing_mode"):
             pool.sync_processing_mode(self)
         else:
-            for cam_id, sm in (getattr(pool, "streams", {}) or {}).items():
+            for cam_id, sm in snapshot_pool_streams(pool).items():
                 sub_count = int(getattr(sm, "subscriber_count", 0))
                 is_rec = bool(getattr(sm, "is_recording", False))
                 is_armed = bool(getattr(sm, "is_armed", False))
@@ -192,14 +193,14 @@ class ProcessingModeService:
     def get_state(self, pool: Any = None) -> dict[str, Any]:
         """Return current processing mode status snapshot."""
         with self._lock:
-            return {
+            snap = {
                 "mode": self._mode, "focused_camera_id": self._focused_camera_id,
                 "active_tab": self._active_tab, "valid_modes": list(VALID_PROCESSING_MODES),
-                "deferred_jobs": list(self._deferred_jobs),
-                "camera_states": self._build_camera_states(pool),
-                "scheduler": self._scheduler.get_summary(),
-                "updated_at": self._updated_at,
+                "deferred_jobs": list(self._deferred_jobs), "updated_at": self._updated_at,
             }
+        snap["camera_states"] = self._build_camera_states(pool)
+        snap["scheduler"] = self._scheduler.get_summary()
+        return snap
 
 
 _service_lock = threading.Lock()

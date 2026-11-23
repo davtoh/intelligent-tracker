@@ -51,8 +51,10 @@ def probe_source_readiness(
 
 def _active_usb_indices_for_other_streams(coordinator: Any, exclude_camera_id: str) -> set[int]:
     """Return numeric device indices currently held by other running streams."""
+    from dashboard.services.camera_pool_queries import snapshot_pool_streams
+
     active: set[int] = set()
-    for cid, mgr in (getattr(coordinator, "streams", None) or {}).items():
+    for cid, mgr in snapshot_pool_streams(coordinator).items():
         if cid == exclude_camera_id or not getattr(mgr, "is_running", False):
             continue
         src = getattr(mgr, "_resolved_source", getattr(mgr, "source_override", None))
@@ -61,8 +63,11 @@ def _active_usb_indices_for_other_streams(coordinator: Any, exclude_camera_id: s
     return active
 
 
-def _record_probe_error(camera_id: str, name: str, raw_source: Any, resolved_source: Any, meta: dict[str, Any]) -> None:
-    """Persist pre-flight probe failure into CameraHealthManager."""
+def _record_probe_error(
+    camera_id: str, name: str, raw_source: Any, resolved_source: Any,
+    meta: dict[str, Any], coordinator: Any = None, enabled: bool = True,
+) -> None:
+    """Persist pre-flight probe failure into CameraHealthManager and WorldGraph."""
     err_code = meta.get("error_code", "FILE_NOT_FOUND")
     err_msg = (
         f"Camera device #{resolved_source} unavailable: {raw_source}"
@@ -72,6 +77,14 @@ def _record_probe_error(camera_id: str, name: str, raw_source: Any, resolved_sou
     CameraHealthManager().set_error(
         camera_id, err_msg, error_code=err_code, attempted_paths=meta.get("attempted_paths"),
     )
+    wg = getattr(coordinator, "world_graph", None) if coordinator is not None else None
+    if wg is not None:
+        from intelligent_tracker.world.nodes import CameraNode
+
+        wg.register_camera(CameraNode(
+            camera_id=camera_id, name=name, source=str(raw_source),
+            enabled=enabled, extra={"status": "offline", "error_code": err_code},
+        ))
     logger.warning("Camera stream [%s] '%s' registered offline (%s): %s", camera_id, name, err_code, raw_source)
 
 
@@ -85,6 +98,9 @@ def _construct_manager_safely(
             config_path=coordinator.base_config_path, db_path=coordinator.db_path,
             camera_id=camera_id, name=name, source_override=resolved_source,
             custom_cfg=custom_cfg, world_graph=coordinator.world_graph,
+            event_bus=getattr(coordinator, "event_bus", None),
+            confidence_engine=getattr(coordinator, "confidence_engine", None),
+            event_fts_index=getattr(coordinator, "event_fts_index", None),
         )
     except Exception as exc:
         capture_runtime_exception(exc, context={"camera_id": camera_id, "source": str(raw_source)})
@@ -97,13 +113,8 @@ def _construct_manager_safely(
 
 
 def bootstrap_camera_stream(
-    coordinator: Any,
-    camera_id: str,
-    cfg: dict[str, Any],
-    *,
-    start: bool = True,
-    resolver: Any = CameraPathResolver,
-    stream_manager_cls: Any = None,
+    coordinator: Any, camera_id: str, cfg: dict[str, Any], *,
+    start: bool = True, resolver: Any = CameraPathResolver, stream_manager_cls: Any = None,
     custom_cfg_builder: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
     start_stream_fn: Callable[[Any, str, str, Any], None] | None = None,
 ) -> Any | None:
@@ -117,7 +128,7 @@ def bootstrap_camera_stream(
         raw_source, device_name=device_name, resolver=resolver, active_usb_indices=active_indices,
     )
     if meta.get("status") == "error":
-        _record_probe_error(camera_id, name, raw_source, resolved_source, meta)
+        _record_probe_error(camera_id, name, raw_source, resolved_source, meta, coordinator, bool(cfg.get("enabled", True)))
         return None
     mgr = _construct_manager_safely(
         coordinator, camera_id, name, raw_source, resolved_source,
@@ -125,7 +136,6 @@ def bootstrap_camera_stream(
     )
     if mgr is None:
         return None
-
     mgr._resolved_source, mgr._source_error = resolved_source, False
     mgr._processing_mode_service, mgr._in_camera_pool = coordinator.processing_mode_service, True
     mgr.is_armed = bool(cfg.get("armed", False))
@@ -136,6 +146,32 @@ def bootstrap_camera_stream(
     if start and start_stream_fn is not None:
         start_stream_fn(mgr, camera_id, name, raw_source)
     return mgr
+
+
+def reapply_stream_scenario(coordinator: Any, old_mgr: Any, new_mgr: Any) -> None:
+    """Re-apply ScenarioManager zones, tripwires, and homography onto a new StreamManager."""
+    if new_mgr is None:
+        return
+    scen = getattr(coordinator, "scenario_manager", None) or (
+        getattr(old_mgr, "_scenario_manager", None) if old_mgr is not None else None
+    )
+    if scen is not None and hasattr(scen, "apply_to_stream_manager"):
+        scen.apply_to_stream_manager(new_mgr)
+
+
+def register_disabled_world_node(coordinator: Any, camera_id: str, cfg: dict[str, Any]) -> None:
+    """Register a disabled camera configuration as a CameraNode in coordinator.world_graph."""
+    wg = getattr(coordinator, "world_graph", None)
+    if wg is None:
+        return
+    from intelligent_tracker.world.nodes import CameraNode
+
+    wg.register_camera(CameraNode(
+        camera_id=camera_id,
+        name=cfg.get("name", camera_id),
+        source=str(cfg.get("source", "")),
+        enabled=False,
+    ))
 
 
 def retry_camera_connection(pool: Any, camera_id: str) -> dict[str, Any]:

@@ -97,18 +97,27 @@
   function extractEventsFromReport(report) {
     if (!report || typeof report !== 'object') return [];
     const events = [];
-    const occurrences = Array.isArray(report.occurrences) ? report.occurrences : [];
-    for (const occ of occurrences) {
-      const t = occ?.first_seen_sec ?? occ?.media_offset_sec ?? occ?.offset_sec;
-      if (t !== undefined && t !== null) {
-        events.push({ offset_sec: Number(t), kind: 'sighting', label: occ.entity_name || `Track #${occ.track_id ?? '?'}` });
+    const entities = Array.isArray(report.entities) ? report.entities : [];
+    for (const ent of entities) {
+      const label = ent?.entity?.name || ent?.entity_name || (ent?.entity?.id ? `Entity #${ent.entity.id}` : 'Entity');
+      const directOffset = ent?.first_seen_sec ?? ent?.media_offset_sec ?? ent?.offset_sec;
+      if (directOffset !== undefined && directOffset !== null && Number.isFinite(Number(directOffset))) {
+        events.push({ offset_sec: Number(directOffset), kind: 'sighting', label });
+        continue;
+      }
+      const timeline = Array.isArray(ent?.timeline) ? ent.timeline : [];
+      for (const item of timeline) {
+        const itemOffset = item?.media_offset_sec ?? item?.offset_sec;
+        if (itemOffset !== undefined && itemOffset !== null && Number.isFinite(Number(itemOffset))) {
+          events.push({ offset_sec: Number(itemOffset), kind: 'sighting', label });
+        }
       }
     }
     const alerts = Array.isArray(report.alerts) ? report.alerts : [];
     for (const al of alerts) {
       const t = al?.media_offset_sec ?? al?.offset_sec;
-      if (t !== undefined && t !== null) {
-        events.push({ offset_sec: Number(t), kind: 'alert', label: al.event_type || 'RSAC Alert' });
+      if (t !== undefined && t !== null && Number.isFinite(Number(t))) {
+        events.push({ offset_sec: Number(t), kind: 'alert', label: al.event_type || al.message || 'RSAC Alert' });
       }
     }
     return events;

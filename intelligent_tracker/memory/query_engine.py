@@ -50,6 +50,8 @@ def _format_citation(row: dict[str, Any]) -> dict[str, Any]:
         "summary": row.get("summary", ""),
         "confidence": row.get("confidence", 1.0),
         "rank": row.get("rank", 0.0),
+        "video_filename": row.get("video_filename", ""),
+        "media_offset_sec": row.get("media_offset_sec"),
     }
 
 

@@ -12,11 +12,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from dashboard.services.async_inference_worker import (
-    AsyncInferenceWorker,
-    build_live_step_result,
-    build_worker_step_result,
-)
+from dashboard.services.async_inference_worker import AsyncInferenceWorker
 from dashboard.services.cached_replay_provider import CachedReplayProvider
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.services.multiview.thumbnail_cache import maybe_update_manager_thumbnail
@@ -24,13 +20,14 @@ from dashboard.services.stream_telemetry import (
     _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
     _extract_track_telemetry, _resolve_detector_telemetry, build_stream_telemetry,
 )
-from dashboard.services.stream_worker_recovery import handle_worker_exception, publish_error_placeholders
+from dashboard.services.stream_worker_recovery import build_live_step_result, handle_worker_exception, publish_error_placeholders, step_worker_vs_frame
 from intelligent_tracker.pipeline import FrameProcessor, FrameStepResult, PipelineBundle, PipelineConfig
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker")
 
 __all__ = [
     "StreamWorker",
+    "build_live_step_result",
     "build_stream_telemetry",
     "_build_tripwires_data",
     "_build_zones_data",
@@ -57,6 +54,7 @@ class StreamWorker:
     def __init__(self, manager: Any) -> None:
         self.manager = manager
         self._processor: FrameProcessor | None = None
+        self._async_worker: AsyncInferenceWorker | None = None
 
     def _get_processor(self) -> FrameProcessor:
         """Lazily build and synchronize the canonical FrameProcessor."""
@@ -121,14 +119,14 @@ class StreamWorker:
         processor = self._get_processor()
         svc = getattr(self.manager, "_processing_mode_service", None)
         replay = CachedReplayProvider(getattr(self.manager, "db", None), self.manager.video_source, processor=processor)
-        async_worker = AsyncInferenceWorker(
-            processor, replay_provider=replay, scheduler=getattr(svc, "scheduler", None),
-            camera_id=self.manager.camera_id, is_armed=bool(getattr(self.manager, "is_armed", False)),
-        )
+        self._async_worker = async_worker = AsyncInferenceWorker(processor, replay_provider=replay, scheduler=getattr(svc, "scheduler", None), camera_id=self.manager.camera_id, is_armed=bool(getattr(self.manager, "is_armed", False)), is_armed_getter=lambda: bool(getattr(self.manager, "is_armed", False)))
         async_worker.start()
-        consecutive_empty, consecutive_errors, frame_seq = 0, 0, 0
+        consecutive_empty, consecutive_errors, frame_seq, last_loop_count = 0, 0, 0, 0
         try:
             while self.manager._running and not self.manager._stop_event.is_set():
+                hib_frames = 0 if consecutive_errors > 0 else max(int(getattr(processor, "frame_count", 0) or 0), frame_seq)
+                if self._handle_hibernation(self.manager.video_source, hib_frames):
+                    continue
                 try:
                     with self.manager.video_source as vs:
                         while self.manager._running and not self.manager._stop_event.is_set():
@@ -136,24 +134,17 @@ class StreamWorker:
                             if self._handle_hibernation(vs, hib_frames):
                                 continue
                             try:
-                                ret, frame = vs.read(timeout=1.0)
-                                if not ret or frame is None:
-                                    consecutive_empty, should_skip = self._handle_empty_frame(vs, consecutive_empty)
-                                    if should_skip:
-                                        continue
-                                consecutive_empty, frame_seq = 0, frame_seq + 1
-                                is_rec = bool(getattr(self.manager, "is_recording", False))
-                                step_res = build_worker_step_result(self.manager, async_worker, frame, frame_seq, self._should_run_vision_step(is_rec), is_rec, step_fn=build_live_step_result)
-                                if step_res.frame_count % 30 == 1 or consecutive_errors > 0:
-                                    CameraHealthManager().set_online(self.manager.camera_id, fps=step_res.fps)
-                                self._process_single_frame(step_res)
-                                consecutive_errors = 0
+                                frame_seq, last_loop_count, consecutive_empty, consecutive_errors = step_worker_vs_frame(
+                                    self, vs, async_worker, processor, replay,
+                                    frame_seq, last_loop_count, consecutive_empty, consecutive_errors,
+                                )
                             except Exception as exc:
                                 consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="frame_step")
                 except Exception as exc:
                     consecutive_errors = handle_worker_exception(self.manager, exc, consecutive_errors, stage="source_enter")
         finally:
             async_worker.stop()
+            self._async_worker = None
 
     def _process_single_frame(self, step_res: FrameStepResult) -> None:
         """Store raw frame, encode needed overlays, and broadcast telemetry."""
@@ -161,25 +152,29 @@ class StreamWorker:
             self.manager._latest_raw_frame = step_res.frame.copy()
             raw_missing = getattr(self.manager, "_latest_raw_jpeg", None) is None
             ann_missing = getattr(self.manager, "_latest_jpeg", None) is None
-
-        if getattr(self.manager, "has_raw_subscribers", True) or raw_missing:
+        svc = getattr(self.manager, "_processing_mode_service", None)
+        is_capture_only = getattr(svc, "mode", None) == "capture_only"
+        has_raw = getattr(self.manager, "has_raw_subscribers", True)
+        has_ann = getattr(self.manager, "has_annotated_subscribers", True)
+        if is_capture_only or has_raw or raw_missing:
             self._encode_raw_frame(step_res.frame)
-
         recorder = getattr(self.manager, "_recording_controller", None)
         is_rec = bool(recorder is not None and recorder.is_recording)
         annotated = None
-        if getattr(self.manager, "has_annotated_subscribers", True) or is_rec or ann_missing:
+        if is_capture_only:
+            with self.manager._lock:
+                if getattr(self.manager, "_latest_raw_jpeg", None) is not None:
+                    self.manager._latest_jpeg = self.manager._latest_raw_jpeg
+        elif has_ann or is_rec or ann_missing:
             annotated = self._encode_annotated_frame(step_res.frame, step_res.tracks, step_res.fps)
-            if is_rec:
-                recorder.write_frame(step_res.frame, annotated, step_res=step_res)
-
+        if is_rec and recorder is not None:
+            recorder.write_frame(step_res.frame, annotated, step_res=step_res)
         thumb_src = annotated if annotated is not None else step_res.frame
-        maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp)
-
-        telemetry = self._build_telemetry(
-            step_res.tracks, step_res.timestamp, step_res.fps, step_res.frame.shape, step_res.frame_count,
-            step_res=step_res,
-        )
+        maybe_update_manager_thumbnail(self.manager, thumb_src, step_res.frame_count, step_res.timestamp, mono_s=time.monotonic())
+        vs = getattr(self.manager, "video_source", None)
+        vs_fps = float(getattr(vs, "measured_fps", getattr(vs, "_measured_fps", 0.0)) or 0.0)
+        tel_fps = vs_fps if vs_fps > 0 else (step_res.fps or 0.0)
+        telemetry = self._build_telemetry(step_res.tracks, step_res.timestamp, tel_fps, step_res.frame.shape, step_res.frame_count, step_res=step_res)
         with self.manager._lock:
             self.manager._latest_telemetry = telemetry
 
@@ -236,10 +231,7 @@ class StreamWorker:
                 self.manager._latest_raw_jpeg = buf.tobytes()
 
     def _encode_annotated_frame(
-        self,
-        frame: np.ndarray,
-        tracks: dict[int, Any],
-        measured_fps: float,
+        self, frame: np.ndarray, tracks: dict[int, Any], measured_fps: float,
     ) -> np.ndarray:
         """Render floating overlays and compress annotated frame to JPEG."""
         annotated = self.manager._overlay_renderer.render(

@@ -136,10 +136,15 @@ class ActiveLearningTriage:
             return None
         crop = _extract_crop_from_frame(frame, getattr(track, "bbox", None))
         resolved_video = str(video_filename or self.video_filename or "").strip()
+        stored_offset = getattr(self, "current_media_offset_sec", None)
         resolved_offset = (
             float(media_offset_sec)
             if media_offset_sec is not None
-            else (float(now) if resolved_video and timestamp is not None else 0.0)
+            else (
+                float(stored_offset)
+                if resolved_video and stored_offset is not None
+                else (float(now) if resolved_video and timestamp is not None else 0.0)
+            )
         )
         return self._queue_crop(
             camera_id=camera_id, track_id=tid, crop=crop, similarity=similarity,

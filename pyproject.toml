@@ -53,6 +53,12 @@ dependencies = [
     "jinja2>=3.1.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/davtoh/InteligentTracker"
 
@@ -63,4 +69,14 @@ intelligent-tracker-ctl = "intelligent_tracker.cli.ctl:main"
 
 [tool.setuptools.packages.find]
 include = ["intelligent_tracker*", "dashboard*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+
 

@@ -162,17 +162,22 @@ def format_generic_event(event: BaseEvent) -> dict[str, Any]:
 
 def normalize_event_doc(event: Any) -> dict[str, Any] | None:
     """Convert any supported pipeline/world event into a timeline document dict."""
+    doc: dict[str, Any] | None = None
     if isinstance(event, ZoneEvent):
-        return format_zone_event(event)
-    if isinstance(event, TripwireCrossEvent):
-        return format_tripwire_event(event)
-    if isinstance(event, EntityStateChangedEvent):
-        return format_entity_state_event(event)
-    if isinstance(event, EntityIdentifiedEvent):
-        return format_identified_event(event)
-    if isinstance(event, (RSACViolationEvent, IntrusionAlert, RestrictedEntityAlert)):
-        return format_security_event(event)
-    if isinstance(event, (PetActivityEvent, OccupancyThresholdEvent, ReviewItemQueuedEvent, BaseEvent)):
-        return format_generic_event(event)
-    return None
+        doc = format_zone_event(event)
+    elif isinstance(event, TripwireCrossEvent):
+        doc = format_tripwire_event(event)
+    elif isinstance(event, EntityStateChangedEvent):
+        doc = format_entity_state_event(event)
+    elif isinstance(event, EntityIdentifiedEvent):
+        doc = format_identified_event(event)
+    elif isinstance(event, (RSACViolationEvent, IntrusionAlert, RestrictedEntityAlert)):
+        doc = format_security_event(event)
+    elif isinstance(event, (PetActivityEvent, OccupancyThresholdEvent, ReviewItemQueuedEvent, BaseEvent)):
+        doc = format_generic_event(event)
+    if doc is not None:
+        meta = getattr(event, "metadata", None) or {}
+        doc["video_filename"] = str(getattr(event, "video_filename", None) or meta.get("video_filename") or "").strip()
+        doc["media_offset_sec"] = float(getattr(event, "media_offset_sec", None) or meta.get("media_offset_sec") or 0.0)
+    return doc
 

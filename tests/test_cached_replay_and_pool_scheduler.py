@@ -257,6 +257,25 @@ class TestCachedReplayAndPoolScheduler(unittest.TestCase):
         self.assertAlmostEqual(res_worker.fps, 14.8, places=2)
         self.assertIn(9, res_worker.tracks)
 
+    def test_detection_stream_exposes_config_and_tightens_sample_rate_tolerance(self) -> None:
+        """get_video_detection_stream exposes config and FileDetectionReplayProvider tightens tolerance_s."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db = TrackerDB(os.path.join(tmp.name, "exact.db"))
+        self.addCleanup(db.close)
+        dets = [{"time": 10.0, "frame": 300, "tracks": [{"id": 1, "bbox": [10, 10, 20, 20], "label": "person"}]}]
+        db.save_video_run(
+            "cam.mp4", report={"frames_processed": 10}, config={"sample_rate": 1},
+            frame_detections=dets, source_resolution=[2688, 1520], source_fps=15.0, timestamp=100.0,
+        )
+        vs = SimpleNamespace(is_file=True, source="data/videos/cam.mp4", source_fps=15.0)
+        provider = CachedReplayProvider(db, vs)
+        frame = np.zeros((360, 640, 3), dtype=np.uint8)
+        hit = provider.build_step_result(frame, now=1.0, frame_seq=1, media_time_s=10.05)
+        miss = provider.build_step_result(frame, now=1.1, frame_seq=2, media_time_s=10.30)
+        self.assertEqual(hit.tracks[1].label, "person")
+        self.assertEqual(miss.tracks, {})
+
 
 if __name__ == "__main__":
     unittest.main()

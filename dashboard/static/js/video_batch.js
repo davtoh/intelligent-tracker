@@ -61,20 +61,23 @@
     if (!sel) return;
     const prev = sel.value;
     try {
-      const resp = await fetch('/api/cameras');
+      const resp = await fetch('/api/scenarios');
       if (!resp.ok) return;
-      const cams = await resp.json();
+      const data = await resp.json();
+      const cameras = (data && typeof data.cameras === 'object' && data.cameras) ? data.cameras : {};
       sel.innerHTML = '<option value="">None (Detection &amp; Re-ID Only)</option>';
-      (Array.isArray(cams) ? cams : []).forEach((cam) => {
-        if (!cam?.id) return;
+      Object.entries(cameras).forEach(([camId, cfg]) => {
+        if (!camId) return;
+        const zones = Array.isArray(cfg?.zones) ? cfg.zones.length : 0;
+        const tripwires = Array.isArray(cfg?.tripwires) ? cfg.tripwires.length : 0;
         const opt = document.createElement('option');
-        opt.value = cam.id;
-        opt.textContent = cam.name ? `${cam.name} (${cam.id})` : cam.id;
+        opt.value = camId;
+        opt.textContent = `${camId} (${zones} zones, ${tripwires} tripwires)`;
         sel.appendChild(opt);
       });
       if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
     } catch (err) {
-      console.warn('Failed to load scenario camera profiles:', err);
+      console.warn('Failed to load scenario profiles:', err);
     }
   }
 

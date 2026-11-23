@@ -133,11 +133,13 @@ class TestDashboardUI(unittest.TestCase):
         self.assertEqual(js_res.status_code, 200)
         js = js_res.text
         self.assertIn("showToast", js)
-        self.assertIn("STANDBY_POSTER_SVG", js)
         self.assertIn("detachLiveStream", js)
         self.assertIn("attachLiveStream", js)
         self.assertNotIn("window.location.protocol =", js)
         self.assertNotIn("location.protocol =", js)
+        lp_res = self.client.get("/static/js/live_player.js")
+        self.assertEqual(lp_res.status_code, 200)
+        self.assertIn("STANDBY_POSTER_SVG", lp_res.text)
 
         # Milestone: Text Truncation & Accessible Popovers
         self.assertIn(".text-truncate", css)

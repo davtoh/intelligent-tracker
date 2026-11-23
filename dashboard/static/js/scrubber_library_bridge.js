@@ -10,6 +10,7 @@
 
   let deferredVideoSelection = null;
   let deferredReportFilename = null;
+  let activeBridgeFilename = null;
 
   function isVideosTabActive() {
     const tabEl = document.getElementById('tab-videos');
@@ -54,6 +55,7 @@
   }
 
   function syncLoadedVideoUI(filename, isWebCompatible, codec, options = {}, context = {}) {
+    activeBridgeFilename = filename || null;
     updateLoadedTitle(filename);
     if (context.btnAddAsCamera) context.btnAddAsCamera.disabled = false;
     window.VideoJobClient?.setCurrentViewedFilename(filename);
@@ -188,9 +190,13 @@
     if (!filename || !Number.isFinite(durationSec) || durationSec <= 0) return;
     if (!window.VideoTimelineLinks) return;
     try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/report`);
+      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/reports`);
       if (!resp.ok) return;
-      const report = await resp.json();
+      const runs = await resp.json();
+      const latestRun = Array.isArray(runs) ? runs[0] : runs;
+      const report = latestRun?.report || latestRun;
+      if (!report || typeof report !== 'object') return;
+      if (activeBridgeFilename && activeBridgeFilename !== filename) return;
       const events = window.VideoTimelineLinks.extractEventsFromReport(report);
       window.VideoTimelineLinks.renderTimelineTicks(events, durationSec);
     } catch (e) {
@@ -229,7 +235,7 @@
     pendingSeek = { filename: fn, offsetSec };
     const cardBtn = document.querySelector(`.video-file-card[data-file="${CSS.escape(fn)}"] .btn-select-video`);
     if (cardBtn) cardBtn.click();
-    else if (typeof loadVideoIntoPlayer === 'function') loadVideoIntoPlayer(`/api/videos/${encodeURIComponent(fn)}`, fn, true, 'h264');
+    else if (typeof loadVideoIntoPlayer === 'function') loadVideoIntoPlayer(`/videos/${encodeURIComponent(fn)}`, fn, true, 'h264');
     return true;
   }
 

@@ -14,7 +14,7 @@ from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.events import EventBus
 from intelligent_tracker.matcher import GalleryMatcher
-from intelligent_tracker.memory import ConfidenceEngine
+from intelligent_tracker.memory import ConfidenceEngine, EventFTSIndex
 from intelligent_tracker.pipeline import (
     PipelineBundle,
     PipelineConfig,
@@ -57,6 +57,7 @@ class StreamPipelineBundle:
     world_graph: WorldGraph | None = None
     world_bridge: WorldEntityBridge | None = None
     world_rule_engine: WorldRuleEngine | None = None
+    event_fts_index: EventFTSIndex | None = None
     pipeline_bundle: PipelineBundle | None = None
 
 
@@ -70,38 +71,32 @@ class StreamPipelineFactory:
 
     @classmethod
     def build(
-        cls,
-        cfg: dict[str, Any],
-        db_path: str,
-        camera_id: str,
-        source_override: Any = None,
-        world_graph: WorldGraph | None = None,
+        cls, cfg: dict[str, Any], db_path: str, camera_id: str, source_override: Any = None,
+        world_graph: WorldGraph | None = None, event_bus: EventBus | None = None,
+        confidence_engine: ConfidenceEngine | None = None, event_fts_index: EventFTSIndex | None = None,
+        camera_name: str | None = None,
     ) -> StreamPipelineBundle:
         """Instantiate and wire complete computer vision pipeline via PipelineEngine."""
         data = dict(cfg or {})
         raw_source = source_override if source_override is not None else data.get("video", {}).get("source")
         config = PipelineConfig.from_dict(
-            data,
-            camera_id=camera_id,
-            db_path=db_path,
-            source_override=source_override,
+            data, camera_id=camera_id, camera_name=camera_name, db_path=db_path, source_override=source_override,
             detector_fallback_mock=is_synthetic_source(raw_source, data.get("type")),
-            enable_governance=True,
-            enable_event_bus_fallback=True,
+            enable_governance=True, enable_event_bus_fallback=True,
         )
         if "loop" not in data.get("video", {}):
             config.loop_video = True
-
-        bundle = PipelineEngine.build(config, world_graph=world_graph)
+        b = PipelineEngine.build(
+            config, world_graph=world_graph, event_bus=event_bus,
+            confidence_engine=confidence_engine, event_fts_index=event_fts_index,
+        )
         return StreamPipelineBundle(
-            db=bundle.db, video_source=bundle.video_source, detector=bundle.detector,
-            tracker=bundle.tracker, analytics=bundle.analytics,
-            reid_extractor=bundle.reid_extractor, gallery_matcher=bundle.gallery_matcher,
-            rsac_manager=bundle.rsac_manager, active_learning=bundle.active_learning,
-            enrollment_manager=bundle.enrollment_manager, event_bus=bundle.event_bus,
-            event_pipeline=bundle.event_pipeline, confidence_engine=bundle.confidence_engine,
-            world_graph=bundle.world_graph, world_bridge=bundle.world_bridge,
-            world_rule_engine=bundle.world_rule_engine, pipeline_bundle=bundle,
+            db=b.db, video_source=b.video_source, detector=b.detector, tracker=b.tracker, analytics=b.analytics,
+            reid_extractor=b.reid_extractor, gallery_matcher=b.gallery_matcher, rsac_manager=b.rsac_manager,
+            active_learning=b.active_learning, enrollment_manager=b.enrollment_manager, event_bus=b.event_bus,
+            event_pipeline=b.event_pipeline, confidence_engine=b.confidence_engine, world_graph=b.world_graph,
+            world_bridge=b.world_bridge, world_rule_engine=b.world_rule_engine,
+            event_fts_index=b.event_fts_index, pipeline_bundle=b,
         )
 
     @staticmethod

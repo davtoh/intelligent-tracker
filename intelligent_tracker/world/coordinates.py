@@ -149,6 +149,11 @@ class GlobalCoordinateMapper:
         with self._lock:
             return self._homographies.get(camera_id)
 
+    def remove_homography(self, camera_id: str) -> bool:
+        """Remove any registered GroundPlaneHomography for camera_id."""
+        with self._lock:
+            return self._homographies.pop(camera_id, None) is not None
+
     def has_camera(self, camera_id: str) -> bool:
         """Return True if camera_id has a registered homography or world pose."""
         with self._lock:
@@ -220,6 +225,27 @@ def sync_homography_to_world(
             graph_mapper.register_camera(camera_id, homography=homo)
 
 
+def clear_homography_from_world(
+    world_graph: Any,
+    coordinate_mapper: GlobalCoordinateMapper | None,
+    camera_id: str,
+) -> None:
+    """Clear calibrated homography from GlobalCoordinateMapper and attached WorldGraph CameraNode."""
+    if coordinate_mapper is not None:
+        coordinate_mapper.remove_homography(camera_id)
+    if world_graph is None:
+        return
+    graph_mapper = getattr(world_graph, "coordinate_mapper", None)
+    if graph_mapper is not None and graph_mapper is not coordinate_mapper:
+        graph_mapper.remove_homography(camera_id)
+    existing = world_graph.get_node(camera_id, node_type="camera")
+    if isinstance(existing, CameraNode):
+        existing.homography = None
+        if isinstance(existing.extra, dict):
+            existing.extra.pop("homography_profile", None)
+        world_graph.register_camera(existing, preserve_defaults=False)
+
+
 def sync_loaded_homographies_to_world(
     world_graph: Any,
     coordinate_mapper: GlobalCoordinateMapper | None,
@@ -232,6 +258,27 @@ def sync_loaded_homographies_to_world(
         homo = entry.get("homography")
         if isinstance(homo, GroundPlaneHomography) and homo.is_calibrated:
             sync_homography_to_world(world_graph, coordinate_mapper, cam_id, homo)
+
+
+def sync_loaded_scenarios_to_world(
+    world_graph: Any, coordinate_mapper: GlobalCoordinateMapper | None, cameras: dict[str, dict[str, Any]],
+) -> None:
+    """Sync all loaded homographies, zones, and tripwires into WorldGraph."""
+    sync_loaded_homographies_to_world(world_graph, coordinate_mapper, cameras)
+    if world_graph is None:
+        return
+    from intelligent_tracker.world.nodes import TripwireNode, ZoneNode
+
+    for cam_id, cam_entry in cameras.items():
+        for z_name, z in cam_entry.get("zones", {}).items():
+            poly = z.polygon.tolist() if hasattr(z.polygon, "tolist") else list(z.polygon)
+            if len(poly) >= 3:
+                pts = [(float(pt[0]), float(pt[1])) for pt in poly]
+                world_graph.register_zone(ZoneNode(zone_id=z_name, camera_id=cam_id, name=z_name, points=pts, max_occupancy=getattr(z, "capacity_limit", None)))
+        for tw_name, tw in cam_entry.get("tripwires", {}).items():
+            seg = tw.line_segment
+            if len(seg) >= 2:
+                world_graph.register_tripwire(TripwireNode(tripwire_id=tw_name, camera_id=cam_id, name=tw_name, pt1=(float(seg[0][0]), float(seg[0][1])), pt2=(float(seg[1][0]), float(seg[1][1])), direction="both" if getattr(tw, "bidirectional", True) else "in"))
 
 
 def compute_hop_global_path(

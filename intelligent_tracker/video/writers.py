@@ -55,6 +55,11 @@ def _normalize_frame(frame: np.ndarray, width: int, height: int) -> np.ndarray |
     return out
 
 
+def _wall_clock_now() -> float:
+    """Return wall-clock epoch timestamp isolated from monotonic duration scopes."""
+    return time.time()
+
+
 class PipelineVideoWriter:
     """Thread-safe MP4/AVI video writer with codec fallback, resize, and telemetry."""
 
@@ -91,7 +96,7 @@ class PipelineVideoWriter:
         )
         self._released = False
         self.frames_written = 0
-        self.started_at = time.time()
+        self.started_at = _wall_clock_now()
         self.stopped_at: float | None = None
         self._start_mono = time.monotonic()
         self._stop_mono: float | None = None
@@ -134,7 +139,7 @@ class PipelineVideoWriter:
             if self._released:
                 return
             self._released = True
-            self.stopped_at = time.time()
+            self.stopped_at = _wall_clock_now()
             self._stop_mono = time.monotonic()
             if self._writer is not None:
                 try:

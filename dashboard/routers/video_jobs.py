@@ -206,6 +206,7 @@ async def analyze_video(
     confidence: Optional[float] = Query(None, ge=0.01, le=1.0, description="Detection confidence threshold"),
     classes: Optional[str] = Query(None, description="Comma-separated class filter names (e.g. person,car)"),
     async_mode: Optional[bool] = Query(None, description="Run analysis asynchronously in background"),
+    scenario_camera_id: Optional[str] = Query(None, description="Optional scenario camera ID for spatial zones/tripwires"),
     req: Optional[VideoAnalyzeRequest] = None,
 ):
     """Run offline occurrence indexer and entity analytics on a video recording."""
@@ -214,7 +215,7 @@ async def analyze_video(
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
 
-    opts = parse_analyze_options(sample_rate, detector, confidence, classes, async_mode, req)
+    opts = parse_analyze_options(sample_rate, detector, confidence, classes, async_mode, req, scenario_camera_id)
     job_mgr = _require_active_job_manager()
     active_job = job_mgr.get_active_job_for_file(safe_name)
     if active_job is not None:
