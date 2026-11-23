@@ -11,8 +11,10 @@ from scripts.cdp_inspect import find_chrome_executable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROBE_PATH = REPO_ROOT / ".diagnostics" / "probes" / "spa_nine_tab_cdp_probe.py"
+DIAGNOSE_PY = Path.home() / ".gemini/config/skills/system-diagnostics/scripts/diagnose.py"
 CHROME_EXE = find_chrome_executable()
 HAS_CHROME = bool(CHROME_EXE and (os.path.exists(CHROME_EXE) or shutil.which(CHROME_EXE)))
+HAS_DIAGNOSE = PROBE_PATH.is_file() and DIAGNOSE_PY.is_file()
 
 
 def _load_spa_probe():
@@ -23,7 +25,10 @@ def _load_spa_probe():
     return module
 
 
-@unittest.skipUnless(HAS_CHROME, "Chrome/Edge executable not found for headless CDP E2E")
+@unittest.skipUnless(
+    HAS_CHROME and HAS_DIAGNOSE,
+    "Chrome/Edge executable or system-diagnostics diagnose.py not found for headless CDP E2E",
+)
 class TestStep4SpaNineTabE2E(unittest.TestCase):
     """Verify 0 HTTP/JS errors, 0 CLS, 0 overflows, and interactive flows across 9 SPA tabs."""
 
