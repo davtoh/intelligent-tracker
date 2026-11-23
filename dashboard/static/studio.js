@@ -85,6 +85,7 @@
 
     window.StudioOverlays?.init(() => studioState);
     bindStudioUI();
+    window.WorldTacticalMinimapView?.bindPoseEditor?.(() => studioState.activeCamera);
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
 
@@ -185,6 +186,7 @@
   }
 
   function renderBEVMinimap() {
+    if (window.WorldTacticalMinimapView) return window.WorldTacticalMinimapView.fetchAndRender(studioState.bevCanvas, studioState.activeCamera, studioState.homography, studioState.zones);
     window.BEVMinimap?.render(studioState.bevCanvas, studioState.homography, studioState.zones, studioState.activeCamera);
   }
 

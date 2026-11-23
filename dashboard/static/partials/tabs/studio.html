@@ -58,6 +58,16 @@
               <span class="legend-item"><span class="dot red"></span> Restricted</span>
               <span class="legend-item"><span class="arrow-icon">↗</span> Velocity</span>
             </div>
+            <div class="world-pose-editor" id="world-pose-editor">
+              <div class="world-pose-grid">
+                <label class="world-pose-field">X (m)<input type="number" step="0.5" id="world-pose-x" value="0" /></label>
+                <label class="world-pose-field">Y (m)<input type="number" step="0.5" id="world-pose-y" value="0" /></label>
+                <label class="world-pose-field">Yaw°<input type="number" step="5" id="world-pose-yaw" value="0" /></label>
+                <label class="world-pose-field">FOV°<input type="number" step="5" min="10" max="180" id="world-pose-fov" value="75" /></label>
+                <label class="world-pose-field">Range<input type="number" step="1" min="1" id="world-pose-range" value="12" /></label>
+              </div>
+              <button type="button" class="btn btn-sm btn-secondary" id="btn-save-world-pose">Save World Pose</button>
+            </div>
           </div>
 
           <!-- Active Zones & Tripwires Card -->

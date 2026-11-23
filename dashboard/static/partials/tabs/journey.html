@@ -3,10 +3,12 @@
       <div class="journey-wrapper">
         <div class="glass-panel toolbar-panel">
           <div class="toolbar-left">
-            <div class="search-box journey-search-box">
+            <div class="search-box journey-search-box journey-autocomplete-wrap">
               <span class="search-icon">🔍</span>
-              <input type="text" id="journey-search-query"
+              <input type="text" id="journey-search-query" autocomplete="off"
                 placeholder="Enter Entity Name (e.g. Alice) or Track ID (e.g. 42)..." />
+              <ul id="journey-suggest-list" class="journey-suggest-list hidden" role="listbox"
+                aria-label="Entity suggestions"></ul>
             </div>
             <button class="btn btn-primary" id="btn-journey-search">🔎 Search Journey</button>
           </div>

@@ -72,6 +72,13 @@ _SPATIAL_TABLES_DDL = (
         matrix_json TEXT NOT NULL, metric_width REAL DEFAULT 10.0,
         metric_height REAL DEFAULT 10.0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );""",
+    """CREATE TABLE IF NOT EXISTS camera_world_poses (
+        camera_id TEXT PRIMARY KEY,
+        origin_x REAL DEFAULT 0.0, origin_y REAL DEFAULT 0.0,
+        yaw_deg REAL DEFAULT 0.0, scale REAL DEFAULT 1.0,
+        fov_deg REAL DEFAULT 75.0, range_m REAL DEFAULT 12.0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
 )
 
 _SECURITY_TABLES_DDL = (

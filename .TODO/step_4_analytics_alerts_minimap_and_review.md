@@ -67,13 +67,13 @@
 
 ---
 
-## Milestone 3: Calibrated `WorldTacticalMinimap` (`/api/topology/world-map`) & `#journey` Prefix Autocomplete *(Deferred to Next Turn)*
+## Milestone 3: Calibrated `WorldTacticalMinimap` (`/api/topology/world-map`) & `#journey` Prefix Autocomplete
 
-- [ ] **intelligent_tracker/repositories/schema_manager.py, intelligent_tracker/repositories/world_pose_repo.py & intelligent_tracker/database.py**: Add `camera_world_poses` table and `WorldPoseMixin` (`<= 120L`, `<= 4` methods with `self._conn.rollback()` in `except`), composed into `TrackerDB` (leaving `spatial_repo.py` untouched).
-- [ ] **intelligent_tracker/world/minimap.py, intelligent_tracker/repositories/entity_repo.py & dashboard/routers/topology.py**: Emit velocity vectors (`vx`, `vy`, `speed_mps`) in `WorldTacticalMinimap`, add `EntityMixin.suggest_entities(query, limit)` (prefix-first ranking), and expose `GET /api/topology/world-pose`, `PUT /api/topology/world-pose/{camera_id}` (hydrated into `/api/topology/world-map`), and `GET /api/entities/suggest`.
-- [ ] **dashboard/static/js/world_minimap.js, dashboard/static/partials/tabs/studio.html, dashboard/static/studio.js, dashboard/static/css/topology.css & dashboard/static/index.html**: Implement `window.WorldTacticalMinimapView` consuming `/api/topology/world-map` (calibrated grid, FOV cones, zones, transitions, trajectories, velocity vectors, and pose editor controls) with `BEVMinimap` fallback, keeping `studio.js <= 349L` and `index.html <= 178L`.
-- [ ] **dashboard/static/partials/tabs/journey.html & dashboard/static/js/journey_search.js**: Add `#journey-suggest-list` autocomplete dropdown wired to `/api/entities/suggest` with debounced input, keyboard navigation (`ArrowUp`/`ArrowDown`/`Escape`/`Enter`), and direct `Enter`-key search submission on `#journey-search-query`.
-- [ ] **tests/test_step4_m3_world_minimap_and_journey.py**: Add unit, FastAPI `TestClient`, and Node VM tests for world pose persistence, velocity vectors, `/api/entities/suggest` prefix ranking, `WorldTacticalMinimapView`, and `#journey` autocomplete + `Enter` submit.
+- [x] **intelligent_tracker/repositories/schema_manager.py, intelligent_tracker/repositories/world_pose_repo.py & intelligent_tracker/database.py**: Add `camera_world_poses` table and `WorldPoseMixin` (`<= 120L`, `<= 4` methods with `self._conn.rollback()` in `except`), composed into `TrackerDB` (leaving `spatial_repo.py` untouched).
+- [x] **intelligent_tracker/world/minimap.py, intelligent_tracker/repositories/entity_repo.py & dashboard/routers/topology.py**: Emit velocity vectors (`vx`, `vy`, `speed_mps`) in `WorldTacticalMinimap`, add `EntityMixin.suggest_entities(query, limit)` (prefix-first ranking), and expose `GET /api/topology/world-pose`, `PUT /api/topology/world-pose/{camera_id}` (hydrated into `/api/topology/world-map`), and `GET /api/entities/suggest`.
+- [x] **dashboard/static/js/world_minimap.js, dashboard/static/partials/tabs/studio.html, dashboard/static/studio.js, dashboard/static/css/topology.css & dashboard/static/index.html**: Implement `window.WorldTacticalMinimapView` consuming `/api/topology/world-map` (calibrated grid, FOV cones, zones, transitions, trajectories, velocity vectors, and pose editor controls) with `BEVMinimap` fallback, keeping `studio.js <= 349L` and `index.html <= 178L`.
+- [x] **dashboard/static/partials/tabs/journey.html & dashboard/static/js/journey_search.js**: Add `#journey-suggest-list` autocomplete dropdown wired to `/api/entities/suggest` with debounced input, keyboard navigation (`ArrowUp`/`ArrowDown`/`Escape`/`Enter`), and direct `Enter`-key search submission on `#journey-search-query`.
+- [x] **tests/test_step4_m3_world_minimap_and_journey.py**: Add unit, FastAPI `TestClient`, and Node VM tests for world pose persistence, velocity vectors, `/api/entities/suggest` prefix ranking, `WorldTacticalMinimapView`, and `#journey` autocomplete + `Enter` submit.
 
 ---
 

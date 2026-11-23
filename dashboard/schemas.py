@@ -164,6 +164,15 @@ class SpatialTransitionRequest(BaseModel):
     active: Optional[bool] = Field(True, description="Whether link is active")
 
 
+class WorldPoseRequest(BaseModel):
+    origin_x: float = Field(0.0, description="World origin X in meters")
+    origin_y: float = Field(0.0, description="World origin Y in meters")
+    yaw_deg: float = Field(0.0, description="Camera heading yaw in degrees")
+    scale: float = Field(1.0, gt=0.0, description="World scale factor")
+    fov_deg: float = Field(75.0, gt=0.0, le=180.0, description="Horizontal field of view in degrees")
+    range_m: float = Field(12.0, gt=0.0, description="Effective FOV cone range in meters")
+
+
 class OverlayUpdateRequest(BaseModel):
     bboxes: Optional[bool] = None
     track_ids: Optional[bool] = None
