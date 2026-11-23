@@ -14,6 +14,7 @@ from intelligent_tracker.tracker.utils import (
     _HAS_SCIPY,
     compute_iou_matrix,
     greedy_assignment,
+    parse_detections,
 )
 
 if _HAS_SCIPY:
@@ -104,8 +105,8 @@ class KalmanBoxTracker:
         K = np.dot(np.dot(self.P, self.H.T), np.linalg.inv(S))
 
         self.x = self.x + np.dot(K, y)
-        I = np.eye(7, dtype=np.float32)
-        self.P = np.dot(I - np.dot(K, self.H), self.P)
+        eye = np.eye(7, dtype=np.float32)
+        self.P = np.dot(eye - np.dot(K, self.H), self.P)
 
     def get_state(self) -> Tuple[int, int, int, int]:
         """Convert current state back to (x, y, w, h) bounding box."""
@@ -132,6 +133,8 @@ class SortTracker:
         max_disappeared: Optional[int] = None,
         max_age_seconds: float = 2.5,
         time_slice_dt_threshold: float = 0.4,
+        coast_frames: int = 0,
+        coast_seconds: float = 0.0,
         **kwargs: Any,
     ):
         if max_disappeared is not None:
@@ -141,35 +144,27 @@ class SortTracker:
         self.iou_threshold = float(iou_threshold)
         self.max_age_seconds = float(max_age_seconds)
         self.time_slice_dt_threshold = float(time_slice_dt_threshold)
+        self.coast_frames = max(0, int(coast_frames))
+        self.coast_seconds = max(0.0, float(coast_seconds))
         self._last_update_time: Optional[float] = None
         self.trackers: List[KalmanBoxTracker] = []
         self.track_metadata: Dict[int, Dict[str, Any]] = {}
+        self._active_tracks: Dict[int, Track] = {}
 
     def reset(self) -> None:
         """Clear active Kalman trackers and associated detection metadata."""
         self.trackers.clear()
         self.track_metadata.clear()
+        self._active_tracks.clear()
         self._last_update_time = None
 
     @property
     def tracks(self) -> Dict[int, Track]:
         """Return currently active tracks keyed by track ID."""
-        now = self._last_update_time if self._last_update_time is not None else time.time()
-        return self._format_active_tracks(now, confirmed_only=False)
-
-    def _parse_detections(self, detections: List[Any]) -> Tuple[list, list, list, list]:
-        """Parse detections into standardized tuples."""
-        det_bboxes, det_classes, det_scores, det_labels = [], [], [], []
-        for d in detections:
-            bbox = getattr(d, "bbox", None)
-            if bbox is None and isinstance(d, (tuple, list)) and len(d) >= 4:
-                bbox = d[:4]
-            if bbox is not None:
-                det_bboxes.append(tuple(int(v) for v in bbox))
-                det_classes.append(getattr(d, "class_id", 0))
-                det_scores.append(getattr(d, "confidence", 1.0))
-                det_labels.append(getattr(d, "label", "object"))
-        return det_bboxes, det_classes, det_scores, det_labels
+        return {
+            tid: trk for tid, trk in self._active_tracks.items()
+            if trk.missed_frames == 0 or trk.state in ("coasting", "occluded")
+        }
 
     def _predict_trackers(self) -> List[Tuple[int, int, int, int]]:
         """Advance all Kalman trackers and prune invalid NaN/degenerated predictions."""
@@ -195,7 +190,8 @@ class SortTracker:
         now: Optional[float] = None,
     ) -> Tuple[Set[int], Set[int]]:
         """Associate predictions to detections via IoU matching."""
-        matched_trks, matched_dets = set(), set()
+        matched_trks: Set[int] = set()
+        matched_dets: Set[int] = set()
         if not predicted_boxes or not det_bboxes:
             return matched_trks, matched_dets
 
@@ -240,26 +236,68 @@ class SortTracker:
                     "label": det_labels[c],
                 }
 
+    def _is_within_coast_budget(
+        self, trk: KalmanBoxTracker, now: float, is_time_sliced: bool
+    ) -> bool:
+        """Return True if missed Kalman tracker is eligible to emit a coasted box."""
+        if trk.time_since_update <= 0:
+            return False
+        within_frames = self.coast_frames > 0 and trk.time_since_update <= self.coast_frames
+        within_seconds = self.coast_seconds > 0.0 and (now - trk.last_seen) <= self.coast_seconds
+        if is_time_sliced and self.coast_seconds > 0.0:
+            return within_seconds
+        return within_frames or within_seconds
+
+    def _sync_persistent_track(
+        self, trk: KalmanBoxTracker, now: float, is_time_sliced: bool
+    ) -> Optional[Track]:
+        """Update or coast the persistent Track object for a KalmanBoxTracker."""
+        meta = self.track_metadata.get(trk.id, {})
+        box = trk.get_state()
+        t = self._active_tracks.get(trk.id)
+        if trk.time_since_update == 0:
+            if t is None:
+                t = Track(
+                    track_id=trk.id, bbox=box, class_id=meta.get("class_id", 0),
+                    label=meta.get("label", "object"), confidence=meta.get("confidence", 1.0),
+                    timestamp=now,
+                )
+                t.hits = trk.hits
+                t.state = "confirmed" if (self.min_hits <= 1 or is_time_sliced or trk.hit_streak >= self.min_hits) else "tentative"
+                self._active_tracks[trk.id] = t
+            elif trk.hits > t.hits:
+                t.update(
+                    box, confidence=meta.get("confidence", 1.0), label=meta.get("label", "object"),
+                    class_id=meta.get("class_id", 0), timestamp=now, min_hits=self.min_hits,
+                )
+                if is_time_sliced:
+                    t.state = "confirmed"
+            return t
+
+        if t is None or not self._is_within_coast_budget(trk, now, is_time_sliced):
+            return None
+        t.missed_frames = trk.time_since_update
+        t.bbox = box
+        t.centroid = (box[0] + box[2] / 2.0, box[1] + box[3] / 2.0)
+        t.last_seen = now
+        t.history.append((t.centroid[0], t.centroid[1], now))
+        t.bbox_history.append(box)
+        t.state = "occluded" if getattr(t, "is_cluttered", False) else "coasting"
+        return t
+
     def _format_active_tracks(
         self, now: float, confirmed_only: bool, is_time_sliced: bool = False
     ) -> Dict[int, Track]:
         """Construct active Track dictionary for current frame."""
         active: Dict[int, Track] = {}
         for trk in self.trackers:
-            confirmed = trk.hit_streak >= self.min_hits or is_time_sliced
-            if trk.time_since_update < 1 and (confirmed or not confirmed_only):
-                meta = self.track_metadata.get(trk.id, {})
-                box = trk.get_state()
-                t = Track(
-                    track_id=trk.id,
-                    bbox=box,
-                    class_id=meta.get("class_id", 0),
-                    label=meta.get("label", "object"),
-                    confidence=meta.get("confidence", 1.0),
-                    timestamp=now,
-                )
-                t.hits = trk.hits
-                t.state = "confirmed" if confirmed else "tentative"
+            if not self._keep_tracker(trk, now, is_time_sliced):
+                continue
+            t = self._sync_persistent_track(trk, now, is_time_sliced)
+            if t is None:
+                continue
+            was_confirmed = t.hits >= self.min_hits or is_time_sliced
+            if not confirmed_only or was_confirmed:
                 active[trk.id] = t
         return active
 
@@ -275,7 +313,7 @@ class SortTracker:
         self._last_update_time = now
         is_time_sliced = step_dt >= self.time_slice_dt_threshold
 
-        bboxes, classes, scores, labels = self._parse_detections(detections)
+        bboxes, classes, scores, labels = parse_detections(detections)
         predicted_boxes = self._predict_trackers()
 
         _, matched_dets = self._associate_and_update(
@@ -284,9 +322,16 @@ class SortTracker:
         self._register_new_detections(bboxes, classes, scores, labels, matched_dets, now=now)
 
         active = self._format_active_tracks(now, confirmed_only, is_time_sliced=is_time_sliced)
-        self.trackers = [
-            t for t in self.trackers if self._keep_tracker(t, now, is_time_sliced)
-        ]
+        kept: List[KalmanBoxTracker] = []
+        for t in self.trackers:
+            if self._keep_tracker(t, now, is_time_sliced):
+                kept.append(t)
+            else:
+                trk_obj = self._active_tracks.pop(t.id, None)
+                if trk_obj is not None:
+                    trk_obj.state = "deleted"
+                self.track_metadata.pop(t.id, None)
+        self.trackers = kept
         return active
 
     def _keep_tracker(self, trk: KalmanBoxTracker, now: float, is_time_sliced: bool) -> bool:

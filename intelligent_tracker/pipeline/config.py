@@ -175,6 +175,8 @@ def _extract_runtime_kwargs(data: dict[str, Any], raw_source: Any, default_detec
         "max_disappeared": int(trk_cfg.get("max_disappeared", trk_cfg.get("max_age", 30))),
         "min_hits": int(trk_cfg.get("min_hits", 2)),
         "iou_threshold": float(trk_cfg.get("iou_threshold", 0.3 if tracker_type == "sort" else 0.2)),
+        "tracker_coast_seconds": float(trk_cfg.get("coast_seconds", 1.5)),
+        "tracker_coast_frames": int(trk_cfg.get("coast_frames", 15)),
         "enable_memory_indexing": bool(mem_cfg.get("indexing", enable_memory_indexing)),
         "heatmap_enabled": bool(hm_cfg.get("enabled", True)),
         "heatmap_decay": float(decay_val) if decay_val is not None else None,
@@ -230,6 +232,8 @@ class PipelineConfig:
     max_disappeared: int = 30
     min_hits: int = 2
     iou_threshold: float = 0.2
+    tracker_coast_seconds: float = 1.5
+    tracker_coast_frames: int = 15
     reid_model: str | None = "color"
     reid_threshold: float = 0.65
     db_path: str | None = None

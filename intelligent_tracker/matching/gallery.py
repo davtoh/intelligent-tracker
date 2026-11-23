@@ -6,7 +6,6 @@ gallery matching against TrackerDB and in-memory session tracking.
 
 import time
 import logging
-from collections import deque
 from typing import Dict, List, Optional, Any
 import numpy as np
 
@@ -14,106 +13,22 @@ from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.reid import BaseFeatureExtractor, batch_cosine_similarity
 from intelligent_tracker.tracker import Track, check_track_occlusions
 from intelligent_tracker.matching.types import EntityIdentifiedEvent
+from intelligent_tracker.matching.feature_buffer import TrackFeatureBuffer
 from intelligent_tracker.matching.session_gallery import SessionGalleryManager
 from intelligent_tracker.matching.adaptive_memory import apply_bounded_ema_update
-from intelligent_tracker.matching._gallery_signals import apply_track_confidence_signals, emit_periodic_sighting
+from intelligent_tracker.matching._gallery_signals import (
+    apply_topology_priors,
+    apply_track_confidence_signals,
+    process_confirmed_identification,
+)
 
 logger = logging.getLogger(__name__)
+_COASTING_STATES = frozenset({"coasting", "occluded", "predicting"})
 
 
-def _apply_topology_priors(
-    topology: Any,
-    gallery_entity_ids: List[int],
-    gallery_names: List[str],
-    similarities: np.ndarray,
-    source: str,
-    zone_id: str,
-    now: float,
-) -> Dict[int, Any]:
-    """Compute and apply cross-camera transition predictive spatial priors to similarity vector."""
-    matched_priors = {}
-    for g_idx, g_eid in enumerate(gallery_entity_ids):
-        g_name = gallery_names[g_idx]
-        orig_sim = float(similarities[g_idx])
-        boosted_sim, prior = topology.compute_weighted_similarity(
-            visual_similarity=orig_sim,
-            candidate_entity_id=g_eid,
-            candidate_name=g_name,
-            target_camera=source,
-            target_zone=zone_id,
-            timestamp=now,
-        )
-        similarities[g_idx] = boosted_sim
-        if prior is not None:
-            matched_priors[g_idx] = prior
-    return matched_priors
-
-
-def _process_confirmed_identification(
-    matcher: "GalleryMatcher",
-    track: Track,
-    best_idx: int,
-    best_score: float,
-    query_vec: np.ndarray,
-    source: str,
-    now: float,
-    zone_id: str,
-) -> Optional[EntityIdentifiedEvent]:
-    """Update track metadata, debounce sightings in DB, and execute continuous EMA adaptation."""
-    tid = track.track_id
-    entity_id = matcher.gallery_entity_ids[best_idx]
-    name = matcher.gallery_names[best_idx]
-    category = matcher.gallery_categories[best_idx]
-
-    if matcher.world_bridge is not None:
-        matcher.world_bridge.sync_track_identification(
-            source, track, entity_id,
-            name=name, category=category, confidence=best_score,
-            zone_id=zone_id, timestamp=now,
-        )
-    else:
-        track.entity_id = entity_id
-        track.entity_name = name
-        track.entity_category = category
-        track.reid_score = best_score
-        track.identity_label = name
-
-    event = None
-    was_identified = tid in matcher._identified_tracks
-    prev_eid = matcher._identified_tracks[tid]["entity_id"] if was_identified else None
-
-    if not was_identified or prev_eid != entity_id:
-        matcher._identified_tracks[tid] = {
-            "entity_id": entity_id,
-            "name": name,
-            "category": category,
-            "similarity": best_score,
-        }
-        event = EntityIdentifiedEvent(
-            entity_id=entity_id,
-            name=name,
-            category=category,
-            track_id=tid,
-            similarity=best_score,
-            source=source,
-            timestamp=now,
-            zone_id=zone_id,
-            bbox=track.bbox,
-        )
-
-    if matcher.auto_adaptive_memory and best_score >= matcher.ema_confidence_threshold:
-        matcher._apply_bounded_ema_update(
-            entity_id=entity_id,
-            query_vec=query_vec,
-            gallery_idx=best_idx,
-            timestamp=now,
-        )
-
-    emit_periodic_sighting(
-        matcher, entity_id=entity_id, name=name, category=category,
-        track=track, confidence=best_score, source=source, zone_id=zone_id, timestamp=now,
-    )
-    return event
+def _is_coasting_or_occluded(track: Track) -> bool:
+    """Return True when a track is coasting/occluded and must not pollute Re-ID features."""
+    return getattr(track, "missed_frames", 0) > 0 or getattr(track, "state", "") in _COASTING_STATES
 
 
 class GalleryMatcher:
@@ -121,51 +36,31 @@ class GalleryMatcher:
 
     def __init__(
         self,
-        db: Optional[TrackerDB] = None,
-        extractor: Optional[BaseFeatureExtractor] = None,
-        reid_threshold: float = 0.65,
-        feature_history_len: int = 10,
-        sighting_interval: float = 4.0,
-        min_track_hits: int = 2,
-        auto_session_gallery: bool = True,
-        session_reid_threshold: float = 0.55,
-        spatial_bonus_radius: float = 200.0,
-        spatial_bonus_max_dt: float = 60.0,
-        topology: Optional[Any] = None,
-        camera_id: str = "cam_01",
-        active_learning: Optional[Any] = None,
-        auto_adaptive_memory: bool = True,
-        ema_alpha: float = 0.05,
-        ema_confidence_threshold: float = 0.75,
-        min_anchor_similarity: float = 0.65,
-        max_drift_threshold: Optional[float] = None,
-        world_bridge: Optional[Any] = None,
-        **kwargs,
+        db: Optional[TrackerDB] = None, extractor: Optional[BaseFeatureExtractor] = None,
+        reid_threshold: float = 0.65, feature_history_len: int = 10, sighting_interval: float = 4.0,
+        min_track_hits: int = 2, auto_session_gallery: bool = True, session_reid_threshold: float = 0.55,
+        spatial_bonus_radius: float = 200.0, spatial_bonus_max_dt: float = 60.0,
+        topology: Optional[Any] = None, camera_id: str = "cam_01", active_learning: Optional[Any] = None,
+        auto_adaptive_memory: bool = True, ema_alpha: float = 0.05, ema_confidence_threshold: float = 0.75,
+        min_anchor_similarity: float = 0.65, max_drift_threshold: Optional[float] = None,
+        world_bridge: Optional[Any] = None, **kwargs: Any,
     ):
-        self.db = db
-        self.extractor = extractor
-        self.topology = topology
-        self.camera_id = camera_id
-        self.active_learning = active_learning
-        self.world_bridge = world_bridge
+        self.db, self.extractor, self.topology = db, extractor, topology
+        self.camera_id, self.active_learning, self.world_bridge = camera_id, active_learning, world_bridge
         self.fts_index = kwargs.get("fts_index")
         self.auto_adaptive_memory = bool(auto_adaptive_memory)
-        self.ema_alpha = float(ema_alpha)
-        self.ema_confidence_threshold = float(ema_confidence_threshold)
-        self.min_anchor_similarity = (
-            float(max_drift_threshold) if max_drift_threshold is not None else float(min_anchor_similarity)
-        )
-
-        self.reid_threshold = float(reid_threshold)
-        self.feature_history_len = int(feature_history_len)
-        self.sighting_interval = float(sighting_interval)
-        self.min_track_hits = int(min_track_hits)
-
+        self.ema_alpha, self.ema_confidence_threshold = float(ema_alpha), float(ema_confidence_threshold)
+        self.min_anchor_similarity = float(max_drift_threshold if max_drift_threshold is not None else min_anchor_similarity)
+        self.reid_threshold, self.feature_history_len = float(reid_threshold), int(feature_history_len)
+        self.sighting_interval, self.min_track_hits = float(sighting_interval), int(min_track_hits)
         self.auto_session_gallery = bool(auto_session_gallery)
         self.session_reid_threshold = float(session_reid_threshold)
-        self.spatial_bonus_radius = float(spatial_bonus_radius)
-        self.spatial_bonus_max_dt = float(spatial_bonus_max_dt)
+        self.spatial_bonus_radius, self.spatial_bonus_max_dt = float(spatial_bonus_radius), float(spatial_bonus_max_dt)
+        self._init_runtime_caches(kwargs.get("coast_grace_seconds", 2.0))
+        self.reload_gallery()
 
+    def _init_runtime_caches(self, coast_grace_seconds: float) -> None:
+        """Initialize session gallery, feature buffer, and empty gallery matrix."""
         self._session_manager = SessionGalleryManager(
             session_reid_threshold=self.session_reid_threshold,
             spatial_bonus_radius=self.spatial_bonus_radius,
@@ -174,17 +69,17 @@ class GalleryMatcher:
         )
         self.session_entities = self._session_manager.session_entities
         self._active_tracks_cache: Dict[int, Track] = {}
-
-        self._track_features: Dict[int, deque] = {}
-        self._last_sighting_time: Dict[int, float] = {}
-        self._identified_tracks: Dict[int, Dict[str, Any]] = {}
-
+        self._feature_buffer = TrackFeatureBuffer(
+            feature_history_len=self.feature_history_len,
+            coast_grace_seconds=float(coast_grace_seconds),
+        )
+        self._track_features = self._feature_buffer.track_features
+        self._last_sighting_time = self._feature_buffer.last_sighting_time
+        self._identified_tracks = self._feature_buffer.identified_tracks
         self.gallery_matrix = np.empty((0, 0), dtype=np.float32)
         self.gallery_entity_ids: List[int] = []
         self.gallery_names: List[str] = []
         self.gallery_categories: List[str] = []
-
-        self.reload_gallery()
 
     @property
     def next_session_id(self) -> int:
@@ -229,24 +124,11 @@ class GalleryMatcher:
 
     def _get_smoothed_embedding(self, track_id: int) -> Optional[np.ndarray]:
         """Compute mean feature vector from accumulated history."""
-        buf = self._track_features.get(track_id)
-        if not buf:
-            return None
-        arr = np.array(buf, dtype=np.float32)
-        mean_vec = np.mean(arr, axis=0)
-        norm = np.linalg.norm(mean_vec)
-        if norm > 1e-7:
-            mean_vec = mean_vec / norm
-        return mean_vec
+        return self._feature_buffer.get_smoothed_embedding(track_id)
 
     def _match_persistent_gallery(
-        self,
-        track: Track,
-        query_vec: np.ndarray,
-        frame: np.ndarray,
-        source: str,
-        now: float,
-        zone_id: str,
+        self, track: Track, query_vec: np.ndarray, frame: np.ndarray,
+        source: str, now: float, zone_id: str,
     ) -> Optional[EntityIdentifiedEvent]:
         """Query persistent database gallery with cross-camera priors and active learning."""
         similarities = batch_cosine_similarity(self.gallery_matrix, query_vec)
@@ -257,14 +139,13 @@ class GalleryMatcher:
         raw_similarities = None
         if self.topology is not None:
             raw_similarities = similarities.copy()
-            matched_priors = _apply_topology_priors(
+            matched_priors = apply_topology_priors(
                 self.topology, self.gallery_entity_ids, self.gallery_names,
                 similarities, source, zone_id, now,
             )
 
         best_idx = int(np.argmax(similarities))
         best_score = float(similarities[best_idx])
-
         if best_score >= self.reid_threshold:
             apply_track_confidence_signals(
                 track, extractor=self.extractor, query_vec=query_vec, gallery_matrix=self.gallery_matrix,
@@ -273,7 +154,7 @@ class GalleryMatcher:
             )
             if self.topology is not None and best_idx in matched_priors:
                 self.topology.consume_prior(matched_priors[best_idx].prior_id)
-            return _process_confirmed_identification(
+            return process_confirmed_identification(
                 self, track, best_idx, best_score, query_vec, source, now, zone_id
             )
 
@@ -299,22 +180,19 @@ class GalleryMatcher:
         """Process a single track: extract feature, smooth embedding, and query gallery."""
         if getattr(track, "is_cluttered", False):
             return None
-
         now = timestamp if timestamp is not None else time.time()
-        source = source or self.camera_id
-        zone_id = zone_id or getattr(track, "current_zone", "") or ""
-        tid = track.track_id
-
+        if _is_coasting_or_occluded(track):
+            self._feature_buffer.mark_active(track.track_id, now)
+            self._feature_buffer.restore_track_identity(track)
+            return None
         if track.hits < self.min_track_hits or track.bbox[2] <= 4 or track.bbox[3] <= 4 or self.extractor is None:
             return None
 
-        if tid not in self._track_features:
-            self._track_features[tid] = deque(maxlen=self.feature_history_len)
-
+        source = source or self.camera_id
+        zone_id = zone_id or getattr(track, "current_zone", "") or ""
         feat = self.extractor.extract(frame, track.bbox)
-        self._track_features[tid].append(feat)
-
-        query_vec = self._get_smoothed_embedding(tid)
+        self._feature_buffer.append(track.track_id, feat, now)
+        query_vec = self._get_smoothed_embedding(track.track_id)
         if query_vec is None:
             return None
 
@@ -322,22 +200,27 @@ class GalleryMatcher:
             ev = self._match_persistent_gallery(track, query_vec, frame, source, now, zone_id)
             if ev is not None or getattr(track, "entity_id", None) is not None:
                 return ev
-
         if self.auto_session_gallery and getattr(track, "entity_name", None) is None:
-            if not self._session_manager.update_existing_track_session(track, feat, now):
-                matched = self._session_manager.match_returning_entity(
-                    track, feat, query_vec, now, self._active_tracks_cache
-                )
-                if not matched:
-                    self._session_manager.allocate_new_session_entity(track, feat, now)
-            if self.world_bridge is not None and getattr(track, "session_id", None) is not None:
-                self.world_bridge.sync_session_track(
-                    source, track, track.session_id,
-                    label=track.identity_label or "", category=track.label,
-                    zone_id=zone_id, timestamp=now,
-                )
-
+            self._match_session_track(track, feat, query_vec, source, zone_id, now)
         return None
+
+    def _match_session_track(
+        self, track: Track, feat: np.ndarray, query_vec: np.ndarray,
+        source: str, zone_id: str, now: float,
+    ) -> None:
+        """Assign or update ephemeral session entity for an unidentified track."""
+        if not self._session_manager.update_existing_track_session(track, feat, now):
+            matched = self._session_manager.match_returning_entity(
+                track, feat, query_vec, now, self._active_tracks_cache
+            )
+            if not matched:
+                self._session_manager.allocate_new_session_entity(track, feat, now)
+        if self.world_bridge is not None and getattr(track, "session_id", None) is not None:
+            self.world_bridge.sync_session_track(
+                source, track, track.session_id,
+                label=track.identity_label or "", category=track.label,
+                zone_id=zone_id, timestamp=now,
+            )
 
     def match_tracks(
         self,
@@ -354,12 +237,7 @@ class GalleryMatcher:
         self._active_tracks_cache = tracks
 
         active_tids = set(tracks.keys())
-        stale_tids = [tid for tid in self._track_features if tid not in active_tids]
-        for tid in stale_tids:
-            self._track_features.pop(tid, None)
-            self._last_sighting_time.pop(tid, None)
-            self._identified_tracks.pop(tid, None)
-
+        self._feature_buffer.prune_stale(active_tids, now)
         self._session_manager.update_exit_telemetry(tracks)
         check_track_occlusions(tracks, timestamp=now)
 
@@ -370,7 +248,11 @@ class GalleryMatcher:
                 events.append(ev)
 
         if self.world_bridge is not None:
-            self.world_bridge.prune_stale_tracks(camera_id=source, active_track_ids=active_tids, timestamp=now)
+            coasting_tids = {tid for tid, trk in tracks.items() if _is_coasting_or_occluded(trk)}
+            self.world_bridge.prune_stale_tracks(
+                camera_id=source, active_track_ids=active_tids,
+                coasting_track_ids=coasting_tids, timestamp=now,
+            )
             self.world_bridge.sync_camera_tracks(source, tracks, zone_lookup=zone_lookup, timestamp=now)
 
         return events

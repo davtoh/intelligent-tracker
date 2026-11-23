@@ -4,15 +4,12 @@ Provides IoU computation, IoU distance matrix generation, and greedy
 assignment fallback when SciPy's Hungarian algorithm is unavailable.
 """
 
-from typing import List, Tuple
+import importlib.util
+from typing import Any, List, Tuple
 import numpy as np
 
 # Optional SciPy Hungarian algorithm with pure NumPy greedy fallback
-try:
-    from scipy.optimize import linear_sum_assignment
-    _HAS_SCIPY = True
-except ImportError:
-    _HAS_SCIPY = False
+_HAS_SCIPY = importlib.util.find_spec("scipy.optimize") is not None
 
 
 def compute_iou(boxA: Tuple[int, int, int, int], boxB: Tuple[int, int, int, int]) -> float:
@@ -73,10 +70,31 @@ def greedy_assignment(cost_matrix: np.ndarray, max_cost: float = float("inf")) -
     return assignments
 
 
+def parse_detections(
+    detections: List[Any],
+) -> Tuple[List[Tuple[int, int, int, int]], List[int], List[float], List[str]]:
+    """Extract standardized (bboxes, class_ids, confidences, labels) from detection objects."""
+    det_bboxes: List[Tuple[int, int, int, int]] = []
+    det_classes: List[int] = []
+    det_scores: List[float] = []
+    det_labels: List[str] = []
+    for d in detections:
+        bbox = getattr(d, "bbox", None)
+        if bbox is None and isinstance(d, (tuple, list)) and len(d) >= 4:
+            bbox = d[:4]
+        if bbox is not None:
+            det_bboxes.append((int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])))
+            det_classes.append(int(getattr(d, "class_id", 0)))
+            det_scores.append(float(getattr(d, "confidence", 1.0)))
+            det_labels.append(str(getattr(d, "label", "object")))
+    return det_bboxes, det_classes, det_scores, det_labels
+
+
 __all__ = [
     "compute_iou",
     "compute_iou_matrix",
     "greedy_assignment",
+    "parse_detections",
     "_HAS_SCIPY",
 ]
 

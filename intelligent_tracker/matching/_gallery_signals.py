@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
+from intelligent_tracker.matching.types import EntityIdentifiedEvent
 from intelligent_tracker.tracker import Track
 
 logger = logging.getLogger(__name__)
@@ -186,3 +187,82 @@ def emit_periodic_sighting(
         video_filename=resolved_video, media_offset_sec=resolved_offset,
     )
     return True
+
+
+def apply_topology_priors(
+    topology: Any,
+    gallery_entity_ids: list[int],
+    gallery_names: list[str],
+    similarities: np.ndarray,
+    source: str,
+    zone_id: str,
+    now: float,
+) -> dict[int, Any]:
+    """Compute and apply cross-camera transition predictive spatial priors to similarity vector."""
+    matched_priors: dict[int, Any] = {}
+    for g_idx, g_eid in enumerate(gallery_entity_ids):
+        boosted_sim, prior = topology.compute_weighted_similarity(
+            visual_similarity=float(similarities[g_idx]),
+            candidate_entity_id=g_eid,
+            candidate_name=gallery_names[g_idx],
+            target_camera=source,
+            target_zone=zone_id,
+            timestamp=now,
+        )
+        similarities[g_idx] = boosted_sim
+        if prior is not None:
+            matched_priors[g_idx] = prior
+    return matched_priors
+
+
+def _apply_identified_metadata(
+    matcher: Any, track: Track, entity_id: int, name: str, category: str,
+    best_score: float, source: str, now: float, zone_id: str,
+) -> None:
+    """Propagate confirmed entity identity onto Track and WorldEntityBridge."""
+    if matcher.world_bridge is not None:
+        matcher.world_bridge.sync_track_identification(
+            source, track, entity_id, name=name, category=category,
+            confidence=best_score, zone_id=zone_id, timestamp=now,
+        )
+        return
+    track.entity_id, track.entity_name, track.entity_category = entity_id, name, category
+    track.reid_score, track.identity_label = best_score, name
+
+
+def process_confirmed_identification(
+    matcher: Any,
+    track: Track,
+    best_idx: int,
+    best_score: float,
+    query_vec: np.ndarray,
+    source: str,
+    now: float,
+    zone_id: str,
+) -> Optional[EntityIdentifiedEvent]:
+    """Update track metadata, debounce sightings in DB, and execute continuous EMA adaptation."""
+    tid = track.track_id
+    entity_id = matcher.gallery_entity_ids[best_idx]
+    name = matcher.gallery_names[best_idx]
+    category = matcher.gallery_categories[best_idx]
+    _apply_identified_metadata(matcher, track, entity_id, name, category, best_score, source, now, zone_id)
+
+    event = None
+    was_identified = tid in matcher._identified_tracks
+    prev_eid = matcher._identified_tracks[tid]["entity_id"] if was_identified else None
+    if not was_identified or prev_eid != entity_id:
+        matcher._feature_buffer.record_identification(tid, entity_id, name, category, best_score)
+        event = EntityIdentifiedEvent(
+            entity_id=entity_id, name=name, category=category, track_id=tid,
+            similarity=best_score, source=source, timestamp=now, zone_id=zone_id, bbox=track.bbox,
+        )
+
+    if matcher.auto_adaptive_memory and best_score >= matcher.ema_confidence_threshold:
+        matcher._apply_bounded_ema_update(
+            entity_id=entity_id, query_vec=query_vec, gallery_idx=best_idx, timestamp=now,
+        )
+    emit_periodic_sighting(
+        matcher, entity_id=entity_id, name=name, category=category,
+        track=track, confidence=best_score, source=source, zone_id=zone_id, timestamp=now,
+    )
+    return event

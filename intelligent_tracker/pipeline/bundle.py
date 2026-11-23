@@ -142,12 +142,16 @@ def build_tracker(config: PipelineConfig) -> Any:
             max_age=config.max_disappeared,
             min_hits=config.min_hits,
             iou_threshold=config.iou_threshold,
+            coast_frames=config.tracker_coast_frames,
+            coast_seconds=config.tracker_coast_seconds,
         )
     return TrackerFactory.create(
         config.tracker_type,
         max_disappeared=config.max_disappeared,
         min_hits=config.min_hits,
         iou_threshold=config.iou_threshold,
+        coast_frames=config.tracker_coast_frames,
+        coast_seconds=config.tracker_coast_seconds,
     )
 
 

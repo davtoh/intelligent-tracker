@@ -155,18 +155,9 @@ class FrameProcessor:
                 self.bundle, frame, tracks, now,
                 topology=self.topology, world_bridge=self.world_bridge, run_reid=True,
             )
+            self._sync_governance_attrs_to_tracker(tracks)
 
-        done_perf = time.perf_counter()
-        elapsed_s = max(done_perf - t_perf, 1e-6)
-        if self._last_step_perf is not None:
-            cadence_s = max(t_perf - self._last_step_perf, elapsed_s)
-            self._fps_history.append(1.0 / cadence_s)
-            self.measured_fps = sum(self._fps_history) / len(self._fps_history)
-        else:
-            self.measured_fps = 1.0 / elapsed_s
-        self._last_step_perf = t_perf
-        self.frame_count += 1
-
+        elapsed_s = self._record_step_timing(t_perf)
         return FrameStepResult(
             frame=processed,
             detections=detections,
@@ -178,6 +169,35 @@ class FrameProcessor:
             frame_count=self.frame_count,
             processing_ms=elapsed_s * 1000.0,
         )
+
+    def _record_step_timing(self, t_perf: float) -> float:
+        """Update rolling FPS telemetry and frame counter for the current step."""
+        elapsed_s = max(time.perf_counter() - t_perf, 1e-6)
+        if self._last_step_perf is not None:
+            cadence_s = max(t_perf - self._last_step_perf, elapsed_s)
+            self._fps_history.append(1.0 / cadence_s)
+            self.measured_fps = sum(self._fps_history) / len(self._fps_history)
+        else:
+            self.measured_fps = 1.0 / elapsed_s
+        self._last_step_perf = t_perf
+        self.frame_count += 1
+        return elapsed_s
+
+    def _sync_governance_attrs_to_tracker(self, tracks: dict[int, Any]) -> None:
+        """Persist governance and Re-ID attributes onto internal tracker Track objects."""
+        internal_tracks = getattr(self.bundle.tracker, "tracks", None)
+        if not isinstance(internal_tracks, dict) or not tracks:
+            return
+        for tid, trk in tracks.items():
+            internal = internal_tracks.get(tid)
+            if internal is None or internal is trk:
+                continue
+            internal.is_cluttered = getattr(trk, "is_cluttered", False)
+            internal.clutter_partner_id = getattr(trk, "clutter_partner_id", None)
+            internal.clutter_start_time = getattr(trk, "clutter_start_time", None)
+            for attr in ("entity_id", "entity_name", "entity_category", "identity_label", "session_id", "reid_score"):
+                if hasattr(trk, attr):
+                    setattr(internal, attr, getattr(trk, attr))
 
     def _run_detector(self, frame: np.ndarray) -> list[Any]:
         """Run object detector on the prepared frame."""

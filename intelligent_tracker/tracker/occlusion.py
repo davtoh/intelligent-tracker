@@ -50,6 +50,23 @@ def _find_cluttered_pairs(
     return newly_cluttered, cluttered_pairs
 
 
+def _clear_clutter_if_separated(
+    trk: Any,
+    tracks: Dict[int, Any],
+    tids: List[int],
+    separation_iou: float,
+) -> None:
+    """Clear clutter flags (and restore coasting state) when partner is gone or separated."""
+    partner_id = getattr(trk, "clutter_partner_id", None)
+    if partner_id not in tracks or partner_id not in tids or _evaluate_track_separation(
+        trk, tracks[partner_id], separation_iou
+    ):
+        trk.is_cluttered = False
+        trk.clutter_partner_id = None
+        if getattr(trk, "missed_frames", 0) > 0 and getattr(trk, "state", None) == "occluded":
+            trk.state = "coasting"
+
+
 def check_track_occlusions(
     tracks: Dict[int, Any],
     iou_threshold: float = 0.3,
@@ -67,7 +84,7 @@ def check_track_occlusions(
     now = timestamp if timestamp is not None else time.time()
     tids = [
         tid for tid, trk in tracks.items()
-        if getattr(trk, "hits", 0) >= 1 and getattr(trk, "missed_frames", 0) == 0
+        if getattr(trk, "hits", 0) >= 1 and getattr(trk, "missed_frames", 0) >= 0
     ]
     newly_cluttered, cluttered_pairs = _find_cluttered_pairs(tids, tracks, iou_threshold)
 
@@ -78,14 +95,10 @@ def check_track_occlusions(
                 trk.is_cluttered = True
                 trk.clutter_start_time = now
             trk.clutter_partner_id = newly_cluttered[tid]
+            if getattr(trk, "missed_frames", 0) > 0:
+                trk.state = "occluded"
         elif getattr(trk, "is_cluttered", False):
-            partner_id = getattr(trk, "clutter_partner_id", None)
-            if partner_id not in tracks or partner_id not in tids:
-                trk.is_cluttered = False
-                trk.clutter_partner_id = None
-            elif _evaluate_track_separation(trk, tracks[partner_id], separation_iou):
-                trk.is_cluttered = False
-                trk.clutter_partner_id = None
+            _clear_clutter_if_separated(trk, tracks, tids, separation_iou)
 
     return cluttered_pairs
 
