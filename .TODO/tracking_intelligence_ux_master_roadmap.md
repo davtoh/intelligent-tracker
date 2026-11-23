@@ -45,10 +45,11 @@
 
 ## Step 4: Real-Time Analytics Flows, Alerts Canvas & BEV Minimap, Journey Autocomplete & Review Loop (`Ideas 5–8`, `ADR-09`)
 - [ ] **Goal**: Replace synthetic analytics and flat alert tables with filterable historical insights, reusable overlay/BEV visualizers, prefix entity autocomplete, and a bidirectional Video Studio <-> Review & Learn workflow.
-- [ ] **Target Scope**:
-  - [ ] **`#analytics` Time-Bucketed Flows & Heatmap Legend**: Add SQLite time-bucketed traffic-flow aggregation endpoint + time-range navigation + "Back to Live" toggle (`analytics_view.js` removes `0.6x/0.4x` synthetic math) and rich heatmap colorbar/camera metadata legend.
-  - [ ] **`#alerts` Filters/Pagination, Reused Canvas & Calibrated `WorldTacticalMinimap`**: Extend `GET /events` with `camera_id`, `severity`, `event_type`, `zone_id`, `start_time`, `end_time`, and `offset` pagination; reuse `UnifiedCanvasOverlay` + `OverlayControlBar` in alert snapshot previews; wire `/api/topology/world-map` (`WorldTacticalMinimap`: calibrated grid, zones, FOV cones, velocity vectors, pose controls).
-  - [ ] **`#journey` Autocomplete & Bidirectional `#review` Loop**: Add `/api/entities/suggest` prefix/substring autocomplete (`#journey-search-query` + `Enter` submit); surface Video Studio tags & proactive low-confidence candidates cleanly in `#review` with bbox context and auto-resolution sync back to studio reports/galleries.
+- [ ] **Target Scope (Recommended 4-Milestone Split, ~50–85 steps each)**:
+  - [ ] **M1 — `#analytics` Time-Bucketed Flows & Heatmap Legend**: Add SQLite time-bucketed traffic-flow aggregation endpoint + time-range navigation + "Back to Live" toggle (`analytics_view.js` removes `0.6x/0.4x` synthetic math) and rich heatmap colorbar/camera metadata legend.
+  - [ ] **M2 — `#alerts` Server-Side Filters/Pagination & Reused Canvas**: Extend `GET /events` with `camera_id`, `severity`, `event_type`, `zone_id`, `start_time`, `end_time`, and `offset` pagination; reuse `UnifiedCanvasOverlay` + `OverlayControlBar` in alert snapshot previews.
+  - [ ] **M3 — Calibrated `WorldTacticalMinimap` & `#journey` Autocomplete**: Wire `/api/topology/world-map` (`WorldTacticalMinimap`: calibrated grid, zones, FOV cones, velocity vectors, pose controls) and add `/api/entities/suggest` prefix/substring autocomplete (`#journey-search-query` + `Enter` submit).
+  - [ ] **M4 — Bidirectional `#review` Loop, 9-Tab CDP E2E & Full Sign-Off**: Surface Video Studio tags & proactive low-confidence candidates cleanly in `#review` with bbox context and auto-resolution sync back to studio reports/galleries, plus `spa_nine_tab_cdp_probe`, full `unittest`, `arch-map`, and `sphinx -W`.
 - [ ] **Definition of Done**: All 9 SPA tabs pass end-to-end API + headless CDP runtime verification, full `unittest`, `arch-map`, and `sphinx -W`.
 
 ---
