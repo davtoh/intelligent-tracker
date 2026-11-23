@@ -121,7 +121,15 @@ class NegativeExemplarService:
                 logger.debug("Negative confidence feedback skipped: %s", exc)
         mgr = self.stream_manager or (self.camera_pool.get_stream(camera_id) if camera_id and self.camera_pool else None)
         _clear_mismatched_live_track(mgr, track_id, entity_id)
-        return {"exemplar_id": exemplar_id, "entity_id": entity_id, "label": label, "crop_path": crop_path, "source": source}
+        from dashboard.services.review_sync_service import sync_studio_feedback_to_review_queue
+        review_sync = sync_studio_feedback_to_review_queue(
+            self.db, action="discourage", camera_id=camera_id, video_filename=video_filename,
+            media_offset_sec=timestamp_sec, track_id=track_id, bbox=bbox,
+        )
+        return {
+            "exemplar_id": exemplar_id, "entity_id": entity_id, "label": label,
+            "crop_path": crop_path, "source": source, "review_sync": review_sync,
+        }
 
     def list_negatives(self, entity_id: int | None = None) -> list[dict[str, Any]]:
         """List persisted negative exemplars."""

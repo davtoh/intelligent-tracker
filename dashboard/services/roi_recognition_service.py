@@ -300,9 +300,7 @@ class RoiRecognitionService:
         ).replace("\\", "/")
         os.makedirs(os.path.dirname(os.path.abspath(crop_path)), exist_ok=True)
         cv2.imwrite(os.path.abspath(crop_path), crop)
-        sig_id = int(self.db.add_signature(
-            entity_id=resolved_id, embedding=emb, crop_path=crop_path, is_anchor=1, locked=1,
-        ))
+        sig_id = int(self.db.add_signature(entity_id=resolved_id, embedding=emb, crop_path=crop_path, is_anchor=1, locked=1))
         bx, by, bw, bh = box
         sighting_id = int(self.db.record_sighting(
             entity_id=resolved_id, track_id=track_id or 0, source=source,
@@ -310,27 +308,22 @@ class RoiRecognitionService:
             snapshot_path=crop_path, video_filename=video_filename, media_offset_sec=media_offset_sec,
         ))
         _record_roi_side_effects(
-            self, entity_id=resolved_id, entity_name=resolved_name, category=category,
-            emb=emb, crop_path=crop_path, notes=notes, source=source, track_id=track_id,
+            self, entity_id=resolved_id, entity_name=resolved_name, category=category, emb=emb,
+            crop_path=crop_path, notes=notes, source=source, track_id=track_id,
             camera_id=camera_id, video_filename=video_filename, media_offset_sec=media_offset_sec,
         )
-        return {
-            "entity_id": resolved_id, "entity_name": resolved_name, "category": category,
-            "signature_id": sig_id, "sighting_id": sighting_id, "crop_path": crop_path, "bbox": list(box),
-        }
+        from dashboard.services.review_sync_service import sync_studio_feedback_to_review_queue
+        review_sync = sync_studio_feedback_to_review_queue(
+            self.db, action="commit", camera_id=camera_id, video_filename=video_filename,
+            media_offset_sec=media_offset_sec, track_id=track_id, bbox=list(box),
+        )
+        return {"entity_id": resolved_id, "entity_name": resolved_name, "category": category, "signature_id": sig_id, "sighting_id": sighting_id, "crop_path": crop_path, "bbox": list(box), "review_sync": review_sync}
 
     def commit_roi_tag(
-        self,
-        entity_name: str,
-        category: str = "person",
-        entity_id: int | None = None,
-        camera_id: str | None = None,
-        video_filename: str | None = None,
-        timestamp_sec: float | None = None,
-        bbox: list[int] | None = None,
-        crop_base64: str | None = None,
-        notes: str = "",
-        track_id: int | None = None,
+        self, entity_name: str, category: str = "person", entity_id: int | None = None,
+        camera_id: str | None = None, video_filename: str | None = None,
+        timestamp_sec: float | None = None, bbox: list[int] | None = None,
+        crop_base64: str | None = None, notes: str = "", track_id: int | None = None,
     ) -> dict[str, Any]:
         """Persist ROI crop, signature, entity record, and sighting into TrackerDB."""
         frame, is_direct = self.resolve_roi_frame(camera_id, video_filename, timestamp_sec, crop_base64)

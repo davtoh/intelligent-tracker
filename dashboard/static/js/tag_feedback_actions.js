@@ -50,7 +50,21 @@
       ? `Recorded negative exemplar for entity #${payload.entity_id}.`
       : 'Recorded global false-positive exemplar.';
     window.showToast?.('Feedback Recorded', msg, 'info');
+    onTagCommitted(payload, json);
     return json;
+  }
+
+  function onTagCommitted(payload, _res) {
+    const fn = payload?.video_filename;
+    if (fn) {
+      window.VideoBatchReports?.invalidateCachedReports?.(fn);
+      if (window.VideoBatchReports?.getCurrentFilename?.() === fn) {
+        window.VideoBatchReports?.restoreReportForFile?.(fn);
+      }
+      window.OverlayLayers?.ensureLoaded?.(fn, { force: true });
+    }
+    window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
+    window.ReviewAndRSAC?.loadQueue?.();
   }
 
   async function discourageFromModal(getActiveCameraId) {
@@ -101,5 +115,6 @@
     discourageFromModal,
     discourageCandidate,
     attachCandidateDiscourage,
+    onTagCommitted,
   };
 })();

@@ -122,7 +122,10 @@ _LEARNING_TABLES_DDL = (
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, suggested_entity_id INTEGER,
         suggested_name TEXT DEFAULT '', suggested_category TEXT DEFAULT '',
         similarity REAL DEFAULT 0.0, status TEXT DEFAULT 'pending',
-        reviewed_at TIMESTAMP, reviewed_by TEXT DEFAULT 'operator'
+        reviewed_at TIMESTAMP, reviewed_by TEXT DEFAULT 'operator',
+        video_filename TEXT DEFAULT '', media_offset_sec REAL DEFAULT 0.0,
+        bbox_json TEXT DEFAULT '', frame_width INTEGER DEFAULT 0,
+        frame_height INTEGER DEFAULT 0, run_id TEXT DEFAULT ''
     );""",
     """CREATE TABLE IF NOT EXISTS custom_categories (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT DEFAULT '#3B82F6',
@@ -209,6 +212,16 @@ class SchemaMixin:
             cursor.execute("ALTER TABLE descriptor_versions ADD COLUMN is_anchor INTEGER DEFAULT 0;")
         except sqlite3.OperationalError:
             pass
+        for col_def in (
+            "bbox_json TEXT DEFAULT ''",
+            "frame_width INTEGER DEFAULT 0",
+            "frame_height INTEGER DEFAULT 0",
+            "run_id TEXT DEFAULT ''",
+        ):
+            try:
+                cursor.execute(f"ALTER TABLE review_queue ADD COLUMN {col_def};")
+            except sqlite3.OperationalError:
+                pass
         apply_memory_schema_migrations(cursor)
         apply_video_schema_migrations(cursor)
 

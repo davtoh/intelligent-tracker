@@ -182,7 +182,6 @@
     if (el('tag-identity-candidates')) el('tag-identity-candidates').innerHTML = '';
     el('tag-entity-form')?.reset();
   }
-
   async function submitTagForm(e) {
     e.preventDefault();
     const name = (el('tag-name-input')?.value || '').trim();
@@ -202,12 +201,13 @@
     try {
       const res = await fetch('/api/tag/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Tagging failed');
+      const data = await res.json().catch(() => ({}));
       closeTagModal();
       window.showToast?.('Entity Enrolled', `Successfully enrolled "${name}" as ${category.toUpperCase()}!`, 'success');
-      window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
+      if (window.TagFeedbackActions?.onTagCommitted) window.TagFeedbackActions.onTagCommitted(payload, data);
+      else window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
     } catch (err) { window.showToast?.('Enrollment Failed', err.message, 'error'); }
   }
-
   function initTagModal(getActiveCameraId) {
     activeCameraGetter = getActiveCameraId;
     window.RoiDrawTagger?.setRecognitionHandler?.(handleRoiRecognition);

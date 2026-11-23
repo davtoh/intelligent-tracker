@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-23] feat: Step 4 M4: Bidirectional #review <-> Video Studio Sync & Full Sign-Off
+- **Type**: feat
+- **Summary**: Migrated review_queue with bbox/frame/run_id provenance, added ReviewSyncService + /api/review/* router, wired frontend VideoBatchReports/Gallery/Review sync, and verified 1008 tests + 4 probes.
+- **Files** (20):
+  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
+  - `dashboard/app.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/routers/topology.py`
+  - `dashboard/services/negative_exemplar_service.py`
+  - `dashboard/services/roi_recognition_service.py`
+  - `dashboard/static/css/review.css`
+  - `dashboard/static/js/interactive_canvas.js`
+  - ... (+12 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-23] feat: Step 3 Milestone 3: Target Class Filter Split, Enrollment Scrubber & Sign-Off
 - **Type**: feat
 - **Summary**: Split COCO detector_classes vs gallery tracked_categories across API/pipeline/UI and extracted ScrubberTimelineSlider for video_scrubber and Universal Enrollment.
@@ -126,18 +141,3 @@
   - `documentation/dashboard.rst`
   - ... (+2 more)
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-19] feat: Step 2 Milestone 2: Zero-GPU CachedReplayProvider & Runtime Pool Scheduler Wiring
-- **Type**: feat
-- **Summary**: Extracted shared post_detection_governance.py (FrameProcessor 14->7 methods), implemented zero-GPU CachedReplayProvider with live zone/tripwire/RSAC governance and loop wrap-around resets, wired AnalyticsScheduler & armed P1 gating into StreamWorker/AsyncInferenceWorker, and exposed scheduler/armed telemetry.
-- **Files** (9):
-  - `dashboard/services/async_inference_worker.py`
-  - `dashboard/services/cached_replay_provider.py`
-  - `dashboard/services/camera_pool_queries.py`
-  - `dashboard/services/file_detection_replay.py`
-  - `dashboard/services/stream_telemetry.py`
-  - `dashboard/services/stream_worker.py`
-  - `intelligent_tracker/pipeline/frame_processor.py`
-  - `intelligent_tracker/pipeline/post_detection_governance.py`
-  - ... (+1 more)
-- **Verification**: python -m unittest tests.test_cached_replay_and_pool_scheduler tests.test_live_studio_sync tests.test_step3_worker_hibernation_and_ai_gating tests.test_dashboard_di tests.test_step3_architecture_budgets tests.test_cross_platform_pipeline_hardening tests.test_analytics_scheduler

@@ -16,18 +16,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from dashboard.camera_pool import CameraPool
-from dashboard.dependencies import (
-    VIDEOS_DIR,
-    get_camera_pool,
-    get_db,
-    get_scenario_mgr,
-)
+from dashboard.dependencies import VIDEOS_DIR, get_camera_pool, get_db, get_scenario_mgr
 from dashboard.schemas import JourneyExportRequest, SpatialTransitionRequest, WorldPoseRequest
 from intelligent_tracker.database import TrackerDB
-from intelligent_tracker.journey import (
-    JourneyVideoExporter,
-    TrajectoryJourneySearcher,
-)
+from intelligent_tracker.journey import JourneyVideoExporter, TrajectoryJourneySearcher
 from intelligent_tracker.scenarios import ScenarioManager
 from intelligent_tracker.topology import SpatialTransitionLink
 from intelligent_tracker.world import WorldGraph, WorldTacticalMinimap
@@ -203,11 +195,7 @@ async def get_topology_world_map(
 
 
 @router.get("/api/entities/suggest")
-async def suggest_entities_route(
-    q: str = "",
-    limit: int = 8,
-    db: TrackerDB = Depends(get_db),
-):
+async def suggest_entities_route(q: str = "", limit: int = 8, db: TrackerDB = Depends(get_db)):
     """Return prefix-ranked entity suggestions for journey autocomplete."""
     items = await asyncio.to_thread(db.suggest_entities, q, limit)
     return {"items": items, "query": q}
@@ -215,56 +203,31 @@ async def suggest_entities_route(
 
 @router.get("/api/journey/search")
 async def search_trajectory_journey(
-    entity_id: Optional[int] = None,
-    entity_name: Optional[str] = None,
-    track_id: Optional[int] = None,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-    db: TrackerDB = Depends(get_db),
+    entity_id: Optional[int] = None, entity_name: Optional[str] = None,
+    track_id: Optional[int] = None, start_time: Optional[str] = None,
+    end_time: Optional[str] = None, db: TrackerDB = Depends(get_db),
 ):
     """Reconstruct an entity's complete chronological trajectory across multiple cameras."""
     searcher = TrajectoryJourneySearcher(db)
     journey = await asyncio.to_thread(
-        searcher.search_journey,
-        entity_id=entity_id,
-        entity_name=entity_name,
-        track_id=track_id,
-        start_time=start_time,
-        end_time=end_time,
+        searcher.search_journey, entity_id=entity_id, entity_name=entity_name,
+        track_id=track_id, start_time=start_time, end_time=end_time,
     )
     return journey.to_dict()
 
 
 @router.post("/api/journey/export")
-async def export_journey_video_route(
-    req: JourneyExportRequest,
-    db: TrackerDB = Depends(get_db),
-):
+async def export_journey_video_route(req: JourneyExportRequest, db: TrackerDB = Depends(get_db)):
     """Slices and concatenates cross-camera video segments into a downloadable MP4 journey file."""
     searcher = TrajectoryJourneySearcher(db)
     journey = await asyncio.to_thread(
-        searcher.search_journey,
-        entity_id=req.entity_id,
-        entity_name=req.entity_name,
-        track_id=req.track_id,
-        start_time=req.start_time,
-        end_time=req.end_time,
+        searcher.search_journey, entity_id=req.entity_id, entity_name=req.entity_name,
+        track_id=req.track_id, start_time=req.start_time, end_time=req.end_time,
     )
-
     if journey.total_hops == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="No sightings found to generate journey video",
-        )
-
+        raise HTTPException(status_code=404, detail="No sightings found to generate journey video")
     exporter = JourneyVideoExporter(output_dir=VIDEOS_DIR)
     exported_file = await asyncio.to_thread(exporter.export_journey_video, journey)
     filename = os.path.basename(exported_file)
-
-    return {
-        "status": "success",
-        "journey": journey.to_dict(),
-        "video_file": filename,
-        "video_url": f"/videos/{filename}",
-    }
+    return {"status": "success", "journey": journey.to_dict(), "video_file": filename, "video_url": f"/videos/{filename}"}
 
