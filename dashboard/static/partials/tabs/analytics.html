@@ -5,7 +5,21 @@
         <div class="glass-panel chart-card">
           <div class="card-header">
             <h3>Entry & Exit Traffic Flows</h3>
-            <span class="panel-badge">Real-time series</span>
+            <div class="analytics-flow-controls">
+              <select id="analytics-range-select" class="form-control form-control-sm" aria-label="Traffic Flow Range">
+                <option value="900">15m</option>
+                <option value="3600" selected>1h</option>
+                <option value="21600">6h</option>
+                <option value="86400">24h</option>
+                <option value="604800">7d</option>
+              </select>
+              <button class="btn btn-sm btn-outline" id="btn-analytics-prev" title="Previous window">‹ Prev</button>
+              <button class="btn btn-sm btn-outline" id="btn-analytics-next" title="Next window" disabled>Next ›</button>
+              <button class="btn btn-sm btn-primary" id="btn-analytics-live" title="Return to live polling" disabled>Back to Live</button>
+            </div>
+          </div>
+          <div class="analytics-window-bar">
+            <span class="panel-badge analytics-window-label" id="analytics-window-label">Live · Last 1h</span>
           </div>
           <div class="chart-wrapper">
             <canvas id="trafficChart"></canvas>
@@ -27,10 +41,12 @@
             <img id="static-heatmap-img" data-src="/analytics/heatmap" alt="Accumulated Density Heatmap" />
           </div>
           <div class="heatmap-legend" id="heatmap-colorbar-legend">
-            <span>Low</span>
+            <span class="heatmap-legend-tick" id="heatmap-legend-min">0.00</span>
             <span class="heatmap-colorbar" aria-hidden="true"></span>
-            <span>High</span>
+            <span class="heatmap-legend-tick" id="heatmap-legend-mid">0.50</span>
+            <span class="heatmap-legend-tick" id="heatmap-legend-max">1.00</span>
           </div>
+          <div class="heatmap-meta-summary" id="heatmap-meta-summary">Awaiting heatmap metadata…</div>
         </div>
       </div>
     </section>

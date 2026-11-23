@@ -12,19 +12,46 @@ from dataclasses import asdict
 import io
 import logging
 import os
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-import numpy as np
 
 from dashboard.dependencies import get_active_stream_manager, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
+from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
 from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.analytics")
 
 router = APIRouter(tags=["Analytics & Timeline"])
+
+
+@router.get("/analytics/flows")
+async def get_traffic_flows(
+    camera_id: Optional[str] = None,
+    range_sec: int = Query(3600, ge=60, le=30 * 86400),
+    end_time: Optional[float] = None,
+    bucket_sec: Optional[int] = Query(None, ge=1, le=86400),
+    db: TrackerDB = Depends(get_db),
+):
+    """Aggregate time-bucketed tripwire/zone traffic flows and sightings."""
+    is_live = end_time is None
+    resolved_end = float(end_time) if end_time is not None else time.time()
+    resolved_bucket = resolve_bucket_sec(range_sec, bucket_sec)
+    start_time = resolved_end - float(range_sec)
+    if db is None:
+        return {
+            "camera_id": camera_id or None, "start_time": start_time, "end_time": resolved_end,
+            "bucket_sec": resolved_bucket, "buckets": [],
+            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0}, "is_live": is_live,
+        }
+    res = await asyncio.to_thread(
+        db.get_traffic_flows, start_time, resolved_end, resolved_bucket, camera_id
+    )
+    res["is_live"] = is_live
+    return res
 
 
 @router.get("/analytics/heatmap")
@@ -39,13 +66,7 @@ async def get_heatmap(
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
     if format == "json":
-        if not mgr.analytics or not mgr.analytics.heatmap:
-            return {"density": []}
-        return {
-            "resolution": [mgr.analytics.heatmap.width, mgr.analytics.heatmap.height],
-            "max_value": float(np.max(mgr.analytics.heatmap.density)),
-            "mean_value": float(np.mean(mgr.analytics.heatmap.density)),
-        }
+        return build_heatmap_json(mgr, camera_id)
 
     jpeg_bytes = mgr.get_heatmap_jpeg()
     return StreamingResponse(io.BytesIO(jpeg_bytes), media_type="image/jpeg")

@@ -44,6 +44,7 @@
 ---
 
 ## Step 4: Real-Time Analytics Flows, Alerts Canvas & BEV Minimap, Journey Autocomplete & Review Loop (`Ideas 5–8`, `ADR-09`)
+- [ ] **Child Plan**: `.TODO/step_4_analytics_alerts_minimap_and_review.md`
 - [ ] **Goal**: Replace synthetic analytics and flat alert tables with filterable historical insights, reusable overlay/BEV visualizers, prefix entity autocomplete, and a bidirectional Video Studio <-> Review & Learn workflow.
 - [ ] **Target Scope (Recommended 4-Milestone Split, ~50–85 steps each)**:
   - [ ] **M1 — `#analytics` Time-Bucketed Flows & Heatmap Legend**: Add SQLite time-bucketed traffic-flow aggregation endpoint + time-range navigation + "Back to Live" toggle (`analytics_view.js` removes `0.6x/0.4x` synthetic math) and rich heatmap colorbar/camera metadata legend.
