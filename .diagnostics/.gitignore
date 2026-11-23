@@ -1,0 +1,4 @@
+# Auto-generated SSOT defect catalog gitignore
+# Ignored by default so they never pollute git status; use `git add -f` if versioning is desired.
+/*
+!/probes
