@@ -20,7 +20,12 @@ from fastapi.responses import StreamingResponse
 from dashboard.dependencies import get_active_stream_manager, get_camera_pool, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
 from dashboard.services.alerts_query_service import query_merged_events
-from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
+from dashboard.services.analytics_query_service import (
+    build_heatmap_json,
+    enrich_sighting,
+    query_sightings_page,
+    resolve_bucket_sec,
+)
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from intelligent_tracker.database import TrackerDB
 
@@ -196,78 +201,50 @@ async def delete_entity(
     return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id, pool)
 
 
-def _enrich_sighting(s: dict, db) -> dict:
-    """Enrich sighting with entity details and thumbnail URL (with entity avatar fallback)."""
-    s_dict = dict(s)
-    ent_id = s_dict.get("entity_id")
-    if ent_id:
-        ent = db.get_entity(ent_id)
-        s_dict["entity_name"] = ent["name"] if ent else "Unknown"
-        s_dict["entity_category"] = ent["category"] if ent else "unknown"
-    else:
-        s_dict["entity_name"] = f"Track #{s_dict.get('track_id', 0)}"
-        s_dict["entity_category"] = "unidentified"
-
-    if s_dict.get("snapshot_path"):
-        s_dict["snapshot_url"] = f"/crops/{os.path.basename(s_dict['snapshot_path'])}"
-    elif ent_id and hasattr(db, "get_signatures"):
-        sigs = db.get_signatures(entity_id=ent_id)
-        for sig in sigs:
-            cp = str(sig.get("crop_path") or "").strip()
-            if cp:
-                s_dict["snapshot_url"] = f"/crops/{os.path.basename(cp)}"
-                break
-    return s_dict
-
-
-def _fetch_sightings_sync(
-    db,
-    entity_id: Optional[int],
-    entity_name: Optional[str],
-    zone_id: Optional[str],
-    start_time: Optional[str],
-    end_time: Optional[str],
-    limit: int,
-) -> list[dict]:
-    """Resolve optional entity name filter and enrich matching sightings."""
-    if entity_name and not entity_id:
-        ent = db.get_entity_by_name(entity_name)
-        if not ent:
-            return []
-        entity_id = ent["id"]
-    sightings = db.query_sightings(
-        entity_id=entity_id,
-        zone_id=zone_id,
-        start_time=start_time,
-        end_time=end_time,
-        limit=limit,
-    )
-    return [_enrich_sighting(s, db) for s in sightings]
+_enrich_sighting = enrich_sighting
 
 
 @router.get("/sightings")
 async def query_sightings(
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
+    source: Optional[str] = None,
     zone_id: Optional[str] = None,
+    video_filename: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    paginated: bool = False,
     db: TrackerDB = Depends(get_db),
 ):
-    """Search historical sighting timeline records with entity, zone, and time filters."""
+    """Search historical sighting timeline records with entity, source, zone, and pagination filters."""
     if db is None:
+        if paginated or offset > 0:
+            return {"items": [], "total": 0, "offset": offset, "limit": limit, "has_more": False}
         return []
     return await asyncio.to_thread(
-        _fetch_sightings_sync,
+        query_sightings_page,
         db,
-        entity_id,
-        entity_name,
-        zone_id,
-        start_time,
-        end_time,
-        limit,
+        entity_id=entity_id,
+        entity_name=entity_name,
+        source=source,
+        zone_id=zone_id,
+        video_filename=video_filename,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+        offset=offset,
+        paginated=paginated,
     )
+
+
+@router.get("/sightings/sources")
+async def list_sighting_sources(db: TrackerDB = Depends(get_db)):
+    """List distinct sighting sources with counts for timeline filter dropdowns."""
+    if db is None:
+        return []
+    return await asyncio.to_thread(db.list_sighting_sources)
 
 
 @router.get("/events")
