@@ -26,12 +26,12 @@ from dashboard.dependencies import (
     get_rsac_mgr,
     reload_all_galleries,
 )
+from dashboard.services.category_service import ensure_known_categories, ensure_known_category
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.rsac import RSACManager
 from dashboard.schemas import (
-    CustomCategoryCreateRequest,
     EnrollmentRequest,
     PetWhitelistRequest,
     ReviewConfirmRequest,
@@ -82,6 +82,7 @@ async def enroll_entity_route(
     req: EnrollmentRequest,
     request: Request,
     enrollment_mgr: UniversalEnrollmentManager = Depends(get_enrollment_mgr),
+    rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Universal Artifact & Face Enrollment from freeze-frame crop or base64 payload."""
     mgr = get_active_stream_manager(req.camera_id, conn=request)
@@ -96,9 +97,10 @@ async def enroll_entity_route(
     else:
         raise HTTPException(status_code=400, detail="Either bbox or crop_base64 must be provided")
 
+    cat = await asyncio.to_thread(ensure_known_category, rsac, req.category)
     try:
         res = await asyncio.to_thread(
-            enrollment_mgr.enroll, name=req.name, category=req.category or "person",
+            enrollment_mgr.enroll, name=req.name, category=cat,
             crop=crop_img, notes=req.notes or "", security_role=req.security_role or "",
             is_anchor=req.is_anchor if req.is_anchor is not None else True,
             merge_entity_id=req.merge_entity_id,
@@ -198,11 +200,13 @@ async def enroll_new_from_active_learning(
     req: ReviewEnrollNewRequest,
     request: Request,
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
+    rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Operator Enroll New: register candidate crop as a newly created entity."""
+    cat = await asyncio.to_thread(ensure_known_category, rsac, req.category)
     res = await asyncio.to_thread(
         al_mgr.enroll_as_new, item_id=item_id, name=req.name,
-        category=req.category or "person", security_role=req.security_role or "", notes=req.notes or "",
+        category=cat, security_role=req.security_role or "", notes=req.notes or "",
     )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
@@ -232,41 +236,7 @@ async def dismiss_active_learning_item(
     return res
 
 
-@router.get("/api/rsac/categories")
-async def list_custom_categories(rsac: RSACManager = Depends(get_rsac_mgr)):
-    """List custom semantic categories and display badges."""
-    return await asyncio.to_thread(rsac.list_categories)
-
-
-@router.post("/api/rsac/categories")
-async def create_custom_category(
-    req: CustomCategoryCreateRequest,
-    request: Request,
-    rsac: RSACManager = Depends(get_rsac_mgr),
-):
-    """Register or update custom category badge."""
-    cat = await asyncio.to_thread(
-        rsac.register_category,
-        cat_id=req.id,
-        name=req.name,
-        color=req.color or "#3B82F6",
-        badge_icon=req.badge_icon or "",
-        description=req.description or "",
-    )
-    await asyncio.to_thread(reload_all_galleries, conn=request)
-    return {"status": "success", "category": cat.to_dict()}
-
-
-@router.delete("/api/rsac/categories/{category_id}")
-async def delete_custom_category(
-    category_id: str,
-    request: Request,
-    rsac: RSACManager = Depends(get_rsac_mgr),
-):
-    """Delete a custom category."""
-    deleted = await asyncio.to_thread(rsac.delete_category, category_id)
-    await asyncio.to_thread(reload_all_galleries, conn=request)
-    return {"status": "success" if deleted else "not_found", "deleted": category_id}
+from dashboard.routers.categories import create_custom_category  # noqa: F401
 
 
 @router.get("/api/rsac/rules")
@@ -285,12 +255,14 @@ async def set_rsac_rule(
     rsac: RSACManager = Depends(get_rsac_mgr),
 ):
     """Create or update Role-Based Spatial Access Control rule for a camera zone."""
+    allowed = await asyncio.to_thread(ensure_known_categories, rsac, req.allowed_categories or [])
+    denied = await asyncio.to_thread(ensure_known_categories, rsac, req.denied_categories or [])
     rule = await asyncio.to_thread(
         rsac.set_rule,
         camera_id=req.camera_id,
         zone_id=req.zone_id,
-        allowed_categories=req.allowed_categories or [],
-        denied_categories=req.denied_categories or [],
+        allowed_categories=allowed,
+        denied_categories=denied,
         schedules=req.schedules or [],
         entity_overrides=req.entity_overrides or {},
         alarm_on_breach=req.alarm_on_breach if req.alarm_on_breach is not None else True,

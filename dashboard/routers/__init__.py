@@ -19,6 +19,7 @@ from dashboard.routers.analytics import router as analytics_router
 from dashboard.routers.cameras import router as cameras_router
 from dashboard.routers.camera_diagnostics import router as camera_diagnostics_router
 from dashboard.routers.camera_recording import router as camera_recording_router
+from dashboard.routers.categories import router as categories_router
 from dashboard.routers.categories_and_collision import router as categories_and_collision_router
 from dashboard.routers.multiview import router as multiview_router
 from dashboard.routers.processing_mode import router as processing_mode_router
@@ -37,6 +38,7 @@ __all__ = [
     "cameras_router",
     "camera_diagnostics_router",
     "camera_recording_router",
+    "categories_router",
     "categories_and_collision_router",
     "multiview_router",
     "processing_mode_router",

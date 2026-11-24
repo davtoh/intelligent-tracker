@@ -21,6 +21,7 @@ from dashboard.dependencies import get_active_stream_manager, get_camera_pool, g
 from dashboard.schemas import EntityCreateRequest, TagRequest
 from dashboard.services.alerts_query_service import query_merged_events
 from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
+from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.analytics")
@@ -119,27 +120,30 @@ async def list_entities(
     return await asyncio.to_thread(_fetch_entities_summary, db, category)
 
 
-def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
-    """Create a new entity if not already enrolled."""
+def _create_entity_sync(db, req: EntityCreateRequest, request: Request) -> dict:
+    """Create a new entity after validating its category against custom_categories."""
+    rsac = resolve_rsac_for_request(request, db=db)
+    cat = ensure_known_category(rsac, req.category)
     existing = db.get_entity_by_name(req.name)
     if existing:
         raise HTTPException(
             status_code=409,
             detail=f"Entity with name '{req.name}' already exists (ID #{existing['id']})",
         )
-    entity_id = db.add_entity(name=req.name, category=req.category, notes=req.notes)
-    return {"id": entity_id, "name": req.name, "category": req.category, "status": "active"}
+    entity_id = db.add_entity(name=req.name, category=cat, notes=req.notes)
+    return {"id": entity_id, "name": req.name, "category": cat, "status": "active"}
 
 
 @router.post("/entities")
 async def create_entity(
     req: EntityCreateRequest,
+    request: Request,
     db: TrackerDB = Depends(get_db),
 ):
     """Enroll a new identity into the persistent Re-ID gallery database."""
     if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_create_entity_sync, db, req)
+    return await asyncio.to_thread(_create_entity_sync, db, req, request)
 
 
 def _fetch_entity_details(db, entity_id: int) -> dict:
@@ -309,11 +313,14 @@ async def tag_bounding_box(req: TagRequest, request: Request):
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
+    cat = await asyncio.to_thread(
+        lambda: ensure_known_category(resolve_rsac_for_request(request, camera_id=req.camera_id), req.category)
+    )
     try:
         result = await asyncio.to_thread(
             mgr.tag_entity,
             entity_name=req.entity_name,
-            category=req.category,
+            category=cat,
             track_id=req.track_id,
             bbox=req.bbox,
             notes=req.notes or "",

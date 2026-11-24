@@ -16,6 +16,7 @@ from intelligent_tracker.repositories.signature_repo import SignatureMixin
 from intelligent_tracker.repositories.descriptor_repo import DescriptorMixin
 from intelligent_tracker.repositories.analytics_repo import AnalyticsMixin
 from intelligent_tracker.repositories.spatial_repo import SpatialMixin
+from intelligent_tracker.repositories.category_repo import CategoryRepoMixin
 from intelligent_tracker.repositories.learning_repo import LearningMixin
 from intelligent_tracker.repositories.rsac_repo import RsacMixin
 from intelligent_tracker.repositories.whitelist_repo import WhitelistMixin
@@ -34,6 +35,7 @@ __all__ = [
     "DescriptorMixin",
     "AnalyticsMixin",
     "SpatialMixin",
+    "CategoryRepoMixin",
     "LearningMixin",
     "RsacMixin",
     "WhitelistMixin",

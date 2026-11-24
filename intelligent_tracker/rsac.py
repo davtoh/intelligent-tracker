@@ -16,34 +16,23 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any, Set, Tuple
 
+from intelligent_tracker.category_registry import (
+    DEFAULT_CUSTOM_CATEGORIES,
+    CustomCategory,
+)
 from intelligent_tracker.database import TrackerDB
 
-
-DEFAULT_CUSTOM_CATEGORIES: List[Dict[str, str]] = [
-    {"id": "person", "name": "Person", "color": "#3B82F6", "badge_icon": "user", "description": "General human person"},
-    {"id": "family_car", "name": "Family Car", "color": "#10B981", "badge_icon": "car", "description": "Whitelisted resident family vehicle"},
-    {"id": "delivery_truck", "name": "Delivery Truck", "color": "#F59E0B", "badge_icon": "truck", "description": "Courier or logistics vehicle"},
-    {"id": "cleaning_crew", "name": "Cleaning Crew", "color": "#8B5CF6", "badge_icon": "sparkles", "description": "Authorized maintenance crew"},
-    {"id": "guard_dog", "name": "Guard Dog", "color": "#EC4899", "badge_icon": "shield", "description": "Authorized security canine"},
-    {"id": "pet", "name": "Household Pet", "color": "#06B6D4", "badge_icon": "paw", "description": "Whitelisted domestic pet"},
-    {"id": "vip", "name": "VIP Resident", "color": "#6366F1", "badge_icon": "star", "description": "High priority resident or guest"},
-    {"id": "restricted", "name": "Restricted / Watchlist", "color": "#EF4444", "badge_icon": "alert-triangle", "description": "Watchlist or unauthorized presence"},
+__all__ = [
+    "CustomCategory",
+    "DEFAULT_CUSTOM_CATEGORIES",
+    "DEFAULT_PET_WHITELIST",
+    "RSACSchedule",
+    "RSACDecision",
+    "RSACZoneRule",
+    "RSACManager",
 ]
 
-DEFAULT_PET_WHITELIST: Set[str] = {"dog", "cat", "pet", "guard_dog"}
-
-
-@dataclass
-class CustomCategory:
-    """Semantic category with display color and metadata."""
-    id: str
-    name: str
-    color: str = "#3B82F6"
-    badge_icon: str = ""
-    description: str = ""
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+DEFAULT_PET_WHITELIST: Set[str] = {"dog", "cat", "pet"}
 
 
 @dataclass
@@ -225,6 +214,7 @@ class RSACManager:
             return
 
         # Load custom categories
+        self.categories.clear()
         for row in self.db.get_custom_categories():
             self.categories[row["id"]] = CustomCategory(
                 id=row["id"],

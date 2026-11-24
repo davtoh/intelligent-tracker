@@ -22,6 +22,7 @@ from dashboard.dependencies import (
     get_db,
     reload_all_galleries,
 )
+from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from dashboard.services.negative_exemplar_service import NegativeExemplarService
 from dashboard.services.roi_recognition_service import (
     RoiNotFoundError,
@@ -145,6 +146,15 @@ def _relabel_after_commit(svc: object, data: object, req: TagCommitRequest) -> N
         )
 
 
+def _validate_tag_category(
+    request: Request, svc: object, camera_id: str | None, category: str | None
+) -> str:
+    """Validate ROI tag category against custom_categories."""
+    svc_db = getattr(svc, "db", None)
+    rsac = resolve_rsac_for_request(request, db=svc_db, camera_id=camera_id)
+    return ensure_known_category(rsac, category)
+
+
 @router.post("/api/tag/commit")
 async def commit_roi_tag_endpoint(
     req: TagCommitRequest,
@@ -154,11 +164,12 @@ async def commit_roi_tag_endpoint(
 ):
     """Commit an ROI tag, persist crop/signature/sighting, and reload galleries."""
     svc = _build_service(request, req.camera_id, db=db, pool=pool)
+    cat = await asyncio.to_thread(_validate_tag_category, request, svc, req.camera_id, req.category)
     try:
         data = await asyncio.to_thread(
             svc.commit_roi_tag,
             entity_name=req.entity_name,
-            category=req.category,
+            category=cat,
             entity_id=req.entity_id,
             camera_id=req.camera_id,
             video_filename=req.video_filename,

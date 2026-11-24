@@ -79,7 +79,16 @@ def _evaluate_zone_access_events(
     rsac_manager: Any | None, pet_whitelist: set[str] | None, snap_b64: str | None, now: float,
 ) -> list[Any]:
     """Evaluate RSAC rules and pet whitelist policy for a zone event."""
-    trk_cat = getattr(trk, "entity_category", getattr(trk, "label", "object")) if trk else "object"
+    explicit_cat = getattr(trk, "entity_category", None) if trk else None
+    if explicit_cat:
+        trk_cat = explicit_cat
+    elif trk is not None:
+        from intelligent_tracker.category_registry import map_detector_label_to_category
+
+        trk_cat = map_detector_label_to_category(getattr(trk, "label", ""))
+    else:
+        trk_cat = "object"
+    raw_label = str(getattr(trk, "label", "") or "").lower().strip() if trk else ""
     trk_eid = getattr(trk, "entity_id", None) if trk else None
     emitted: list[Any] = []
 
@@ -98,7 +107,7 @@ def _evaluate_zone_access_events(
                 entity_category=trk_cat, reason=decision.reason, severity=decision.severity,
                 message=decision.reason, timestamp=now, snapshot_base64=snap_b64,
             ))
-    elif pet_whitelist and trk_cat.lower().strip() in pet_whitelist:
+    elif pet_whitelist and (trk_cat.lower().strip() in pet_whitelist or (raw_label and raw_label in pet_whitelist)):
         emitted.append(_make_pet_event(camera_id, z_ev.zone_id, z_ev.track_id, trk, trk_eid, trk_cat, now, snap_b64))
 
     for ev in emitted:

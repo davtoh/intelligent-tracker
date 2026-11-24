@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-24] feat: Step 2 M1: Unified Category SSOT, Universal Defaults & COCO Mapping
+- **Type**: feat
+- **Summary**: Added intelligent_tracker/category_registry.py with 9 universal defaults, legacy migration/pruning, slug validation, and COCO label mapping; wired CategoryRepoMixin into TrackerDB; moved /api/rsac/categories CRUD + export/import + guarded delete to dashboard/routers/categories.py; enforced category SSOT validation across entity/tag/review/enroll/RSAC routes.
+- **Files** (16):
+  - `intelligent_tracker/category_registry.py`
+  - `intelligent_tracker/repositories/category_repo.py`
+  - `intelligent_tracker/repositories/schema_manager.py`
+  - `intelligent_tracker/rsac.py`
+  - `intelligent_tracker/database.py`
+  - `intelligent_tracker/analytics/zone_stats.py`
+  - `dashboard/services/category_service.py`
+  - `dashboard/routers/categories.py`
+  - ... (+8 more)
+- **Verification**: plan_engine verify: 53/53 OK; targeted 14 modules: 88/88 OK; audit: 0 new issues; surface --verify --strict: 0 mismatches; discover tests: 1024/1027 (3 unrelated timing races pass standalone)
+
 ## [2026-11-24] feat: Step 1: Re-ID unification, sighting crops, responsive dialogs, and diagnostics elevation
 - **Type**: feat
 - **Summary**: Unified DualModel Re-ID, sighting crop persistence, wide/resizable dialogs, MediaEmptyState, and upgraded system-diagnostics rules and workspace probes.
@@ -120,18 +135,3 @@
   - `.diagnostics/probes/replay_pipeline_probe.py`
   - `.diagnostics/probes/video_studio_contract_probe.py`
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-20] fix: Integration Diagnostics Remediation Milestone 3
-- **Type**: fix
-- **Summary**: Fixed scrubber reports/media URLs, entities+alerts timeline extraction, BEV telemetry wiring, Studio video overlay gating, armed UI/AsyncInferenceWorker sync, boot stream gating, and zero active scan/surface defects
-- **Files** (22):
-  - `.TODO/integration_diagnostics_and_remediation_plan.md`
-  - `dashboard/camera_pool.py`
-  - `dashboard/services/async_inference_worker.py`
-  - `dashboard/services/process_supervisor.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/static/app.js`
-  - `dashboard/static/camera_manager.js`
-  - `dashboard/static/js/bev_minimap.js`
-  - ... (+14 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

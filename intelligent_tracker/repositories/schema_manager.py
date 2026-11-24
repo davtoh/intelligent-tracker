@@ -9,6 +9,7 @@ import logging
 import sqlite3
 from typing import Any
 
+from intelligent_tracker.category_registry import DEFAULT_CUSTOM_CATEGORIES, migrate_category_registry
 from intelligent_tracker.repositories.memory_schema import apply_memory_schema_migrations
 from intelligent_tracker.repositories.video_schema import apply_video_schema_migrations
 
@@ -228,27 +229,23 @@ class SchemaMixin:
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""
         default_cats = [
-            ("person", "Person", "#3B82F6", "user", "General human person"),
-            ("family_car", "Family Car", "#10B981", "car", "Whitelisted resident family vehicle"),
-            ("delivery_truck", "Delivery Truck", "#F59E0B", "truck", "Courier or logistics vehicle"),
-            ("cleaning_crew", "Cleaning Crew", "#8B5CF6", "sparkles", "Authorized maintenance crew"),
-            ("guard_dog", "Guard Dog", "#EC4899", "shield", "Authorized security canine"),
-            ("pet", "Household Pet", "#06B6D4", "paw", "Whitelisted domestic pet"),
-            ("vip", "VIP Resident", "#6366F1", "star", "High priority resident or guest"),
-            ("restricted", "Restricted / Watchlist", "#EF4444", "alert-triangle", "Watchlist or unauthorized presence"),
+            (c["id"], c["name"], c["color"], c["badge_icon"], c["description"])
+            for c in DEFAULT_CUSTOM_CATEGORIES
         ]
         cursor.executemany(
             "INSERT OR IGNORE INTO custom_categories (id, name, color, badge_icon, description) VALUES (?, ?, ?, ?, ?)",
             default_cats,
         )
         default_pets = [
-            ("dog", "Canine family pet"), ("cat", "Feline family pet"),
-            ("pet", "Generic domestic pet"), ("guard_dog", "Trained security or family guard dog"),
+            ("dog", "Canine family pet"),
+            ("cat", "Feline family pet"),
+            ("pet", "Generic domestic pet"),
         ]
         cursor.executemany(
             "INSERT OR IGNORE INTO pet_whitelist (category_or_label, notes) VALUES (?, ?)",
             default_pets,
         )
+        migrate_category_registry(cursor)
 
     def _init_indexes(self, cursor: sqlite3.Cursor) -> None:
         """Create indices for fast timeline, lookup, and analytics queries."""

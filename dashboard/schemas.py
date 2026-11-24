@@ -7,7 +7,7 @@ Defines validated data transfer schemas for REST endpoints across cameras,
 zones, tripwires, homography, RSAC access control, and active learning candidate reviews.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -250,6 +250,11 @@ class CustomCategoryUpdateRequest(BaseModel):
     color: Optional[str] = Field("#3B82F6", description="HEX color string")
     badge_icon: Optional[str] = Field("", description="Badge icon identifier")
     description: Optional[str] = Field("", description="Category description")
+
+
+class CategoryImportRequest(BaseModel):
+    categories: List[CustomCategoryCreateRequest] = Field(..., description="Category preset list")
+    mode: Literal["merge", "replace"] = Field("merge", description="Import merge or replace mode")
 
 
 class RSACRuleCreateRequest(BaseModel):
