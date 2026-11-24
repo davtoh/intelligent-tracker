@@ -14,6 +14,7 @@ import logging
 import threading
 from typing import Any, Dict, Optional
 
+from dashboard.services.base_config_resolver import resolve_base_config_path
 from dashboard.services.stream_subscribers import StreamSubscriberRegistry, StreamSubscriberMixin
 from dashboard.services.frame_overlay import FrameOverlayRenderer
 from dashboard.services.stream_media import StreamMediaMixin
@@ -81,7 +82,7 @@ def _init_manager_config(
     custom_cfg: Optional[Dict[str, Any]],
 ) -> None:
     """Initialize stream configuration paths, database path, and empty component slots."""
-    manager.config_path = config_path or os.environ.get("TRACKER_CONFIG", "configs/alert_demo.yaml")
+    manager.config_path = resolve_base_config_path(config_path)
     if not os.path.exists(manager.config_path) and os.path.exists("configs/demo.yaml"):
         manager.config_path = "configs/demo.yaml"
 

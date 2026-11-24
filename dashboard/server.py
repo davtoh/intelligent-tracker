@@ -49,6 +49,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_false",
         help="Disable auto-reload.",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Enable opt-in demo scenarios (loads configs/alert_demo.yaml).",
+    )
     return parser.parse_args(argv)
 
 
@@ -94,6 +99,8 @@ def preflight_port_check(port: int, host: str = "0.0.0.0") -> bool:
 def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for intelligent-tracker-server."""
     args = parse_args(argv)
+    if args.demo:
+        os.environ["IT_LOAD_DEMO_SCENARIOS"] = "1"
     host, port, reload = resolve_config(args)
 
     print("=== Starting Intelligent Tracker Dashboard ===")

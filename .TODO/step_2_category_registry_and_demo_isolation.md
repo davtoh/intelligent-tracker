@@ -54,10 +54,10 @@
 
 > *Deferred to Next Turn / Milestone 2*
 
-- [ ] **configs/default.yaml**: Create clean non-demo base configuration copied from `configs/alert_demo.yaml` without `analytics.zones` (`restricted_vault`), `analytics.tripwires`, or the `alerting:` block.
-- [ ] **dashboard/services/base_config_resolver.py** + **dashboard/camera_pool.py** + **dashboard/stream_manager.py**: Implement `resolve_base_config_path()` (`TRACKER_CONFIG` -> `configs/alert_demo.yaml` when `IT_LOAD_DEMO_SCENARIOS` in `1`/`true`/`yes` -> `configs/default.yaml`) and wire `CameraPool(base_config_path: str | None = None)` and `stream_manager._init_manager_config()` through the resolver.
-- [ ] **dashboard/server.py**: Add `--demo` CLI flag setting `os.environ["IT_LOAD_DEMO_SCENARIOS"] = "1"` before `uvicorn.run()` so reload worker children inherit opt-in demo mode.
-- [ ] **tests/test_step2_demo_isolation.py** + **documentation/events.rst**: Add isolated tests verifying `resolve_base_config_path()` precedence, zero `restricted_vault` demo alerts on default cold boot, and `--demo` flag propagation; update docs where default config is referenced.
+- [x] **configs/default.yaml**: Create clean non-demo base configuration copied from `configs/alert_demo.yaml` without `analytics.zones` (`restricted_vault`), `analytics.tripwires`, or the `alerting:` block.
+- [x] **dashboard/services/base_config_resolver.py** + **dashboard/camera_pool.py** + **dashboard/stream_manager.py**: Implement `resolve_base_config_path()` (`TRACKER_CONFIG` -> `configs/alert_demo.yaml` when `IT_LOAD_DEMO_SCENARIOS` in `1`/`true`/`yes` -> `configs/default.yaml`) and wire `CameraPool(base_config_path: str | None = None)` and `stream_manager._init_manager_config()` through the resolver.
+- [x] **dashboard/server.py**: Add `--demo` CLI flag setting `os.environ["IT_LOAD_DEMO_SCENARIOS"] = "1"` before `uvicorn.run()` so reload worker children inherit opt-in demo mode.
+- [x] **tests/test_step2_demo_isolation.py** + **documentation/events.rst**: Add isolated tests verifying `resolve_base_config_path()` precedence, zero `restricted_vault` demo alerts on default cold boot, and `--demo` flag propagation; update docs where default config is referenced.
 
 ---
 

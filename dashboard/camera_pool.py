@@ -11,6 +11,7 @@ import logging
 import threading
 from typing import Any
 
+from dashboard.services.base_config_resolver import resolve_base_config_path
 from dashboard.services.camera_config_store import CameraConfigStore
 from dashboard.services.camera_pool_queries import (
     CameraPoolQueryMixin,
@@ -41,12 +42,13 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         self,
         config_file: str = "configs/cameras.json",
         db_path: str = "data/tracker.db",
-        base_config_path: str = "configs/alert_demo.yaml",
+        base_config_path: str | None = None,
         autostart: bool = True,
     ) -> None:
+        resolved_base_config = resolve_base_config_path(base_config_path)
         self.config_file = config_file
         self.db_path = db_path
-        self.base_config_path = base_config_path
+        self.base_config_path = resolved_base_config
         self._autostart = autostart
 
         self._lock = threading.RLock()
@@ -67,7 +69,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         self._config_store = CameraConfigStore(config_file=config_file, lock=self._lock)
         self._coordinator = StreamPoolCoordinator(
             db_path=db_path,
-            base_config_path=base_config_path,
+            base_config_path=resolved_base_config,
             world_graph=self.world_graph,
             lock=self._lock,
             event_bus=self.event_bus,
