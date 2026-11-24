@@ -7,6 +7,7 @@ Provides endpoints for spatial scenario configuration, polygonal zones,
 directional tripwires, 4-point homography calibration, and Bird's-Eye-View (BEV) minimap rendering.
 """
 
+import asyncio
 import io
 import logging
 from typing import Optional
@@ -20,6 +21,16 @@ from dashboard.schemas import (
     HomographyCalibrationRequest,
     TripwireCreateRequest,
     ZoneCreateRequest,
+)
+from dashboard.schemas_scenarios import TripwireUpdateRequest, ZoneUpdateRequest
+from intelligent_tracker.repositories.spatial_edit_helpers import (
+    ScenarioConflictError,
+    ScenarioNotFoundError,
+)
+from intelligent_tracker.scenario_edits import (
+    _UNSET,
+    update_tripwire_in_place,
+    update_zone_in_place,
 )
 from intelligent_tracker.scenarios import GroundPlaneHomography, ScenarioManager
 
@@ -299,3 +310,30 @@ async def get_bev_minimap_image(
     bev_img = homo.render_bev_minimap({}, zones=c_entry["zones"])
     ret, buf = cv2.imencode(".jpg", bev_img, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
     return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+@router.put("/api/scenarios/zones/{camera_id}/{zone_id}")
+async def update_zone_route(camera_id: str, zone_id: str, req: ZoneUpdateRequest, request: Request, sm: ScenarioManager = Depends(get_scenario_mgr)):
+    """Update zone geometry, metadata, or name in place without resetting live counters."""
+    mgr = get_active_stream_manager(camera_id, conn=request)
+    cap = req.capacity_limit if "capacity_limit" in req.model_fields_set else _UNSET
+    try:
+        z = await asyncio.to_thread(update_zone_in_place, sm, camera_id, zone_id, name=req.name, polygon=req.polygon, category_filter=req.category_filter, dwell_threshold=req.dwell_threshold, capacity_limit=cap, color=req.color, stream_manager=mgr)
+    except ScenarioNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScenarioConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"status": "success", "zone": {"camera_id": camera_id, "name": z.name, "polygon": z.polygon.tolist(), "dwell_threshold": z.dwell_threshold, "capacity_limit": z.capacity_limit, "category_filter": getattr(z, "category_filter", ""), "color": list(z.color)}}
+
+
+@router.put("/api/scenarios/tripwires/{camera_id}/{tripwire_id}")
+async def update_tripwire_route(camera_id: str, tripwire_id: str, req: TripwireUpdateRequest, request: Request, sm: ScenarioManager = Depends(get_scenario_mgr)):
+    """Update tripwire endpoints, directionality, or name in place without resetting counts."""
+    mgr = get_active_stream_manager(camera_id, conn=request)
+    try:
+        tw = await asyncio.to_thread(update_tripwire_in_place, sm, camera_id, tripwire_id, name=req.name, line_segment=req.line_segment, bidirectional=req.bidirectional, color=req.color, stream_manager=mgr)
+    except ScenarioNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ScenarioConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"status": "success", "tripwire": {"camera_id": camera_id, "name": tw.name, "line_segment": [list(tw.pt1), list(tw.pt2)], "bidirectional": tw.bidirectional, "color": list(tw.color)}}

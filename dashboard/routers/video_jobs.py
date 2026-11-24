@@ -11,8 +11,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from dashboard.dependencies import VIDEOS_DIR
+from dashboard.dependencies import VIDEOS_DIR, get_camera_pool, get_db, get_scenario_mgr
 from dashboard.schemas import VideoAnalyzeRequest
+from dashboard.schemas_scenarios import VideoReevalRequest
 from dashboard.services.progressive_stream_store import build_job_stream_response
 from dashboard.services.video_analytics_service import (
     parse_analyze_options,
@@ -28,6 +29,7 @@ from dashboard.services.video_report_store import (
     is_same_recording_alias,
     list_report_runs,
 )
+from dashboard.services.video_scenario_reeval_service import reevaluate_video_run_scenarios
 from dashboard.services.video_transcoder import VideoTranscodeService
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.video_jobs")
@@ -320,6 +322,23 @@ async def export_video_report_run(filename: str, run_id: str):
         content=bundle,
         headers={"Content-Disposition": f'attachment; filename="{export_name}"'},
     )
+
+
+@router.post("/api/videos/re-evaluate-scenarios")
+async def reevaluate_video_scenarios_route(req: VideoReevalRequest):
+    """Re-evaluate indexed video detections against current ScenarioManager & RSAC rules (0-GPU)."""
+    try:
+        return await asyncio.to_thread(
+            reevaluate_video_run_scenarios,
+            get_db(),
+            req.video_filename,
+            run_id=req.run_id,
+            scenario_camera_id=req.scenario_camera_id,
+            scenario_mgr=get_scenario_mgr(),
+            pool=get_camera_pool(),
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 
