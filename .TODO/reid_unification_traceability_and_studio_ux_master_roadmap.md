@@ -43,11 +43,11 @@
 ---
 
 ## Step 4: `#studio` In-Place Zone/Tripwire Vertex Editing, Interactive 2D Minimap & Zero-GPU Scenario Re-Evaluation *(Deferred to Step 4)*
-- [ ] **Goal**: Upgrade `#studio` from delete-and-recreate geometry management to non-destructive in-place editing, interactive camera-cone manipulation on the 2D Tactical Minimap, and optional 0-GPU scenario re-evaluation (`Idea 4`, `ADR-12`).
-- [ ] **Target Scope**:
-  - [ ] **Non-Destructive `PUT` Geometry API & Zero-GPU Re-Evaluation**: Add `PUT /api/scenarios/zones/{camera_id}/{zone_id}` and `/tripwires/{camera_id}/{tripwire_id}` supporting vertex edits and rename while preserving live zone/tripwire counters and immutable `sightings`/`world_timeline_events` audit logs; add `POST /api/videos/re-evaluate-scenarios` recomputing `video_runs` alerts/zone/tripwire summaries over cached `frame_detections_json` at 0 GPU cost.
-  - [ ] **Interactive `#studio` Canvas & 2D Minimap**: Extract `studio_shape_editor.js` (idle-mode polygon/tripwire hit-testing, vertex drag, shape move, inline rename) and `world_minimap_interactions.js` (prune stale/deleted cameras from `/api/topology/world-map`, click FOV cones to focus camera, drag position/yaw/range handles on `#bev-minimap-canvas`), plus `"Re-evaluate Scenarios"` action on indexed video runs.
-- [ ] **Definition of Done**: Existing zones, tripwires, and minimap camera cones edit smoothly in place without wiping live counters or mutating historical audit rows, and 0-GPU video re-evaluation updates run metrics accurately.
+- [x] **Goal**: Upgrade `#studio` from delete-and-recreate geometry management to non-destructive in-place editing, interactive camera-cone manipulation on the 2D Tactical Minimap, and optional 0-GPU scenario re-evaluation (`Idea 4`, `ADR-12`).
+- [x] **Target Scope**:
+  - [x] **Non-Destructive `PUT` Geometry API & Zero-GPU Re-Evaluation**: Add `PUT /api/scenarios/zones/{camera_id}/{zone_id}` and `/tripwires/{camera_id}/{tripwire_id}` supporting vertex edits and rename while preserving live zone/tripwire counters and immutable `sightings`/`world_timeline_events` audit logs; add `POST /api/videos/re-evaluate-scenarios` recomputing `video_runs` alerts/zone/tripwire summaries over cached `frame_detections_json` at 0 GPU cost.
+  - [x] **Interactive `#studio` Canvas & 2D Minimap**: Extract `studio_shape_editor.js` (idle-mode polygon/tripwire hit-testing, vertex drag, shape move, inline rename) and `world_minimap_interactions.js` (prune stale/deleted cameras from `/api/topology/world-map`, click FOV cones to focus camera, drag position/yaw/range handles on `#bev-minimap-canvas`), plus `"Re-evaluate Scenarios"` action on indexed video runs.
+- [x] **Definition of Done**: Existing zones, tripwires, and minimap camera cones edit smoothly in place without wiping live counters or mutating historical audit rows, and 0-GPU video re-evaluation updates run metrics accurately.
 
 ---
 

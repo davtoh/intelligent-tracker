@@ -81,6 +81,7 @@
     window.StudioShapeEditor?.init(() => studioState, { drawOverlay, updateStatus: updateStudioStatus, showToast });
     bindStudioUI();
     window.WorldTacticalMinimapView?.bindPoseEditor?.(() => studioState.activeCamera);
+    window.WorldMinimapInteractions?.bind?.(() => studioState.activeCamera);
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-11-24] feat: Step 4 M3: Minimap Interactions and Stale Camera Pruning
+- **Type**: feat
+- **Summary**: Pruned stale cameras from /api/topology/world-map via world_map_service, cleaned up camera_world_poses on CameraPool.remove_camera, and added interactive 2D minimap cone-focus and origin/yaw/range drag controls.
+- **Files** (8):
+  - `dashboard/services/world_map_service.py`
+  - `dashboard/routers/topology.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/static/js/world_minimap.js`
+  - `dashboard/static/js/world_minimap_interactions.js`
+  - `dashboard/static/partials/scripts_studio.html`
+  - `dashboard/static/studio.js`
+  - `tests/test_step4_minimap_interactions.py`
+
 ## [2026-11-24] feat: Step 3: Traceability, Analytics Drill-Down & Stateful Alerts Lifecycle
 - **Type**: feat
 - **Summary**: Added #timeline pagination and Live/Studio jump links, #analytics explicit X/Y axes and 32x24 peak/hotspot drill-down, #alerts unread state (is_read/acknowledged_at) and /api/events/* admin endpoints, and #alerts frontend lifecycle (alerts_admin.js, facets datalists, mark-read/delete/clear/export, snapshot download, Live/Studio deep-links, real unread_alert_count badge sync).
@@ -126,18 +139,3 @@
   - `dashboard/services/video_analytics_service.py`
   - `dashboard/static/review_and_rsac.js`
   - ... (+24 more)
-
-## [2026-11-21] fix: Step 2 M2: Lock-Order Deadlock Elimination, Pool-Scoped Singletons & CameraConfigStore Hardening
-- **Type**: fix
-- **Summary**: Eliminated ProcessingModeService<->StreamRecordingController AB-BA deadlock (P0-2), guarded all pool.streams accesses with snapshot_pool_streams/_snapshot_pool_streams, hardened CameraConfigStore.load_cameras() for {'cameras': ...} payloads (TRC-017), wired pool-scoped EventBus/WorldGraph/ConfidenceEngine/EventFTSIndex singletons into CameraPool/PipelineEngine/app.state (P0-5), added SQLite rollback-on-error in memory_repo.py, and upgraded cold_boot_world_probe.py + test_step2_pool_singletons_and_locks.py.
-- **Files** (24):
-  - `.diagnostics/probes/cold_boot_world_probe.py`
-  - `dashboard/app.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/dependencies.py`
-  - `dashboard/routers/camera_recording.py`
-  - `dashboard/routers/cameras.py`
-  - `dashboard/routers/system.py`
-  - `dashboard/routers/videos.py`
-  - ... (+16 more)
-- **Verification**: 893/893 unittest discover tests OK; cold_boot_world_probe PASS; test_step2_pool_singletons_and_locks + test_dashboard_di + test_step3_architecture_budgets 18/18 OK

@@ -170,6 +170,12 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             removed_cfg = self._config_store.remove_entry(camera_id)
         self.save_cameras()
         self._coordinator.remove_stream(camera_id)
+        db = getattr(self, "_db", None)
+        if db is not None and hasattr(db, "delete_world_pose"):
+            try:
+                db.delete_world_pose(camera_id)
+            except Exception as exc:
+                logger.warning("Failed to delete world pose for [%s]: %s", camera_id, exc)
         logger.info("Removed camera [%s] from pool", camera_id)
         return removed_cfg is not None
 
