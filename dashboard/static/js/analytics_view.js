@@ -75,8 +75,15 @@
         trafficChart.data.labels = buckets.map((b) => formatBucketLabel(b.bucket_start, b.label, rangeSec));
         trafficChart.data.datasets[0].data = buckets.map((b) => Number(b.inflow || 0));
         trafficChart.data.datasets[1].data = buckets.map((b) => Number(b.outflow || 0));
+        if (data?.axes?.x?.label && trafficChart.options?.scales?.x?.title) {
+          trafficChart.options.scales.x.title.text = `${data.axes.x.label} (Click peak to drill down)`;
+        }
+        if (data?.axes?.y?.label && trafficChart.options?.scales?.y?.title) {
+          trafficChart.options.scales.y.title.text = data.axes.y.label;
+        }
         trafficChart.update('none');
       }
+      window.AnalyticsDrilldown?.setFlowData?.(data);
       syncWindowControls(data);
       return data;
     } catch (err) {
@@ -114,6 +121,7 @@
           metaEl.textContent = `${data?.camera_id || 'All Cameras'} · Heatmap uninitialized`;
         }
       }
+      window.AnalyticsDrilldown?.setHeatmapData?.(data);
       return data;
     } catch (err) {
       console.error('Heatmap metadata fetch error:', err);
@@ -184,8 +192,12 @@
         },
         options: {
           responsive: true, maintainAspectRatio: false,
+          onClick: (evt, elements, chart) => window.AnalyticsDrilldown?.handleChartClick?.(evt, elements, chart),
           plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } } },
-          scales: { x: gridStyle, y: { ...gridStyle, beginAtZero: true } },
+          scales: {
+            x: { ...gridStyle, title: { display: true, text: 'Time (Click peak to drill down)', color: '#94a3b8' } },
+            y: { ...gridStyle, beginAtZero: true, title: { display: true, text: 'Crossings / Events', color: '#94a3b8' } },
+          },
         },
       });
     }

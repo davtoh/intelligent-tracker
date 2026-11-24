@@ -37,8 +37,15 @@
                 Export High-Res</a>
             </div>
           </div>
-          <div class="heatmap-viewport">
-            <img id="static-heatmap-img" data-src="/analytics/heatmap" alt="Accumulated Density Heatmap" />
+          <div class="heatmap-viewport heatmap-viewport-grid">
+            <div class="heatmap-axis-y" id="heatmap-axis-y" aria-hidden="true"></div>
+            <div class="heatmap-stage-wrap" id="heatmap-stage-wrap">
+              <img id="static-heatmap-img" data-src="/analytics/heatmap" alt="Accumulated Density Heatmap" />
+              <canvas id="heatmap-hotspot-canvas" aria-label="Heatmap hotspot grid"></canvas>
+              <div class="heatmap-hotspot-tooltip" id="heatmap-hotspot-tooltip" hidden></div>
+            </div>
+            <div class="heatmap-axis-spacer" aria-hidden="true"></div>
+            <div class="heatmap-axis-x" id="heatmap-axis-x" aria-hidden="true"></div>
           </div>
           <div class="heatmap-legend" id="heatmap-colorbar-legend">
             <span class="heatmap-legend-tick" id="heatmap-legend-min">0.00</span>

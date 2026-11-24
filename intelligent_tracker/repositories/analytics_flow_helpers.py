@@ -40,6 +40,7 @@ def _init_flow_buckets(start_time: float, end_time: float, bucket_sec: int) -> l
         b_start = float(start_time) + idx * float(bucket_sec)
         buckets.append({
             "bucket_start": b_start,
+            "bucket_end": b_start + float(bucket_sec),
             "label": time.strftime(fmt, time.gmtime(b_start)),
             "inflow": 0,
             "outflow": 0,
@@ -144,4 +145,8 @@ def query_traffic_flows_sync(
         "bucket_sec": safe_bucket,
         "buckets": buckets,
         "totals": totals,
+        "axes": {
+            "x": {"label": "Time", "unit": "epoch_s", "bucket_sec": safe_bucket},
+            "y": {"label": "Crossings / Events", "unit": "count"},
+        },
     }

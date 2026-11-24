@@ -51,7 +51,12 @@ async def get_traffic_flows(
         return {
             "camera_id": camera_id or None, "start_time": start_time, "end_time": resolved_end,
             "bucket_sec": resolved_bucket, "buckets": [],
-            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0}, "is_live": is_live,
+            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+            "axes": {
+                "x": {"label": "Time", "unit": "epoch_s", "bucket_sec": resolved_bucket},
+                "y": {"label": "Crossings / Events", "unit": "count"},
+            },
+            "is_live": is_live,
         }
     res = await asyncio.to_thread(
         db.get_traffic_flows, start_time, resolved_end, resolved_bucket, camera_id

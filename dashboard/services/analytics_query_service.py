@@ -35,28 +35,82 @@ def resolve_bucket_sec(range_sec: int, bucket_sec: Optional[int]) -> int:
     return 21600
 
 
+_HEATMAP_GRID_COLS = 32
+_HEATMAP_GRID_ROWS = 24
+
+
+def _downsample_heatmap_grid(
+    density: Any,
+    cols: int = _HEATMAP_GRID_COLS,
+    rows: int = _HEATMAP_GRID_ROWS,
+) -> list[list[float]]:
+    """Downsample a 2D heatmap density array into a normalized rows x cols grid."""
+    if density is None:
+        return [[0.0] * cols for _ in range(rows)]
+    arr = np.asarray(density, dtype=np.float32)
+    if arr.ndim != 2 or arr.size == 0 or arr.shape[0] <= 0 or arr.shape[1] <= 0:
+        return [[0.0] * cols for _ in range(rows)]
+    max_val = float(np.max(arr))
+    if not np.isfinite(max_val) or max_val <= 0.0:
+        return [[0.0] * cols for _ in range(rows)]
+
+    h, w = arr.shape
+    grid: list[list[float]] = []
+    for r in range(rows):
+        r0 = (r * h) // rows
+        r1 = max(r0 + 1, ((r + 1) * h) // rows)
+        row_vals: list[float] = []
+        for c in range(cols):
+            c0 = (c * w) // cols
+            c1 = max(c0 + 1, ((c + 1) * w) // cols)
+            cell_max = float(np.max(arr[r0:r1, c0:c1]))
+            row_vals.append(round(max(0.0, min(1.0, cell_max / max_val)), 4))
+        grid.append(row_vals)
+    return grid
+
+
+def _build_axis_ticks(span: int, steps: int = 5) -> list[int]:
+    """Return evenly spaced integer pixel ticks from 0 to span."""
+    safe_span = max(0, int(span))
+    if safe_span == 0 or steps <= 1:
+        return [0]
+    return [round(safe_span * i / (steps - 1)) for i in range(steps)]
+
+
+def _resolve_colormap_name(hm: Any) -> str:
+    """Resolve human-readable colormap name from a Heatmap object."""
+    cmap_val = getattr(hm, "colormap", 2)
+    return _COLORMAP_NAMES.get(int(cmap_val), str(cmap_val)) if isinstance(cmap_val, int) else str(cmap_val)
+
+
 def build_heatmap_json(mgr: Any, camera_id: Optional[str]) -> dict[str, Any]:
     """Build enriched JSON metadata payload for the spatial density heatmap."""
     resolved_cam = camera_id or getattr(mgr, "camera_id", None)
     if not mgr.analytics or not mgr.analytics.heatmap:
-        return {"density": [], "initialized": False, "camera_id": resolved_cam}
+        return {
+            "density": [], "initialized": False, "camera_id": resolved_cam,
+            "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS], "grid": [], "x_ticks": [], "y_ticks": [],
+        }
     hm = mgr.analytics.heatmap
-    cmap_val = getattr(hm, "colormap", 2)
-    cmap_name = (
-        _COLORMAP_NAMES.get(int(cmap_val), str(cmap_val))
-        if isinstance(cmap_val, int)
-        else str(cmap_val)
-    )
+    raw_density = getattr(hm, "density", None)
+    arr = np.asarray(raw_density, dtype=np.float32) if raw_density is not None else np.empty((0, 0), dtype=np.float32)
+    has_data = arr.ndim == 2 and arr.size > 0
+    width = int(getattr(hm, "width", 0) or (arr.shape[1] if arr.ndim == 2 else 0))
+    height = int(getattr(hm, "height", 0) or (arr.shape[0] if arr.ndim == 2 else 0))
     return {
         "initialized": True,
         "camera_id": resolved_cam,
-        "resolution": [hm.width, hm.height],
-        "max_value": float(np.max(hm.density)),
-        "mean_value": float(np.mean(hm.density)),
-        "colormap": cmap_name,
+        "resolution": [width, height],
+        "max_value": float(np.max(arr)) if has_data else 0.0,
+        "mean_value": float(np.mean(arr)) if has_data else 0.0,
+        "colormap": _resolve_colormap_name(hm),
         "decay_rate": getattr(hm, "decay_rate", None),
         "radius": getattr(hm, "radius", None),
         "stops": _DEFAULT_HEATMAP_STOPS,
+        "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS],
+        "grid": _downsample_heatmap_grid(arr, _HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS),
+        "x_ticks": _build_axis_ticks(width),
+        "y_ticks": _build_axis_ticks(height),
     }
 
 
