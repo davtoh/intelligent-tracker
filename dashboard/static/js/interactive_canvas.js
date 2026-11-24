@@ -84,7 +84,7 @@
     if (['car', 'truck', 'bus', 'motorcycle', 'vehicle'].includes(norm)) return 'vehicle';
     const opts = Array.from(el('tag-category-select')?.options || []).map((o) => o.value);
     if (opts.includes(norm)) return norm;
-    return opts.find((v) => ['object', 'other', 'custom'].includes(v)) || opts[0] || 'object';
+    return opts.find((v) => ['asset', 'bag_parcel', 'object', 'other', 'custom'].includes(v)) || opts[0] || 'asset';
   }
   function renderCandidateChips(candidates) {
     const box = el('tag-identity-candidates');

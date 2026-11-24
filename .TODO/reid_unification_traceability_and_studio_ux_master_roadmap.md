@@ -23,12 +23,12 @@
 ---
 
 ## Step 2: Unified Dynamic Category Registry (`custom_categories` SSOT), Clean Universal Defaults & Demo Scenario Isolation *(Deferred to Step 2)*
-- [ ] **Goal**: Consolidate all entity, zone, filter, and RSAC categories onto `/api/rsac/categories` (`Idea 1`), replace residential demo categories with clean general-purpose defaults, add inline `+ New / Manage Categories` and JSON preset import/export, and make `configs/alert_demo.yaml` (`restricted_vault`) opt-in (`BUG-07`).
-- [ ] **Target Scope**:
-  - [ ] **Category SSOT, Universal Defaults & COCO Mapping**: Replace `family_car`/`delivery_truck`/`cleaning_crew`/`guard_dog` defaults with universal categories (`person`, `staff`, `visitor`, `vip`, `restricted`, `vehicle`, `pet`, `bag_parcel`, `asset`), map COCO classes cleanly (`car`/`truck`/`bus` -> `vehicle`, `backpack`/`suitcase` -> `bag_parcel`), migrate distinct `entities.category` values on boot, validate category slugs on entity/RSAC writes, and add `/api/rsac/categories/export` & `/import`.
-  - [ ] **Inline Quick-Create/Manage UI & Camera/Batch Category Pickers**: Replace static fallback `<option>` drifts across Enrollment, Tag ROI, Gallery filters, and Studio modals with unified `CategoryBadgeManager` + inline `+ New / Manage` trigger; upgrade `CameraFormHelpers` and Batch Video tracked-category pickers to consume `/api/rsac/categories`.
-  - [ ] **Opt-In Demo Scenarios**: Gate `configs/alert_demo.yaml` (`restricted_vault`) behind explicit `--demo` / `IT_LOAD_DEMO_SCENARIOS=1` (preserving opt-in tests and demos without polluting clean deployments).
-- [ ] **Definition of Done**: Dynamic categories created inline appear immediately across all modals, gallery filters, camera pickers, and RSAC rules, and fresh cold boots load zero `restricted_vault` demo alerts unless `--demo` is enabled.
+- [x] **Goal**: Consolidate all entity, zone, filter, and RSAC categories onto `/api/rsac/categories` (`Idea 1`), replace residential demo categories with clean general-purpose defaults, add inline `+ New / Manage Categories` and JSON preset import/export, and make `configs/alert_demo.yaml` (`restricted_vault`) opt-in (`BUG-07`).
+- [x] **Target Scope**:
+  - [x] **Category SSOT, Universal Defaults & COCO Mapping**: Replace `family_car`/`delivery_truck`/`cleaning_crew`/`guard_dog` defaults with universal categories (`person`, `staff`, `visitor`, `vip`, `restricted`, `vehicle`, `pet`, `bag_parcel`, `asset`), map COCO classes cleanly (`car`/`truck`/`bus` -> `vehicle`, `backpack`/`suitcase` -> `bag_parcel`), migrate distinct `entities.category` values on boot, validate category slugs on entity/RSAC writes, and add `/api/rsac/categories/export` & `/import`.
+  - [x] **Inline Quick-Create/Manage UI & Camera/Batch Category Pickers**: Replace static fallback `<option>` drifts across Enrollment, Tag ROI, Gallery filters, and Studio modals with unified `CategoryBadgeManager` + inline `+ New / Manage` trigger; upgrade `CameraFormHelpers` and Batch Video tracked-category pickers to consume `/api/rsac/categories`.
+  - [x] **Opt-In Demo Scenarios**: Gate `configs/alert_demo.yaml` (`restricted_vault`) behind explicit `--demo` / `IT_LOAD_DEMO_SCENARIOS=1` (preserving opt-in tests and demos without polluting clean deployments).
+- [x] **Definition of Done**: Dynamic categories created inline appear immediately across all modals, gallery filters, camera pickers, and RSAC rules, and fresh cold boots load zero `restricted_vault` demo alerts unless `--demo` is enabled.
 
 ---
 
