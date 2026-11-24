@@ -33,12 +33,12 @@
 ---
 
 ## Step 3: `#timeline` Pagination & Source Links, `#analytics` Peak/Hotspot Drill-Down & `#alerts` Stateful Admin Lifecycle *(Deferred to Step 3)*
-- [ ] **Goal**: Deliver complete operational traceability across `#timeline`, `#analytics`, and `#alerts` (`Ideas 2, 3a, 3b`, `ADR-12`) and eliminate the stuck `"8"` alert badge (`BUG-07`).
-- [ ] **Target Scope**:
-  - [ ] **`#timeline` Pagination & Source Navigation**: Extend `GET /sightings` with `offset`, `source`, `video_filename`, and `{ items, total, offset, limit, has_more }` paginated mode; add Prev/Next/page controls, `Source` filter, source badges, and 1-click jump to Live Monitor or Video Studio `@ media_offset_sec`.
-  - [ ] **`#analytics` Peak & `32x24` Hotspot Drill-Down**: Expose explicit X/Y axes and time-bucket `[bucket_start, bucket_end]` metadata on `GET /analytics/flows`, expose `32x24` normalized grid density + scale ticks on `GET /analytics/heatmap?format=json`, and wire click-peak and click-hotspot drill-downs to filtered `#timeline`/`#alerts`/source views.
-  - [ ] **`#alerts` Unread State, Dynamic Facets & Admin Lifecycle**: Add `is_read` / `acknowledged_at` columns to `world_timeline_events`, compute real `unread_alert_count` in telemetry (fixing `#header-alert-badge` / `#drawer-alert-badge` stuck at `"8"`), add `GET /api/events/facets` populating `#alerts-filter-camera`/type/zone, add `PATCH /api/events/acknowledge`, `DELETE /api/events/{id}`, bulk clear, CSV/JSON/snapshot export (`dashboard/routers/events_admin.py`), and Zone/Source deep-links.
-- [ ] **Definition of Done**: Multi-page `#timeline` browsing, interactive chart/heatmap drill-downs, real unread badge clearing, populated `#alerts` filters, and export/delete actions pass API + headless CDP tests.
+- [x] **Goal**: Deliver complete operational traceability across `#timeline`, `#analytics`, and `#alerts` (`Ideas 2, 3a, 3b`, `ADR-12`) and eliminate the stuck `"8"` alert badge (`BUG-07`).
+- [x] **Target Scope**:
+  - [x] **`#timeline` Pagination & Source Navigation**: Extend `GET /sightings` with `offset`, `source`, `video_filename`, and `{ items, total, offset, limit, has_more }` paginated mode; add Prev/Next/page controls, `Source` filter, source badges, and 1-click jump to Live Monitor or Video Studio `@ media_offset_sec`.
+  - [x] **`#analytics` Peak & `32x24` Hotspot Drill-Down**: Expose explicit X/Y axes and time-bucket `[bucket_start, bucket_end]` metadata on `GET /analytics/flows`, expose `32x24` normalized grid density + scale ticks on `GET /analytics/heatmap?format=json`, and wire click-peak and click-hotspot drill-downs to filtered `#timeline`/`#alerts`/source views.
+  - [x] **`#alerts` Unread State, Dynamic Facets & Admin Lifecycle**: Add `is_read` / `acknowledged_at` columns to `world_timeline_events`, compute real `unread_alert_count` in telemetry (fixing `#header-alert-badge` / `#drawer-alert-badge` stuck at `"8"`), add `GET /api/events/facets` populating `#alerts-filter-camera`/type/zone, add `PATCH /api/events/acknowledge`, `DELETE /api/events/{id}`, bulk clear, CSV/JSON/snapshot export (`dashboard/routers/events_admin.py`), and Zone/Source deep-links.
+- [x] **Definition of Done**: Multi-page `#timeline` browsing, interactive chart/heatmap drill-downs, real unread badge clearing, populated `#alerts` filters, and export/delete actions pass API + headless CDP tests.
 
 ---
 

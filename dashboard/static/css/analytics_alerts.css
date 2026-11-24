@@ -122,3 +122,28 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.alerts-admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.alert-row-unread {
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 3px solid var(--accent-color, #38bdf8);
+}
+
+.alert-row-read {
+  opacity: 0.78;
+}
+
+.alert-action-group,
+.alert-source-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}

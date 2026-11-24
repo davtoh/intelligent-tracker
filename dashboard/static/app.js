@@ -176,13 +176,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (data.zones) window.TelemetryGateway?.renderZones(data.zones);
     if (data.tripwires) window.TelemetryGateway?.renderTripwires(data.tripwires);
+    const unreadCount = typeof data.unread_alert_count === 'number'
+      ? data.unread_alert_count
+      : (Array.isArray(data.recent_alerts) ? data.recent_alerts.filter((a) => !a?.is_read).length : null);
+    if (unreadCount !== null) {
+      if (window.AppUIHelpers?.syncAlertBadges) {
+        window.AppUIHelpers.syncAlertBadges(unreadCount);
+      } else if (alertBadge) {
+        alertBadge.textContent = String(unreadCount);
+      }
+    }
     if (data.recent_alerts) {
       window.TelemetryGateway?.renderMiniAlerts(data.recent_alerts);
-      if (window.AppUIHelpers?.syncAlertBadges) {
-        window.AppUIHelpers.syncAlertBadges(data.recent_alerts.length);
-      } else if (alertBadge) {
-        alertBadge.textContent = data.recent_alerts.length;
-      }
       window.ReviewAndRSAC?.checkAlertEvents(data.recent_alerts);
     }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-24] feat: Step 3: Traceability, Analytics Drill-Down & Stateful Alerts Lifecycle
+- **Type**: feat
+- **Summary**: Added #timeline pagination and Live/Studio jump links, #analytics explicit X/Y axes and 32x24 peak/hotspot drill-down, #alerts unread state (is_read/acknowledged_at) and /api/events/* admin endpoints, and #alerts frontend lifecycle (alerts_admin.js, facets datalists, mark-read/delete/clear/export, snapshot download, Live/Studio deep-links, real unread_alert_count badge sync).
+- **Files** (10):
+  - `dashboard/static/partials/tabs/alerts.html`
+  - `dashboard/static/partials/scripts_traceability.html`
+  - `dashboard/static/partials/modals/video_modals.html`
+  - `dashboard/static/css/analytics_alerts.css`
+  - `dashboard/static/js/alerts_admin.js`
+  - `dashboard/static/js/alerts_view.js`
+  - `dashboard/static/app.js`
+  - `dashboard/static/js/multiview/grid_tile_overlay.js`
+  - ... (+2 more)
+- **Verification**: diagnose.py audit/surface/scan PASS; 37 targeted Step 3 M4 tests OK
+
 ## [2026-11-24] feat: Step 2 M1: Unified Category SSOT, Universal Defaults & COCO Mapping
 - **Type**: feat
 - **Summary**: Added intelligent_tracker/category_registry.py with 9 universal defaults, legacy migration/pruning, slug validation, and COCO label mapping; wired CategoryRepoMixin into TrackerDB; moved /api/rsac/categories CRUD + export/import + guarded delete to dashboard/routers/categories.py; enforced category SSOT validation across entity/tag/review/enroll/RSAC routes.
@@ -126,12 +141,3 @@
   - `dashboard/routers/videos.py`
   - ... (+16 more)
 - **Verification**: 893/893 unittest discover tests OK; cold_boot_world_probe PASS; test_step2_pool_singletons_and_locks + test_dashboard_di + test_step3_architecture_budgets 18/18 OK
-
-## [2026-11-21] feat: Step 1: Diagnostics Upgrades, Unmocked Probes & Red Baseline
-- **Type**: feat
-- **Summary**: Upgraded system-diagnostics/frontier-architect tooling, added ruff/mypy dev tooling, hardened 4 unmocked workspace probes (including spa_nine_tab_cdp_probe), resolved stale test traces, and captured verified Red baseline.
-- **Files** (3):
-  - `.diagnostics/probes/cold_boot_world_probe.py`
-  - `.diagnostics/probes/replay_pipeline_probe.py`
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-- **Verification**: python -m unittest discover tests

@@ -51,10 +51,13 @@
   }
 
   function syncAlertBadges(count) {
-    const text = String(count ?? 0);
+    const n = Math.max(0, Number(count ?? 0) || 0);
+    const text = String(n);
     ['header-alert-badge', 'drawer-alert-badge', 'drawer-alert-count'].forEach((id) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = text;
+      if (!el) return;
+      el.textContent = text;
+      el.classList?.toggle?.('has-unread', n > 0);
     });
   }
 
