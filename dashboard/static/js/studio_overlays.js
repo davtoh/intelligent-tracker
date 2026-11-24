@@ -121,7 +121,9 @@
       if (!btn) return;
       const { action, cameraId, name, linkId } = btn.dataset;
       if (action === 'delete-zone') window.Studio?.deleteZone(cameraId, name);
+      else if (action === 'rename-zone') window.StudioShapeEditor?.renameShape?.('zone', cameraId, name);
       else if (action === 'delete-tripwire') window.Studio?.deleteTripwire(cameraId, name);
+      else if (action === 'rename-tripwire') window.StudioShapeEditor?.renameShape?.('tripwire', cameraId, name);
       else if (action === 'delete-topology-link') window.Studio?.deleteTopologyLink(linkId);
     };
     ['studio-zones-list', 'studio-tripwires-list', 'topology-links-list'].forEach((id) => {
@@ -144,7 +146,10 @@
               ${z.capacity_limit ? `<span class="badge">Cap: ${z.capacity_limit}</span>` : ''}
             </div>
             <div class="item-sub">${z.polygon.length} vertices | Dwell: ${z.dwell_threshold}s</div>
-            <button class="btn btn-xs btn-outline-danger" data-action="delete-zone" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(z.name)}">🗑️</button>
+            <div class="item-actions">
+              <button class="btn btn-xs btn-outline" data-action="rename-zone" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(z.name)}" title="Rename zone">✏️</button>
+              <button class="btn btn-xs btn-outline-danger" data-action="delete-zone" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(z.name)}">🗑️</button>
+            </div>
           </div>
         `).join('');
     }
@@ -161,7 +166,10 @@
               <span class="badge">${tw.bidirectional ? 'IN/OUT' : 'One-Way'}</span>
             </div>
             <div class="item-sub">(${tw.line_segment[0][0]}, ${tw.line_segment[0][1]}) -> (${tw.line_segment[1][0]}, ${tw.line_segment[1][1]})</div>
-            <button class="btn btn-xs btn-outline-danger" data-action="delete-tripwire" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(tw.name)}">🗑️</button>
+            <div class="item-actions">
+              <button class="btn btn-xs btn-outline" data-action="rename-tripwire" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(tw.name)}" title="Rename tripwire">✏️</button>
+              <button class="btn btn-xs btn-outline-danger" data-action="delete-tripwire" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(tw.name)}">🗑️</button>
+            </div>
           </div>
         `).join('');
     }

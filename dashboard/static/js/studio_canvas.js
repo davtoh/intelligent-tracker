@@ -187,6 +187,7 @@
     syncCanvasBox(canvas);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawSavedScenario(ctx, canvas, saved);
+    if (mode === 'idle') window.StudioShapeEditor?.drawSelection?.(ctx, canvas, saved);
     if (!pts || pts.length === 0) return;
 
     ctx.save();
@@ -206,9 +207,17 @@
       const pt = getCanvasCoords(evt, canvas);
       handlers.onClick?.(pt);
     });
+    canvas.addEventListener('mousedown', (evt) => {
+      const pt = getCanvasCoords(evt, canvas);
+      handlers.onMouseDown?.(pt, evt);
+    });
     canvas.addEventListener('mousemove', (evt) => {
       const pt = getCanvasCoords(evt, canvas);
       handlers.onMouseMove?.(pt);
+    });
+    canvas.addEventListener('mouseup', (evt) => {
+      const pt = getCanvasCoords(evt, canvas);
+      handlers.onMouseUp?.(pt, evt);
     });
     canvas.addEventListener('dblclick', (evt) => {
       handlers.onDblClick?.();

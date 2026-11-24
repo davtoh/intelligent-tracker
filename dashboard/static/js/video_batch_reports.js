@@ -85,6 +85,7 @@
         <label for="batch-report-run-select" class="batch-history-label">History:</label>
         <select id="batch-report-run-select" class="form-select batch-history-select">${optionsHtml}</select>
         <div class="batch-report-actions">
+          <button type="button" id="btn-reeval-report-run" class="btn btn-xs btn-outline" data-filename="${escapeHtml(filename)}" data-run-id="${escapeHtml(selectedId)}" title="Re-evaluate detections against current zones & rules">🔄 Re-evaluate Scenarios</button>
           <a id="btn-export-report-run" class="btn btn-xs btn-outline" href="${exportHref}" download title="Export selected report run as portable JSON">📥 Export JSON</a>
           <button type="button" id="btn-delete-report-run" class="btn btn-xs btn-outline btn-danger-outline" data-filename="${escapeHtml(filename)}" data-run-id="${escapeHtml(selectedId)}" title="Delete selected report run">🗑️ Delete Run</button>
           <button type="button" id="btn-clear-report-runs" class="btn btn-xs btn-outline btn-danger-outline" data-filename="${escapeHtml(filename)}" title="Clear all report runs for this recording">🧹 Clear All</button>
@@ -129,7 +130,7 @@
 
   function setActionButtonsDisabled(container, disabled) {
     if (!container) return;
-    ['#btn-delete-report-run', '#btn-clear-report-runs'].forEach((sel) => {
+    ['#btn-reeval-report-run', '#btn-delete-report-run', '#btn-clear-report-runs'].forEach((sel) => {
       const btn = container.querySelector(sel);
       if (btn) btn.disabled = Boolean(disabled);
     });
@@ -168,6 +169,13 @@
       });
     }
 
+    const reevalBtn = container.querySelector('#btn-reeval-report-run');
+    if (reevalBtn) {
+      reevalBtn.addEventListener('click', () => {
+        const rid = reevalBtn.getAttribute('data-run-id') || activeRunId || select?.value;
+        reevaluateReportRun(filename, rid);
+      });
+    }
     const delBtn = container.querySelector('#btn-delete-report-run');
     if (delBtn) {
       delBtn.addEventListener('click', () => {
@@ -213,23 +221,17 @@
     const container = document.getElementById('video-batch-report-container');
     setActionButtonsDisabled(container, true);
     try {
-      const resp = await fetch(
-        `/api/videos/${encodeURIComponent(filename)}/reports/${encodeURIComponent(runId)}`,
-        { method: 'DELETE' }
-      );
+      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/reports/${encodeURIComponent(runId)}`, { method: 'DELETE' });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         notifyToast(`Failed to delete run '${runId}': ${err.detail || resp.statusText}`, 'error');
         setActionButtonsDisabled(container, false);
         return false;
       }
-
       invalidateCachedReports(filename);
       window.ScrubberOverlay?.removeLayer?.(runId);
-
       const remainingRuns = await fetchFreshRuns(filename);
       if (currentReportFilename && currentReportFilename !== filename) return true;
-
       if (remainingRuns.length > 0) {
         reportsByFilename.set(filename, remainingRuns);
         if (container) renderLatestRun(container, filename, remainingRuns);
@@ -251,25 +253,19 @@
     const container = document.getElementById('video-batch-report-container');
     setActionButtonsDisabled(container, true);
     try {
-      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/reports`, {
-        method: 'DELETE',
-      });
+      const resp = await fetch(`/api/videos/${encodeURIComponent(filename)}/reports`, { method: 'DELETE' });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         notifyToast(`Failed to clear report runs: ${err.detail || resp.statusText}`, 'error');
         setActionButtonsDisabled(container, false);
         return false;
       }
-
       const payload = await resp.json().catch(() => ({}));
       invalidateCachedReports(filename);
       clearStoredOverlaySelection(filename);
       window.ScrubberOverlay?.clearLayers?.({ keepLive: true });
       window.OverlayLayers?.syncRuns?.(filename, []);
-
-      if (!currentReportFilename || currentReportFilename === filename) {
-        renderEmptyState(container);
-      }
+      if (!currentReportFilename || currentReportFilename === filename) renderEmptyState(container);
       notifyToast(`Cleared ${payload.cleared_count ?? 0} report run(s) for '${filename}'.`, 'success');
       return true;
     } catch (e) {
@@ -313,16 +309,40 @@
     }
   }
 
+  async function reevaluateReportRun(filename, runId) {
+    if (!filename) return false;
+    const container = document.getElementById('video-batch-report-container');
+    setActionButtonsDisabled(container, true);
+    try {
+      const resp = await fetch('/api/videos/re-evaluate-scenarios', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_filename: filename, run_id: runId || null }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        notifyToast(`Re-evaluation failed: ${err.detail || resp.statusText}`, 'error');
+        setActionButtonsDisabled(container, false);
+        return false;
+      }
+      invalidateCachedReports(filename);
+      const runs = await fetchFreshRuns(filename);
+      if (runs.length > 0) {
+        reportsByFilename.set(filename, runs);
+        if (container && (!currentReportFilename || currentReportFilename === filename)) renderLatestRun(container, filename, runs, { force: true });
+      }
+      notifyToast(`Re-evaluated scenarios for '${filename}'.`, 'success');
+      return true;
+    } catch (e) {
+      notifyToast(`Error re-evaluating scenarios: ${e.message}`, 'error');
+      setActionButtonsDisabled(container, false);
+      return false;
+    }
+  }
+
   window.VideoBatchReports = {
-    setCurrentFilename,
-    getCurrentFilename,
-    invalidateCachedReports,
-    renderReportCards,
-    renderLatestRun,
-    renderEmptyState,
-    restoreReportForFile,
-    deleteReportRun,
-    clearAllReportRuns,
+    setCurrentFilename, getCurrentFilename, invalidateCachedReports,
+    renderReportCards, renderLatestRun, renderEmptyState,
+    restoreReportForFile, deleteReportRun, clearAllReportRuns, reevaluateReportRun,
   };
 })();
 

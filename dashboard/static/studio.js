@@ -13,14 +13,8 @@
     tripwires: [],
     homography: null,
     topologyLinks: [],
-    overlays: {
-      bboxes: true, track_ids: true, dwell_timers: true, velocity: false,
-      zones: true, tripwires: true, heatmap: false, bev_minimap: false,
-      hud_bar: true, clutter: false,
-    },
-    canvas: null,
-    ctx: null,
-    bevCanvas: null,
+    overlays: { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true, heatmap: false, bev_minimap: false, hud_bar: true, clutter: false },
+    canvas: null, ctx: null, bevCanvas: null,
   };
 
   function showToast(title, body, type = 'info') {
@@ -84,6 +78,7 @@
     studioState.bevCanvas = document.getElementById('bev-minimap-canvas');
 
     window.StudioOverlays?.init(() => studioState);
+    window.StudioShapeEditor?.init(() => studioState, { drawOverlay, updateStatus: updateStudioStatus, showToast });
     bindStudioUI();
     window.WorldTacticalMinimapView?.bindPoseEditor?.(() => studioState.activeCamera);
     window.StudioOverlays?.bindOverlayToolbar();
@@ -124,7 +119,9 @@
   function setupCanvasListeners() {
     window.StudioCanvas?.setupListeners(studioState.canvas, {
       onClick: (pt) => handleCanvasClick(pt),
-      onMouseMove: (pt) => drawOverlay(pt),
+      onMouseDown: (pt) => studioState.mode === 'idle' && window.StudioShapeEditor?.onMouseDown?.(pt),
+      onMouseMove: (pt) => (studioState.mode === 'idle' && window.StudioShapeEditor?.onMouseMove?.(pt)) || drawOverlay(pt),
+      onMouseUp: (pt) => studioState.mode === 'idle' && window.StudioShapeEditor?.onMouseUp?.(pt),
       onDblClick: () => handleCanvasDblClick(),
     });
   }
