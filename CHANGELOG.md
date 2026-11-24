@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-11-24] feat: Step 1: Re-ID unification, sighting crops, responsive dialogs, and diagnostics elevation
+- **Type**: feat
+- **Summary**: Unified DualModel Re-ID, sighting crop persistence, wide/resizable dialogs, MediaEmptyState, and upgraded system-diagnostics rules and workspace probes.
+- **Files** (4):
+  - `.diagnostics/probes/replay_pipeline_probe.py`
+  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
+  - `.diagnostics/probes/spa_nine_tab_sweep.js`
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+
 ## [2026-11-23] feat: Step 4 M4: Bidirectional #review <-> Video Studio Sync & Full Sign-Off
 - **Type**: feat
 - **Summary**: Migrated review_queue with bbox/frame/run_id provenance, added ReviewSyncService + /api/review/* router, wired frontend VideoBatchReports/Gallery/Review sync, and verified 1008 tests + 4 probes.
@@ -126,18 +135,3 @@
   - `dashboard/static/js/bev_minimap.js`
   - ... (+14 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-19] feat: Step 2 Milestone 3: Scheduler HUD, Schema Telemetry & Docs
-- **Type**: feat
-- **Summary**: Extended ProcessingModeStatusResponse with scheduler telemetry, fixed data.camera_states lookup in processing_mode.js, added scheduler_hud.js tier and load-shed pills, documented scheduler and CachedReplayProvider in dashboard.rst and AGENTS.md, and verified 858 tests plus Sphinx -W.
-- **Files** (10):
-  - `AGENTS.md`
-  - `dashboard/schemas.py`
-  - `dashboard/services/processing_mode_service.py`
-  - `dashboard/static/css/processing_mode.css`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `documentation/dashboard.rst`
-  - ... (+2 more)
-- **Verification**: python -m unittest discover tests

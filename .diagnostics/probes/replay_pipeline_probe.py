@@ -292,6 +292,32 @@ def _check_replay_bridge_and_ttl(
         db.close()
 
 
+def _check_auto_sighting_crop(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Verify periodic sighting crop persistence and _enrich_sighting URL."""
+    from dashboard.routers.analytics import _enrich_sighting
+    from intelligent_tracker.database import TrackerDB
+    from intelligent_tracker.matching._gallery_signals import emit_periodic_sighting
+    from intelligent_tracker.matching.gallery import GalleryMatcher
+    from intelligent_tracker.tracker.track import Track
+
+    db, crops = TrackerDB(str(tmp / "sighting.db")), tmp / "sighting_crops"
+    crops.mkdir(parents=True, exist_ok=True)
+    try:
+        eid = db.add_entity("ProbeCarol", "person")
+        db.add_signature(eid, np.ones(16, dtype=np.float32))
+        matcher = GalleryMatcher(db=db, extractor=None, sighting_interval=5.0)
+        matcher.crops_dir = str(crops)
+        emitted = emit_periodic_sighting(matcher, entity_id=eid, name="ProbeCarol", category="person", track=Track(track_id=7, bbox=(10, 10, 50, 70), label="person"), confidence=0.9, source="cam_1", zone_id="", timestamp=100.0, frame=np.full((120, 160, 3), 90, dtype=np.uint8))
+        rows = db.query_sightings(entity_id=eid, limit=5)
+        enriched = _enrich_sighting(rows[0], db) if rows else {}
+        ok = bool(emitted and rows and rows[0].get("snapshot_path") and Path(rows[0]["snapshot_path"]).exists() and str(enriched.get("snapshot_url", "")).startswith("/crops/sighting_"))
+        checks["auto_sighting_crop_persisted"] = ok
+        if not ok:
+            failures.append("Automatic sighting crop persistence or /crops/sighting_* enrichment failed")
+    finally:
+        db.close()
+
+
 def run_probe() -> dict[str, Any]:
     """Execute replay pipeline integration assertions."""
     checks: dict[str, Any] = {}
@@ -306,6 +332,7 @@ def run_probe() -> dict[str, Any]:
         _check_capture_only_mjpeg(tmp, vid, failures, checks)
         _check_replay_bridge_and_ttl(tmp, vid, failures, checks)
         _check_eof_and_motion_pause(vid, failures, checks)
+        _check_auto_sighting_crop(tmp, failures, checks)
 
     status = "error" if failures else "ok"
     summary = (

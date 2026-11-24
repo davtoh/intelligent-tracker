@@ -127,6 +127,24 @@ async def recognize_roi_endpoint(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def _relabel_after_commit(svc: object, data: object, req: TagCommitRequest) -> None:
+    """Relabel video_runs after ROI tag commit when DB and entity/track metadata exist."""
+    db = getattr(svc, "db", None)
+    if db is None:
+        return
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    eid = data.get("entity_id") if isinstance(data, dict) else req.entity_id
+    if eid is not None or (req.video_filename and req.track_id is not None):
+        relabel_video_runs_on_entity_mutation(
+            db,
+            pool=getattr(svc, "camera_pool", None),
+            updated_entity_id=int(eid) if eid is not None else None,
+            video_filename=req.video_filename,
+            track_id=req.track_id,
+        )
+
+
 @router.post("/api/tag/commit")
 async def commit_roi_tag_endpoint(
     req: TagCommitRequest,
@@ -156,18 +174,7 @@ async def commit_roi_tag_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RoiUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
-
-    eid = data.get("entity_id") if isinstance(data, dict) else req.entity_id
-    if eid is not None or (req.video_filename and req.track_id is not None):
-        await asyncio.to_thread(
-            relabel_video_runs_on_entity_mutation,
-            svc.db,
-            pool=svc.camera_pool,
-            discouraged_entity_id=int(eid) if eid is not None else -1,
-            video_filename=req.video_filename,
-            track_id=req.track_id,
-        )
+    await asyncio.to_thread(_relabel_after_commit, svc, data, req)
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "data": data}
 

@@ -142,6 +142,8 @@ def _evaluate_cdp_output(raw: dict[str, Any], failures: list[str], checks: dict[
     tight_gaps = layout.get("sibling_gap_warnings", []) or []
     dead_btns = layout.get("dead_buttons", []) or []
     dup_btns = layout.get("duplicate_buttons", []) or []
+    broken_imgs = layout.get("brokenImageWarnings", []) or []
+    squeezed_ctrls = layout.get("squeezedControlWarnings", []) or []
     checks.update(
         http_errors=len(http_errs),
         js_errors=len(js_excs),
@@ -150,6 +152,8 @@ def _evaluate_cdp_output(raw: dict[str, Any], failures: list[str], checks: dict[
         tight_gaps=len(tight_gaps),
         dead_buttons=len(dead_btns),
         duplicate_buttons=len(dup_btns),
+        broken_images=len(broken_imgs),
+        squeezed_controls=len(squeezed_ctrls),
     )
     for label, items in [
         ("HTTP>=400", http_errs),
@@ -159,6 +163,8 @@ def _evaluate_cdp_output(raw: dict[str, Any], failures: list[str], checks: dict[
         ("<4px gaps", tight_gaps),
         ("dead buttons", dead_btns),
         ("duplicate buttons", dup_btns),
+        ("broken images", broken_imgs),
+        ("squeezed controls", squeezed_ctrls),
     ]:
         if items:
             failures.append(f"CDP {label} ({len(items)}): {items[:3]}")
@@ -186,8 +192,11 @@ def _evaluate_sweep(sweep: dict[str, Any], failures: list[str]) -> None:
         ("journeyReady", "#tab-journey failed to activate"),
         ("reviewCardReady", "#tab-review card missing bbox/provenance context"),
         ("studioLiveLoaded", "#studio-live-img failed to load (naturalWidth==0)"),
+        ("studioOfflineEmptyOk", "#studio offline camera did not show MediaEmptyState / hide broken img"),
         ("recordedSelected", "#studio Recorded Videos selection failed"),
         ("enrollChanged", "#enroll-camera-select change did not render freeze-frame"),
+        ("camTableErgonomic", "#modal-camera-manager .data-table horizontally squeezed"),
+        ("candidateXNonClosing", "#modal-tag-entity candidate X closed the modal"),
     ):
         if not sweep.get(key):
             failures.append(msg)

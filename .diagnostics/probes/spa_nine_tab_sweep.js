@@ -64,6 +64,14 @@
     stSel.value = 'cam_short'; stSel.dispatchEvent(new Event('change', { bubbles: true }));
   }
   const studioLiveLoaded = Boolean(await waitFor(() => stImg && stImg.naturalWidth > 0, 2800));
+  let studioOfflineEmptyOk = false;
+  if (stSel && Array.from(stSel.options).some((o) => o.value === 'cam_long')) {
+    stSel.value = 'cam_long'; stSel.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(150);
+    const emptyEl = document.getElementById('studio-empty-state') || document.querySelector('#tab-studio .media-empty-state');
+    const imgHidden = !stImg || getComputedStyle(stImg).display === 'none';
+    studioOfflineEmptyOk = Boolean(emptyEl && getComputedStyle(emptyEl).display !== 'none' && imgHidden);
+  }
   const recGroup = await waitFor(() => stSel && Array.from(stSel.querySelectorAll('optgroup')).find((g) => g.label === 'Recorded Videos'));
   let recordedSelected = false;
   if (recGroup && recGroup.querySelector('option')) {
@@ -73,10 +81,16 @@
   }
   const modalOk = {};
   let enrollChanged = false;
+  let camTableErgonomic = false;
+  let candidateXNonClosing = false;
   for (const [openId, modalId, closeId] of [['#btn-manage-cameras', '#modal-camera-manager', '#modal-cam-close'], ['#btn-open-enrollment', '#modal-universal-enrollment', '#modal-enroll-close']]) {
     document.querySelector(openId)?.click(); await sleep(150);
     const el = document.querySelector(modalId);
     const open = el?.classList.contains('active') || getComputedStyle(el || document.body).display !== 'none';
+    if (modalId === '#modal-camera-manager') {
+      const tbl = el?.querySelector('.data-table');
+      camTableErgonomic = Boolean(!tbl || tbl.scrollWidth <= tbl.clientWidth + 2);
+    }
     if (modalId === '#modal-universal-enrollment') {
       const esel = document.getElementById('enroll-camera-select');
       if (await waitFor(() => esel && Array.from(esel.options).some((o) => o.value === 'cam_short'))) {
@@ -88,5 +102,17 @@
     document.querySelector(closeId)?.click(); await sleep(100);
     modalOk[modalId] = open;
   }
-  return { tabs: tabResults, grid2x2Active: Boolean(gridParity['2x2']?.active), gridParity, heatmapLoaded, alertsReady, journeyReady, reviewCardReady, studioLiveLoaded, recordedSelected, enrollChanged, titleHeights: titleRects, modals: modalOk };
+  const tagModal = document.getElementById('modal-tag-entity');
+  const candBox = document.getElementById('tag-identity-candidates');
+  if (tagModal && candBox && window.TagFeedbackActions?.attachCandidateDiscourage) {
+    tagModal.style.display = 'flex';
+    candBox.innerHTML = '<button type="button" class="btn btn-xs btn-outline candidate-chip" data-entity-id="1"><span>Alice</span></button>';
+    const chipBtn = candBox.querySelector('.candidate-chip');
+    window.TagFeedbackActions.attachCandidateDiscourage(chipBtn, { entity_id: 1, name: 'Alice', similarity: 0.72 }, candBox, () => 'cam_short');
+    candBox.querySelector('.candidate-discourage-btn')?.click();
+    await sleep(100);
+    candidateXNonClosing = getComputedStyle(tagModal).display !== 'none';
+    tagModal.style.display = 'none';
+  }
+  return { tabs: tabResults, grid2x2Active: Boolean(gridParity['2x2']?.active), gridParity, heatmapLoaded, alertsReady, journeyReady, reviewCardReady, studioLiveLoaded, studioOfflineEmptyOk, recordedSelected, enrollChanged, camTableErgonomic, candidateXNonClosing, titleHeights: titleRects, modals: modalOk };
 })()

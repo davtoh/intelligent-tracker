@@ -86,13 +86,16 @@ def _record_roi_side_effects(
 def _resolve_roi_models(stream_manager: Any, camera_pool: Any) -> tuple[Any, Any]:
     """Resolve configured detector and Re-ID extractor from stream, pool, or factories."""
     det = getattr(stream_manager, "detector", None) if stream_manager else None
-    reid = getattr(stream_manager, "reid_extractor", None) if stream_manager else None
+    reid = (
+        getattr(stream_manager, "reid_extractor", None)
+        or getattr(getattr(stream_manager, "gallery_matcher", None), "extractor", None)
+    ) if stream_manager else None
     if (det is None or reid is None) and camera_pool is not None:
         from dashboard.services.camera_pool_queries import snapshot_pool_streams
 
         for mgr in snapshot_pool_streams(camera_pool).values():
             det = det or getattr(mgr, "detector", None)
-            reid = reid or getattr(mgr, "reid_extractor", None)
+            reid = reid or getattr(mgr, "reid_extractor", None) or getattr(getattr(mgr, "gallery_matcher", None), "extractor", None)
             if det is not None and reid is not None:
                 break
     if det is None:

@@ -66,10 +66,10 @@
 
 > *Deferred to Next Turn / Milestone 3*
 
-- [ ] **<config_dir>/skills/system-diagnostics/scripts/surface_verifier.py** + **<config_dir>/skills/system-diagnostics/scripts/cross_module_rules.py** + **<config_dir>/skills/system-diagnostics/scripts/audit_layout.js**: Add `[UNDEFINED_LAYOUT_CLASS]` HTML-to-CSS layout class verification, `CALLABLE_SIGNATURE_DRIFT` AST rule inside `try/except`, and `audit_layout.js` checks for empty-`src`/broken `<img>` elements and horizontally squeezed modal `.data-table`/form controls (`< 350L`/file, `<= 40L`/fn).
-- [ ] **<config_dir>/skills/system-diagnostics/tests/**: Add unit tests (`<= 40L`/method) for `[UNDEFINED_LAYOUT_CLASS]`, `CALLABLE_SIGNATURE_DRIFT`, and modal/media `audit_layout.js` checks, and run full skill self-tests.
-- [ ] **.diagnostics/probes/video_studio_contract_probe.py** + **.diagnostics/probes/replay_pipeline_probe.py** + **.diagnostics/probes/spa_nine_tab_cdp_probe.py**: Upgrade probes to test `/api/enroll` -> `create_video_indexer()` -> `/detections` + retroactive relabeling, automatic sighting crop persistence, cold-hash/offline/0-camera `#studio` media surfaces, modal column ergonomics, and non-closing candidate `✕`.
-- [ ] **CHANGELOG.md**: Record Step 1 completion via `'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'`.
+- [x] **<config_dir>/skills/system-diagnostics/scripts/surface_verifier.py** + **<config_dir>/skills/system-diagnostics/scripts/cross_module_rules.py** + **<config_dir>/skills/system-diagnostics/scripts/audit_layout.js**: Add `[UNDEFINED_LAYOUT_CLASS]` HTML-to-CSS layout class verification, `CALLABLE_SIGNATURE_DRIFT` AST rule inside `try/except`, and `audit_layout.js` checks for empty-`src`/broken `<img>` elements and horizontally squeezed modal `.data-table`/form controls (`< 350L`/file, `<= 40L`/fn).
+- [x] **<config_dir>/skills/system-diagnostics/tests/**: Add unit tests (`<= 40L`/method) for `[UNDEFINED_LAYOUT_CLASS]`, `CALLABLE_SIGNATURE_DRIFT`, and modal/media `audit_layout.js` checks, and run full skill self-tests.
+- [x] **.diagnostics/probes/video_studio_contract_probe.py** + **.diagnostics/probes/replay_pipeline_probe.py** + **.diagnostics/probes/spa_nine_tab_cdp_probe.py**: Upgrade probes to test `/api/enroll` -> `create_video_indexer()` -> `/detections` + retroactive relabeling, automatic sighting crop persistence, cold-hash/offline/0-camera `#studio` media surfaces, modal column ergonomics, and non-closing candidate `✕`.
+- [x] **CHANGELOG.md**: Record Step 1 completion via `'python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add'`.
 
 ---
 
