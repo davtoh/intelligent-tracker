@@ -59,7 +59,7 @@
 
   function clearStudioLiveImage() {
     const img = document.getElementById('studio-live-img');
-    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; img.removeAttribute?.('src'); img.src = ''; }
+    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; if (window.MediaEmptyState) window.MediaEmptyState.showEmpty(img, 'No Active Camera Feed', 'Select a camera or recorded video.'); else { img.removeAttribute?.('src'); if (img.style) img.style.display = 'none'; } }
   }
   function drawOverlay(cursorPt) {
     window.StudioCanvas?.drawOverlay(
@@ -94,7 +94,7 @@
         const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
         loadCameraScenario(studioState.activeCamera);
         applyStudioChannel(studioState.activeCamera, isVideo);
-      }
+      } else { clearStudioLiveImage(); }
     });
     loadTopologyLinks();
     syncStudioTabState(isStudioTabActive());

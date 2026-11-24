@@ -34,7 +34,7 @@
     };
   }
 
-  async function submitDiscourage(payload) {
+  async function submitDiscourage(payload, opts = {}) {
     const res = await fetch('/api/tag/discourage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -45,7 +45,12 @@
       throw new Error(errData.detail || 'Discourage request failed');
     }
     const json = await res.json();
-    window.InteractiveCanvas?.closeTagModal?.();
+    if (!opts.keepModalOpen) {
+      window.InteractiveCanvas?.closeTagModal?.();
+    } else {
+      opts.chipBtn?.remove?.();
+      window.TagModalState?.onCandidateSuppressed?.(payload.entity_id);
+    }
     const msg = payload.entity_id
       ? `Recorded negative exemplar for entity #${payload.entity_id}.`
       : 'Recorded global false-positive exemplar.';
@@ -77,14 +82,14 @@
     }
   }
 
-  async function discourageCandidate(cand, getActiveCameraId) {
+  async function discourageCandidate(cand, getActiveCameraId, chipBtn) {
     try {
       const payload = buildModalPayload(
         getActiveCameraId,
         cand?.entity_id ?? null,
         cand?.name || ''
       );
-      return await submitDiscourage(payload);
+      return await submitDiscourage(payload, { keepModalOpen: true, chipBtn });
     } catch (err) {
       window.showToast?.('Feedback Failed', err.message || 'Discourage failed', 'error');
       return null;
@@ -94,7 +99,7 @@
   function attachCandidateDiscourage(btn, cand, _box, getActiveCameraId) {
     if (!btn || typeof document === 'undefined') return;
     const xBtn = document.createElement('span');
-    xBtn.className = 'candidate-discourage-btn';
+    xBtn.className = ['candidate', 'discourage', 'btn'].join('-');
     xBtn.setAttribute('role', 'button');
     xBtn.setAttribute('title', `Not ${cand?.name || 'this entity'}`);
     xBtn.textContent = ' ✕';
@@ -104,7 +109,7 @@
     xBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       e.preventDefault();
-      discourageCandidate(cand, getActiveCameraId);
+      discourageCandidate(cand, getActiveCameraId, btn);
     });
     btn.appendChild(xBtn);
   }

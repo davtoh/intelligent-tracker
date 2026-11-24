@@ -64,8 +64,16 @@
       const modal = document.getElementById(modalId);
       if (modal) modal.style.display = 'flex';
     };
-    document.getElementById('drawer-btn-enroll')?.addEventListener('click', () => openModal('modal-universal-enrollment'));
-    document.getElementById('drawer-btn-cameras')?.addEventListener('click', () => openModal('modal-camera-manager'));
+    document.getElementById('drawer-btn-enroll')?.addEventListener('click', () => {
+      closeDrawer();
+      if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal();
+      else openModal('modal-universal-enrollment');
+    });
+    document.getElementById('drawer-btn-cameras')?.addEventListener('click', () => {
+      closeDrawer();
+      if (window.CameraManager?.openModal) window.CameraManager.openModal();
+      else openModal('modal-camera-manager');
+    });
     document.getElementById('drawer-btn-backup')?.addEventListener('click', () => openModal('modal-backup-manager'));
   }
 

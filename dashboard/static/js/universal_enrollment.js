@@ -41,7 +41,7 @@
     }
   }
 
-  async function populateCameraSelect() {
+  async function populateCameraSelect(options = {}) {
     const camSelect = document.getElementById('enroll-camera-select');
     if (!camSelect) return;
     let cams = window.CameraManager?.getActiveCameras?.() || [];
@@ -56,18 +56,21 @@
       }
     } catch (e) { console.warn('Failed to load enrollment sources:', e); }
     const activeId = window.App?.getActiveCameraId?.() || '';
+    const preferred = window.EnrollmentStageController?.resolvePreferredSource?.(cams, videos, activeId, options) || activeId;
     const camOpts = (Array.isArray(cams) ? cams : []).map(c =>
-      `<option value="${escapeHtml(c.id)}" ${c.id === activeId ? 'selected' : ''}>${escapeHtml(c.name || c.id)} (${escapeHtml(c.id)})</option>`
+      `<option value="${escapeHtml(c.id)}" ${c.id === preferred ? 'selected' : ''}>${escapeHtml(c.name || c.id)} (${escapeHtml(c.id)})</option>`
     ).join('');
     const vidOpts = videos.map(v => {
       const fn = v.filename || v.name || '';
       const url = v.video_url || `/videos/${encodeURIComponent(fn)}`;
-      return `<option value="video:${escapeHtml(fn)}" data-video-url="${escapeHtml(url)}">${escapeHtml(fn)}</option>`;
+      const fps = Number(v.fps) || 30;
+      return `<option value="video:${escapeHtml(fn)}" data-video-url="${escapeHtml(url)}" data-fps="${fps}" ${preferred === `video:${fn}` ? 'selected' : ''}>${escapeHtml(fn)}</option>`;
     }).join('');
     camSelect.innerHTML = '<option value="">Image Upload Only (No Camera)</option>'
       + (camOpts ? `<optgroup label="Camera Profiles">${camOpts}</optgroup>` : '')
       + (vidOpts ? `<optgroup label="Recorded Videos">${vidOpts}</optgroup>` : '');
-    if (activeId) camSelect.value = activeId;
+    if (preferred) camSelect.value = preferred;
+    window.EnrollmentStageController?.updateSourceBadge?.(camSelect.value);
   }
 
   function resetEnrollmentState(form, canvas, placeholder) {
@@ -77,7 +80,7 @@
     enrollState.selectedCropBase64 = null;
     enrollState.mergeEntityId = null;
     enrollState.forceCreateNew = false;
-    window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.();
+    window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.(canvas);
     if (form?.reset) form.reset();
     const banner = document.getElementById('enroll-collision-banner');
     if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
@@ -90,13 +93,15 @@
   async function captureFreezeFrame(canvas, placeholder) {
     const camSelect = document.getElementById('enroll-camera-select');
     const camId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
+    window.EnrollmentStageController?.updateSourceBadge?.(camId);
     if (camId && camId.startsWith('video:')) {
       const opt = camSelect?.options?.[camSelect.selectedIndex];
       const url = opt?.getAttribute?.('data-video-url') || `/videos/${encodeURIComponent(camId.slice(6))}`;
-      window.ScrubberTimelineSlider?.mountEnrollmentScrubber?.(url, canvas, placeholder, (dataUrl) => loadFreezeImage(dataUrl, canvas, placeholder));
+      const fps = Number(opt?.getAttribute?.('data-fps')) || 30;
+      window.ScrubberTimelineSlider?.mountEnrollmentScrubber?.(url, canvas, placeholder, (dataUrl) => loadFreezeImage(dataUrl, canvas, placeholder), { fps });
       return;
     }
-    window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.();
+    window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.(canvas);
     if (!camId) {
       if (placeholder) placeholder.innerHTML = '<span style="color:#ef4444;">No active camera selected.</span>';
       return;
@@ -174,14 +179,9 @@
       if (!isDrawing || !enrollState.freezeFrameImg) return;
       isDrawing = false;
       const pt = getCanvasPoint(canvas, e);
-      const x = Math.round(Math.min(startX, pt.x));
-      const y = Math.round(Math.min(startY, pt.y));
-      const w = Math.round(Math.abs(pt.x - startX));
-      const h = Math.round(Math.abs(pt.y - startY));
-      if (w > 15 && h > 15) {
-        enrollState.selectedBbox = [x, y, w, h];
-        extractCropThumbnail(x, y, w, h);
-      }
+      const x = Math.round(Math.min(startX, pt.x)), y = Math.round(Math.min(startY, pt.y));
+      const w = Math.round(Math.abs(pt.x - startX)), h = Math.round(Math.abs(pt.y - startY));
+      if (w > 15 && h > 15) { enrollState.selectedBbox = [x, y, w, h]; extractCropThumbnail(x, y, w, h); }
     });
   }
 
@@ -212,10 +212,11 @@
     const security_role = (document.getElementById('enroll-role-input')?.value || '').trim();
     const camSelect = document.getElementById('enroll-camera-select');
     const rawCamId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
-    const camera_id = rawCamId && rawCamId.startsWith('video:') ? null : rawCamId;
+    const meta = window.EnrollmentStageController?.getSelectedSourceMeta?.(camSelect) || { camera_id: rawCamId && rawCamId.startsWith('video:') ? null : rawCamId, video_filename: rawCamId?.startsWith('video:') ? rawCamId.slice(6) : null, media_offset_sec: null };
+    const camera_id = meta.camera_id;
     const is_anchor = document.getElementById('enroll-locked-anchor-cb')?.checked ?? true;
     const notes = (document.getElementById('enroll-notes-input')?.value || '').trim();
-    if (!camera_id && !enrollState.selectedCropBase64) {
+    if (!camera_id && !meta.video_filename && !enrollState.selectedCropBase64) {
       showToast('Camera Required', 'Please select an active camera source or upload an image.', 'warning');
       return null;
     }
@@ -229,6 +230,7 @@
     }
     return {
       name, category, security_role, notes, is_anchor, camera_id,
+      video_filename: meta.video_filename, media_offset_sec: meta.media_offset_sec,
       crop_base64: enrollState.selectedCropBase64, bbox: enrollState.selectedBbox,
       merge_entity_id: enrollState.mergeEntityId, force_create_new: enrollState.forceCreateNew,
     };
@@ -285,7 +287,7 @@
     });
   }
 
-  async function openModal() {
+  async function openModal(options = {}) {
     const modal = document.getElementById('modal-universal-enrollment');
     const canvas = document.getElementById('enroll-bbox-canvas');
     const placeholder = document.getElementById('enroll-canvas-placeholder');
@@ -294,7 +296,7 @@
     if (!modal) return;
     resetEnrollmentState(form, canvas, placeholder);
     modal.style.display = 'flex';
-    await Promise.all([loadCategoriesDropdown(categorySelect), populateCameraSelect()]);
+    await Promise.all([loadCategoriesDropdown(categorySelect), populateCameraSelect(options)]);
     const camSelect = document.getElementById('enroll-camera-select');
     const camId = camSelect ? (camSelect.value || null) : (window.App?.getActiveCameraId?.() || null);
     if (camId) await captureFreezeFrame(canvas, placeholder);

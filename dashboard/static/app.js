@@ -133,6 +133,8 @@ document.addEventListener('DOMContentLoaded', () => {
       versions: 'modal-descriptor-versions',
     };
     if (modalMap[raw]) {
+      if (raw === 'enroll' && window.UniversalEnrollment?.openModal) { window.UniversalEnrollment.openModal(); return; }
+      if (raw === 'cameras' && window.CameraManager?.openModal) { window.CameraManager.openModal(); return; }
       const m = document.getElementById(modalMap[raw]);
       if (m) m.style.display = 'flex';
       return;

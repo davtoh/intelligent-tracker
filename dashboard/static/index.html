@@ -63,7 +63,6 @@
       <div class="connection-status-pill online" id="connection-status-pill"><span class="status-indicator"></span><span id="connection-status-text">Connected</span></div>
     </div>
   </header>
-  <!-- Main Container -->
   <main class="main-content">
     {% include "partials/tabs/live.html" %}
     {% include "partials/tabs/videos.html" %}
@@ -113,10 +112,8 @@
       </div>
     </div>
   </aside>
-
-  <!-- Toast Notification Container (Milestone 9 & 10) -->
   <div id="toast-container" class="toast-container"></div>
-  <!-- JavaScript Modules -->
+  <script src="/static/js/media_empty_state.js"></script>
   <script src="/static/js/text_truncation_manager.js"></script>
   <script src="/static/js/scheduler_hud.js"></script>
   <script src="/static/js/processing_mode.js"></script>
@@ -124,6 +121,7 @@
   <script src="/static/js/live_player.js"></script>
   <script src="/static/js/unified_canvas_overlay.js"></script>
   <script src="/static/js/roi_draw_tagger.js"></script>
+  <script src="/static/js/tag_modal_state.js"></script>
   <script src="/static/js/tag_feedback_actions.js"></script>
   <script src="/static/js/interactive_canvas.js"></script>
   <script src="/static/js/telemetry.js"></script>
@@ -153,6 +151,7 @@
   <script src="/static/js/scenario_modals.js"></script>
   <script src="/static/js/journey_search.js"></script>
   <script src="/static/js/category_badge_manager.js"></script>
+  <script src="/static/js/enrollment_stage_controller.js"></script>
   <script src="/static/js/universal_enrollment.js"></script>
   <script src="/static/js/rsac_versions.js"></script>
   <script src="/static/js/review_modals.js"></script>

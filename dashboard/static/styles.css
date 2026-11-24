@@ -35,6 +35,7 @@
 
 /* 8. Modals, Toast Notifications & Responsive Breakpoints */
 @import url("css/modals.css");
+@import url("css/modal_forms_grid.css");
 @import url("css/toast.css");
 @import url("css/responsive.css");
 @import url("css/responsive_patterns.css");

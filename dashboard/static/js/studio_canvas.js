@@ -20,8 +20,8 @@
     if (isVideo) {
       if (img) {
         if (img.dataset) delete img.dataset.activeStreamSrc;
+        if (window.MediaEmptyState) window.MediaEmptyState.hideEmpty(img, 'none');
         img.removeAttribute?.('src');
-        img.src = '';
         if (img.style) img.style.display = 'none';
       }
       if (vid && targetId) {
@@ -37,10 +37,14 @@
       if (vid.style) vid.style.display = 'none';
     }
     if (img && targetId) {
-      if (img.style) img.style.display = 'block';
       const streamBase = `/stream/${encodeURIComponent(targetId)}`;
       if (img.dataset) img.dataset.activeStreamSrc = streamBase;
-      if (isActive) img.src = `${streamBase}?t=${Date.now()}`;
+      if (isActive) {
+        if (window.MediaEmptyState) window.MediaEmptyState.setSource(img, `${streamBase}?t=${Date.now()}`);
+        else { if (img.style) img.style.display = 'block'; img.src = `${streamBase}?t=${Date.now()}`; }
+      }
+    } else if (img && !targetId && window.MediaEmptyState) {
+      window.MediaEmptyState.showEmpty(img, 'No Active Camera Feed', 'Select a camera or recorded video.');
     }
   }
 

@@ -280,6 +280,14 @@
       return currentRuns;
     }
 
+    if (options.force) {
+      for (const k of Array.from(streamCache.keys())) {
+        if (k.startsWith(`${stem}::`)) streamCache.delete(k);
+      }
+      for (const k of Array.from(inFlightStreams.keys())) {
+        if (k.startsWith(`${stem}::`)) inFlightStreams.delete(k);
+      }
+    }
     if (!options.force && inFlightRuns.has(stem)) return inFlightRuns.get(stem);
 
     const promise = (async () => {
