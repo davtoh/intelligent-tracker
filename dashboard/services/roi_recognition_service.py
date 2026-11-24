@@ -101,7 +101,7 @@ def _resolve_roi_models(stream_manager: Any, camera_pool: Any) -> tuple[Any, Any
         except Exception:
             det = None
     if reid is None:
-        for model_name in ("osnet", "color"):
+        for model_name in ("dual", "onnx", "color"):
             try:
                 reid = ReIDExtractorFactory.create(model_name)
                 break
@@ -242,24 +242,36 @@ class RoiRecognitionService:
         return {"label": "object", "confidence": 0.5, "method": "heuristic"}
 
     def match_crop_to_gallery(
-        self, crop: np.ndarray, top_k: int = 3, reid_extractor: Any = None,
+        self, crop: np.ndarray, top_k: int = 3, reid_extractor: Any = None, threshold: float = 0.65,
     ) -> dict[str, Any]:
         """Compute crop embedding and return top-K cosine similarity gallery matches."""
         if reid_extractor is None:
             _, reid_extractor = _resolve_roi_models(self.stream_manager, self.camera_pool)
         emb = EntityTaggerService._compute_deterministic_embedding(crop, reid_extractor)
-        mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=int(emb.shape[0]))
+        dim, thresh = int(emb.shape[0]), float(threshold)
+        mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=dim)
         if mat.size == 0 or not ids:
-            return {"embedding_dim": int(emb.shape[0]), "candidates": [], "best_match": None}
+            return {"embedding_dim": dim, "threshold": thresh, "is_known": False, "candidates": [], "best_match": None}
+        suppressed_eids: set[int] = set()
+        if hasattr(self.db, "get_negative_embeddings"):
+            neg_mat, neg_ids, _ = self.db.get_negative_embeddings(expected_dim=dim)
+            for idx, nsim in enumerate(batch_cosine_similarity(neg_mat, emb) if getattr(neg_mat, "size", 0) > 0 else ()):
+                neid = neg_ids[idx] if idx < len(neg_ids) else None
+                if neid is None and float(nsim) >= 0.82:
+                    return {"embedding_dim": dim, "threshold": thresh, "is_known": False, "suppressed": True, "candidates": [], "best_match": None}
+                if neid is not None and float(nsim) >= 0.78:
+                    suppressed_eids.add(int(neid))
         best_by_entity: dict[int, dict[str, Any]] = {}
         for idx, sim in enumerate(batch_cosine_similarity(mat, emb)):
             eid, score_val = int(ids[idx]), round(float(sim), 4)
+            if eid in suppressed_eids:
+                continue
             prev = best_by_entity.get(eid)
             if prev is None or score_val > prev["similarity"]:
-                best_by_entity[eid] = {"entity_id": eid, "name": names[idx], "category": categories[idx], "similarity": score_val}
-        ranked = sorted(best_by_entity.values(), key=lambda c: c["similarity"], reverse=True)
-        candidates = ranked[: max(1, int(top_k))]
-        return {"embedding_dim": int(emb.shape[0]), "candidates": candidates, "best_match": candidates[0] if candidates else None}
+                best_by_entity[eid] = {"entity_id": eid, "name": names[idx], "category": categories[idx], "similarity": score_val, "is_known": score_val >= thresh}
+        candidates = sorted(best_by_entity.values(), key=lambda c: c["similarity"], reverse=True)[: max(1, int(top_k))]
+        best = candidates[0] if candidates else None
+        return {"embedding_dim": dim, "threshold": thresh, "is_known": bool(best and best["is_known"]), "candidates": candidates, "best_match": best}
 
     def recognize_roi(
         self, camera_id: str | None = None, video_filename: str | None = None,

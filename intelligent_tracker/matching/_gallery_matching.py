@@ -100,7 +100,9 @@ def _confirm_gallery_match(
     )
     if matcher.topology is not None and best_idx in matched_priors:
         matcher.topology.consume_prior(matched_priors[best_idx].prior_id)
-    return process_confirmed_identification(matcher, track, best_idx, best_score, query_vec, source, now, zone_id)
+    return process_confirmed_identification(
+        matcher, track, best_idx, best_score, query_vec, source, now, zone_id, frame=frame,
+    )
 
 
 def match_persistent_gallery(

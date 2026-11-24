@@ -106,6 +106,15 @@ async def enroll_entity_route(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    from dashboard.dependencies import get_camera_pool, get_db
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    ent_id = res.get("entity_id") if isinstance(res, dict) else None
+    if ent_id is not None:
+        await asyncio.to_thread(
+            relabel_video_runs_on_entity_mutation,
+            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
+        )
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
@@ -144,6 +153,15 @@ async def confirm_active_learning_item(
     res = await asyncio.to_thread(al_mgr.confirm_candidate, item_id=item_id, notes=req.notes)
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
+    from dashboard.dependencies import get_camera_pool, get_db
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    ent_id = res.get("entity_id") if isinstance(res, dict) else None
+    if ent_id is not None:
+        await asyncio.to_thread(
+            relabel_video_runs_on_entity_mutation,
+            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
+        )
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
@@ -161,6 +179,15 @@ async def reassign_active_learning_item(
     )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
+    from dashboard.dependencies import get_camera_pool, get_db
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    ent_id = res.get("entity_id") if isinstance(res, dict) else None
+    if ent_id is not None:
+        await asyncio.to_thread(
+            relabel_video_runs_on_entity_mutation,
+            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
+        )
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 
@@ -179,6 +206,15 @@ async def enroll_new_from_active_learning(
     )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
+    from dashboard.dependencies import get_camera_pool, get_db
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    ent_id = res.get("entity_id") if isinstance(res, dict) else None
+    if ent_id is not None:
+        await asyncio.to_thread(
+            relabel_video_runs_on_entity_mutation,
+            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
+        )
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 

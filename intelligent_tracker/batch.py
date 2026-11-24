@@ -85,7 +85,7 @@ class VideoIndexer:
         db: TrackerDB | None = None,
         db_path: str = "data/tracker.db",
         detector_name: str = "yolov8",
-        reid_name: str = "color",
+        reid_name: str = "dual",
         reid_threshold: float = 0.65,
         tracker_type: str = "centroid",
         sample_rate: int = 1,

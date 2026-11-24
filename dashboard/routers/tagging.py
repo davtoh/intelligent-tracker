@@ -156,6 +156,18 @@ async def commit_roi_tag_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RoiUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    eid = data.get("entity_id") if isinstance(data, dict) else req.entity_id
+    if eid is not None or (req.video_filename and req.track_id is not None):
+        await asyncio.to_thread(
+            relabel_video_runs_on_entity_mutation,
+            svc.db,
+            pool=svc.camera_pool,
+            discouraged_entity_id=int(eid) if eid is not None else -1,
+            video_filename=req.video_filename,
+            track_id=req.track_id,
+        )
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "data": data}
 
@@ -195,6 +207,18 @@ async def discourage_roi_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RoiUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    eid = data.get("entity_id") if isinstance(data, dict) else req.entity_id
+    if eid is not None or (req.video_filename and req.track_id is not None):
+        await asyncio.to_thread(
+            relabel_video_runs_on_entity_mutation,
+            svc.db,
+            pool=svc.camera_pool,
+            discouraged_entity_id=int(eid) if eid is not None else -1,
+            video_filename=req.video_filename,
+            track_id=req.track_id,
+        )
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "data": data}
 

@@ -27,6 +27,33 @@ def _is_coasting_or_occluded(track: Track) -> bool:
     return getattr(track, "missed_frames", 0) > 0 or getattr(track, "state", "") in _COASTING_STATES
 
 
+def _recompute_mismatched_signatures(db: Any, extractor: Any, expected_dim: int) -> None:
+    """Auto-recompute DB signatures whose embedding dim mismatches extractor from stored crop_path."""
+    if db is None or extractor is None or not hasattr(db, "get_signatures") or not hasattr(db, "update_entity_signature"):
+        return
+    try:
+        sigs = db.get_signatures()
+    except Exception:
+        return
+    import os
+    import cv2
+    for sig in sigs:
+        emb = sig.get("embedding")
+        dim = int(emb.shape[0]) if hasattr(emb, "shape") and emb.ndim == 1 else (int(emb.size) if hasattr(emb, "size") else 0)
+        crop_path = str(sig.get("crop_path") or "").strip()
+        if dim == expected_dim or not crop_path or not os.path.exists(crop_path):
+            continue
+        try:
+            crop = cv2.imread(crop_path)
+            if crop is None or getattr(crop, "size", 0) == 0:
+                continue
+            new_vec = extractor.extract_crop(crop)
+            if hasattr(new_vec, "shape") and int(new_vec.shape[0]) == expected_dim and float(np.linalg.norm(new_vec)) > 1e-7:
+                db.update_entity_signature(int(sig["id"]), embedding=new_vec)
+        except Exception as exc:
+            logger.debug("Signature recompute skipped for id=%s: %s", sig.get("id"), exc)
+
+
 class GalleryMatcher:
     """Coordinates gallery Re-ID matching between active tracks and persistent TrackerDB."""
 
@@ -104,6 +131,8 @@ class GalleryMatcher:
             self.negative_labels = []
             return
         expected_dim = getattr(self.extractor, "embedding_dim", None)
+        if expected_dim is not None and self.extractor is not None:
+            _recompute_mismatched_signatures(self.db, self.extractor, int(expected_dim))
         mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=expected_dim)
         self.gallery_matrix = mat
         self.gallery_entity_ids = ids

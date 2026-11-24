@@ -17,7 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from dashboard.dependencies import get_active_stream_manager, get_db
+from dashboard.dependencies import get_active_stream_manager, get_camera_pool, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
 from dashboard.services.alerts_query_service import query_merged_events
 from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
@@ -164,11 +164,16 @@ async def get_entity_details(
     return await asyncio.to_thread(_fetch_entity_details, db, entity_id)
 
 
-def _delete_entity_sync(db, mgr, entity_id: int) -> dict:
-    """Delete entity from SQLite and refresh in-memory gallery matcher."""
+def _delete_entity_sync(db, mgr, entity_id: int, pool=None) -> dict:
+    """Delete entity from SQLite, scrub video_runs, and reload all pool galleries."""
     if not db.delete_entity(entity_id):
         raise HTTPException(status_code=404, detail="Entity not found")
-    if mgr and mgr.gallery_matcher:
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    relabel_video_runs_on_entity_mutation(db, pool=pool, deleted_entity_id=entity_id)
+    if pool is not None:
+        pool.reload_all_galleries()
+    elif mgr and mgr.gallery_matcher:
         mgr.gallery_matcher.refresh_gallery()
     return {"deleted": True, "entity_id": entity_id}
 
@@ -183,14 +188,16 @@ async def delete_entity(
     if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
     mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id)
+    pool = get_camera_pool(conn=request)
+    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id, pool)
 
 
 def _enrich_sighting(s: dict, db) -> dict:
-    """Enrich sighting with entity details and thumbnail URL."""
+    """Enrich sighting with entity details and thumbnail URL (with entity avatar fallback)."""
     s_dict = dict(s)
-    if s_dict.get("entity_id"):
-        ent = db.get_entity(s_dict["entity_id"])
+    ent_id = s_dict.get("entity_id")
+    if ent_id:
+        ent = db.get_entity(ent_id)
         s_dict["entity_name"] = ent["name"] if ent else "Unknown"
         s_dict["entity_category"] = ent["category"] if ent else "unknown"
     else:
@@ -198,9 +205,14 @@ def _enrich_sighting(s: dict, db) -> dict:
         s_dict["entity_category"] = "unidentified"
 
     if s_dict.get("snapshot_path"):
-        s_dict["snapshot_url"] = (
-            f"/crops/{os.path.basename(s_dict['snapshot_path'])}"
-        )
+        s_dict["snapshot_url"] = f"/crops/{os.path.basename(s_dict['snapshot_path'])}"
+    elif ent_id and hasattr(db, "get_signatures"):
+        sigs = db.get_signatures(entity_id=ent_id)
+        for sig in sigs:
+            cp = str(sig.get("crop_path") or "").strip()
+            if cp:
+                s_dict["snapshot_url"] = f"/crops/{os.path.basename(cp)}"
+                break
     return s_dict
 
 

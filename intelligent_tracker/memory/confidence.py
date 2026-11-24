@@ -24,7 +24,7 @@ from intelligent_tracker.memory._confidence_math import (
 
 logger = logging.getLogger(__name__)
 
-_VALID_FEEDBACK_ACTIONS = frozenset({"confirm", "reassign", "enroll_new", "dismiss"})
+_VALID_FEEDBACK_ACTIONS = frozenset({"confirm", "reassign", "enroll_new", "dismiss", "reject"})
 
 
 class ConfidenceEngine:
@@ -130,26 +130,32 @@ class ConfidenceEngine:
         previous_entity_id: int | None = None,
         similarity: float | None = None,
         reviewer: str = "operator",
+        camera_id: str = "",
+        zone_id: str = "",
         timestamp: float | None = None,
     ) -> ConfidenceState | None:
-        """Apply operator confirm/reassign/enroll_new/dismiss decision to entity confidence."""
+        """Apply operator confirm/reassign/enroll_new/dismiss/reject decision to entity confidence."""
         act = action.strip().lower()
         if act not in _VALID_FEEDBACK_ACTIONS:
             raise ValueError(f"Unsupported active learning feedback action: {action!r}")
 
         now = float(timestamp) if timestamp is not None else time.time()
         if previous_entity_id is not None and previous_entity_id != entity_id and act in ("reassign", "enroll_new"):
-            self._apply_rejection(int(previous_entity_id), act, reviewer, now)
+            self._apply_rejection(int(previous_entity_id), act, reviewer, now, camera_id=camera_id, zone_id=zone_id)
 
         if entity_id is None:
             return None
-        if act == "dismiss":
-            return self._apply_rejection(int(entity_id), act, reviewer, now)
+        if act in ("dismiss", "reject"):
+            return self._apply_rejection(int(entity_id), act, reviewer, now, camera_id=camera_id, zone_id=zone_id)
 
         state = self._load_or_init_state(int(entity_id), default_confidence=0.65)
         state.confirmation_count += 1
         state.ambiguity_penalty = clamp01(state.ambiguity_penalty * 0.45)
         state.last_seen_at = max(state.last_seen_at, now)
+        if camera_id:
+            state.last_camera_id = camera_id
+        if zone_id:
+            state.last_zone_id = zone_id
         vis = clamp01(similarity) if similarity is not None else float(state.evidence.get("visual_similarity", 0.72) or 0.72)
         if state.face_score <= 0.0 and state.body_score <= 0.0:
             state.body_score = max(0.72, vis)
@@ -160,12 +166,19 @@ class ConfidenceEngine:
         self._persist_state(state, force=True)
         return state
 
-    def _apply_rejection(self, entity_id: int, action: str, reviewer: str, now: float) -> ConfidenceState:
-        """Penalize an entity's confidence after dismissal or reassignment away from it."""
+    def _apply_rejection(
+        self, entity_id: int, action: str, reviewer: str, now: float,
+        *, camera_id: str = "", zone_id: str = "",
+    ) -> ConfidenceState:
+        """Penalize an entity's confidence after dismissal, rejection, or reassignment."""
         state = self._load_or_init_state(entity_id, default_confidence=0.5)
         state.rejection_count += 1
         state.ambiguity_penalty = clamp01(state.ambiguity_penalty + 0.25)
         state.last_seen_at = max(state.last_seen_at, now)
+        if camera_id:
+            state.last_camera_id = camera_id
+        if zone_id:
+            state.last_zone_id = zone_id
         vis = float(state.evidence.get("visual_similarity", state.confidence) or state.confidence)
         state.confidence = compute_calibrated_score(state, vis, 0.0)
         state.evidence = {**state.evidence, "last_feedback_action": action, "last_reviewer": reviewer}

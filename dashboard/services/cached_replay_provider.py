@@ -169,6 +169,15 @@ class CachedReplayProvider:
         self._last_nonempty_media_time_s = None
         return tracks
 
+    def invalidate(self) -> None:
+        """Clear cached replay tracks and force FileDetectionReplayProvider reload on next step."""
+        self._last_nonempty_tracks.clear()
+        self._last_nonempty_media_time_s = None
+        if self.replay is not None:
+            self.replay._loaded = False
+            self.replay._records = []
+            self.replay._last_db_changes = None
+
     def build_step_result(
         self,
         frame: Any,

@@ -83,6 +83,7 @@ class StreamPipelineFactory:
             data, camera_id=camera_id, camera_name=camera_name, db_path=db_path, source_override=source_override,
             detector_fallback_mock=is_synthetic_source(raw_source, data.get("type")),
             enable_governance=True, enable_event_bus_fallback=True,
+            probe_db_reid=True, default_reid_model="dual",
         )
         if "loop" not in data.get("video", {}):
             config.loop_video = True
