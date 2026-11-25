@@ -58,17 +58,23 @@
     return [x, y, w, h];
   }
 
-  function hitTestTrackAtPoint(srcX, srcY, tracks) {
-    if (!Array.isArray(tracks) || !Number.isFinite(srcX) || !Number.isFinite(srcY)) return null;
-    for (let i = tracks.length - 1; i >= 0; i -= 1) {
+  function hitTestTracksAtPoint(srcX, srcY, tracks) {
+    if (!Array.isArray(tracks) || !Number.isFinite(srcX) || !Number.isFinite(srcY)) return [];
+    const hits = [];
+    for (let i = 0; i < tracks.length; i += 1) {
       const trk = tracks[i];
       if (!Array.isArray(trk?.bbox) || trk.bbox.length < 4) continue;
       const [bx, by, bw, bh] = trk.bbox;
       if (srcX >= bx && srcX <= bx + bw && srcY >= by && srcY <= by + bh) {
-        return trk;
+        hits.push({ trk, area: Math.max(0, Number(bw) || 0) * Math.max(0, Number(bh) || 0), idx: i });
       }
     }
-    return null;
+    hits.sort((a, b) => (a.area - b.area) || (b.idx - a.idx));
+    return hits.map((h) => h.trk);
+  }
+
+  function hitTestTrackAtPoint(srcX, srcY, tracks) {
+    return hitTestTracksAtPoint(srcX, srcY, tracks)[0] || null;
   }
 
   function drawSelectionOverlay(ctx, rect, options = {}) {
@@ -181,9 +187,10 @@
         return;
       }
       const tracks = typeof config.getTracks === 'function' ? (config.getTracks() || []) : [];
-      const track = hitTestTrackAtPoint(endPt.x, endPt.y, tracks);
+      const overlappingTracks = hitTestTracksAtPoint(endPt.x, endPt.y, tracks);
+      const track = overlappingTracks[0] || null;
       if (track && typeof config.onTrackClick === 'function') {
-        config.onTrackClick({ track, point: { x: endPt.x, y: endPt.y }, sourceContext: srcCtx });
+        config.onTrackClick({ track, overlappingTracks, point: { x: endPt.x, y: endPt.y }, sourceContext: srcCtx });
       }
     };
 
@@ -213,9 +220,7 @@
     return detach;
   }
 
-  function isDragging(canvas) {
-    return Boolean(canvas && dragContexts.get(canvas)?.state?.isDragging);
-  }
+  function isDragging(canvas) { return Boolean(canvas && dragContexts.get(canvas)?.state?.isDragging); }
 
   function redrawDragOverlay(canvas) {
     const entry = canvas ? dragContexts.get(canvas) : null;
@@ -226,28 +231,12 @@
     return true;
   }
 
-  function setRecognitionHandler(fn) {
-    recognitionHandler = typeof fn === 'function' ? fn : null;
-  }
-
-  function openWithRecognition(payload) {
-    if (typeof recognitionHandler === 'function') {
-      return recognitionHandler(payload);
-    }
-    return null;
-  }
+  function setRecognitionHandler(fn) { recognitionHandler = typeof fn === 'function' ? fn : null; }
+  function openWithRecognition(payload) { return typeof recognitionHandler === 'function' ? recognitionHandler(payload) : null; }
 
   window.RoiDrawTagger = {
-    DRAG_THRESHOLD_PX,
-    MIN_SOURCE_ROI_PX,
-    mapClientToSourcePoint,
-    normalizeDragRect,
-    hitTestTrackAtPoint,
-    drawSelectionOverlay,
-    isDragging,
-    redrawDragOverlay,
-    attach,
-    setRecognitionHandler,
-    openWithRecognition,
+    DRAG_THRESHOLD_PX, MIN_SOURCE_ROI_PX, mapClientToSourcePoint, normalizeDragRect,
+    hitTestTracksAtPoint, hitTestTrackAtPoint, drawSelectionOverlay, isDragging,
+    redrawDragOverlay, attach, setRecognitionHandler, openWithRecognition,
   };
 })();

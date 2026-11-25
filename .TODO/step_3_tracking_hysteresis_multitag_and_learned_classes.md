@@ -83,19 +83,19 @@
 
 ---
 
-## Milestone 3: Multi-Box Overlap Hit-Test & Quick-Tag Queue inside `#modal-tag-entity` *(Deferred to Next Turn / Milestone)*
+## Milestone 3: Multi-Box Overlap Hit-Test & Quick-Tag Queue inside `#modal-tag-entity`
 
 **Goal**: Return all overlapping boxes on canvas click and queue overlapping or Quick-Tag tracks inside `#modal-tag-entity` via a reusable track picker strip without losing untagged tracks on submit (`BUG-22`, `ADR-18`).
 
-- [ ] **dashboard/static/js/roi_draw_tagger.js**: Add `hitTestTracksAtPoint(srcX, srcY, tracks)` returning all containing tracks sorted deterministically (smallest area / topmost first), keep `hitTestTrackAtPoint()` delegating to the first result for compatibility, and include `overlappingTracks` in `onTrackClick` payloads.
-- [ ] **dashboard/static/js/tag_track_queue.js**: Create `TagTrackQueue` controller (`<= 220L`) managing `#tag-track-picker-strip` inside `#modal-tag-entity` (queue initialization from overlapping click hits or Quick-Tag track list, active track chip selection with seq-guarded `runRoiRecognition`, marking committed tracks as done, auto-advancing to the next untagged track on submit instead of closing modal prematurely, and explicit clear on cancel/close).
-- [ ] **dashboard/static/css/tag_queue.css**: Create focused stylesheet (`<= 95L`, zero `!important`, `min-width: 0`, `flex-wrap: wrap`, `>= 8px` gaps) for `#tag-track-picker-strip` chips and progress indicator.
-- [ ] **dashboard/static/partials/modals/entity_modals.html**: Insert compact `#tag-track-picker-strip` container inside `#modal-tag-entity` (`<= 8L`, keeping file strictly `< 240L`) and include `tag_track_queue.js` / `tag_queue.css` in `dashboard/static/index.html` (`< 180L`).
-- [ ] **dashboard/static/js/interactive_canvas.js**: Wire `TagTrackQueue` into `openTagModal`, `#btn-quick-tag` (passing all active tracks rather than `tracks[0]` only), and `submitTagForm` (advancing queue when untagged items remain) while keeping `interactive_canvas.js < 240L`; also update `dashboard/static/js/scrubber_overlay.js` (or small helper) so `getTracksAtCurrentTime()` collects overlapping tracks across all visible active run layers.
-- [ ] **tests/test_step3_multitag_queue_ui.py**: Add Node VM tests covering `hitTestTracksAtPoint` multi-hit ordering, `#tag-track-picker-strip` switching, Quick-Tag batch submit retaining untagged tracks until queue completion, and regression parity with `tests/test_step3_roi_draw_tagger.py` and `tests/test_step3_tag_modal_integration.py`.
-- [ ] **Verifier (M3)**:
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path dashboard/static/js/roi_draw_tagger.js dashboard/static/js/tag_track_queue.js dashboard/static/js/interactive_canvas.js dashboard/static/partials/modals/entity_modals.html dashboard/static/index.html tests/test_step3_multitag_queue_ui.py --max-lines 350 --max-fn-lines 40`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_multitag_queue_ui.py tests/test_step3_roi_draw_tagger.py tests/test_step3_tag_modal_integration.py tests/test_step2_video_scrubber_parity.py`
+- [x] **dashboard/static/js/roi_draw_tagger.js**: Add `hitTestTracksAtPoint(srcX, srcY, tracks)` returning all containing tracks sorted deterministically (smallest area / topmost first), keep `hitTestTrackAtPoint()` delegating to the first result for compatibility, and include `overlappingTracks` in `onTrackClick` payloads.
+- [x] **dashboard/static/js/tag_track_queue.js**: Create `TagTrackQueue` controller (`<= 220L`) managing `#tag-track-picker-strip` inside `#modal-tag-entity` (queue initialization from overlapping click hits or Quick-Tag track list, active track chip selection with seq-guarded `runRoiRecognition`, marking committed tracks as done, auto-advancing to the next untagged track on submit instead of closing modal prematurely, and explicit clear on cancel/close).
+- [x] **dashboard/static/css/tag_queue.css**: Create focused stylesheet (`<= 95L`, zero `!important`, `min-width: 0`, `flex-wrap: wrap`, `>= 8px` gaps) for `#tag-track-picker-strip` chips and progress indicator.
+- [x] **dashboard/static/partials/modals/entity_modals.html**: Insert compact `#tag-track-picker-strip` container inside `#modal-tag-entity` (`<= 8L`, keeping file strictly `< 240L`) and include `tag_track_queue.js` / `tag_queue.css` in `dashboard/static/index.html` (`< 180L`).
+- [x] **dashboard/static/js/interactive_canvas.js**: Wire `TagTrackQueue` into `openTagModal`, `#btn-quick-tag` (passing all active tracks rather than `tracks[0]` only), and `submitTagForm` (advancing queue when untagged items remain) while keeping `interactive_canvas.js < 240L`; also update `dashboard/static/js/scrubber_overlay.js` (or small helper) so `getTracksAtCurrentTime()` collects overlapping tracks across all visible active run layers.
+- [x] **tests/test_step3_multitag_queue_ui.py**: Add Node VM tests covering `hitTestTracksAtPoint` multi-hit ordering, `#tag-track-picker-strip` switching, Quick-Tag batch submit retaining untagged tracks until queue completion, and regression parity with `tests/test_step3_roi_draw_tagger.py` and `tests/test_step3_tag_modal_integration.py`.
+- [x] **Verifier (M3)**:
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path dashboard/static/js/roi_draw_tagger.js dashboard/static/js/tag_track_queue.js dashboard/static/js/interactive_canvas.js dashboard/static/partials/modals/entity_modals.html dashboard/static/index.html tests/test_step3_multitag_queue_ui.py --max-lines 350 --max-fn-lines 40`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_multitag_queue_ui.py tests/test_step3_roi_draw_tagger.py tests/test_step3_tag_modal_integration.py tests/test_step2_video_scrubber_parity.py`
 
 ---
 

@@ -287,12 +287,6 @@ document.addEventListener('DOMContentLoaded', () => {
       e.stopPropagation();
       if (state.hoveredTrack) window.InteractiveCanvas?.openTagModal(state.hoveredTrack);
     });
-
-    document.getElementById('btn-quick-tag')?.addEventListener('click', () => {
-      if (state.tracks[0]) window.InteractiveCanvas?.openTagModal?.(state.tracks[0]);
-      else if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal();
-      else window.InteractiveCanvas?.openTagModal?.(null);
-    });
   }
 
   // Setup Lifecycle Listeners

@@ -98,16 +98,13 @@
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'btn btn-xs btn-outline candidate-chip';
-      btn.dataset.entityId = String(cand.entity_id ?? '');
-      btn.dataset.name = cand.name || '';
-      btn.dataset.category = cand.category || 'person';
+      btn.dataset.entityId = String(cand.entity_id ?? ''); btn.dataset.name = cand.name || ''; btn.dataset.category = cand.category || 'person';
       btn.textContent = `${cand.name} (${Math.round((Number(cand.similarity) || 0) * 100)}%)`;
       btn.addEventListener('click', () => {
         if (el('tag-entity-id')) el('tag-entity-id').value = btn.dataset.entityId;
         if (el('tag-name-input')) el('tag-name-input').value = btn.dataset.name;
         if (el('tag-category-select') && btn.dataset.category) el('tag-category-select').value = btn.dataset.category;
-        box.querySelectorAll('.candidate-chip').forEach((c) => c.classList.remove('active'));
-        btn.classList.add('active');
+        box.querySelectorAll('.candidate-chip').forEach((c) => c.classList.remove('active')); btn.classList.add('active');
         window.TagModalState?.syncFromDom?.();
       });
       window.TagFeedbackActions?.attachCandidateDiscourage?.(btn, cand, box, activeCameraGetter);
@@ -153,14 +150,18 @@
     window.CategoryBadgeManager?.syncSelect?.(el('tag-category-select'));
     categoryTouched = false;
     modalTag.style.display = 'flex';
-    const bbox = options.bbox || track?.bbox || null;
-    const trackId = track?.id ?? track?.track_id ?? '';
+    const queueTracks = options.queueTracks || options.overlappingTracks;
+    if (!options.fromQueueSwitch) {
+      if (Array.isArray(queueTracks) && queueTracks.length > 1) window.TagTrackQueue?.init?.(queueTracks, { activeTrack: track, context: options, onSelect: (t, ctx) => handleRoiRecognition({ ...ctx, track: t, bbox: t?.bbox || null, fromQueueSwitch: true }) });
+      else window.TagTrackQueue?.clear?.();
+    }
+    const bbox = options.bbox || track?.bbox || null, trackId = track?.id ?? track?.track_id ?? '';
     const fields = { 'tag-entity-id': track?.entity_id != null ? String(track.entity_id) : '', 'tag-source-type': options.sourceType || 'live', 'tag-video-filename': options.videoFilename || '', 'tag-timestamp-sec': options.timestampSec != null ? String(options.timestampSec) : '', 'tag-crop-base64': options.cropBase64 || '', 'tag-track-id': trackId, 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '', 'tag-name-input': track?.entity_name || '', 'tag-category-select': track?.category || 'person' };
     Object.entries(fields).forEach(([id, val]) => { if (el(id)) el(id).value = val; });
     if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${trackId}` : '🏷️ Enroll New Identity');
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
     window.TagModalState?.syncFromDom?.();
-    if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, track, bbox });
+    if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: options.sourceType || 'live', cameraId: options.cameraId || activeCameraGetter?.() || null, videoFilename: options.videoFilename || null, timestampSec: options.timestampSec ?? null, track, bbox });
     el('tag-name-input')?.focus();
   }
 
@@ -174,6 +175,7 @@
 
   function closeTagModal() {
     recognitionSeq += 1;
+    window.TagTrackQueue?.clear?.();
     if (el('modal-tag-entity')) el('modal-tag-entity').style.display = 'none';
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
     if (el('tag-identity-candidates')) el('tag-identity-candidates').innerHTML = '';
@@ -199,7 +201,8 @@
       const res = await fetch('/api/tag/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Tagging failed');
       const data = await res.json().catch(() => ({}));
-      closeTagModal();
+      const adv = window.TagTrackQueue?.markCurrentDoneAndAdvance?.();
+      if (!adv?.advanced) closeTagModal();
       window.showToast?.('Entity Enrolled', `Successfully enrolled "${name}" as ${category.toUpperCase()}!`, 'success');
       if (window.TagFeedbackActions?.onTagCommitted) window.TagFeedbackActions.onTagCommitted(payload, data);
       else window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
@@ -208,18 +211,18 @@
   function initTagModal(getActiveCameraId) {
     activeCameraGetter = getActiveCameraId;
     window.RoiDrawTagger?.setRecognitionHandler?.(handleRoiRecognition);
-    const liveCanvas = el('interactive-canvas');
-    const liveVideo = el('live-stream-img') || el('video-stream');
+    const liveCanvas = el('interactive-canvas'), liveVideo = el('live-stream-img') || el('video-stream');
     if (liveCanvas && window.RoiDrawTagger?.attach) {
       window.RoiDrawTagger.attach({
         canvas: liveCanvas, mediaEl: liveVideo, containerEl: liveCanvas.parentElement,
         getTracks: () => latestState.tracks,
         getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, sourceWidth: liveVideo?.naturalWidth || 0, sourceHeight: liveVideo?.naturalHeight || 0 }),
         onRenderOverlay: () => drawInteractiveOverlay(latestState.ctx, latestState.canvas, latestState.videoImg, latestState.tracks, latestState.hoveredTrack, latestState.sceneExtras),
-        onTrackClick: ({ track, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, bbox: track.bbox }),
+        onTrackClick: ({ track, overlappingTracks, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, overlappingTracks, bbox: track.bbox }),
         onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),
       });
     }
+    el('btn-quick-tag')?.addEventListener('click', () => { const t = latestState.tracks || []; if (t.length > 0) openTagModal(t[0], { queueTracks: t }); else if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal(); else openTagModal(null); });
     el('modal-tag-close')?.addEventListener('click', closeTagModal);
     el('modal-tag-cancel')?.addEventListener('click', closeTagModal);
     el('btn-tag-discourage')?.addEventListener('click', () => window.TagFeedbackActions?.discourageFromModal?.(activeCameraGetter));
