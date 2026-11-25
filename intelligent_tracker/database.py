@@ -40,6 +40,7 @@ from intelligent_tracker.repositories import (
     NegativeExemplarMixin,
     WorldPoseMixin,
     LearnedClassMixin,
+    ReviewDecisionMixin,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class TrackerDB(
     NegativeExemplarMixin,
     WorldPoseMixin,
     LearnedClassMixin,
+    ReviewDecisionMixin,
 ):
     """
     Thread-safe SQLite database manager for entities, Re-ID signatures, and sightings.

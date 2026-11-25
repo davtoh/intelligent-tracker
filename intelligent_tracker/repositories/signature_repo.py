@@ -186,6 +186,22 @@ class SignatureMixin:
             finally:
                 cursor.close()
 
+    def delete_signature(self, sig_id: int) -> bool:
+        """Delete a single signature row by ID with rollback on error."""
+        with self._lock:
+            if self._conn is None:
+                return False
+            cursor = self._conn.cursor()
+            try:
+                cursor.execute("DELETE FROM entity_signatures WHERE id = ?", (int(sig_id),))
+                self._conn.commit()
+                return cursor.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
+            finally:
+                cursor.close()
+
     def _build_gallery_matrix(
         self, rows: List[Any], expected_dim: Optional[int]
     ) -> Tuple[np.ndarray, List[int], List[str], List[str]]:
