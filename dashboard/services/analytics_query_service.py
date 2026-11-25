@@ -38,6 +38,42 @@ def resolve_bucket_sec(range_sec: int, bucket_sec: Optional[int]) -> int:
     return 21600
 
 
+def query_traffic_flows_service(
+    db: Any,
+    *,
+    camera_id: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    range_sec: int = 3600,
+    end_time: Optional[float] = None,
+    bucket_sec: Optional[int] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
+    now_ts: float,
+) -> dict[str, Any]:
+    """Query time-bucketed traffic flows with optional zone, event_type, and bucket pagination."""
+    is_live = end_time is None
+    resolved_end = float(end_time) if end_time is not None else float(now_ts)
+    resolved_bucket = resolve_bucket_sec(range_sec, bucket_sec)
+    start_time = resolved_end - float(range_sec)
+    if db is None:
+        return {
+            "camera_id": camera_id or None, "zone_id": zone_id or None, "event_type": event_type or None,
+            "start_time": start_time, "end_time": resolved_end, "bucket_sec": resolved_bucket,
+            "buckets": [], "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+            "pagination": {"page": 1, "page_size": 0, "total_buckets": 0, "total_pages": 1, "has_prev": False, "has_next": False},
+            "axes": {"x": {"label": "Time", "unit": "epoch_s", "bucket_sec": resolved_bucket}, "y": {"label": "Crossings / Events", "unit": "count"}},
+            "is_live": is_live,
+        }
+    res = db.get_traffic_flows(
+        start_time, resolved_end, resolved_bucket,
+        camera_id=camera_id, zone_id=zone_id, event_type=event_type,
+        page=page, page_size=page_size,
+    )
+    res["is_live"] = is_live
+    return res
+
+
 _HEATMAP_GRID_COLS = 32
 _HEATMAP_GRID_ROWS = 24
 

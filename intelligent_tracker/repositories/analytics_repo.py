@@ -320,22 +320,27 @@ class AnalyticsMixin:
         end_time: float,
         bucket_sec: int = 300,
         camera_id: Optional[str] = None,
+        zone_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Aggregate timeline crossing/zone events and sightings into time buckets."""
         with self._lock:
             if self._conn is None:
                 return {
-                    "camera_id": camera_id or None,
-                    "start_time": float(start_time),
-                    "end_time": float(end_time),
-                    "bucket_sec": max(1, int(bucket_sec)),
-                    "buckets": [],
+                    "camera_id": camera_id or None, "zone_id": zone_id or None, "event_type": event_type or None,
+                    "start_time": float(start_time), "end_time": float(end_time),
+                    "bucket_sec": max(1, int(bucket_sec)), "buckets": [],
                     "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+                    "pagination": {"page": 1, "page_size": 0, "total_buckets": 0, "total_pages": 1, "has_prev": False, "has_next": False},
                 }
             cursor = self._conn.cursor()
             try:
                 return query_traffic_flows_sync(
-                    cursor, start_time, end_time, bucket_sec, camera_id=camera_id
+                    cursor, start_time, end_time, bucket_sec,
+                    camera_id=camera_id, zone_id=zone_id, event_type=event_type,
+                    page=page, page_size=page_size,
                 )
             finally:
                 cursor.close()

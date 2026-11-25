@@ -292,10 +292,10 @@
   }
 
   function showSnapshotModal(imgUrl, title) {
+    window.SnapshotModalOverlay?.reset?.();
     const modalSnapshot = document.getElementById('modal-snapshot-view');
     const modalSnapshotImg = document.getElementById('snapshot-modal-img');
     const modalSnapshotMeta = document.getElementById('snapshot-modal-meta');
-
     if (modalSnapshot && modalSnapshotImg && modalSnapshotMeta) {
       modalSnapshotImg.src = imgUrl;
       modalSnapshotMeta.textContent = title;
@@ -305,6 +305,7 @@
 
   function initSnapshotModal() {
     document.getElementById('modal-snapshot-close')?.addEventListener('click', () => {
+      window.SnapshotModalOverlay?.reset?.();
       const modal = document.getElementById('modal-snapshot-view');
       if (modal) modal.style.display = 'none';
     });
@@ -329,21 +330,12 @@
   }
 
   window.GalleryTimeline = {
-    loadGallery: loadGallery,
-    renderGalleryGrid: renderGalleryGrid,
-    bindGalleryEvents: bindGalleryEvents,
-    loadTimelineFilters: loadTimelineFilters,
-    loadSightings: loadSightings,
-    bindTimelineEvents: bindTimelineEvents,
-    showSnapshotModal: showSnapshotModal,
-    initSnapshotModal: initSnapshotModal,
+    loadGallery, renderGalleryGrid, bindGalleryEvents, loadTimelineFilters,
+    loadSightings, bindTimelineEvents, showSnapshotModal, initSnapshotModal,
   };
 
   window.TimelineView = {
-    applyFilter: applyTimelineFilter,
-    loadSightings: loadSightings,
-    loadTimelineFilters: loadTimelineFilters,
-    jumpToLiveSource: jumpToLiveSource,
+    applyFilter: applyTimelineFilter, loadSightings, loadTimelineFilters, jumpToLiveSource,
   };
 })();
 

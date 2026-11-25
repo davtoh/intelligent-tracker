@@ -11,43 +11,43 @@
   let endTime = null;
   let isLive = true;
   let lastFlowRefreshAt = 0;
+  let bucketPage = 1;
+  let bucketPageSize = null;
 
   function escapeHtml(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return str ? String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
   }
 
   function formatRangeLabel(sec) {
-    if (sec <= 900) return '15m';
-    if (sec <= 3600) return '1h';
-    if (sec <= 21600) return '6h';
-    if (sec <= 86400) return '24h';
-    return '7d';
+    return sec <= 900 ? '15m' : sec <= 3600 ? '1h' : sec <= 21600 ? '6h' : sec <= 86400 ? '24h' : '7d';
   }
 
   function formatBucketLabel(bucketStart, fallbackLabel, spanSec) {
     if (!Number.isFinite(Number(bucketStart))) return fallbackLabel || '';
     const d = new Date(Number(bucketStart) * 1000);
-    if (spanSec > 86400) {
-      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' '
-        + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return spanSec > 86400 ? `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${t}` : t;
   }
 
   function syncWindowControls(data) {
     const labelEl = document.getElementById('analytics-window-label');
+    const pageEl = document.getElementById('analytics-bucket-page-summary');
     const nextBtn = document.getElementById('btn-analytics-next');
     const liveBtn = document.getElementById('btn-analytics-live');
     if (nextBtn) nextBtn.disabled = isLive;
     if (liveBtn) {
       liveBtn.disabled = isLive;
       liveBtn.classList.toggle('active', !isLive);
+    }
+    if (pageEl) {
+      const pg = data?.pagination;
+      const shown = Array.isArray(data?.buckets) ? data.buckets.length : 0;
+      const total = Number(pg?.total_buckets ?? shown);
+      const curPage = Number(pg?.page ?? 1);
+      const totalPages = Math.max(1, Number(pg?.total_pages ?? 1));
+      pageEl.textContent = totalPages > 1
+        ? `Page ${curPage}/${totalPages} · ${shown}/${total} buckets`
+        : `${total} bucket${total !== 1 ? 's' : ''}`;
     }
     if (!labelEl) return;
     const totals = data?.totals || {};
@@ -84,6 +84,26 @@
     if (dlBtn) dlBtn.href = src.id ? `/analytics/heatmap?camera_id=${encodeURIComponent(src.id)}` : '/analytics/heatmap';
   }
 
+  async function populateZoneFilter() {
+    const sel = document.getElementById('analytics-zone-select');
+    if (!sel) return;
+    try {
+      const res = await fetch('/zones');
+      if (!res?.ok) return;
+      const zones = await res.json();
+      const prev = sel.value || '';
+      const opts = ['<option value="">All Zones</option>'];
+      (Array.isArray(zones) ? zones : []).forEach((z) => {
+        const name = String(z?.name || z?.zone_id || '').trim();
+        if (name) opts.push(`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`);
+      });
+      sel.innerHTML = opts.join('');
+      if (prev) sel.value = prev;
+    } catch (_err) {
+      // Keep default All Zones option when /zones is unavailable
+    }
+  }
+
   async function initSourceSelect() {
     const sel = document.getElementById('analytics-source-select');
     if (!sel || !window.ActiveSourceContext?.populateSelect) return null;
@@ -92,6 +112,7 @@
       sel.dataset.sourceBound = '1';
       sel.addEventListener('change', () => {
         sel.dataset.userSelected = '1';
+        bucketPage = 1;
         const ref = window.ActiveSourceContext?.fromSelectValue?.(sel.value, sel) || null;
         if (ref) window.ActiveSourceContext?.set?.(ref);
         loadTrafficFlows();
@@ -108,11 +129,22 @@
     return catalog;
   }
 
-  async function loadTrafficFlows() {
+  async function loadTrafficFlows(opts = {}) {
     lastFlowRefreshAt = Date.now();
-    const camId = resolveAnalyticsSource().id;
+    if (opts && typeof opts.page === 'number') bucketPage = Math.max(1, opts.page);
+    if (opts && opts.pageSize !== undefined) bucketPageSize = opts.pageSize;
+    const src = resolveAnalyticsSource();
+    const camParam = src.kind === 'video' && src.id ? `video:${src.id}` : src.id;
+    const zoneId = String(document.getElementById('analytics-zone-select')?.value || '').trim();
+    const eventType = String(document.getElementById('analytics-event-type-select')?.value || '').trim();
     const params = new URLSearchParams({ range_sec: String(rangeSec) });
-    if (camId) params.set('camera_id', camId);
+    if (camParam) params.set('camera_id', camParam);
+    if (zoneId) params.set('zone_id', zoneId);
+    if (eventType) params.set('event_type', eventType);
+    if (bucketPageSize) {
+      params.set('page', String(bucketPage));
+      params.set('page_size', String(bucketPageSize));
+    }
     if (!isLive && endTime !== null) params.set('end_time', String(endTime));
     try {
       const res = await fetch(`/analytics/flows?${params.toString()}`);
@@ -177,33 +209,34 @@
     }
   }
 
+  function bindOnce(id, ev, fn) {
+    const el = document.getElementById(id);
+    if (el && !el.dataset?.bound) {
+      if (el.dataset) el.dataset.bound = '1';
+      el.addEventListener(ev, fn);
+    }
+  }
+
   function bindFlowControls() {
-    const rangeSel = document.getElementById('analytics-range-select');
-    const prevBtn = document.getElementById('btn-analytics-prev');
-    const nextBtn = document.getElementById('btn-analytics-next');
-    const liveBtn = document.getElementById('btn-analytics-live');
-    if (rangeSel && !rangeSel.dataset.bound) {
-      rangeSel.dataset.bound = '1';
-      rangeSel.addEventListener('change', () => { rangeSec = Math.max(60, Number(rangeSel.value) || 3600); endTime = null; isLive = true; loadTrafficFlows(); });
-    }
-    if (prevBtn && !prevBtn.dataset.bound) {
-      prevBtn.dataset.bound = '1';
-      prevBtn.addEventListener('click', () => { const nowSec = Math.floor(Date.now() / 1000); endTime = (isLive || endTime === null) ? (nowSec - rangeSec) : (endTime - rangeSec); isLive = false; loadTrafficFlows(); });
-    }
-    if (nextBtn && !nextBtn.dataset.bound) {
-      nextBtn.dataset.bound = '1';
-      nextBtn.addEventListener('click', () => {
-        if (isLive || endTime === null) return;
-        const nowSec = Math.floor(Date.now() / 1000);
-        const nextEnd = endTime + rangeSec;
-        if (nextEnd >= nowSec) { endTime = null; isLive = true; } else { endTime = nextEnd; }
-        loadTrafficFlows();
-      });
-    }
-    if (liveBtn && !liveBtn.dataset.bound) {
-      liveBtn.dataset.bound = '1';
-      liveBtn.addEventListener('click', () => { endTime = null; isLive = true; loadTrafficFlows(); });
-    }
+    bindOnce('analytics-range-select', 'change', () => {
+      rangeSec = Math.max(60, Number(document.getElementById('analytics-range-select')?.value) || 3600);
+      endTime = null; isLive = true; bucketPage = 1; loadTrafficFlows();
+    });
+    bindOnce('analytics-zone-select', 'change', () => { bucketPage = 1; loadTrafficFlows(); });
+    bindOnce('analytics-event-type-select', 'change', () => { bucketPage = 1; loadTrafficFlows(); });
+    bindOnce('btn-analytics-prev', 'click', () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      endTime = (isLive || endTime === null) ? (nowSec - rangeSec) : (endTime - rangeSec);
+      isLive = false; bucketPage = 1; loadTrafficFlows();
+    });
+    bindOnce('btn-analytics-next', 'click', () => {
+      if (isLive || endTime === null) return;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const nextEnd = endTime + rangeSec;
+      if (nextEnd >= nowSec) { endTime = null; isLive = true; } else { endTime = nextEnd; }
+      bucketPage = 1; loadTrafficFlows();
+    });
+    bindOnce('btn-analytics-live', 'click', () => { endTime = null; isLive = true; bucketPage = 1; loadTrafficFlows(); });
   }
 
   function initTrafficChart() {
@@ -228,6 +261,7 @@
       });
     }
     bindFlowControls();
+    populateZoneFilter();
     if (window.ActiveSourceContext?.populateSelect && document.getElementById('analytics-source-select')) {
       initSourceSelect().then(() => { loadTrafficFlows(); loadHeatmapMetadata(); });
     } else {
@@ -242,41 +276,26 @@
     if (Date.now() - lastFlowRefreshAt >= 5000) loadTrafficFlows();
   }
 
-  function buildAlertRowHtml(ev) {
-    const timeStr = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : '--';
-    const type = ev.event_type || 'alert';
-    const rawSev = String(ev.severity || '').toUpperCase();
-    let severityClass = 'panel-badge';
-    let severityText = rawSev || 'INFO';
-    if (rawSev === 'CRITICAL' || rawSev === 'HIGH' || (!rawSev && (type.includes('intrusion') || type.includes('restricted')))) {
-      severityClass = 'badge-category restricted'; severityText = rawSev || 'CRITICAL';
-    } else if (rawSev === 'WARNING' || rawSev === 'MEDIUM' || (!rawSev && (type.includes('threshold') || type.includes('capacity')))) {
-      severityClass = 'badge-category vip'; severityText = rawSev || 'WARNING';
-    }
-    const entityLabel = ev.name || ev.entity_name || ev.suggested_name || (ev.entity_id ? '#' + ev.entity_id : 'Unknown');
-    const detailText = ev.message || ev.reason || ev.title || ev.summary || JSON.stringify(ev.metadata || {});
-    const snapshotBtn = ev.snapshot_base64
-      ? `<button class="btn btn-xs btn-outline" onclick="window.showSnapshotModal('data:image/jpeg;base64,${ev.snapshot_base64}', '${escapeHtml(type)}')">View</button>`
-      : '<span class="text-subtle">None</span>';
-    const vFile = ev.video_filename || ev.metadata?.video_filename || '';
-    const vOffset = ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0;
-    const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(vFile, vOffset) || '';
-    return `<tr><td>${escapeHtml(timeStr)}</td><td><strong>${escapeHtml(type)}</strong></td><td><span class="${severityClass}">${escapeHtml(severityText)}</span></td><td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td><td>${escapeHtml(entityLabel)}</td><td>${escapeHtml(detailText)}</td><td>${snapshotBtn}${seekBtn}</td></tr>`;
-  }
-
   async function loadAlertsTable(opts) {
     if (window.AlertsView?.loadAlerts) return window.AlertsView.loadAlerts(opts);
     const tbody = document.getElementById('alerts-table-body');
     const badge = document.getElementById('total-alerts-count');
-    if (!tbody) return;
+    if (!tbody) return [];
     try {
       const camId = window.App?.getActiveCameraId?.();
       const res = await fetch(camId ? `/events?limit=50&camera_id=${encodeURIComponent(camId)}` : '/events?limit=50');
       const events = await res.json();
       if (badge) badge.textContent = `${events.length} event${events.length !== 1 ? 's' : ''}`;
-      tbody.innerHTML = events.length ? events.map(buildAlertRowHtml).join('') : '<tr><td colspan="7" class="text-center">No alerts logged yet.</td></tr>';
+      tbody.innerHTML = events.length ? events.map((ev) => {
+        const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(ev.video_filename || ev.metadata?.video_filename || '', ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0) || '';
+        const who = ev.name || ev.entity_name || ev.suggested_name || (ev.entity_id ? `#${ev.entity_id}` : 'Unknown');
+        const msg = ev.message || ev.reason || ev.title || ev.summary || JSON.stringify(ev.metadata || {});
+        return `<tr><td>${escapeHtml(ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : '--')}</td><td><strong>${escapeHtml(ev.event_type || 'alert')}</strong></td><td><span class="panel-badge">${escapeHtml(String(ev.severity || 'INFO').toUpperCase())}</span></td><td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td><td>${escapeHtml(who)}</td><td>${escapeHtml(msg)}</td><td>${seekBtn}</td></tr>`;
+      }).join('') : '<tr><td colspan="7" class="text-center">No alerts logged yet.</td></tr>';
+      return events;
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
+      return [];
     }
   }
 

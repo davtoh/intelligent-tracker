@@ -9,6 +9,16 @@
               <select id="analytics-source-select" class="form-control form-control-sm" aria-label="Analytics Source">
                 <option value="">All Sources</option>
               </select>
+              <select id="analytics-zone-select" class="form-control form-control-sm" aria-label="Analytics Zone">
+                <option value="">All Zones</option>
+              </select>
+              <select id="analytics-event-type-select" class="form-control form-control-sm" aria-label="Analytics Event Type">
+                <option value="">All Events</option>
+                <option value="zone_enter">Zone Enter</option>
+                <option value="zone_exit">Zone Exit</option>
+                <option value="tripwire_cross">Tripwire Cross</option>
+                <option value="sighting">Sightings</option>
+              </select>
               <select id="analytics-range-select" class="form-control form-control-sm" aria-label="Traffic Flow Range">
                 <option value="900">15m</option>
                 <option value="3600" selected>1h</option>
@@ -23,6 +33,7 @@
           </div>
           <div class="analytics-window-bar">
             <span class="panel-badge analytics-window-label" id="analytics-window-label">Live · Last 1h</span>
+            <span class="panel-badge analytics-window-label" id="analytics-bucket-page-summary">Buckets: 0</span>
           </div>
           <div class="chart-wrapper">
             <canvas id="trafficChart"></canvas>

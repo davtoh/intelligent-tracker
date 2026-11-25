@@ -6,17 +6,9 @@
   'use strict';
 
   const state = {
-    offset: 0,
-    limit: 50,
-    total: 0,
-    hasMore: false,
-    eventsByIndex: [],
-    selectedIds: new Set(),
-    selectAllMatching: false,
-    featureVisibility: {
-      bboxes: true, track_ids: true, dwell_timers: true,
-      velocity: false, zones: true, tripwires: true,
-    },
+    offset: 0, limit: 50, total: 0, hasMore: false,
+    eventsByIndex: [], selectedIds: new Set(), selectAllMatching: false,
+    featureVisibility: { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true },
     activePreviewEvent: null,
   };
 
@@ -32,8 +24,9 @@
     const sevEl = document.getElementById('alerts-filter-severity');
     const typeEl = document.getElementById('alerts-filter-type');
     const zoneEl = document.getElementById('alerts-filter-zone');
+    const cameraVal = camEl ? String(camEl.value ?? '').trim() : String(window.App?.getActiveCameraId?.() ?? '').trim();
     return {
-      camera_id: (camEl?.value ?? window.App?.getActiveCameraId?.() ?? '').trim(),
+      camera_id: cameraVal,
       severity: (sevEl?.value || '').trim(),
       event_type: (typeEl?.value || '').trim(),
       zone_id: (zoneEl?.value || '').trim(),
@@ -115,69 +108,33 @@
   }
 
   function renderSnapshotOverlay() {
-    const img = document.getElementById('snapshot-modal-img');
-    const canvas = document.getElementById('snapshot-modal-canvas');
-    const U = window.UnifiedCanvasOverlay;
-    if (!img || !canvas || !U) return;
-    const ctx = canvas.getContext?.('2d');
-    if (!ctx) return;
+    if (window.SnapshotModalOverlay?.render) return window.SnapshotModalOverlay.render();
+    const img = document.getElementById('snapshot-modal-img'), canvas = document.getElementById('snapshot-modal-canvas');
+    const U = window.UnifiedCanvasOverlay, ctx = canvas?.getContext?.('2d');
+    if (!img || !canvas || !U || !ctx) return;
     const imgRect = img.getBoundingClientRect?.() || { width: img.naturalWidth || 640, height: img.naturalHeight || 360, left: 0, top: 0 };
     const stageRect = img.parentElement?.getBoundingClientRect?.() || imgRect;
-    const mediaW = img.naturalWidth || imgRect.width || 640;
-    const mediaH = img.naturalHeight || imgRect.height || 360;
+    const mediaW = img.naturalWidth || imgRect.width || 640, mediaH = img.naturalHeight || imgRect.height || 360;
     U.syncCanvasDpr(canvas, ctx, stageRect.width || mediaW, stageRect.height || mediaH, window.devicePixelRatio || 1);
-    const box = U.computeContainBox(imgRect, stageRect, mediaW, mediaH);
-    const ev = state.activePreviewEvent || {};
+    const box = U.computeContainBox(imgRect, stageRect, mediaW, mediaH), ev = state.activePreviewEvent || {};
     const bbox = ev.bbox || ev.metadata?.bbox;
     const scales = U.resolveScaleFactors(box.renderW, box.renderH, ev.source_resolution || ev.metadata?.source_resolution, mediaW, mediaH);
-    const tracks = Array.isArray(bbox) && bbox.length >= 4 ? [{
-      bbox,
-      id: ev.track_id ?? ev.metadata?.track_id,
-      entity_name: ev.entity_name || ev.name || ev.suggested_name,
-      label: ev.event_type || 'alert',
-      confidence: ev.confidence,
-    }] : [];
-    U.renderScene(ctx, {
-      clear: true,
-      clearWidth: stageRect.width || mediaW,
-      clearHeight: stageRect.height || mediaH,
-      visibility: state.featureVisibility,
-      transform: { offsetX: box.offsetX, offsetY: box.offsetY, scaleX: scales.scaleX, scaleY: scales.scaleY },
-      tracks,
-      zones: Array.isArray(ev.zones) ? ev.zones : [],
-    });
+    const tracks = Array.isArray(bbox) && bbox.length >= 4 ? [{ bbox, id: ev.track_id ?? ev.metadata?.track_id, entity_name: ev.entity_name || ev.name || ev.suggested_name, label: ev.event_type || 'alert', confidence: ev.confidence }] : [];
+    U.renderScene(ctx, { clear: true, clearWidth: stageRect.width || mediaW, clearHeight: stageRect.height || mediaH, visibility: state.featureVisibility, transform: { offsetX: box.offsetX, offsetY: box.offsetY, scaleX: scales.scaleX, scaleY: scales.scaleY }, tracks, zones: Array.isArray(ev.zones) ? ev.zones : [] });
   }
 
   function openAlertSnapshot(idx) {
-    const ev = state.eventsByIndex[idx];
-    if (!ev) return;
-    const src = resolveSnapshotSrc(ev);
-    if (!src) return;
+    const ev = state.eventsByIndex[idx], src = ev ? resolveSnapshotSrc(ev) : '';
+    if (!ev || !src) return;
     state.activePreviewEvent = ev;
+    if (window.SnapshotModalOverlay?.open) return window.SnapshotModalOverlay.open(ev, src, { visibility: state.featureVisibility });
     window.AlertsAdmin?.syncSnapshotDownloadButton?.(src, ev);
-    const modal = document.getElementById('modal-snapshot-view');
-    const img = document.getElementById('snapshot-modal-img');
-    const metaEl = document.getElementById('snapshot-modal-meta');
-    const controlsEl = document.getElementById('snapshot-modal-controls');
-    if (img) {
-      img.onload = () => renderSnapshotOverlay();
-      img.src = src;
-    }
-    if (metaEl) {
-      metaEl.textContent = `${ev.event_type || 'alert'} · ${ev.camera_id || 'System'}${ev.zone_id ? ` (${ev.zone_id})` : ''}`;
-    }
+    const modal = document.getElementById('modal-snapshot-view'), img = document.getElementById('snapshot-modal-img');
+    const metaEl = document.getElementById('snapshot-modal-meta'), controlsEl = document.getElementById('snapshot-modal-controls');
+    if (img) { img.onload = () => renderSnapshotOverlay(); img.src = src; }
+    if (metaEl) metaEl.textContent = `${ev.event_type || 'alert'} · ${ev.camera_id || 'System'}${ev.zone_id ? ` (${ev.zone_id})` : ''}`;
     if (controlsEl && window.OverlayControlBar?.mount) {
-      window.OverlayControlBar.mount({
-        container: controlsEl,
-        variant: 'scrubber',
-        descriptors: [],
-        showFeaturePills: true,
-        featureVisibility: state.featureVisibility,
-        onToggleFeature: (key, next) => {
-          state.featureVisibility[key] = Boolean(next);
-          renderSnapshotOverlay();
-        },
-      });
+      window.OverlayControlBar.mount({ container: controlsEl, variant: 'scrubber', descriptors: [], showFeaturePills: true, featureVisibility: state.featureVisibility, onToggleFeature: (k, n) => { state.featureVisibility[k] = Boolean(n); renderSnapshotOverlay(); } });
     }
     if (modal) modal.style.display = 'flex';
     if (img?.complete && img?.naturalWidth > 0) renderSnapshotOverlay();
@@ -227,62 +184,31 @@
     return loadAlerts({ offset: state.offset, filters: { ...readFiltersFromDom(), ...filters } });
   }
 
+  function bindOnce(id, ev, fn) {
+    const el = document.getElementById(id);
+    if (el && !el.dataset?.bound) {
+      if (el.dataset) el.dataset.bound = '1';
+      el.addEventListener(ev, fn);
+    }
+  }
+
   function bindControls() {
     window.AlertsAdmin?.bindAdminControls?.(readFiltersFromDom);
-    const applyBtn = document.getElementById('alerts-filter-apply');
-    const resetBtn = document.getElementById('alerts-filter-reset');
-    const prevBtn = document.getElementById('alerts-prev-btn');
-    const nextBtn = document.getElementById('alerts-next-btn');
-    if (applyBtn && !applyBtn.dataset.bound) {
-      applyBtn.dataset.bound = '1';
-      applyBtn.addEventListener('click', () => { state.offset = 0; loadAlerts(); });
-    }
-    if (resetBtn && !resetBtn.dataset.bound) {
-      resetBtn.dataset.bound = '1';
-      resetBtn.addEventListener('click', () => {
-        ['alerts-filter-camera', 'alerts-filter-severity', 'alerts-filter-type', 'alerts-filter-zone'].forEach((id) => {
-          const el = document.getElementById(id);
-          if (el) el.value = '';
-        });
-        state.offset = 0;
-        loadAlerts();
+    bindOnce('alerts-filter-apply', 'click', () => { state.offset = 0; loadAlerts(); });
+    bindOnce('alerts-filter-reset', 'click', () => {
+      ['alerts-filter-camera', 'alerts-filter-severity', 'alerts-filter-type', 'alerts-filter-zone'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
       });
-    }
-    if (prevBtn && !prevBtn.dataset.bound) {
-      prevBtn.dataset.bound = '1';
-      prevBtn.addEventListener('click', () => {
-        state.offset = Math.max(0, state.offset - state.limit);
-        loadAlerts();
-      });
-    }
-    if (nextBtn && !nextBtn.dataset.bound) {
-      nextBtn.dataset.bound = '1';
-      nextBtn.addEventListener('click', () => {
-        if (!state.hasMore) return;
-        state.offset += state.limit;
-        loadAlerts();
-      });
-    }
-    const selAll = document.getElementById('alerts-select-all');
-    if (selAll && !selAll.dataset.bound) {
-      selAll.dataset.bound = '1';
-      selAll.addEventListener('change', (e) => toggleSelectAllVisible(Boolean(e.target?.checked)));
-    }
-    const selMatch = document.getElementById('alerts-select-all-matching');
-    if (selMatch && !selMatch.dataset.bound) {
-      selMatch.dataset.bound = '1';
-      selMatch.addEventListener('change', (e) => toggleSelectAllMatching(Boolean(e.target?.checked)));
-    }
-    const ackSelBtn = document.getElementById('btn-alerts-ack-selected');
-    if (ackSelBtn && !ackSelBtn.dataset.bound) {
-      ackSelBtn.dataset.bound = '1';
-      ackSelBtn.addEventListener('click', () => bulkAckSelected(true));
-    }
-    const delSelBtn = document.getElementById('btn-alerts-delete-selected');
-    if (delSelBtn && !delSelBtn.dataset.bound) {
-      delSelBtn.dataset.bound = '1';
-      delSelBtn.addEventListener('click', () => bulkDeleteSelected());
-    }
+      state.offset = 0;
+      loadAlerts();
+    });
+    bindOnce('alerts-prev-btn', 'click', () => { state.offset = Math.max(0, state.offset - state.limit); loadAlerts(); });
+    bindOnce('alerts-next-btn', 'click', () => { if (state.hasMore) { state.offset += state.limit; loadAlerts(); } });
+    bindOnce('alerts-select-all', 'change', (e) => toggleSelectAllVisible(Boolean(e.target?.checked)));
+    bindOnce('alerts-select-all-matching', 'change', (e) => toggleSelectAllMatching(Boolean(e.target?.checked)));
+    bindOnce('btn-alerts-ack-selected', 'click', () => bulkAckSelected(true));
+    bindOnce('btn-alerts-delete-selected', 'click', () => bulkDeleteSelected());
   }
 
   function toggleRowSelection(eventId, checked) {

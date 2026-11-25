@@ -161,6 +161,7 @@
   let suggestTimer = null;
   let suggestItems = [];
   let activeSuggestIndex = -1;
+  let outsideDismissBound = false;
 
   function hideSuggestions() {
     const list = document.getElementById('journey-suggest-list');
@@ -200,19 +201,21 @@
     });
   }
 
-  async function fetchSuggestions(query) {
-    const trimmed = (query || '').trim();
-    if (!trimmed) {
-      hideSuggestions();
-      return;
-    }
+  async function fetchSuggestions(query = '') {
+    const trimmed = String(query ?? '').trim();
     try {
       const res = await fetch(`/api/entities/suggest?q=${encodeURIComponent(trimmed)}&limit=8`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        hideSuggestions();
+        return [];
+      }
       const data = await res.json();
-      renderSuggestions(data.items || []);
+      const items = Array.isArray(data?.items) ? data.items : [];
+      renderSuggestions(items);
+      return items;
     } catch (_err) {
       hideSuggestions();
+      return [];
     }
   }
 
@@ -225,6 +228,19 @@
     searchJourney(input?.value || item.name);
   }
 
+  function bindOutsideDismiss() {
+    if (outsideDismissBound || typeof document?.addEventListener !== 'function') return;
+    outsideDismissBound = true;
+    document.addEventListener('pointerdown', (e) => {
+      const target = e?.target;
+      const input = document.getElementById('journey-search-query');
+      const list = document.getElementById('journey-suggest-list');
+      const inInput = input && (target === input || (typeof input.contains === 'function' && input.contains(target)));
+      const inList = list && (target === list || (typeof list.contains === 'function' && list.contains(target)));
+      if (!inInput && !inList) hideSuggestions();
+    });
+  }
+
   function bindJourneySearch() {
     const btnSearch = document.getElementById('btn-journey-search');
     const btnExport = document.getElementById('btn-journey-export');
@@ -234,20 +250,21 @@
     if (btnSearch) {
       btnSearch.addEventListener('click', () => {
         hideSuggestions();
-        const query = (input?.value || '').trim();
-        searchJourney(query);
+        searchJourney((input?.value || '').trim());
       });
     }
 
     if (btnExport) {
       btnExport.addEventListener('click', () => {
         hideSuggestions();
-        const query = (input?.value || '').trim();
-        exportJourneyVideo(query);
+        exportJourneyVideo((input?.value || '').trim());
       });
     }
 
     if (input) {
+      const triggerOpen = () => fetchSuggestions(input.value || '');
+      input.addEventListener('focus', triggerOpen);
+      input.addEventListener('click', triggerOpen);
       input.addEventListener('input', () => {
         if (suggestTimer) ((id) => clearTimeout(id))(suggestTimer);
         suggestTimer = ((fn, ms) => setTimeout(fn, ms))(() => fetchSuggestions(input.value), 180);
@@ -281,6 +298,7 @@
         if (idx >= 0) selectSuggestion(idx);
       });
     }
+    bindOutsideDismiss();
   }
 
   window.JourneySearch = {

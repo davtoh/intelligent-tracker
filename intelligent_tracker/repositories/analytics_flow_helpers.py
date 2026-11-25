@@ -109,23 +109,43 @@ def _bucket_index(ts: float, start_time: float, bucket_sec: int, count: int) -> 
     return None
 
 
+_FLOW_EVENT_TYPES = frozenset({"tripwire_cross", "zone_enter", "zone_exit"})
+
+
+def _build_timeline_where(
+    safe_start: float, safe_end: float, lookup: Optional[str],
+    zone_id: Optional[str], event_type: Optional[str],
+) -> tuple[str, list[Any]]:
+    """Build parameterized WHERE clause for world_timeline_events flow queries."""
+    clauses = ["timestamp >= ?", "timestamp <= ?"]
+    params: list[Any] = [safe_start, safe_end]
+    if event_type:
+        clauses.append("event_type = ?")
+        params.append(event_type)
+    else:
+        clauses.append("event_type IN ('tripwire_cross', 'zone_enter', 'zone_exit')")
+    if lookup:
+        clauses.append("(camera_id = ? OR video_filename = ?)")
+        params.extend([lookup, lookup])
+    if zone_id:
+        clauses.append("zone_id = ?")
+        params.append(zone_id)
+    return " AND ".join(clauses), params
+
+
 def _accumulate_timeline_events(
-    cursor: Any,
-    buckets: list[dict[str, Any]],
-    safe_start: float,
-    safe_end: float,
-    safe_bucket: int,
-    cam: Optional[str],
+    cursor: Any, buckets: list[dict[str, Any]], safe_start: float, safe_end: float,
+    safe_bucket: int, cam: Optional[str], zone_id: Optional[str] = None, event_type: Optional[str] = None,
 ) -> None:
     """Query world_timeline_events and accumulate inflow/outflow/total and media_refs per bucket."""
+    if event_type and event_type not in _FLOW_EVENT_TYPES:
+        return
     lookup = cam[6:].strip() if (cam and cam.startswith("video:")) else cam
-    cam_clause = " AND (camera_id = ? OR video_filename = ?)" if lookup else ""
-    ev_params: list[Any] = [safe_start, safe_end] + ([lookup, lookup] if lookup else [])
+    where_sql, ev_params = _build_timeline_where(safe_start, safe_end, lookup, zone_id, event_type)
     cursor.execute(
         "SELECT event_type, timestamp, camera_id, zone_id, entity_id, "
         "video_filename, media_offset_sec, run_id, metadata_json FROM world_timeline_events "
-        "WHERE event_type IN ('tripwire_cross', 'zone_enter', 'zone_exit') "
-        f"AND timestamp >= ? AND timestamp <= ?{cam_clause}",
+        f"WHERE {where_sql}",
         ev_params,
     )
     for row in cursor.fetchall():
@@ -139,42 +159,42 @@ def _accumulate_timeline_events(
         buckets[idx]["total"] += tot
         if len(buckets[idx]["media_refs"]) < _MAX_BUCKET_MEDIA_REFS:
             meta = _parse_meta_json(row["metadata_json"] or "")
+            moff = row["media_offset_sec"] if row["media_offset_sec"] not in (None, 0.0, "") else meta.get("media_offset_sec", 0.0)
             buckets[idx]["media_refs"].append(_build_flow_media_ref(
-                camera_id=row["camera_id"] or "",
-                video_filename=row["video_filename"] or meta.get("video_filename") or "",
-                media_offset_sec=row["media_offset_sec"] if row["media_offset_sec"] not in (None, 0.0, "") else meta.get("media_offset_sec", 0.0),
-                run_id=row["run_id"] or meta.get("run_id") or "",
+                camera_id=row["camera_id"] or "", video_filename=row["video_filename"] or meta.get("video_filename") or "",
+                media_offset_sec=moff, run_id=row["run_id"] or meta.get("run_id") or "",
                 snapshot_path=meta.get("snapshot_path") or meta.get("crop_path") or "",
-                zone_id=row["zone_id"] or meta.get("zone_id") or "",
-                ts=ts_val, track_id=meta.get("track_id"), entity_id=row["entity_id"], bbox=meta.get("bbox"),
+                zone_id=row["zone_id"] or meta.get("zone_id") or "", ts=ts_val,
+                track_id=meta.get("track_id"), entity_id=row["entity_id"], bbox=meta.get("bbox"),
             ))
 
 
 def _accumulate_sightings(
-    cursor: Any,
-    buckets: list[dict[str, Any]],
-    safe_start: float,
-    safe_end: float,
-    safe_bucket: int,
-    cam: Optional[str],
+    cursor: Any, buckets: list[dict[str, Any]], safe_start: float, safe_end: float,
+    safe_bucket: int, cam: Optional[str], zone_id: Optional[str] = None, event_type: Optional[str] = None,
 ) -> None:
     """Query sightings and accumulate sighting counts and media_refs per bucket."""
+    if event_type and event_type != "sighting":
+        return
     lookup = cam[6:].strip() if (cam and cam.startswith("video:")) else cam
-    src_clause = " AND (camera_id = ? OR source = ?)" if lookup else ""
-    sig_params: list[Any] = [safe_start, safe_end] + ([lookup, lookup] if lookup else [])
+    clauses = ["ts_epoch >= ?", "ts_epoch <= ?"]
+    sig_params: list[Any] = [safe_start, safe_end]
+    if lookup:
+        clauses.append("(camera_id = ? OR source = ? OR video_filename = ?)")
+        sig_params.extend([lookup, lookup, lookup])
+    if zone_id:
+        clauses.append("zone_id = ?")
+        sig_params.append(zone_id)
     cursor.execute(
         "SELECT CASE WHEN typeof(timestamp) IN ('integer', 'real') THEN CAST(timestamp AS REAL) "
         "ELSE CAST(strftime('%s', timestamp) AS REAL) END AS ts_epoch, "
         "entity_id, track_id, source, camera_id, zone_id, bbox, snapshot_path, "
-        "video_filename, media_offset_sec, run_id "
-        f"FROM sightings WHERE ts_epoch >= ? AND ts_epoch <= ?{src_clause}",
+        f"video_filename, media_offset_sec, run_id FROM sightings WHERE {' AND '.join(clauses)}",
         sig_params,
     )
     for row in cursor.fetchall():
         ts_val = row["ts_epoch"]
-        if ts_val is None:
-            continue
-        idx = _bucket_index(float(ts_val), safe_start, safe_bucket, len(buckets))
+        idx = _bucket_index(float(ts_val), safe_start, safe_bucket, len(buckets)) if ts_val is not None else None
         if idx is None:
             continue
         buckets[idx]["sightings"] += 1
@@ -198,37 +218,60 @@ def _resolve_flow_source_ref(cam: Optional[str]) -> dict[str, Any]:
     return build_source_ref(video_filename=lookup) if is_vid else build_source_ref(camera_id=cam)
 
 
+def _paginate_buckets(
+    buckets: list[dict[str, Any]], page: Optional[int], page_size: Optional[int],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Slice flow buckets when page_size is specified and return pagination metadata."""
+    total_buckets = len(buckets)
+    if page_size is None:
+        return buckets, {
+            "page": 1, "page_size": total_buckets, "total_buckets": total_buckets,
+            "total_pages": 1, "has_prev": False, "has_next": False,
+        }
+    safe_ps = max(1, int(page_size))
+    total_pages = max(1, int(math.ceil(total_buckets / float(safe_ps))))
+    safe_page = max(1, min(int(page or 1), total_pages))
+    start_idx = (safe_page - 1) * safe_ps
+    return buckets[start_idx:start_idx + safe_ps], {
+        "page": safe_page, "page_size": safe_ps, "total_buckets": total_buckets,
+        "total_pages": total_pages, "has_prev": safe_page > 1, "has_next": safe_page < total_pages,
+    }
+
+
 def query_traffic_flows_sync(
     cursor: Any,
     start_time: float,
     end_time: float,
     bucket_sec: int,
     camera_id: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Aggregate world_timeline_events and sightings into time buckets."""
+    """Aggregate world_timeline_events and sightings into time buckets with optional filters/pagination."""
     safe_bucket = max(1, int(bucket_sec))
     safe_start = float(start_time)
     safe_end = max(safe_start + float(safe_bucket), float(end_time))
     cam = camera_id.strip() if camera_id and camera_id.strip() else None
+    zone = zone_id.strip() if zone_id and zone_id.strip() else None
+    ev_type = event_type.strip() if event_type and event_type.strip() else None
 
-    buckets = _init_flow_buckets(safe_start, safe_end, safe_bucket)
-    _accumulate_timeline_events(cursor, buckets, safe_start, safe_end, safe_bucket, cam)
-    _accumulate_sightings(cursor, buckets, safe_start, safe_end, safe_bucket, cam)
-
+    all_buckets = _init_flow_buckets(safe_start, safe_end, safe_bucket)
+    _accumulate_timeline_events(cursor, all_buckets, safe_start, safe_end, safe_bucket, cam, zone, ev_type)
+    _accumulate_sightings(cursor, all_buckets, safe_start, safe_end, safe_bucket, cam, zone, ev_type)
     totals = {
-        "inflow": sum(b["inflow"] for b in buckets),
-        "outflow": sum(b["outflow"] for b in buckets),
-        "total": sum(b["total"] for b in buckets),
-        "sightings": sum(b["sightings"] for b in buckets),
+        "inflow": sum(b["inflow"] for b in all_buckets),
+        "outflow": sum(b["outflow"] for b in all_buckets),
+        "total": sum(b["total"] for b in all_buckets),
+        "sightings": sum(b["sightings"] for b in all_buckets),
     }
+    page_buckets, pagination = _paginate_buckets(all_buckets, page, page_size)
     return {
-        "camera_id": cam,
+        "camera_id": cam, "zone_id": zone, "event_type": ev_type,
         "source_ref": _resolve_flow_source_ref(cam),
-        "start_time": safe_start,
-        "end_time": safe_end,
-        "bucket_sec": safe_bucket,
-        "buckets": buckets,
-        "totals": totals,
+        "start_time": safe_start, "end_time": safe_end, "bucket_sec": safe_bucket,
+        "buckets": page_buckets, "totals": totals, "pagination": pagination,
         "axes": {
             "x": {"label": "Time", "unit": "epoch_s", "bucket_sec": safe_bucket},
             "y": {"label": "Crossings / Events", "unit": "count"},
