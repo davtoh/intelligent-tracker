@@ -4,31 +4,47 @@ from datetime import datetime
 from typing import Any, Optional, Tuple
 
 
-def _build_sightings_filters(
-    entity_id: Optional[int],
-    source: Optional[str],
-    zone_id: Optional[str],
-    start_time: Optional[str],
-    end_time: Optional[str],
+def build_sightings_where_clause(
+    entity_id: Optional[int] = None,
+    source: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
     video_filename: Optional[str] = None,
+    camera_id: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> tuple[str, list[Any]]:
     """Build parameterized WHERE clause and bind parameters for sightings queries."""
-    filters = [
-        ("s.entity_id = ?", entity_id, entity_id is not None),
-        ("s.source = ?", source.strip() if source else None, bool(source and source.strip())),
-        ("s.zone_id = ?", zone_id.strip() if zone_id else None, bool(zone_id and zone_id.strip())),
-        (
-            "s.video_filename = ?",
-            video_filename.strip() if video_filename else None,
-            bool(video_filename and video_filename.strip()),
-        ),
-        ("s.timestamp >= ?", start_time, bool(start_time)),
-        ("s.timestamp <= ?", end_time, bool(end_time)),
-    ]
-    conditions = [sql for sql, _, active in filters if active]
-    params = [val for _, val, active in filters if active]
+    conditions: list[str] = []
+    params: list[Any] = []
+    if entity_id is not None:
+        conditions.append("s.entity_id = ?")
+        params.append(entity_id)
+    if source and source.strip():
+        src = source.strip()
+        conditions.append("(s.camera_id = ? OR s.source = ?)")
+        params.extend([src, src])
+    for col, raw in (
+        ("s.camera_id = ?", camera_id),
+        ("s.run_id = ?", run_id),
+        ("s.zone_id = ?", zone_id),
+        ("s.video_filename = ?", video_filename),
+    ):
+        val = raw.strip() if raw else ""
+        if val:
+            conditions.append(col)
+            params.append(val)
+    if start_time:
+        conditions.append("s.timestamp >= ?")
+        params.append(start_time)
+    if end_time:
+        conditions.append("s.timestamp <= ?")
+        params.append(end_time)
     where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     return where_sql, params
+
+
+_build_sightings_filters = build_sightings_where_clause
 
 
 def build_sightings_query(
@@ -40,10 +56,19 @@ def build_sightings_query(
     limit: int,
     offset: int = 0,
     video_filename: Optional[str] = None,
+    camera_id: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> tuple[str, list[Any]]:
     """Build parameterized SQL query and args for sightings filtering and pagination."""
-    where_sql, params = _build_sightings_filters(
-        entity_id, source, zone_id, start_time, end_time, video_filename=video_filename
+    where_sql, params = build_sightings_where_clause(
+        entity_id,
+        source,
+        zone_id,
+        start_time,
+        end_time,
+        video_filename=video_filename,
+        camera_id=camera_id,
+        run_id=run_id,
     )
     query = (
         "SELECT s.*, e.name AS entity_name, e.category AS entity_category "
@@ -72,10 +97,19 @@ def count_sightings_sync(
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
     video_filename: Optional[str] = None,
+    camera_id: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> int:
     """Count total sightings matching the given filter criteria."""
-    where_sql, params = _build_sightings_filters(
-        entity_id, source, zone_id, start_time, end_time, video_filename=video_filename
+    where_sql, params = build_sightings_where_clause(
+        entity_id,
+        source,
+        zone_id,
+        start_time,
+        end_time,
+        video_filename=video_filename,
+        camera_id=camera_id,
+        run_id=run_id,
     )
     cursor.execute(f"SELECT COUNT(*) FROM sightings s{where_sql}", params)
     row = cursor.fetchone()

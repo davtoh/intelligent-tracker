@@ -162,6 +162,7 @@ def save_report_run(
     source_fps: Optional[float] = None,
     db: Optional[TrackerDB] = None,
     run_type: str = "batch",
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Persist an occurrence indexing run and optional detection stream to TrackerDB."""
     safe_name = _get_safe_filename(filename)
@@ -180,6 +181,7 @@ def save_report_run(
             source_fps=resolved_fps,
             run_type=run_type,
             base_filename=canonical_name,
+            run_id=run_id,
         )
     finally:
         _close_if_owned(active_db, owns_db)

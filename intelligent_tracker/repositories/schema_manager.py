@@ -225,6 +225,10 @@ class SchemaMixin:
                 pass
         apply_memory_schema_migrations(cursor)
         apply_video_schema_migrations(cursor)
+        self._migrate_user_version(cursor)
+
+    def _migrate_user_version(self, cursor: sqlite3.Cursor) -> None:
+        """Apply versioned PRAGMA user_version schema migrations idempotently."""
         ver_row = cursor.execute("PRAGMA user_version;").fetchone()
         cur_ver = int(ver_row[0]) if ver_row else 0
         if cur_ver < 2:
@@ -241,6 +245,13 @@ class SchemaMixin:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sightings_camera_id ON sightings(camera_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sightings_run_id ON sightings(run_id);")
             cursor.execute("PRAGMA user_version = 2;")
+        if cur_ver < 3:
+            try:
+                cursor.execute("ALTER TABLE world_timeline_events ADD COLUMN run_id TEXT DEFAULT '';")
+            except sqlite3.OperationalError:
+                pass
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_run_id ON world_timeline_events(run_id);")
+            cursor.execute("PRAGMA user_version = 3;")
 
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""

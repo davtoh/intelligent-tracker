@@ -137,16 +137,20 @@ def _index_periodic_sighting_fts(
     timestamp: float,
     video_filename: str,
     media_offset_sec: float,
+    run_id: str = "",
 ) -> None:
     """Index a periodic sighting into EventFTSIndex if wired on matcher."""
     fts_index = getattr(matcher, "fts_index", None)
     if fts_index is None:
         return
+    meta: dict[str, Any] = {"track_id": track_id}
+    if run_id:
+        meta["run_id"] = run_id
     try:
         fts_index.index_sighting(
             entity_id=entity_id, entity_name=name, category=category,
             camera_id=source, zone_id=zone_id, confidence=confidence,
-            timestamp=timestamp, metadata={"track_id": track_id},
+            timestamp=timestamp, metadata=meta,
             video_filename=video_filename, media_offset_sec=media_offset_sec,
         )
     except Exception as exc:
@@ -206,18 +210,20 @@ def emit_periodic_sighting(
     if last_log is not None and (timestamp - last_log < matcher.sighting_interval) and (timestamp >= last_log):
         return False
     resolved_video, resolved_offset = _resolve_media_fields(matcher, video_filename, media_offset_sec, timestamp)
+    resolved_run_id = str(getattr(matcher, "run_id", "") or "").strip()
+    resolved_camera_id = str(getattr(matcher, "camera_id", "") or ("" if resolved_video else source) or "").strip()
     snapshot_path = _save_sighting_crop(matcher, frame, track.bbox, entity_id, tid, timestamp)
     matcher.db.add_sighting(
-        entity_id=entity_id, track_id=tid, source=source,
-        timestamp=timestamp, zone_id=zone_id, bbox=track.bbox, confidence=confidence,
-        snapshot_path=snapshot_path,
+        entity_id=entity_id, track_id=tid, source=source, timestamp=timestamp, zone_id=zone_id,
+        bbox=track.bbox, confidence=confidence, snapshot_path=snapshot_path,
         video_filename=resolved_video, media_offset_sec=resolved_offset,
+        camera_id=resolved_camera_id, run_id=resolved_run_id,
     )
     matcher._last_sighting_time[tid] = timestamp
     _index_periodic_sighting_fts(
         matcher, entity_id=entity_id, name=name, category=category, track_id=tid,
         source=source, zone_id=zone_id, confidence=confidence, timestamp=timestamp,
-        video_filename=resolved_video, media_offset_sec=resolved_offset,
+        video_filename=resolved_video, media_offset_sec=resolved_offset, run_id=resolved_run_id,
     )
     return True
 

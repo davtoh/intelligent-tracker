@@ -109,6 +109,8 @@ class AnalyticsMixin:
         limit: int = 100,
         offset: int = 0,
         video_filename: Optional[str] = None,
+        camera_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Query sightings audit trail with flexible filtering and offset pagination."""
         query, params = build_sightings_query(
@@ -120,6 +122,8 @@ class AnalyticsMixin:
             limit,
             offset=offset,
             video_filename=video_filename,
+            camera_id=camera_id,
+            run_id=run_id,
         )
         with self._lock:
             if self._conn is None:
@@ -141,6 +145,8 @@ class AnalyticsMixin:
         start_time: Optional[str] = None,
         end_time: Optional[str] = None,
         video_filename: Optional[str] = None,
+        camera_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> int:
         """Count total sightings matching the given filter criteria."""
         with self._lock:
@@ -156,6 +162,8 @@ class AnalyticsMixin:
                     start_time=start_time,
                     end_time=end_time,
                     video_filename=video_filename,
+                    camera_id=camera_id,
+                    run_id=run_id,
                 )
             finally:
                 cursor.close()

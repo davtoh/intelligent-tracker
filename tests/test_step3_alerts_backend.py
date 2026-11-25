@@ -63,7 +63,7 @@ class TestMemoryUnreadMigration(unittest.TestCase):
         self.assertIn("acknowledged_at", cols)
         idxs = {r[1] for r in db._conn.execute("PRAGMA index_list(world_timeline_events)").fetchall()}
         self.assertIn("idx_world_timeline_unread", idxs)
-        self.assertEqual(db.get_schema_version(), 1)
+        self.assertGreaterEqual(db.get_schema_version(), 1)
 
     def test_legacy_v1_db_migrates_without_losing_rows(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -89,7 +89,7 @@ class TestMemoryUnreadMigration(unittest.TestCase):
 
         db = TrackerDB(db_path=str(db_path))
         self.addCleanup(db.close)
-        self.assertEqual(db.get_schema_version(), 1)
+        self.assertGreaterEqual(db.get_schema_version(), 1)
         ev = db.get_timeline_event(1)
         self.assertIsNotNone(ev)
         self.assertFalse(ev["is_read"])

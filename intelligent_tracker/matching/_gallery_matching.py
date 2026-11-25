@@ -60,6 +60,9 @@ def _notify_active_learning(
         track=track, frame=frame, similarity=best_score,
         suggested_entity_id=cand_eid, suggested_name=cand_name,
         suggested_category=cand_cat, camera_id=source, timestamp=now,
+        video_filename=str(getattr(matcher, "video_filename", "") or "").strip(),
+        media_offset_sec=float(getattr(matcher, "current_media_offset_sec", 0.0) or 0.0),
+        run_id=str(getattr(matcher, "run_id", "") or "").strip(),
     )
 
 

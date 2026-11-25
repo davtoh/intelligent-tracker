@@ -16,6 +16,7 @@ from intelligent_tracker.events.types import (
     UnattendedItemAlert,
     ZoneEvent,
 )
+from intelligent_tracker.source_ref import build_source_ref
 from intelligent_tracker.world.events import EntityStateChangedEvent
 
 
@@ -199,6 +200,40 @@ def format_unattended_item_event(event: UnattendedItemAlert) -> dict[str, Any]:
     }
 
 
+def _attach_media_provenance(event: Any, doc: dict[str, Any]) -> None:
+    """Attach video/media offset, run_id, and canonical SourceRef to a timeline doc."""
+    raw_meta = getattr(event, "metadata", None)
+    meta: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+    raw_doc_meta = doc.get("metadata")
+    doc_meta: dict[str, Any] = raw_doc_meta if isinstance(raw_doc_meta, dict) else {}
+    vfile = str(getattr(event, "video_filename", None) or meta.get("video_filename") or "").strip()
+    m_off = float(getattr(event, "media_offset_sec", None) or meta.get("media_offset_sec") or 0.0)
+    run_id = str(getattr(event, "run_id", None) or meta.get("run_id") or "").strip()
+    if run_id and isinstance(doc.get("metadata"), dict):
+        doc["metadata"]["run_id"] = run_id
+    doc["video_filename"] = vfile
+    doc["media_offset_sec"] = m_off
+    doc["run_id"] = run_id
+    doc["source_ref"] = build_source_ref(
+        camera_id=str(doc.get("camera_id") or ""),
+        video_filename=vfile,
+        run_id=run_id,
+        media_offset_sec=m_off,
+        ts=doc.get("timestamp"),
+        track_id=doc_meta.get("track_id"),
+        entity_id=doc.get("entity_id"),
+        zone_id=str(doc.get("zone_id") or ""),
+        bbox=doc_meta.get("bbox"),
+        snapshot_path=str(
+            getattr(event, "snapshot_path", None)
+            or getattr(event, "crop_path", None)
+            or meta.get("snapshot_path")
+            or meta.get("crop_path")
+            or ""
+        ),
+    )
+
+
 def normalize_event_doc(event: Any) -> dict[str, Any] | None:
     """Convert any supported pipeline/world event into a timeline document dict."""
     doc: dict[str, Any] | None = None
@@ -217,8 +252,6 @@ def normalize_event_doc(event: Any) -> dict[str, Any] | None:
     elif isinstance(event, (PetActivityEvent, OccupancyThresholdEvent, ReviewItemQueuedEvent, BaseEvent)):
         doc = format_generic_event(event)
     if doc is not None:
-        meta = getattr(event, "metadata", None) or {}
-        doc["video_filename"] = str(getattr(event, "video_filename", None) or meta.get("video_filename") or "").strip()
-        doc["media_offset_sec"] = float(getattr(event, "media_offset_sec", None) or meta.get("media_offset_sec") or 0.0)
+        _attach_media_provenance(event, doc)
     return doc
 
