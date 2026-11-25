@@ -65,26 +65,20 @@ def _sync_matcher_and_bridge(
             pass
         if resolved_avatar is None and entity_id is not None:
             resolved_avatar = (getattr(gallery_matcher, "entity_avatars", None) or {}).get(entity_id)
-        if track_id is not None and entity_id is not None:
-            hyst = getattr(gallery_matcher, "hysteresis", None)
-            if hyst is not None and hasattr(hyst, "force_bind"):
-                hyst.force_bind(
-                    track_id, int(entity_id), entity_name, category,
-                    avatar_url=resolved_avatar, track=live_track,
-                )
-        if track_id is not None and isinstance(getattr(gallery_matcher, "_identified_tracks", None), dict):
-            gallery_matcher._identified_tracks[track_id] = {
+        hyst = getattr(gallery_matcher, "hysteresis", None)
+        if track_id is not None and entity_id is not None and hyst is not None and hasattr(hyst, "force_bind"):
+            hyst.force_bind(track_id, int(entity_id), entity_name, category, avatar_url=resolved_avatar, track=live_track)
+        id_tracks = getattr(gallery_matcher, "_identified_tracks", None)
+        if track_id is not None and isinstance(id_tracks, dict):
+            id_tracks[track_id] = {
                 "entity_id": entity_id, "name": entity_name, "entity_name": entity_name,
-                "category": category, "similarity": 1.0, "reid_score": 1.0,
-                "avatar_url": resolved_avatar,
+                "category": category, "similarity": 1.0, "reid_score": 1.0, "avatar_url": resolved_avatar,
             }
     if live_track is not None and resolved_avatar:
         live_track.avatar_url = resolved_avatar
     if world_bridge is not None and track_id is not None and entity_id is not None and hasattr(world_bridge, "reassign_track"):
         try:
-            world_bridge.reassign_track(
-                camera_id=camera_id, track_id=track_id, entity_id=entity_id, name=entity_name, category=category,
-            )
+            world_bridge.reassign_track(camera_id=camera_id, track_id=track_id, entity_id=entity_id, name=entity_name, category=category)
         except Exception:
             pass
 

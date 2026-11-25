@@ -6,15 +6,15 @@ Provides thread-safe SQLite CRUD, alias-aware lookup (``clip.mp4`` <->
 
 import json
 import sqlite3
-import time
-import uuid
 from typing import Any
 
+from intelligent_tracker.repositories.video_run_helpers import (
+    build_save_params as _build_save_params,
+    detector_signature_matches,
+)
 from intelligent_tracker.repositories.video_schema import (
     UPSERT_VIDEO_RUN_SQL,
-    canonical_video_base_name,
     expand_video_aliases,
-    safe_video_basename,
 )
 
 _RUN_COLS = (
@@ -52,20 +52,6 @@ def _normalize_detector_sig(cfg: dict[str, Any] | None) -> dict[str, Any]:
     return {"detector": det, "confidence": conf, "classes": classes, "agnostic_nms": agnostic_nms}
 
 
-def detector_signature_matches(run_cfg: dict[str, Any] | None, expected_sig: dict[str, Any] | None) -> bool:
-    """Return True when a cached video_run config matches the active detector signature."""
-    if not expected_sig:
-        return True
-    exp, got = _normalize_detector_sig(expected_sig), _normalize_detector_sig(run_cfg)
-    if exp["detector"] and got["detector"] and exp["detector"] != got["detector"]:
-        return False
-    if exp["confidence"] is not None and got["confidence"] is not None and exp["confidence"] != got["confidence"]:
-        return False
-    if exp["classes"] != got["classes"]:
-        return False
-    return exp["agnostic_nms"] == got["agnostic_nms"]
-
-
 def _hydrate_video_run(row: sqlite3.Row, include_detections: bool = False) -> dict[str, Any]:
     """Convert a ``video_runs`` SQLite row into a clean dictionary."""
     data = dict(row)
@@ -89,34 +75,6 @@ def _hydrate_video_run(row: sqlite3.Row, include_detections: bool = False) -> di
         record["frame_detections"] = dets
         record["has_detections"] = dets is not None
     return record
-
-
-def _build_save_params(
-    video_filename: str, report: dict[str, Any], config: dict[str, Any] | None,
-    frame_detections: list[dict[str, Any]] | None, source_resolution: list[int] | None,
-    source_fps: float | None, run_type: str, base_filename: str | None,
-    run_id: str | None, timestamp: float | None, generated_at: str | None,
-    metrics: dict[str, Any] | None,
-) -> tuple[str, tuple[Any, ...]]:
-    """Validate and serialize arguments for ``UPSERT_VIDEO_RUN_SQL``."""
-    safe_name = safe_video_basename(video_filename)
-    if not safe_name:
-        raise ValueError("video_filename must not be empty")
-    canonical = safe_video_basename(base_filename) if base_filename else canonical_video_base_name(safe_name)
-    rid = str(run_id).strip() if run_id else f"run_{uuid.uuid4().hex[:8]}"
-    ts = float(timestamp) if timestamp is not None else time.time()
-    gen_at = generated_at or time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
-    resolved_metrics = metrics if metrics is not None else {
-        k: report.get(k, 0) for k in (
-            "frames_processed", "total_detections", "total_sightings", "unique_entities_identified"
-        )
-    }
-    res_json = json.dumps(source_resolution) if source_resolution is not None else None
-    det_json = json.dumps(frame_detections) if frame_detections is not None else None
-    return rid, (
-        rid, safe_name, canonical, run_type or "batch", gen_at, ts, res_json, source_fps,
-        json.dumps(config or {}), json.dumps(resolved_metrics), json.dumps(report or {}), det_json,
-    )
 
 
 class VideoRunRepositoryMixin:

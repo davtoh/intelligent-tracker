@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from dashboard.services.entity_tagger import EntityTaggerService
+from dashboard.services.entity_tagger import EntityTaggerService, _to_avatar_url
 from intelligent_tracker.detectors import DetectorFactory
 from intelligent_tracker.memory.confidence import ConfidenceEngine
 from intelligent_tracker.reid.factory import ReIDExtractorFactory
@@ -56,6 +56,7 @@ def record_roi_side_effects(
             getattr(mgr, "tracker", None), track_id, entity_name, category,
             getattr(mgr, "gallery_matcher", None), entity_id=entity_id,
             camera_id=camera_id or source, world_bridge=getattr(mgr, "world_bridge", None),
+            avatar_url=_to_avatar_url(crop_path),
         )
 
 

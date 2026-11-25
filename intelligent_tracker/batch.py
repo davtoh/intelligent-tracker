@@ -51,7 +51,7 @@ def _create_batch_detector(detector_name: str, conf_threshold: float, classes: l
         if classes:
             det_kwargs["classes"] = classes
     elif det_clean in ("mock", "mockdetector"):
-        det_kwargs["confidence"] = conf_threshold
+        det_kwargs["confidence"] = max(0.95, min(1.0, float(conf_threshold)))
     return DetectorFactory.create(detector_name, **det_kwargs)
 
 
