@@ -118,6 +118,9 @@
     } else if (item.camera_id) {
       parts.push(`<span class="review-source-pill">Live: ${escapeHtml(item.camera_id)}</span>`);
     }
+    if (item.run_id) {
+      parts.push(`<span class="review-run-pill">Run: ${escapeHtml(item.run_id)}</span>`);
+    }
     let bbox = item.bbox;
     if (!bbox && item.bbox_json) {
       try { bbox = JSON.parse(item.bbox_json); } catch (_) { bbox = null; }
@@ -137,6 +140,11 @@
     const matchLabel = suggested ? `Matched: <strong>${escapeHtml(suggested)}</strong>` : 'Unidentified Borderline Track';
     const tsText = formatReviewTimestamp(item.timestamp ?? item.created_at);
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(item.video_filename, item.media_offset_sec) || '';
+    const jumpBtns = window.VideoTimelineLinks?.buildSourceJumpButtonsHtml?.({
+      cameraId: item.camera_id, videoFilename: item.video_filename, runId: item.run_id,
+      mediaOffsetSec: item.media_offset_sec, trackId: item.track_id, entityId: item.matched_entity_id,
+    }, { includeVideo: false }) || '';
+    const linkRow = [seekBtn, jumpBtns].filter(Boolean).join(' ');
     const provenanceHtml = buildProvenanceHtml(item);
     const actionsHtml = item.status === 'pending'
       ? `<div class="review-actions">
@@ -160,7 +168,7 @@
             </div>
             <div class="review-timestamp">${escapeHtml(tsText)}</div>
             ${provenanceHtml}
-            ${seekBtn ? `<div class="review-seek-row">${seekBtn}</div>` : ''}
+            ${linkRow ? `<div class="review-seek-row">${linkRow}</div>` : ''}
           </div>
         </div>
         ${actionsHtml}

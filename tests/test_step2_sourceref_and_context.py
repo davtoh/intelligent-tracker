@@ -193,3 +193,65 @@ class TestStep2Milestone3Frontend(unittest.TestCase):
         self.assertTrue(out["found"])
         self.assertEqual(out["selected"], {"type": "zone", "name": "vault"})
         self.assertEqual(out["mode"], "idle")
+
+    def test_enrollment_active_source_and_live_freeze_toggle(self) -> None:
+        body = """
+        const btn = makeEl('btn-enroll-live-toggle', 'button'), img = makeEl('enroll-live-preview-img', 'img');
+        const cvs = makeEl('enroll-bbox-canvas', 'canvas'), ph = makeEl('enroll-canvas-placeholder'), sel = makeEl('enroll-camera-select', 'select');
+        sel.value = 'cam_02';
+        ['btn-enroll-live-toggle', 'enroll-live-preview-img', 'enroll-bbox-canvas', 'enroll-canvas-placeholder', 'enroll-camera-select'].forEach((id, i) => byId.set(id, [btn, img, cvs, ph, sel][i]));
+        sandbox.ActiveSourceContext.set({ kind: 'camera', cameraId: 'cam_02' });
+        const pref = sandbox.EnrollmentStageController.resolvePreferredSource([{ id: 'cam_02' }], [], 'cam_01');
+        const frozenCalls = [];
+        sandbox.UniversalEnrollment = { loadFreezeImage: (url) => frozenCalls.push(url) };
+        sandbox.fetch = async () => ({ ok: true, json: async () => ({ image_base64: 'data:image/jpeg;base64,SNAP' }) });
+        const ctrl = sandbox.EnrollmentStageController.initStageControls(cvs, ph);
+        ctrl.startLive('cam_02');
+        const liveState = { isLive: ctrl.isLive(), src: img.src, text: btn.textContent };
+        await ctrl.freezeFromLive();
+        console.log(JSON.stringify({ pref, liveState, afterFreeze: { isLive: ctrl.isLive(), text: btn.textContent, frozenCalls } }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "enrollment_stage_controller.js"], body)
+        self.assertEqual(out["pref"], "cam_02")
+        self.assertTrue(out["liveState"]["isLive"])
+        self.assertIn("/stream/cam_02?t=", out["liveState"]["src"])
+        self.assertIn("Freeze", out["liveState"]["text"])
+        self.assertFalse(out["afterFreeze"]["isLive"])
+        self.assertEqual(out["afterFreeze"]["frozenCalls"], ["data:image/jpeg;base64,SNAP"])
+
+    def test_journey_and_review_sourceref_jump_buttons_and_fallbacks(self) -> None:
+        body = """
+        const jCont = makeEl('journey-results-container'), rCont = makeEl('review-queue-container');
+        byId.set('journey-results-container', jCont); byId.set('review-queue-container', rCont);
+        const navs = []; sandbox.App = { navigate: (t, r) => navs.push({ t, r }) };
+        sandbox.fetch = async () => ({ ok: true, json: async () => ({ items: [{ id: 7, track_id: 14, camera_id: 'cam_01', run_id: 'run_42', status: 'pending', similarity: 0.62, video_filename: 'clip.mp4', media_offset_sec: 3.5 }] }) });
+        await sandbox.ReviewAndRSAC.loadQueue('pending');
+        const jumpHtml = sandbox.VideoTimelineLinks.buildSourceJumpButtonsHtml({ cameraId: 'cam_01', videoFilename: 'clip.mp4', runId: 'run_42', mediaOffsetSec: 3.5, zoneId: 'z1' });
+        const fakeBtn = makeEl('b1', 'button');
+        fakeBtn.setAttribute('data-jump-tab', 'tab-studio');
+        fakeBtn.setAttribute('data-source-ref', JSON.stringify({ cameraId: 'cam_01', zoneId: 'z1' }));
+        sandbox.VideoTimelineLinks.handleSourceJumpClick(fakeBtn);
+        const brokenImg = makeEl('broken-hop', 'img');
+        sandbox.JourneySearch.handleThumbError(brokenImg);
+        console.log(JSON.stringify({ reviewHtml: rCont.innerHTML, jumpHtml, navs, brokenTitle: byId.get('broken-hop-empty-state').querySelector('.media-empty-state-title').textContent }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "video_timeline_links.js", JS_DIR / "journey_search.js", ROOT / "dashboard" / "static" / "review_and_rsac.js"], body)
+        self.assertIn("Run: run_42", out["reviewHtml"])
+        self.assertIn("btn-jump-live", out["reviewHtml"])
+        self.assertIn("btn-jump-studio", out["jumpHtml"])
+        self.assertIn("btn-jump-video", out["jumpHtml"])
+        self.assertEqual(out["navs"], [{"t": "tab-studio", "r": {"cameraId": "cam_01", "zoneId": "z1"}}])
+        self.assertEqual(out["brokenTitle"], "Snapshot Unavailable")
+
+    def test_journey_search_renders_track_id_and_jump_buttons(self) -> None:
+        body = """
+        const jCont = makeEl('journey-results-container'); byId.set('journey-results-container', jCont);
+        sandbox.fetch = async () => ({ ok: true, json: async () => ({ entity_name: 'Alice', category: 'person', total_hops: 1, total_duration_seconds: 12, summary_narrative: 'Seen', hops: [{ hop_index: 1, camera_id: 'cam_a', camera_name: 'Lobby', start_time: 1700, duration_seconds: 12, sightings_count: 3, track_id: 99, snapshot_url: '/api/crops/a.jpg', source_ref: { kind: 'camera', camera_id: 'cam_a', track_id: 99, zone_id: 'entry' } }] }) });
+        await sandbox.JourneySearch.search('Alice');
+        console.log(JSON.stringify({ html: jCont.innerHTML }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "video_timeline_links.js", JS_DIR / "journey_search.js"], body)
+        self.assertIn("Track #99", out["html"])
+        self.assertIn("btn-jump-live", out["html"])
+        self.assertIn("btn-jump-studio", out["html"])
+        self.assertIn("handleThumbError", out["html"])

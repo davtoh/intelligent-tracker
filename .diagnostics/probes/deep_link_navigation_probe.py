@@ -19,9 +19,24 @@ def run_probe() -> dict[str, Any]:
     """Check App.navigate() targets against HTML tab IDs and SourceRef handlers."""
     failures: list[str] = []
     nav_js = (STATIC_DIR / "js" / "app_navigation.js").read_text(encoding="utf-8")
-    for required_tab in ("tab-live", "tab-studio", "tab-timeline", "tab-alerts"):
+    for required_tab in ("tab-live", "tab-studio", "tab-analytics", "tab-videos", "tab-timeline", "tab-alerts"):
         if required_tab not in nav_js:
             failures.append(f"app_navigation.js missing SourceRef handler for {required_tab}")
+
+    contracts = {
+        "js/active_source_context.js": ["bindFreezeToggle", "checkAvailability", "showUnavailable"],
+        "js/video_timeline_links.js": ["buildSourceJumpButtonsHtml", "handleSourceJumpClick"],
+        "js/journey_search.js": ["buildSourceJumpButtonsHtml", "handleThumbError"],
+        "review_and_rsac.js": ["buildSourceJumpButtonsHtml", "review-run-pill"],
+        "partials/modals/entity_modals.html": ["btn-enroll-live-toggle"],
+        "partials/tabs/studio.html": ["btn-studio-freeze-toggle"],
+        "partials/tabs/analytics.html": ["analytics-source-select"],
+    }
+    for rel, tokens in contracts.items():
+        text = (STATIC_DIR / rel).read_text(encoding="utf-8", errors="replace")
+        for tok in tokens:
+            if tok not in text:
+                failures.append(f"{rel} missing required contract symbol/id '{tok}'")
 
     html_ids: set[str] = set()
     for hp in STATIC_DIR.rglob("*.html"):

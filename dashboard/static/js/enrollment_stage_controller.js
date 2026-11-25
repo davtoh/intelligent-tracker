@@ -30,7 +30,22 @@
     if (preferVid && targetFn && videoList.some((v) => (v.filename || v.name) === targetFn)) {
       return `video:${targetFn}`;
     }
+    const ctxRef = window.ActiveSourceContext?.get?.();
+    if (ctxRef?.kind === 'video' && ctxRef.videoFilename && videoList.some((v) => (v.filename || v.name) === ctxRef.videoFilename)) {
+      return `video:${ctxRef.videoFilename}`;
+    }
+    if (ctxRef?.cameraId) return ctxRef.cameraId;
     return activeCamId || '';
+  }
+
+  function syncSourceContext(sourceVal) {
+    const val = String(sourceVal || '').trim();
+    if (!val || !window.ActiveSourceContext?.set) return;
+    if (val.startsWith('video:')) {
+      window.ActiveSourceContext.set({ kind: 'video', cameraId: '', videoFilename: val.slice(6) }, { silent: true });
+    } else {
+      window.ActiveSourceContext.set({ kind: 'camera', cameraId: val, videoFilename: '' }, { silent: true });
+    }
   }
 
   function updateSourceBadge(sourceVal, labelText) {
@@ -85,13 +100,98 @@
     return Number.isFinite(t) && t > 0 ? t : 0;
   }
 
+  function setLiveToggleButtonState(btn, isLive, disabled = false) {
+    if (!btn) return;
+    btn.disabled = Boolean(disabled);
+    btn.textContent = isLive ? '⏸ Freeze' : '▶ Live';
+    btn.setAttribute?.('aria-pressed', isLive ? 'true' : 'false');
+    btn.classList?.toggle?.('active', Boolean(isLive));
+    if (btn.dataset) btn.dataset.live = isLive ? 'true' : 'false';
+  }
+
+  function bindLiveToggle(canvas, placeholder, onFreezeImage) {
+    const btn = document.getElementById('btn-enroll-live-toggle');
+    const liveImg = document.getElementById('enroll-live-preview-img');
+    const camSel = document.getElementById('enroll-camera-select');
+    if (!btn) return null;
+    let isLive = false;
+    let busy = false;
+    const stopLive = () => {
+      isLive = false;
+      if (liveImg) {
+        window.MediaEmptyState?.hideEmpty?.(liveImg, 'none');
+        liveImg.removeAttribute?.('src');
+        if (liveImg.style) liveImg.style.display = 'none';
+      }
+      const val = String(camSel?.value || '');
+      setLiveToggleButtonState(btn, false, !val || val.startsWith('video:'));
+    };
+    const startLive = (camId) => {
+      if (!camId || camId.startsWith('video:')) return false;
+      if (canvas?.style) canvas.style.display = 'none';
+      if (placeholder?.style) placeholder.style.display = 'none';
+      if (liveImg) {
+        const src = `/stream/${encodeURIComponent(camId)}?t=${Date.now()}`;
+        if (window.MediaEmptyState?.setSource) window.MediaEmptyState.setSource(liveImg, src);
+        else { if (liveImg.style) liveImg.style.display = 'block'; liveImg.src = src; }
+      }
+      isLive = true;
+      setLiveToggleButtonState(btn, true, false);
+      return true;
+    };
+    const freezeFromLive = async () => {
+      if (busy) return false;
+      const camId = String(camSel?.value || '').trim();
+      if (!camId || camId.startsWith('video:')) return false;
+      busy = true;
+      try {
+        const res = await fetch(`/api/cameras/${encodeURIComponent(camId)}/freeze_frame`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.image_base64) throw new Error(data?.detail || `HTTP ${res.status}`);
+        stopLive();
+        const loader = onFreezeImage || window.UniversalEnrollment?.loadFreezeImage;
+        loader?.(data.image_base64, canvas, placeholder);
+        return true;
+      } catch (err) {
+        if (liveImg && window.MediaEmptyState?.showEmpty) {
+          window.MediaEmptyState.showEmpty(liveImg, 'Freeze Frame Unavailable', err?.message || 'Camera offline');
+        }
+        return false;
+      } finally {
+        busy = false;
+      }
+    };
+    const toggle = () => (isLive ? freezeFromLive() : startLive(String(camSel?.value || '').trim()));
+    if (!btn.dataset?.liveBound) {
+      if (btn.dataset) btn.dataset.liveBound = '1';
+      btn.addEventListener('click', toggle);
+    }
+    return { isLive: () => isLive, startLive, freezeFromLive, stopLive, toggle };
+  }
+
+  function initStageControls(canvas, placeholder) {
+    const ctrl = bindLiveToggle(canvas, placeholder);
+    const camSel = document.getElementById('enroll-camera-select');
+    if (camSel && !camSel.dataset?.ctxBound) {
+      if (camSel.dataset) camSel.dataset.ctxBound = '1';
+      camSel.addEventListener('change', (e) => {
+        syncSourceContext(e.target?.value || camSel.value || '');
+        ctrl?.stopLive?.();
+      });
+    }
+    return ctrl;
+  }
+
   window.EnrollmentStageController = {
     getActiveVideoFilename,
     getActiveVideoCurrentTime,
     isVideoStudioActive,
     resolvePreferredSource,
+    syncSourceContext,
     updateSourceBadge,
     getSelectedSourceMeta,
     syncVideoStageClasses,
+    bindLiveToggle,
+    initStageControls,
   };
 })();

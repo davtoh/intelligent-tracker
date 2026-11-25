@@ -153,11 +153,76 @@
     return seekToVideoTimestamp(fn, Number(offset) || 0);
   }
 
+  function normalizeJumpRef(raw = {}) {
+    if (!raw || typeof raw !== 'object') return {};
+    const out = {};
+    const camId = raw.cameraId || raw.camera_id || raw.camera || '';
+    const videoFn = raw.videoFilename || raw.video_filename || raw.video || '';
+    if (camId) out.cameraId = String(camId);
+    if (videoFn) out.videoFilename = String(videoFn);
+    if (raw.kind) out.kind = String(raw.kind);
+    else if (videoFn) out.kind = 'video';
+    else if (camId) out.kind = 'camera';
+    const runId = raw.runId || raw.run_id || '';
+    if (runId) out.runId = String(runId);
+    const off = raw.mediaOffsetSec ?? raw.media_offset_sec ?? raw.offset_sec;
+    if (off !== undefined && off !== null && off !== '' && Number.isFinite(Number(off))) out.mediaOffsetSec = Number(off);
+    const zoneId = raw.zoneId || raw.zone_id || raw.zone || '';
+    if (zoneId) out.zoneId = String(zoneId);
+    const trackId = raw.trackId ?? raw.track_id;
+    if (trackId !== undefined && trackId !== null && trackId !== '' && Number.isFinite(Number(trackId))) out.trackId = Number(trackId);
+    const entityId = raw.entityId ?? raw.entity_id ?? raw.entity;
+    if (entityId !== undefined && entityId !== null && entityId !== '') out.entityId = entityId;
+    if (raw.ts !== undefined && raw.ts !== null && Number.isFinite(Number(raw.ts))) out.ts = Number(raw.ts);
+    return out;
+  }
+
+  function buildSourceJumpButtonsHtml(rawRef, opts = {}) {
+    const ref = normalizeJumpRef(rawRef);
+    const encoded = escapeHtml(JSON.stringify(ref));
+    const parts = [];
+    if (ref.cameraId) {
+      parts.push(`<button type="button" class="btn btn-xs btn-outline btn-jump-live" data-jump-tab="tab-live" data-source-ref="${encoded}" title="Open in Live Monitor">📺 Live</button>`);
+      parts.push(`<button type="button" class="btn btn-xs btn-outline btn-jump-studio" data-jump-tab="tab-studio" data-source-ref="${encoded}" title="Open in Scenario Studio">🎨 Studio</button>`);
+    }
+    if (ref.videoFilename && opts.includeVideo !== false) {
+      parts.push(`<button type="button" class="btn btn-xs btn-outline btn-jump-video" data-jump-tab="tab-videos" data-source-ref="${encoded}" title="Seek in Video Studio">📼 Video</button>`);
+    }
+    return parts.join(' ');
+  }
+
+  function handleSourceJumpClick(targetOrBtn) {
+    const el = targetOrBtn?.target ? targetOrBtn.target : targetOrBtn;
+    const btn = el?.closest ? el.closest('[data-jump-tab][data-source-ref]') : (el?.getAttribute?.('data-jump-tab') ? el : null);
+    if (!btn) return false;
+    const tab = btn.getAttribute('data-jump-tab') || '';
+    const raw = btn.getAttribute('data-source-ref') || '{}';
+    let ref = {};
+    try { ref = JSON.parse(raw); } catch (_) { ref = {}; }
+    if (!tab) return false;
+    const nav = window.App?.navigate || window.AppNavigation?.navigate;
+    if (typeof nav === 'function') {
+      nav(tab, ref);
+      return true;
+    }
+    if (tab === 'tab-videos' && ref.videoFilename) {
+      return seekToVideoTimestamp(ref.videoFilename, ref.mediaOffsetSec || 0);
+    }
+    return false;
+  }
+
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function' && !document.__itSourceJumpBound) {
+    document.__itSourceJumpBound = true;
+    document.addEventListener('click', (e) => { handleSourceJumpClick(e); });
+  }
+
   window.VideoTimelineLinks = {
     renderTimelineTicks,
     extractEventsFromReport,
     computeTickPercent,
     buildSeekInStudioButtonHtml,
+    buildSourceJumpButtonsHtml,
+    handleSourceJumpClick,
     seekToVideoTimestamp,
     seekFromButton,
   };

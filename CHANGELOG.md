@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-25] feat: Step 2: Unified SourceRef Provenance, ActiveSourceContext & Media Freeze Controls
+- **Type**: feat
+- **Summary**: Implemented canonical SourceRef provenance, world_timeline_events run_id migration, ActiveSourceContext cross-tab sync, #studio and Enrollment /freeze_frame controls, and #journey/#review deep-link jump buttons.
+- **Files** (9):
+  - `.diagnostics/probes/deep_link_navigation_probe.py`
+  - `.diagnostics/probes/spa_nine_tab_sweep.js`
+  - `dashboard/static/js/enrollment_stage_controller.js`
+  - `dashboard/static/js/journey_search.js`
+  - `dashboard/static/js/universal_enrollment.js`
+  - `dashboard/static/js/video_timeline_links.js`
+  - `dashboard/static/partials/modals/entity_modals.html`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+1 more)
+
 ## [2026-11-25] feat: Step 1: P0 Integration Seams and Probe Hardening
 - **Type**: feat
 - **Summary**: Upgraded probe_runner, cdp_inspect/audit_layout, cross_module_rules (SILENT_SHAPE_SKIP), and surface_contracts/surface_verifier; added 5 workspace seam probes and hardened spa_nine_tab_cdp_probe.
@@ -132,17 +146,3 @@
   - `tests/test_dashboard_ui.py`
   - ... (+3 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-21] feat: Step 3: P1 Pipeline, Multiview Telemetry, Video Studio & Persistence Hardening
-- **Type**: feat
-- **Summary**: Completed P1-6..P1-13, /ws/multiview JSON telemetry, P3 edge cases, and TRC-018
-- **Files** (32):
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-  - `dashboard/routers/analytics.py`
-  - `dashboard/routers/tagging.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/services/entity_tagger.py`
-  - `dashboard/services/roi_recognition_service.py`
-  - `dashboard/services/video_analytics_service.py`
-  - `dashboard/static/review_and_rsac.js`
-  - ... (+24 more)

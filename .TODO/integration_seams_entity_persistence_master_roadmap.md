@@ -26,13 +26,13 @@
 
 ---
 
-## Step 2: Unified `SourceRef` Provenance, `ActiveSourceContext` & Media Freeze Controls *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Extend `SourceRef` provenance uniformly across `sightings`, `world_timeline_events`, `/api/journey/*` hops (`track_id`), `/analytics/flows` & heatmap cells (media references), and `review_queue` (`run_id`); expose unified `ActiveSourceContext` source selectors across `#live`, `#analytics`, `#studio`, and Enrollment (with Pause/Resume `/freeze_frame` in Enrollment & `#studio`), Live/Studio deep-links on `#journey` & `#review`, and `MediaEmptyState` / `onerror` fallbacks (`journey_search.js`).
-- [ ] **Target Scope**:
-  - Add `track_id` to `JourneyHop`, media refs to `/analytics/flows` & heatmap JSON cells, `run_id` to `review_queue` writes (`_gallery_matching.py`), and explicit unavailable-source `MediaEmptyState` rendering on broken deep links.
-  - Wire shared `ActiveSourceContext` (`localStorage` + URL hash pin override) into `#analytics` (`analytics.html`), `#studio`, and `#modal-universal-enrollment`, adding `/freeze_frame` Pause/Resume toggles for camera previews in Enrollment & `#studio` (`BUG-21`, `BUG-26`, `BUG-30`, `ADRs 15–16`).
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step2_sourceref_and_context.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe` (plus `spa_nine_tab_cdp_probe` non-INFRA pass).
-- [ ] **Review Gate**: Fresh reviewer verifies `SourceRef` round-trips, modularity budgets (`<= 350L`/file, `<= 12` methods/class, `<= 40L`/fn), and zero `INFRA_UNAVAILABLE` probes before advancing.
+## Step 2: Unified `SourceRef` Provenance, `ActiveSourceContext` & Media Freeze Controls
+- [x] **Goal**: Extend `SourceRef` provenance uniformly across `sightings`, `world_timeline_events`, `/api/journey/*` hops (`track_id`), `/analytics/flows` & heatmap cells (media references), and `review_queue` (`run_id`); expose unified `ActiveSourceContext` source selectors across `#live`, `#analytics`, `#studio`, and Enrollment (with Pause/Resume `/freeze_frame` in Enrollment & `#studio`), Live/Studio deep-links on `#journey` & `#review`, and `MediaEmptyState` / `onerror` fallbacks (`journey_search.js`).
+- [x] **Target Scope**:
+  - [x] Add `track_id` to `JourneyHop`, media refs to `/analytics/flows` & heatmap JSON cells, `run_id` to `review_queue` writes (`_gallery_matching.py`), and explicit unavailable-source `MediaEmptyState` rendering on broken deep links.
+  - [x] Wire shared `ActiveSourceContext` (`localStorage` + URL hash pin override) into `#analytics` (`analytics.html`), `#studio`, and `#modal-universal-enrollment`, adding `/freeze_frame` Pause/Resume toggles for camera previews in Enrollment & `#studio` (`BUG-21`, `BUG-26`, `BUG-30`, `ADRs 15–16`).
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step2_sourceref_and_context.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe` (plus `spa_nine_tab_cdp_probe` non-INFRA pass).
+- [x] **Review Gate**: Fresh reviewer verifies `SourceRef` round-trips, modularity budgets (`<= 350L`/file, `<= 12` methods/class, `<= 40L`/fn), and zero `INFRA_UNAVAILABLE` probes before advancing.
 
 ---
 

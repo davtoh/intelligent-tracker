@@ -333,6 +333,7 @@
     });
     bindCanvasSelection(canvas);
     bindEnrollmentForm(form, modal, canvas, placeholder);
+    window.EnrollmentStageController?.initStageControls?.(canvas, placeholder);
   }
 
   window.UniversalEnrollment = {

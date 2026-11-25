@@ -16,14 +16,32 @@
       .replace(/'/g, '&#39;');
   }
 
+  function handleThumbError(imgEl) {
+    if (!imgEl) return;
+    imgEl.onerror = null;
+    if (window.MediaEmptyState?.showEmpty) {
+      window.MediaEmptyState.showEmpty(imgEl, 'Snapshot Unavailable', 'Crop could not be loaded.', true);
+    } else {
+      imgEl.src = '/static/avatar-placeholder.svg';
+    }
+  }
+
   function renderHopCards(hops) {
     return hops.map((hop) => {
       const startTimeStr = new Date(hop.start_time * 1000).toLocaleTimeString();
       const transitBadge = hop.transit_time_from_prev
         ? `<div class="transit-connector"><span>⏱️ Transit: +${hop.transit_time_from_prev}s</span></div>`
         : '';
-      const thumbUrl = hop.snapshot_path ? `/crops/${hop.snapshot_path.split(/[\\/]/).pop()}` : '';
+      const thumbUrl = hop.snapshot_url || (hop.snapshot_path ? `/crops/${encodeURIComponent(hop.snapshot_path.split(/[\\/]/).pop())}` : '');
       const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(hop.video_filename, hop.media_offset_sec) || '';
+      const hopRef = hop.source_ref && Object.keys(hop.source_ref).length ? hop.source_ref : {
+        cameraId: hop.camera_id, videoFilename: hop.video_filename, runId: hop.run_id,
+        mediaOffsetSec: hop.media_offset_sec, zoneId: hop.zone_id, trackId: hop.track_id,
+      };
+      const jumpBtns = window.VideoTimelineLinks?.buildSourceJumpButtonsHtml?.(hopRef, { includeVideo: false }) || '';
+      const trackBadge = hop.track_id !== undefined && hop.track_id !== null && hop.track_id !== ''
+        ? `<span class="badge badge-secondary hop-track-badge">Track #${escapeHtml(hop.track_id)}</span>`
+        : '';
 
       return `
         ${transitBadge}
@@ -32,16 +50,17 @@
           <div class="hop-details">
             <div class="hop-title">
               <strong>${escapeHtml(hop.camera_name)}</strong>
+              ${trackBadge}
               <span class="hop-time">${startTimeStr}</span>
             </div>
             <div class="hop-meta">
               <span>Zone: ${escapeHtml(hop.zone_id || 'General Area')}</span> •
               <span>Dwell: ${hop.duration_seconds}s</span> •
               <span>Sightings: ${hop.sightings_count}</span>
-              ${seekBtn}
+              ${seekBtn} ${jumpBtns}
             </div>
           </div>
-          ${thumbUrl ? `<div class="hop-thumb"><img src="${thumbUrl}" alt="Snapshot" /></div>` : ''}
+          ${thumbUrl ? `<div class="hop-thumb"><img src="${thumbUrl}" alt="Snapshot" onerror="window.JourneySearch?.handleThumbError?.(this)" /></div>` : ''}
         </div>
       `;
     }).join('');
@@ -270,6 +289,7 @@
     exportVideo: exportJourneyVideo,
     fetchSuggestions,
     hideSuggestions,
+    handleThumbError,
   };
 })();
 
