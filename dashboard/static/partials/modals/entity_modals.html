@@ -9,6 +9,7 @@
         <input type="hidden" id="tag-track-id" />
         <input type="hidden" id="tag-bbox-val" />
         <input type="hidden" id="tag-entity-id" />
+        <input type="hidden" id="tag-prior-entity-id" />
         <input type="hidden" id="tag-source-type" />
         <input type="hidden" id="tag-video-filename" />
         <input type="hidden" id="tag-timestamp-sec" />
@@ -43,6 +44,7 @@
         </div>
 
         <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="btn-tag-correct" style="display: none;" title="Correct mistaken identity">✏️ Correct...</button>
           <button type="button" class="btn btn-outline" id="btn-tag-discourage" title="Discourage false match or mark as false positive">🚫 Not This / False Positive</button>
           <button type="button" class="btn btn-outline" id="modal-tag-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" id="modal-tag-submit">💾 Enroll to Gallery</button>

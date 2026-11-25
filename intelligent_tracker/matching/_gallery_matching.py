@@ -98,21 +98,32 @@ def is_gallery_category_compatible(track_label: Optional[str], gallery_category:
 
 
 def _notify_active_learning(
-    matcher: Any, track: Track, frame: np.ndarray, best_idx: int, best_score: float, source: str, now: float
+    matcher: Any, track: Track, frame: np.ndarray, best_idx: Optional[int], best_score: float,
+    source: str, now: float, track_dwell_sec: Optional[float] = None,
 ) -> None:
-    """Send low-confidence compatible candidate to active learning triage."""
-    if matcher.active_learning is None or best_score < 0.0:
+    """Send borderline or recurring-unknown candidate to active learning triage."""
+    if matcher.active_learning is None:
         return
-    cand_eid = matcher.gallery_entity_ids[best_idx] if best_idx < len(matcher.gallery_entity_ids) else None
-    cand_name = matcher.gallery_names[best_idx] if best_idx < len(matcher.gallery_names) else ""
-    cand_cat = matcher.gallery_categories[best_idx] if best_idx < len(matcher.gallery_categories) else ""
+    score = max(0.0, float(best_score))
+    min_conf = float(getattr(matcher.active_learning, "min_confidence", 0.45))
+    valid_idx = best_idx is not None and 0 <= best_idx < len(matcher.gallery_entity_ids)
+    idx_val = best_idx if valid_idx and best_idx is not None else -1
+    cand_eid = matcher.gallery_entity_ids[idx_val] if (idx_val >= 0 and score >= min_conf) else None
+    cand_name = matcher.gallery_names[idx_val] if (idx_val >= 0 and score >= min_conf) else ""
+    cand_cat = (
+        matcher.gallery_categories[idx_val]
+        if (idx_val >= 0 and idx_val < len(matcher.gallery_categories))
+        else str(getattr(track, "label", "") or "")
+    )
+    dwell = float(track_dwell_sec) if track_dwell_sec is not None else float(getattr(track, "dwell_time", 0.0) or 0.0)
     matcher.active_learning.consider_candidate(
-        track=track, frame=frame, similarity=best_score,
+        track=track, frame=frame, similarity=score,
         suggested_entity_id=cand_eid, suggested_name=cand_name,
         suggested_category=cand_cat, camera_id=source, timestamp=now,
         video_filename=str(getattr(matcher, "video_filename", "") or "").strip(),
         media_offset_sec=float(getattr(matcher, "current_media_offset_sec", 0.0) or 0.0),
         run_id=str(getattr(matcher, "run_id", "") or "").strip(),
+        track_dwell_sec=dwell,
     )
 
 
@@ -221,7 +232,7 @@ def _score_compatible_gallery(
         similarities = np.where(compatible_mask, similarities, -1.0)
     similarities, globally_suppressed = _apply_negative_suppression(matcher, query_vec, similarities)
     if globally_suppressed:
-        return None, None, {}
+        return None, None, {"_globally_suppressed": True}
     return similarities, raw_similarities, matched_priors
 
 
@@ -260,17 +271,22 @@ def match_persistent_gallery(
     similarities, raw_similarities, matched_priors = _score_compatible_gallery(
         matcher, track, query_vec, source, zone_id, now,
     )
+    hyst = getattr(matcher, "hysteresis", None)
+    unlocked = hyst is None or hyst.get_locked(track.track_id) is None
     if similarities is None:
+        if unlocked and not matched_priors.get("_globally_suppressed"):
+            _notify_active_learning(matcher, track, frame, None, 0.0, source, now)
         _observe_gallery_miss(matcher, track, source, now, zone_id)
         return None
     best_idx = int(np.argmax(similarities))
     best_score = float(similarities[best_idx])
     if best_score < 0.0:
+        if unlocked:
+            _notify_active_learning(matcher, track, frame, None, 0.0, source, now)
         _observe_gallery_miss(matcher, track, source, now, zone_id)
         return None
-    hyst = getattr(matcher, "hysteresis", None)
     if best_score < matcher.reid_threshold:
-        if hyst is None or hyst.get_locked(track.track_id) is None:
+        if unlocked:
             _notify_active_learning(matcher, track, frame, best_idx, best_score, source, now)
         _observe_gallery_miss(matcher, track, source, now, zone_id)
         return None

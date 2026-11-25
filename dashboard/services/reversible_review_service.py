@@ -136,7 +136,7 @@ def _relabel_runs_for_undo(
     created_eid = decision.get("created_entity_id")
     if not vfile and not prior.get("run_id") and not entity_deleted:
         return 0
-    if prior_eid is not None and db.get_entity(int(prior_eid)) is not None and decision.get("action") in ("reassign", "enroll_new"):
+    if prior_eid is not None and db.get_entity(int(prior_eid)) is not None and decision.get("action") in ("reassign", "enroll_new", "correct"):
         return relabel_video_runs_on_entity_mutation(
             db, pool=pool,
             deleted_entity_id=int(created_eid) if entity_deleted and created_eid is not None else None,
@@ -164,20 +164,35 @@ def _revert_confidence(confidence_engine: Any, decision: dict[str, Any]) -> bool
     if confidence_engine is None or not hasattr(confidence_engine, "revert_human_feedback"):
         return False
     prior = decision.get("prior_state") or {}
-    act = str(decision.get("action") or "")
+    raw_act = str(decision.get("action") or "")
+    act = "reassign" if raw_act == "correct" else ("dismiss" if raw_act == "report_wrong" else raw_act)
     target_eid = decision.get("prior_entity_id") if act == "dismiss" else decision.get("new_entity_id")
     try:
         confidence_engine.revert_human_feedback(
-            entity_id=target_eid,
-            prior_action=act,
+            entity_id=target_eid, prior_action=act,
             previous_entity_id=decision.get("prior_entity_id"),
-            camera_id=prior.get("camera_id") or None,
-            zone_id=prior.get("zone_id") or None,
+            camera_id=prior.get("camera_id") or None, zone_id=prior.get("zone_id") or None,
         )
         return True
     except Exception as exc:
         logger.warning("Failed to revert confidence feedback for decision %s: %s", decision.get("id"), exc)
         return False
+
+
+def _restore_correction_sightings(db: Any, decision: dict[str, Any], prior: dict[str, Any]) -> None:
+    """Restore reassigned sightings from ``new_entity_id`` back to ``prior_entity_id`` before entity pruning."""
+    if (
+        decision.get("action") == "correct"
+        and decision.get("prior_entity_id") is not None
+        and decision.get("new_entity_id") is not None
+        and hasattr(db, "reassign_sightings_by_provenance")
+    ):
+        db.reassign_sightings_by_provenance(
+            from_entity_id=int(decision["new_entity_id"]), to_entity_id=int(decision["prior_entity_id"]),
+            camera_id=str(prior.get("camera_id") or ""), run_id=str(prior.get("run_id") or ""),
+            video_filename=str(prior.get("video_filename") or ""),
+            track_id=int(prior["track_id"]) if prior.get("track_id") is not None else None,
+        )
 
 
 def undo_review_decision(
@@ -194,9 +209,9 @@ def undo_review_decision(
         return {"status": "not_found", "decision_id": decision_id, "review_id": review_id}
     if decision.get("undone"):
         return {"status": "already_undone", "decision_id": decision["id"], "review_id": decision["review_id"]}
-
-    reverted = _revert_created_artifacts(db, decision)
     prior = decision.get("prior_state") or {}
+    _restore_correction_sightings(db, decision, prior)
+    reverted = _revert_created_artifacts(db, decision)
     db.update_review_status(
         int(decision["review_id"]),
         status=str(decision.get("prior_status") or "pending"),
@@ -210,3 +225,102 @@ def undo_review_decision(
         "status": "undone", "decision_id": int(decision["id"]), "review_id": int(decision["review_id"]),
         "action": str(decision.get("action") or ""), "reverted": reverted, "relabelled_runs": relabelled,
     }
+
+
+def report_wrong_sighting(
+    db: Any, *, sighting_id: int | None = None, entity_id: int | None = None,
+    camera_id: str = "", video_filename: str = "", media_offset_sec: float = 0.0,
+    track_id: int = 0, run_id: str = "", crop_path: str = "",
+    bbox: list[int] | None = None, notes: str = "", reviewer: str = "operator",
+    confidence_engine: Any = None,
+) -> dict[str, Any]:
+    """Queue a timeline false-positive sighting into ``review_queue`` with audit decision."""
+    row = db.get_sighting_by_id(int(sighting_id)) if (sighting_id is not None and hasattr(db, "get_sighting_by_id")) else None
+    eff_eid = entity_id if entity_id is not None else (row.get("entity_id") if row else None)
+    eff_cam = str(camera_id or (row or {}).get("camera_id") or (row or {}).get("source") or "cam_01").strip()
+    eff_vid = str(video_filename or (row or {}).get("video_filename") or "").strip()
+    eff_off = float(media_offset_sec or (row or {}).get("media_offset_sec") or 0.0)
+    eff_tid = int(track_id or (row or {}).get("track_id") or 0)
+    eff_run = str(run_id or (row or {}).get("run_id") or "").strip()
+    eff_crop = str(crop_path or (row or {}).get("snapshot_path") or "").strip()
+    ent = db.get_entity(int(eff_eid)) if (eff_eid is not None and hasattr(db, "get_entity")) else None
+    review_id = db.add_review_item(
+        camera_id=eff_cam, track_id=eff_tid, crop_path=eff_crop,
+        suggested_entity_id=int(eff_eid) if eff_eid is not None else None,
+        suggested_name=str((ent or {}).get("name") or ""),
+        suggested_category=str((ent or {}).get("category") or "person"),
+        similarity=0.0, status="pending", video_filename=eff_vid,
+        media_offset_sec=eff_off, bbox=bbox, run_id=eff_run, reason="timeline_flag",
+    )
+    if confidence_engine is not None and eff_eid is not None and hasattr(confidence_engine, "record_human_feedback"):
+        confidence_engine.record_human_feedback(int(eff_eid), "reject", camera_id=eff_cam or None)
+    decision_id = db.record_review_decision(
+        review_id, "report_wrong", prior_status="dismissed",
+        prior_entity_id=int(eff_eid) if eff_eid is not None else None,
+        prior_state={"sighting_id": sighting_id, "camera_id": eff_cam, "video_filename": eff_vid, "track_id": eff_tid, "run_id": eff_run},
+        reviewer=reviewer, notes=notes or "Reported wrong from timeline",
+    ) if hasattr(db, "record_review_decision") else None
+    return {"status": "flagged", "review_id": int(review_id), "decision_id": decision_id, "entity_id": int(eff_eid) if eff_eid is not None else None, "reason": "timeline_flag"}
+
+
+def _record_correction_negative(
+    neg_svc: Any, confidence_engine: Any, prior_entity_id: int, prior_name: str,
+    *, camera_id: str | None, video_filename: str | None, timestamp_sec: float | None,
+    bbox: list[int] | None, crop_base64: str | None, notes: str, track_id: int | None,
+) -> int | None:
+    """Record a negative exemplar or rejection feedback against ``prior_entity_id``."""
+    neg_id: int | None = None
+    if neg_svc is not None:
+        try:
+            res = neg_svc.discourage_roi(
+                entity_id=int(prior_entity_id), label=prior_name, camera_id=camera_id,
+                video_filename=video_filename, timestamp_sec=timestamp_sec, bbox=bbox,
+                crop_base64=crop_base64, notes=notes or "Corrected mistaken identity", track_id=track_id,
+            )
+            raw_id = res.get("exemplar_id") or res.get("id") if isinstance(res, dict) else None
+            neg_id = int(raw_id) if raw_id is not None else None
+        except Exception as exc:
+            logger.debug("Negative exemplar fallback on correction for entity %s: %s", prior_entity_id, exc)
+    if neg_id is None and confidence_engine is not None and hasattr(confidence_engine, "record_human_feedback"):
+        confidence_engine.record_human_feedback(int(prior_entity_id), "reject", camera_id=camera_id)
+    return neg_id
+
+
+def correct_known_entity_match(
+    db: Any, roi_svc: Any, neg_svc: Any, *, prior_entity_id: int, entity_name: str, category: str = "person",
+    entity_id: int | None = None, camera_id: str | None = None, video_filename: str | None = None,
+    timestamp_sec: float | None = None, bbox: list[int] | None = None, crop_base64: str | None = None,
+    notes: str = "", track_id: int | None = None, run_id: str = "", reviewer: str = "operator",
+    pool: Any = None, request: Any = None, reload_galleries: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    """Correct a Known-state entity match with negative exemplar, relabel, and undoable audit."""
+    prior_ent, existed_before = (db.get_entity(int(prior_entity_id)) if hasattr(db, "get_entity") else None), (entity_id is not None)
+    commit_data = roi_svc.commit_roi_tag(
+        entity_name=entity_name, category=category, entity_id=entity_id, camera_id=camera_id,
+        video_filename=video_filename, timestamp_sec=timestamp_sec, bbox=bbox, crop_base64=crop_base64, notes=notes, track_id=track_id,
+    )
+    new_eid, prior_name = int(commit_data["entity_id"]), str((prior_ent or {}).get("name") or "")
+    neg_id = _record_correction_negative(
+        neg_svc, getattr(roi_svc, "confidence_engine", None), int(prior_entity_id), prior_name,
+        camera_id=camera_id, video_filename=video_filename, timestamp_sec=timestamp_sec,
+        bbox=bbox, crop_base64=crop_base64, notes=notes, track_id=track_id,
+    )
+    cam_s, vid_s, run_s = str(camera_id or ""), str(video_filename or ""), str(run_id or "")
+    moved = db.reassign_sightings_by_provenance(
+        from_entity_id=int(prior_entity_id), to_entity_id=new_eid, camera_id=cam_s, run_id=run_s, video_filename=vid_s, track_id=track_id,
+    ) if hasattr(db, "reassign_sightings_by_provenance") else 0
+    relabel_video_runs_on_entity_mutation(db, pool=pool, updated_entity_id=new_eid, video_filename=video_filename, track_id=track_id)
+    review_id = db.add_review_item(
+        camera_id=cam_s or "cam_01", track_id=int(track_id or 0), crop_path=str(commit_data.get("crop_path") or ""),
+        suggested_entity_id=int(prior_entity_id), suggested_name=prior_name, suggested_category=category, similarity=0.0,
+        status="reassigned", video_filename=vid_s, media_offset_sec=float(timestamp_sec or 0.0), bbox=bbox, run_id=run_s, reason="tag_correction",
+    )
+    prior_state = {"camera_id": cam_s, "video_filename": vid_s, "track_id": track_id, "run_id": run_s}
+    decision_id = db.record_review_decision(
+        review_id, "correct", prior_status="pending", prior_entity_id=int(prior_entity_id), new_entity_id=new_eid,
+        created_signature_id=commit_data.get("signature_id"), created_sighting_id=commit_data.get("sighting_id"),
+        created_negative_exemplar_id=neg_id, created_entity_id=None if existed_before else new_eid,
+        prior_state=prior_state, reviewer=reviewer, notes=notes or "Known-state correction",
+    ) if hasattr(db, "record_review_decision") else None
+    _reload_and_invalidate(reload_galleries, request, pool)
+    return {"status": "corrected", "decision_id": decision_id, "review_id": int(review_id), "prior_entity_id": int(prior_entity_id), "entity_id": new_eid, "negative_exemplar_id": neg_id, "reassigned_sightings": moved, "data": commit_data}

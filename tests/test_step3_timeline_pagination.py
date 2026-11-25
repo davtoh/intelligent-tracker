@@ -81,6 +81,10 @@ class TestTimelinePaginationRepoAndApi(unittest.TestCase):
         clear_app_state(app)
         bind_app_state(app, db=self.db)
         self.addCleanup(lambda: clear_app_state(app))
+        from unittest.mock import patch
+        p_vid = patch("dashboard.dependencies.VIDEOS_DIR", self._tmp.name)
+        p_vid.start()
+        self.addCleanup(p_vid.stop)
         self.client = TestClient(app)
 
     def _seed_sightings(self) -> int:

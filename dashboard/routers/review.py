@@ -24,10 +24,11 @@ from dashboard.schemas import (
     ReviewEnrollNewRequest,
     ReviewReassignRequest,
 )
-from dashboard.schemas_review import ReviewUndoRequest
+from dashboard.schemas_review import ReportWrongSightingRequest, ReviewUndoRequest
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from dashboard.services.reversible_review_service import (
     execute_review_action_with_audit,
+    report_wrong_sighting,
     undo_review_decision,
 )
 from intelligent_tracker.active_learning import ActiveLearningManager
@@ -95,6 +96,33 @@ async def undo_review_decision_endpoint(
     )
     _handle_review_result(res, decision_id)
     return res
+
+
+@router.post("/api/review/report-wrong")
+async def report_wrong_sighting_endpoint(
+    req: ReportWrongSightingRequest,
+    request: Request,
+    al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
+    db: TrackerDB = Depends(get_db),
+) -> dict[str, Any]:
+    """Flag a false-positive sighting from ``#timeline`` into the review queue."""
+    pool = get_camera_pool(request)
+    return await asyncio.to_thread(
+        report_wrong_sighting,
+        db,
+        sighting_id=req.sighting_id,
+        entity_id=req.entity_id,
+        camera_id=req.camera_id,
+        video_filename=req.video_filename,
+        media_offset_sec=req.media_offset_sec,
+        track_id=req.track_id,
+        run_id=req.run_id,
+        crop_path=req.crop_path,
+        bbox=req.bbox,
+        notes=req.notes,
+        reviewer=req.reviewer,
+        confidence_engine=_resolve_confidence_engine(al_mgr, pool),
+    )
 
 
 @router.get("/api/review/{item_id}")

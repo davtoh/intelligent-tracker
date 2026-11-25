@@ -163,6 +163,19 @@ class ReviewDecisionMixin:
             finally:
                 cur.close()
 
+    def get_sighting_by_id(self, sighting_id: int) -> dict[str, Any] | None:
+        """Fetch a single sighting row by ID."""
+        with self._lock:
+            if self._conn is None:
+                return None
+            cur = self._conn.cursor()
+            try:
+                cur.execute("SELECT * FROM sightings WHERE id = ?", (int(sighting_id),))
+                row = cur.fetchone()
+                return dict(row) if row else None
+            finally:
+                cur.close()
+
     def delete_sighting_by_id(self, sighting_id: int) -> bool:
         """Delete a single sighting row by ID."""
         with self._lock:

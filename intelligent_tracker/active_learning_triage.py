@@ -45,24 +45,38 @@ class ActiveLearningTriage:
         debounce_interval: float = 30.0,
         crops_dir: str = "data/crops",
         event_bus: Any | None = None,
+        unknown_min_dwell_sec: float = 3.0,
     ) -> None:
         self.db = db
         self.min_confidence = float(min_confidence)
         self.max_confidence = float(max_confidence)
         self.debounce_interval = float(debounce_interval)
+        self.unknown_min_dwell_sec = max(0.0, float(unknown_min_dwell_sec))
         self.crops_dir = crops_dir
         self.event_bus = event_bus
         self.video_filename: str = ""
         self._last_queued: dict[tuple[str, int], float] = {}
         os.makedirs(self.crops_dir, exist_ok=True)
 
-    def _is_candidate_eligible(self, camera_id: str, track_id: int, similarity: float, now: float) -> bool:
-        """Check similarity range [min_confidence, max_confidence) and track debounce."""
-        score = float(similarity)
-        if not (self.min_confidence <= score < self.max_confidence):
-            return False
+    def _classify_candidate_reason(
+        self, camera_id: str, track_id: int, similarity: float, now: float, track_dwell_sec: float = 0.0,
+    ) -> str | None:
+        """Return queue reason ('borderline' or 'recurring_unknown') if eligible and not debounced."""
         last = self._last_queued.get((camera_id, track_id))
-        return last is None or (now - last) >= self.debounce_interval or now < last
+        if last is not None and 0.0 <= (now - last) < self.debounce_interval:
+            return None
+        score = float(similarity)
+        if self.min_confidence <= score < self.max_confidence:
+            return "borderline"
+        if score < self.min_confidence and float(track_dwell_sec or 0.0) >= self.unknown_min_dwell_sec:
+            return "recurring_unknown"
+        return None
+
+    def _is_candidate_eligible(
+        self, camera_id: str, track_id: int, similarity: float, now: float, track_dwell_sec: float = 0.0,
+    ) -> bool:
+        """Check borderline or recurring-unknown eligibility and per-track debounce."""
+        return self._classify_candidate_reason(camera_id, track_id, similarity, now, track_dwell_sec) is not None
 
     def _save_crop(self, camera_id: str, track_id: int, crop: np.ndarray, now: float) -> str | None:
         """Persist candidate BGR crop thumbnail to ``crops_dir``."""
@@ -83,21 +97,10 @@ class ActiveLearningTriage:
             pass
 
     def _queue_crop(
-        self,
-        camera_id: str,
-        track_id: int,
-        crop: np.ndarray | None,
-        similarity: float,
-        suggested_entity_id: int | None,
-        suggested_name: str,
-        suggested_category: str,
-        now: float,
-        video_filename: str = "",
-        media_offset_sec: float = 0.0,
-        bbox: Any = None,
-        frame_width: int = 0,
-        frame_height: int = 0,
-        run_id: str = "",
+        self, camera_id: str, track_id: int, crop: np.ndarray | None, similarity: float,
+        suggested_entity_id: int | None, suggested_name: str, suggested_category: str, now: float,
+        video_filename: str = "", media_offset_sec: float = 0.0, bbox: Any = None,
+        frame_width: int = 0, frame_height: int = 0, run_id: str = "", reason: str = "borderline",
     ) -> int | None:
         """Persist crop, insert review queue record, update debounce, and emit event."""
         if crop is None or not _is_valid_crop(crop):
@@ -106,60 +109,58 @@ class ActiveLearningTriage:
         if crop_path is None:
             return None
         score = float(similarity)
+        eff_eid = None if reason == "recurring_unknown" else suggested_entity_id
+        eff_name = "" if reason == "recurring_unknown" else suggested_name
         review_id = self.db.add_review_item(
             camera_id=camera_id, track_id=track_id, crop_path=crop_path,
-            suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
+            suggested_entity_id=eff_eid, suggested_name=eff_name,
             suggested_category=suggested_category, similarity=score, status="pending",
             video_filename=video_filename, media_offset_sec=media_offset_sec,
-            bbox=bbox, frame_width=frame_width, frame_height=frame_height, run_id=run_id,
+            bbox=bbox, frame_width=frame_width, frame_height=frame_height, run_id=run_id, reason=reason,
         )
         self._last_queued[(camera_id, track_id)] = now
         self._publish_queued_event(
             camera_id=camera_id, review_id=review_id, track_id=track_id, crop_path=crop_path,
-            suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
+            suggested_entity_id=eff_eid, suggested_name=eff_name,
             suggested_category=suggested_category, similarity=score, timestamp=now,
         )
         return review_id
 
+    def _resolve_media_offset(self, resolved_video: str, media_offset_sec: float | None, now: float, timestamp: float | None) -> float:
+        """Resolve media offset from explicit arg, stored offset, or video timestamp."""
+        if media_offset_sec is not None:
+            return float(media_offset_sec)
+        stored_offset = getattr(self, "current_media_offset_sec", None)
+        if resolved_video and stored_offset is not None:
+            return float(stored_offset)
+        return float(now) if resolved_video and timestamp is not None else 0.0
+
     def consider_candidate(
-        self,
-        track: Any,
-        frame: np.ndarray,
-        similarity: float,
-        suggested_entity_id: int | None = None,
-        suggested_name: str = "",
-        suggested_category: str = "",
-        camera_id: str = "cam_01",
-        timestamp: float | None = None,
-        video_filename: str = "",
-        media_offset_sec: float | None = None,
-        run_id: str = "",
+        self, track: Any, frame: np.ndarray, similarity: float,
+        suggested_entity_id: int | None = None, suggested_name: str = "",
+        suggested_category: str = "", camera_id: str = "cam_01",
+        timestamp: float | None = None, video_filename: str = "",
+        media_offset_sec: float | None = None, run_id: str = "",
+        track_dwell_sec: float | None = None,
     ) -> int | None:
-        """Evaluate track detection; crop from frame and queue if ambiguous."""
+        """Evaluate track detection; crop from frame and queue if borderline or recurring unknown."""
         now = timestamp if timestamp is not None else time.time()
         tid = getattr(track, "track_id", 0)
-        if not self._is_candidate_eligible(camera_id, tid, similarity, now):
+        dwell = float(track_dwell_sec) if track_dwell_sec is not None else float(getattr(track, "dwell_time", 0.0) or 0.0)
+        reason = self._classify_candidate_reason(camera_id, tid, similarity, now, track_dwell_sec=dwell)
+        if reason is None:
             return None
         bbox = getattr(track, "bbox", None)
         crop = _extract_crop_from_frame(frame, bbox)
         frame_h, frame_w = (int(frame.shape[0]), int(frame.shape[1])) if frame is not None and frame.ndim >= 2 else (0, 0)
         resolved_video = str(video_filename or self.video_filename or "").strip()
-        stored_offset = getattr(self, "current_media_offset_sec", None)
-        resolved_offset = (
-            float(media_offset_sec)
-            if media_offset_sec is not None
-            else (
-                float(stored_offset)
-                if resolved_video and stored_offset is not None
-                else (float(now) if resolved_video and timestamp is not None else 0.0)
-            )
-        )
+        resolved_offset = self._resolve_media_offset(resolved_video, media_offset_sec, now, timestamp)
         return self._queue_crop(
             camera_id=camera_id, track_id=tid, crop=crop, similarity=similarity,
             suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
-            suggested_category=suggested_category, now=now,
-            video_filename=resolved_video, media_offset_sec=resolved_offset,
-            bbox=bbox, frame_width=frame_w, frame_height=frame_h, run_id=run_id,
+            suggested_category=suggested_category, now=now, video_filename=resolved_video,
+            media_offset_sec=resolved_offset, bbox=bbox, frame_width=frame_w, frame_height=frame_h,
+            run_id=run_id, reason=reason,
         )
 
     def maybe_queue_candidate(
@@ -178,10 +179,12 @@ class ActiveLearningTriage:
         video_filename: str = "",
         media_offset_sec: float = 0.0,
         run_id: str = "",
+        track_dwell_sec: float = 0.0,
     ) -> dict[str, Any] | None:
         """Evaluate pre-cropped candidate and return queued review item dict or None."""
         now = timestamp if timestamp is not None else time.time()
-        if not self._is_candidate_eligible(camera_id, track_id, similarity, now):
+        reason = self._classify_candidate_reason(camera_id, track_id, similarity, now, track_dwell_sec=track_dwell_sec)
+        if reason is None:
             return None
         item_id = self._queue_crop(
             camera_id=camera_id, track_id=track_id, crop=crop, similarity=similarity,
@@ -189,5 +192,6 @@ class ActiveLearningTriage:
             suggested_category=matched_category, now=now,
             video_filename=video_filename, media_offset_sec=media_offset_sec,
             bbox=bbox, frame_width=frame_width, frame_height=frame_height, run_id=run_id,
+            reason=reason,
         )
         return self.db.get_review_item(item_id) if item_id is not None else None

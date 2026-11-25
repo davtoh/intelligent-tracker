@@ -199,7 +199,7 @@
               <span>🕒 ${escapeHtml(timeStr)}</span> &bull;
               <span>Track #${s.track_id}</span> &bull;
               <span>Match Confidence: ${confPct}%</span>
-              ${seekBtn}${liveBtn}
+              ${seekBtn}${liveBtn}${window.ReviewUndoAndFlag?.buildReportWrongButtonHtml?.(s) || ''}
             </div>
           </div>
         </div>

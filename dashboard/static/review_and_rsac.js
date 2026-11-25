@@ -146,6 +146,8 @@
     }, { includeVideo: false }) || '';
     const linkRow = [seekBtn, jumpBtns].filter(Boolean).join(' ');
     const provenanceHtml = buildProvenanceHtml(item);
+    const reasonBadge = window.ReviewUndoAndFlag?.renderReasonBadgeHtml?.(item) || '';
+    const cardUndoBtn = window.ReviewUndoAndFlag?.renderCardUndoButtonHtml?.(item) || '';
     const actionsHtml = item.status === 'pending'
       ? `<div class="review-actions">
           <button class="btn btn-xs btn-confirm" data-id="${item.id}" data-name="${escapeHtml(suggested || '')}" title="Confirm as Ground Truth Locked Anchor">✓ Confirm (Locked Anchor)</button>
@@ -153,13 +155,13 @@
           <button class="btn btn-xs btn-enroll-new" data-id="${item.id}" data-crop="${escapeHtml(cropUrl)}" title="Enroll as a newly created entity">✨ Enroll New</button>
           <button class="btn btn-xs btn-dismiss" data-id="${item.id}" title="Dismiss candidate without changes">✕ Dismiss</button>
         </div>`
-      : `<div style="font-size: 11px; color: #94a3b8; font-style: italic;">Status: <span style="color: #f8fafc; font-weight: 600;">${escapeHtml(item.status)}</span>${item.notes ? ` &mdash; ${escapeHtml(item.notes)}` : ''}</div>`;
+      : `<div class="review-resolved-row" style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:#94a3b8;font-style:italic;"><span>Status: <span style="color:#f8fafc;font-weight:600;">${escapeHtml(item.status)}</span>${item.notes ? ` &mdash; ${escapeHtml(item.notes)}` : ''}</span>${cardUndoBtn}</div>`;
     return `
       <div class="glass-panel review-card" data-item-id="${item.id}">
         <div class="review-card-top">
           <img class="review-thumb" src="${cropUrl}" alt="Review Crop" onerror="this.onerror=null;this.src='/static/avatar-placeholder.svg';" />
           <div class="review-meta">
-            <div class="review-title">Track #${item.track_id} (${escapeHtml(item.camera_id)})</div>
+            <div class="review-title">Track #${item.track_id} (${escapeHtml(item.camera_id)}) ${reasonBadge}</div>
             <div class="review-candidate-match">${matchLabel}</div>
             <div class="confidence-meter">
               <span>Confidence:</span>
@@ -212,9 +214,11 @@
         await dismissReviewItem(id);
       });
     });
+    window.ReviewUndoAndFlag?.bindCardUndoButtons?.(container);
   }
 
   function notifyReviewResolved(data) {
+    window.ReviewUndoAndFlag?.recordResolvedDecision?.(data);
     const syncFn = data?.sync?.video_filename;
     if (syncFn) {
       window.VideoBatchReports?.invalidateCachedReports?.(syncFn);

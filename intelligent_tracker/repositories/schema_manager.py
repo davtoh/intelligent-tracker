@@ -127,7 +127,8 @@ _LEARNING_TABLES_DDL = (
         reviewed_at TIMESTAMP, reviewed_by TEXT DEFAULT 'operator',
         video_filename TEXT DEFAULT '', media_offset_sec REAL DEFAULT 0.0,
         bbox_json TEXT DEFAULT '', frame_width INTEGER DEFAULT 0,
-        frame_height INTEGER DEFAULT 0, run_id TEXT DEFAULT ''
+        frame_height INTEGER DEFAULT 0, run_id TEXT DEFAULT '',
+        reason TEXT DEFAULT 'borderline'
     );""",
     """CREATE TABLE IF NOT EXISTS custom_categories (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT DEFAULT '#3B82F6',
@@ -247,6 +248,7 @@ class SchemaMixin:
             "frame_width INTEGER DEFAULT 0",
             "frame_height INTEGER DEFAULT 0",
             "run_id TEXT DEFAULT ''",
+            "reason TEXT DEFAULT 'borderline'",
         ):
             try:
                 cursor.execute(f"ALTER TABLE review_queue ADD COLUMN {col_def};")
