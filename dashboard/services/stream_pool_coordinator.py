@@ -13,6 +13,7 @@ import logging
 import threading
 from typing import Any
 
+from dashboard.services.camera_cfg_builder import build_custom_cfg as _build_custom_cfg
 from dashboard.services.camera_source_bootstrap import (
     bootstrap_camera_stream,
     reapply_stream_scenario,
@@ -23,19 +24,6 @@ from intelligent_tracker.camera_resolver import CameraPathResolver
 from intelligent_tracker.world import WorldGraph
 
 logger = logging.getLogger("intelligent_tracker.stream_pool_coordinator")
-
-
-def _build_custom_cfg(cfg: dict[str, Any]) -> dict[str, Any] | None:
-    """Extract detector, tracker, and Re-ID override sections from a camera config entry."""
-    custom_cfg: dict[str, Any] = {}
-    det_dict = {k: cfg[src] for src, k in (("detector", "model"), ("confidence", "confidence"), ("classes", "classes")) if cfg.get(src) is not None and (src != "detector" or cfg.get(src))}
-    if det_dict:
-        custom_cfg["detector"] = det_dict
-    if cfg.get("tracker"):
-        custom_cfg["tracker"] = {"type": cfg["tracker"]}
-    if cfg.get("tracked_categories") is not None:
-        custom_cfg["reid"] = {"tracked_categories": cfg["tracked_categories"]}
-    return custom_cfg or None
 
 
 def _stagger_if_hardware(source: Any) -> None:

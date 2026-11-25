@@ -62,7 +62,7 @@ def _seed_default_camera() -> dict[str, Any]:
         "enabled": True,
         "armed": False,
         "detector": "mock" if is_synth else "yolov8",
-        "tracker": "centroid",
+        "tracker": "sort",
     }
 
 
@@ -126,7 +126,7 @@ class CameraConfigStore:
         detector: str | None = None, tracker: str | None = None, confidence: float | None = None,
         classes: list[str] | None = None, tracked_categories: list[str] | None = None,
         enabled: bool = True, details: dict[str, Any] | None = None,
-        device_name: str | None = None, armed: bool = False,
+        device_name: str | None = None, armed: bool = False, **extra_fields: Any,
     ) -> dict[str, Any]:
         """Create or replace a camera config entry in memory under lock."""
         resolved_device_name = device_name or (details.get("device_name") if details else None)
@@ -136,11 +136,14 @@ class CameraConfigStore:
         entry = {
             "id": camera_id, "name": name, "source": norm_source, "type": cam_type,
             "enabled": enabled, "armed": bool(armed),
-            "detector": detector or det_default, "tracker": tracker or "centroid",
+            "detector": detector or det_default, "tracker": tracker or "sort",
             "confidence": float(confidence) if confidence is not None else 0.40,
             "classes": classes, "tracked_categories": tracked_categories,
             "details": details or {}, "device_name": resolved_device_name, "created_at": time.time(),
         }
+        for key in ("agnostic_nms", "min_hits", "iou_threshold", "max_disappeared", "high_conf_threshold", "low_conf_threshold"):
+            if extra_fields.get(key) is not None:
+                entry[key] = extra_fields[key]
         with self._lock:
             self.camera_configs[camera_id] = entry
         return entry
@@ -153,7 +156,7 @@ class CameraConfigStore:
             cfg = self.camera_configs[camera_id]
             if updates.get("source") is not None:
                 updates["source"] = _normalize_cfg_source(updates["source"])
-            restart_keys = ("source", "enabled", "device_name", "detector", "tracker", "confidence", "classes", "tracked_categories")
+            restart_keys = ("source", "enabled", "device_name", "detector", "tracker", "confidence", "classes", "tracked_categories", "agnostic_nms", "min_hits", "iou_threshold", "max_disappeared", "high_conf_threshold", "low_conf_threshold")
             nullable_keys = {"classes", "tracked_categories"}
             needs_restart = any(
                 (k in updates and (updates[k] is not None or k in nullable_keys)) and updates[k] != cfg.get(k)

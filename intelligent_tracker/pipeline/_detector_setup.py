@@ -30,6 +30,9 @@ def _build_detector_kwargs(config: PipelineConfig, det_name: str) -> dict[str, A
             kwargs["classes"] = config.detector_classes
         if det_name == "onnx":
             kwargs["agnostic_nms"] = getattr(config, "detector_agnostic_nms", True)
+            low_conf = getattr(config, "tracker_low_conf_threshold", 0.0)
+            if config.tracker_type == "sort" and low_conf > 0.0:
+                kwargs["low_conf_threshold"] = float(low_conf)
     elif det_name in _MOCK_NAMES:
         kwargs["confidence"] = config.detector_confidence
     return kwargs

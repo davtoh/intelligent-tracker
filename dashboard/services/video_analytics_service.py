@@ -40,6 +40,7 @@ def parse_analyze_options(
     req: VideoAnalyzeRequest | None,
     scenario_camera_id: str | None = None,
     tracked_categories: str | None = None,
+    tracker: str | None = None,
 ) -> dict[str, Any]:
     """Normalize query and JSON body options for batch video analytics."""
     sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
@@ -59,12 +60,14 @@ def parse_analyze_options(
     is_async = bool(async_mode) if is_async is None else is_async
     raw_scen = req.scenario_camera_id if (req and req.scenario_camera_id is not None) else scenario_camera_id
     scen_cam = str(raw_scen).strip() if raw_scen and str(raw_scen).strip() else None
+    trk = (getattr(req, "tracker", None) if req else None) or tracker
     return {
         "sample_rate": sr,
         "detector": det,
         "confidence": conf,
         "classes": target_classes,
         "tracked_categories": target_cats,
+        "tracker": str(trk).strip().lower() if trk and str(trk).strip() else None,
         "is_async": is_async,
         "scenario_camera_id": scen_cam,
     }
@@ -219,6 +222,8 @@ def create_video_indexer(
         "active_learning": al_mgr, "event_bus": event_bus, "video_filename": safe_name,
         "fts_index": fts_index, "confidence_engine": resolved_ce, "world_graph": resolved_wg,
     }
+    if opts.get("tracker"):
+        kwargs["tracker_type"] = opts["tracker"]
     try:
         indexer = VideoIndexer(detector_name=det, **kwargs)
     except Exception as err:

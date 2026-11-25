@@ -5,25 +5,14 @@ and IoU association.
 """
 
 import time
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 
-from intelligent_tracker.tracker.association import (
-    INVALID_ASSOCIATION_COST,
-    build_fused_cost_matrix,
-    extract_detection_embeddings,
-)
+from intelligent_tracker.tracker.association import extract_detection_embeddings
+from intelligent_tracker.tracker.bytetrack_association import associate_two_stage
 from intelligent_tracker.tracker.kalman import KalmanBoxTracker
 from intelligent_tracker.tracker.track import Track
-from intelligent_tracker.tracker.utils import (
-    _HAS_SCIPY,
-    compute_iou_matrix,
-    greedy_assignment,
-    parse_detections,
-)
-
-if _HAS_SCIPY:
-    from scipy.optimize import linear_sum_assignment
+from intelligent_tracker.tracker.utils import parse_detections
 
 
 class SortTracker:
@@ -39,6 +28,8 @@ class SortTracker:
         time_slice_dt_threshold: float = 0.4,
         coast_frames: int = 0,
         coast_seconds: float = 0.0,
+        high_conf_threshold: float = 0.4,
+        low_conf_threshold: float = 0.1,
         **kwargs: Any,
     ):
         if max_disappeared is not None:
@@ -50,6 +41,8 @@ class SortTracker:
         self.time_slice_dt_threshold = float(time_slice_dt_threshold)
         self.coast_frames = max(0, int(coast_frames))
         self.coast_seconds = max(0.0, float(coast_seconds))
+        self.high_conf_threshold = float(high_conf_threshold)
+        self.low_conf_threshold = float(low_conf_threshold)
         self._last_update_time: Optional[float] = None
         self.trackers: List[KalmanBoxTracker] = []
         self.track_metadata: Dict[int, Dict[str, Any]] = {}
@@ -93,35 +86,26 @@ class SortTracker:
         det_labels: List[str],
         det_embeddings: Optional[List[Optional[np.ndarray]]] = None,
         now: Optional[float] = None,
-    ) -> Tuple[Set[int], Set[int]]:
-        """Associate predictions to detections via class-consistent, appearance-assisted IoU."""
-        matched_trks: Set[int] = set()
-        matched_dets: Set[int] = set()
-        if not predicted_boxes or not det_bboxes:
-            return matched_trks, matched_dets
-
-        iou_mat = compute_iou_matrix(predicted_boxes, det_bboxes)
+    ) -> Tuple[Set[int], List[int]]:
+        """Associate predictions to detections via 2-stage ByteTrack IoU+appearance matching."""
         trk_labels = [self.track_metadata.get(t.id, {}).get("label", getattr(self._active_tracks.get(t.id), "label", "object")) for t in self.trackers]
         trk_classes = [int(self.track_metadata.get(t.id, {}).get("class_id", getattr(self._active_tracks.get(t.id), "class_id", 0))) for t in self.trackers]
         trk_embs = [getattr(self._active_tracks.get(t.id), "last_embedding", None) for t in self.trackers]
-        cost_mat = build_fused_cost_matrix(
-            trk_labels, trk_classes, trk_embs, det_labels, det_classes, det_embeddings,
-            iou_mat=iou_mat, appearance_weight=getattr(self, "appearance_weight", 0.35),
+        matches, unmatched_high_dets = associate_two_stage(
+            predicted_boxes, det_bboxes, det_scores, trk_labels, trk_classes, trk_embs,
+            det_labels, det_classes, det_embeddings, iou_threshold=self.iou_threshold,
+            high_conf_threshold=self.high_conf_threshold, low_conf_threshold=self.low_conf_threshold,
+            appearance_weight=getattr(self, "appearance_weight", 0.35),
         )
-        assignments = (
-            list(zip(*linear_sum_assignment(cost_mat)))
-            if _HAS_SCIPY else greedy_assignment(cost_mat, max_cost=1.0 - self.iou_threshold)
-        )
-        for r, c in assignments:
-            if cost_mat[r, c] < INVALID_ASSOCIATION_COST and iou_mat[r, c] > 0.0 and (1.0 - cost_mat[r, c]) >= self.iou_threshold:
-                self.trackers[r].update(det_bboxes[c], timestamp=now)
-                self.track_metadata[self.trackers[r].id] = {
-                    "class_id": det_classes[c], "confidence": det_scores[c], "label": det_labels[c],
-                    "embedding": det_embeddings[c] if det_embeddings is not None else None,
-                }
-                matched_trks.add(r)
-                matched_dets.add(c)
-        return matched_trks, matched_dets
+        matched_trks: Set[int] = set()
+        for r, c in matches:
+            self.trackers[r].update(det_bboxes[c], timestamp=now)
+            self.track_metadata[self.trackers[r].id] = {
+                "class_id": det_classes[c], "confidence": det_scores[c], "label": det_labels[c],
+                "embedding": det_embeddings[c] if det_embeddings is not None else None,
+            }
+            matched_trks.add(r)
+        return matched_trks, unmatched_high_dets
 
     def _register_new_detections(
         self,
@@ -129,21 +113,20 @@ class SortTracker:
         det_classes: list,
         det_scores: list,
         det_labels: list,
-        matched_dets: Set[int],
+        unmatched_high_dets: Sequence[int] | Set[int],
         det_embeddings: Optional[List[Optional[np.ndarray]]] = None,
         now: Optional[float] = None,
     ) -> None:
-        """Create new Kalman trackers for unassociated detections."""
-        for c in range(len(det_bboxes)):
-            if c not in matched_dets:
-                trk = KalmanBoxTracker(det_bboxes[c], timestamp=now)
-                self.trackers.append(trk)
-                self.track_metadata[trk.id] = {
-                    "class_id": det_classes[c],
-                    "confidence": det_scores[c],
-                    "label": det_labels[c],
-                    "embedding": det_embeddings[c] if det_embeddings is not None else None,
-                }
+        """Create new Kalman trackers only for unmatched high-confidence detections."""
+        for c in unmatched_high_dets:
+            trk = KalmanBoxTracker(det_bboxes[c], timestamp=now)
+            self.trackers.append(trk)
+            self.track_metadata[trk.id] = {
+                "class_id": det_classes[c],
+                "confidence": det_scores[c],
+                "label": det_labels[c],
+                "embedding": det_embeddings[c] if det_embeddings is not None else None,
+            }
 
     def _is_within_coast_budget(
         self, trk: KalmanBoxTracker, now: float, is_time_sliced: bool

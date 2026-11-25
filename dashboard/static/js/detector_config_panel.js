@@ -48,11 +48,25 @@
       if (inp.dataset) inp.dataset.cocoBound = '1';
       inp.addEventListener('input', syncMultiSelectFromInput);
     }
+    const panel = document.getElementById('detector-config-panel');
+    if (panel) {
+      const presets = Array.from(panel.querySelectorAll('.btn-tag-preset'));
+      presets.forEach((btn) => {
+        if (btn.dataset?.panelPresetBound) return;
+        if (btn.dataset) btn.dataset.panelPresetBound = '1';
+        btn.addEventListener('click', () => {
+          if (inp) inp.value = btn.getAttribute('data-classes') || '';
+          syncMultiSelectFromInput();
+          presets.forEach((b) => b.classList?.remove?.('active'));
+          btn.classList?.add?.('active');
+        });
+      });
+    }
   }
 
   function readValues() {
     const det = document.getElementById('cam-detector-select')?.value || 'yolov8';
-    const trk = document.getElementById('cam-tracker-select')?.value || 'centroid';
+    const trk = document.getElementById('cam-tracker-select')?.value || 'sort';
     const confVal = parseFloat(document.getElementById('cam-conf-input')?.value || '0.40');
     const classesList = parseClassesList(document.getElementById('cam-classes-input')?.value);
     const catsList = parseClassesList(document.getElementById('cam-tracked-categories-input')?.value);

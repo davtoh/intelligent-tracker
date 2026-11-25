@@ -167,7 +167,7 @@ def _extract_runtime_kwargs(data: dict[str, Any], raw_source: Any, default_detec
     ana_cfg, vis_cfg, mem_cfg = data.get("analytics", {}), data.get("visualization", {}), data.get("memory", {})
     hm_cfg = ana_cfg.get("heatmap", {})
     source = _resolve_source(raw_source) if resolve_source else ("synthetic" if raw_source is None else raw_source)
-    tracker_type = str(trk_cfg.get("type", "centroid")).strip().lower()
+    tracker_type = str(trk_cfg.get("type", "sort")).strip().lower()
     decay_val = hm_cfg.get("decay", 0.998)
     return {
         "source": source,
@@ -183,8 +183,10 @@ def _extract_runtime_kwargs(data: dict[str, Any], raw_source: Any, default_detec
         "detector_agnostic_nms": bool(det_cfg.get("agnostic_nms", True)),
         "tracker_type": tracker_type,
         "max_disappeared": int(trk_cfg.get("max_disappeared", trk_cfg.get("max_age", 30))),
-        "min_hits": int(trk_cfg.get("min_hits", 2)),
+        "min_hits": int(trk_cfg.get("min_hits", 3 if tracker_type == "sort" else 2)),
         "iou_threshold": float(trk_cfg.get("iou_threshold", 0.3 if tracker_type == "sort" else 0.2)),
+        "tracker_high_conf_threshold": float(trk_cfg.get("high_conf_threshold", 0.4)),
+        "tracker_low_conf_threshold": float(trk_cfg.get("low_conf_threshold", 0.1)),
         "tracker_coast_seconds": float(trk_cfg.get("coast_seconds", 1.5)),
         "tracker_coast_frames": int(trk_cfg.get("coast_frames", 15)),
         "enable_memory_indexing": bool(mem_cfg.get("indexing", enable_memory_indexing)),
@@ -239,10 +241,12 @@ class PipelineConfig:
     detector_classes: list[str] | None = None
     detector_agnostic_nms: bool = True
     detector_fallback_mock: bool = False
-    tracker_type: str = "centroid"
+    tracker_type: str = "sort"
     max_disappeared: int = 30
-    min_hits: int = 2
-    iou_threshold: float = 0.2
+    min_hits: int = 3
+    iou_threshold: float = 0.3
+    tracker_high_conf_threshold: float = 0.4
+    tracker_low_conf_threshold: float = 0.1
     tracker_coast_seconds: float = 1.5
     tracker_coast_frames: int = 15
     reid_model: str | None = "color"

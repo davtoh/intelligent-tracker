@@ -22,8 +22,8 @@
                   <div class="form-group col-6">
                     <label for="cam-tracker-select">Tracking Engine</label>
                     <select id="cam-tracker-select" class="form-input">
-                      <option value="centroid" selected>Centroid (Fast Distance)</option>
-                      <option value="sort">SORT (Kalman + Hungarian)</option>
+                      <option value="centroid">Centroid (Fast Distance)</option>
+                      <option value="sort" selected>SORT (Kalman + Hungarian)</option>
                     </select>
                   </div>
                 </div>
@@ -56,6 +56,7 @@
                   <select id="cam-coco-class-select" class="form-input" multiple size="3" aria-label="COCO Class Multi-Select" style="margin-top: 6px; font-size: 12px;"></select>
                   <div class="class-presets-bar">
                     <button type="button" class="btn-tag-preset" data-classes="person">👤 Person</button>
+                    <button type="button" class="btn-tag-preset" data-classes="person, backpack, handbag, suitcase">🎒 Person + Bags</button>
                     <button type="button" class="btn-tag-preset" data-classes="car, motorcycle, bus, truck, bicycle">🚗 Vehicles</button>
                     <button type="button" class="btn-tag-preset" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
                     <button type="button" class="btn-tag-preset" data-classes="">🌐 All Classes</button>

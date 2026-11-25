@@ -139,12 +139,11 @@ def build_tracker(config: PipelineConfig) -> Any:
     """Instantiate multi-object tracker backend."""
     if config.tracker_type == "sort":
         return TrackerFactory.create(
-            "sort",
-            max_age=config.max_disappeared,
-            min_hits=config.min_hits,
-            iou_threshold=config.iou_threshold,
-            coast_frames=config.tracker_coast_frames,
+            "sort", max_age=config.max_disappeared, min_hits=config.min_hits,
+            iou_threshold=config.iou_threshold, coast_frames=config.tracker_coast_frames,
             coast_seconds=config.tracker_coast_seconds,
+            high_conf_threshold=config.tracker_high_conf_threshold,
+            low_conf_threshold=config.tracker_low_conf_threshold,
         )
     return TrackerFactory.create(
         config.tracker_type,
