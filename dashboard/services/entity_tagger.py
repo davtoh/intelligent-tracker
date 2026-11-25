@@ -46,7 +46,7 @@ def _to_avatar_url(crop_path: str | None) -> str | None:
     raw = str(crop_path or "").strip()
     if not raw:
         return None
-    if raw.startswith(("/", "http://", "https://", "data:")):
+    if raw.startswith(("/crops/", "http://", "https://", "data:")):
         return raw
     return f"/crops/{os.path.basename(raw.replace(chr(92), '/'))}"
 
