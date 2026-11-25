@@ -55,10 +55,9 @@ class Track:
         self.bbox_history: deque = deque([self.bbox], maxlen=max_history)
 
         self._init_lifecycle_and_identity()
-        if "entity_id" in kwargs:
-            self.entity_id = kwargs["entity_id"]
-        if "entity_category" in kwargs:
-            self.entity_category = kwargs["entity_category"]
+        for opt_attr in ("entity_id", "entity_category", "avatar_url", "learned_class"):
+            if opt_attr in kwargs:
+                setattr(self, opt_attr, kwargs[opt_attr])
 
     def _init_lifecycle_and_identity(self) -> None:
         """Initialize state machine, velocity, and session identity fields."""
@@ -175,7 +174,9 @@ class Track:
             "entity_id": getattr(self, "entity_id", None),
             "entity_name": self.entity_name,
             "entity_category": getattr(self, "entity_category", None),
-            "category": getattr(self, "entity_category", None) or self.label,
+            "category": getattr(self, "entity_category", None) or getattr(self, "learned_class", None) or self.label,
+            "avatar_url": getattr(self, "avatar_url", None),
+            "learned_class": getattr(self, "learned_class", None),
             "session_id": self.session_id,
             "velocity": (round(self.velocity[0], 1), round(self.velocity[1], 1)),
         }

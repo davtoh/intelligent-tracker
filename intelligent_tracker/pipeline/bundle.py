@@ -200,12 +200,10 @@ def build_reid(
         return None, None
     try:
         extractor = ReIDExtractorFactory.create(config.reid_model)
+        hyst_k = int((config.raw_config.get("reid") or {}).get("hysteresis_k", 3))
         matcher = GalleryMatcher(
-            db=db,
-            extractor=extractor,
-            reid_threshold=config.reid_threshold,
-            camera_id=config.camera_id,
-            tracked_categories=config.tracked_categories,
+            db=db, extractor=extractor, reid_threshold=config.reid_threshold,
+            camera_id=config.camera_id, tracked_categories=config.tracked_categories, hysteresis_k=hyst_k,
         )
         return extractor, matcher
     except Exception as exc:

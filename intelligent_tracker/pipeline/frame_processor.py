@@ -195,7 +195,14 @@ class FrameProcessor:
             internal.is_cluttered = getattr(trk, "is_cluttered", False)
             internal.clutter_partner_id = getattr(trk, "clutter_partner_id", None)
             internal.clutter_start_time = getattr(trk, "clutter_start_time", None)
-            for attr in ("entity_id", "entity_name", "entity_category", "identity_label", "session_id", "reid_score"):
+            if getattr(trk, "_identity_unbound", False):
+                for attr in ("entity_id", "entity_category", "avatar_url", "reid_score"):
+                    if hasattr(internal, attr):
+                        delattr(internal, attr)
+                internal.entity_name = None
+                internal.identity_label = None
+                continue
+            for attr in ("entity_id", "entity_name", "entity_category", "identity_label", "session_id", "reid_score", "avatar_url", "learned_class"):
                 if hasattr(trk, attr):
                     setattr(internal, attr, getattr(trk, attr))
 

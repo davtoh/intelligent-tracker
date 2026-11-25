@@ -41,20 +41,45 @@ def _save_tag_crop_and_anchor(
     return sig_id, crop_rel_path
 
 
+def _to_avatar_url(crop_path: str | None) -> str | None:
+    """Convert a stored crop path into a mounted ``/crops/<basename>`` URL."""
+    raw = str(crop_path or "").strip()
+    if not raw:
+        return None
+    if raw.startswith(("/", "http://", "https://", "data:")):
+        return raw
+    return f"/crops/{os.path.basename(raw.replace(chr(92), '/'))}"
+
+
 def _sync_matcher_and_bridge(
     gallery_matcher: Any, world_bridge: Any, track_id: int | None,
     entity_id: int | None, entity_name: str, category: str, camera_id: str,
+    *, avatar_url: str | None = None, live_track: Any = None,
 ) -> None:
-    """Update GalleryMatcher cache and WorldEntityBridge assignment after tagging."""
+    """Update GalleryMatcher cache, hysteresis lock, and WorldEntityBridge assignment after tagging."""
+    resolved_avatar = avatar_url
     if gallery_matcher is not None:
-        if track_id is not None and isinstance(getattr(gallery_matcher, "_identified_tracks", None), dict):
-            gallery_matcher._identified_tracks[track_id] = {
-                "entity_id": entity_id, "entity_name": entity_name, "category": category, "reid_score": 1.0,
-            }
         try:
             gallery_matcher.refresh_gallery()
         except Exception:
             pass
+        if resolved_avatar is None and entity_id is not None:
+            resolved_avatar = (getattr(gallery_matcher, "entity_avatars", None) or {}).get(entity_id)
+        if track_id is not None and entity_id is not None:
+            hyst = getattr(gallery_matcher, "hysteresis", None)
+            if hyst is not None and hasattr(hyst, "force_bind"):
+                hyst.force_bind(
+                    track_id, int(entity_id), entity_name, category,
+                    avatar_url=resolved_avatar, track=live_track,
+                )
+        if track_id is not None and isinstance(getattr(gallery_matcher, "_identified_tracks", None), dict):
+            gallery_matcher._identified_tracks[track_id] = {
+                "entity_id": entity_id, "name": entity_name, "entity_name": entity_name,
+                "category": category, "similarity": 1.0, "reid_score": 1.0,
+                "avatar_url": resolved_avatar,
+            }
+    if live_track is not None and resolved_avatar:
+        live_track.avatar_url = resolved_avatar
     if world_bridge is not None and track_id is not None and entity_id is not None and hasattr(world_bridge, "reassign_track"):
         try:
             world_bridge.reassign_track(
@@ -154,19 +179,22 @@ class EntityTaggerService:
         entity_id: int | None = None,
         camera_id: str = "cam_01",
         world_bridge: Any = None,
+        avatar_url: str | None = None,
     ) -> None:
         """Propagate newly tagged identity to active tracker track, gallery matcher, and world bridge."""
-        if track_id is not None and tracker is not None:
-            trk = (getattr(tracker, "tracks", {}) or {}).get(track_id)
-            if trk is not None:
-                if entity_id is not None:
-                    trk.entity_id = entity_id
-                trk.entity_name = entity_name
-                trk.category = category
-                trk.entity_category = category
-                trk.identity_label = entity_name
-                trk.reid_score = 1.0
-        _sync_matcher_and_bridge(gallery_matcher, world_bridge, track_id, entity_id, entity_name, category, camera_id)
+        trk = (getattr(tracker, "tracks", {}) or {}).get(track_id) if (track_id is not None and tracker is not None) else None
+        if trk is not None:
+            if entity_id is not None:
+                trk.entity_id = entity_id
+            trk.entity_name = entity_name
+            trk.category = category
+            trk.entity_category = category
+            trk.identity_label = entity_name
+            trk.reid_score = 1.0
+        _sync_matcher_and_bridge(
+            gallery_matcher, world_bridge, track_id, entity_id, entity_name, category, camera_id,
+            avatar_url=avatar_url, live_track=trk,
+        )
 
     @staticmethod
     def tag_entity(
@@ -196,7 +224,8 @@ class EntityTaggerService:
             db, entity_name, category, notes, emb, crop, camera_id, track_id, bbox_tuple)
         EntityTaggerService._update_live_track_identity(
             tracker, track_id, entity_name, category, gallery_matcher,
-            entity_id=entity_id, camera_id=camera_id, world_bridge=world_bridge)
+            entity_id=entity_id, camera_id=camera_id, world_bridge=world_bridge,
+            avatar_url=_to_avatar_url(crop_rel_path))
         logger.info("Successfully tagged entity '%s' (ID #%d, sig #%d)", entity_name, entity_id, sig_id)
         return {"entity_id": entity_id, "name": entity_name, "category": category,
                 "signature_id": sig_id, "crop_path": crop_rel_path}

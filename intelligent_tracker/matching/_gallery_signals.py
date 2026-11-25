@@ -258,7 +258,12 @@ def _apply_identified_metadata(
     matcher: Any, track: Track, entity_id: int, name: str, category: str,
     best_score: float, source: str, now: float, zone_id: str,
 ) -> None:
-    """Propagate confirmed entity identity onto Track and WorldEntityBridge."""
+    """Propagate confirmed entity identity and avatar URL onto Track and WorldEntityBridge."""
+    avatar_url = (getattr(matcher, "entity_avatars", None) or {}).get(entity_id)
+    if avatar_url:
+        track.avatar_url = avatar_url
+    elif hasattr(track, "avatar_url"):
+        delattr(track, "avatar_url")
     if matcher.world_bridge is not None:
         matcher.world_bridge.sync_track_identification(
             source, track, entity_id, name=name, category=category,
@@ -292,7 +297,9 @@ def process_confirmed_identification(
     was_identified = tid in matcher._identified_tracks
     prev_eid = matcher._identified_tracks[tid]["entity_id"] if was_identified else None
     if not was_identified or prev_eid != entity_id:
-        matcher._feature_buffer.record_identification(tid, entity_id, name, category, best_score)
+        matcher._feature_buffer.record_identification(
+            tid, entity_id, name, category, best_score, avatar_url=getattr(track, "avatar_url", None)
+        )
         event = EntityIdentifiedEvent(
             entity_id=entity_id, name=name, category=category, track_id=tid,
             similarity=best_score, source=source, timestamp=now, zone_id=zone_id, bbox=track.bbox,
