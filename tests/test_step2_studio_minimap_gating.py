@@ -58,6 +58,8 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
+const mediaPath = require('path').join(require('path').dirname(STUDIO_PATH), 'js', 'studio_media.js');
+if (fs.existsSync(mediaPath)) vm.runInContext(fs.readFileSync(mediaPath, 'utf8'), sandbox);
 const canvasPath = require('path').join(require('path').dirname(STUDIO_PATH), 'js', 'studio_canvas.js');
 if (fs.existsSync(canvasPath)) vm.runInContext(fs.readFileSync(canvasPath, 'utf8'), sandbox);
 vm.runInContext(fs.readFileSync(STUDIO_PATH, 'utf8'), sandbox);

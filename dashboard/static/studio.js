@@ -5,22 +5,18 @@
 (function () {
   'use strict';
 
+  const BEV_QUAD_MODES = ['all', 'selected', 'off'];
+  const BEV_QUAD_LABELS = { all: '📐 BEV Quad: All', selected: '📐 BEV Quad: Selected', off: '📐 BEV Quad: Off' };
+
   const studioState = {
-    activeCamera: null,
-    mode: 'idle',
-    points: [],
-    zones: [],
-    tripwires: [],
-    homography: null,
-    topologyLinks: [],
+    activeCamera: null, mode: 'idle', bevQuadMode: 'all',
+    points: [], zones: [], tripwires: [], homography: null, topologyLinks: [],
     overlays: { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true, heatmap: false, bev_minimap: false, hud_bar: true, clutter: false },
+    overlayVisibility: { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true },
     canvas: null, ctx: null, bevCanvas: null,
   };
 
-  function showToast(title, body, type = 'info') {
-    if (typeof window.showToast === 'function') window.showToast(title, body, type);
-    else console.warn(`[${type.toUpperCase()}] ${title}: ${body}`);
-  }
+  const showToast = (t, b, type = 'info') => (typeof window.showToast === 'function' ? window.showToast(t, b, type) : console.warn(`[${type.toUpperCase()}] ${t}: ${b}`));
 
   function updateStudioStatus(msg, level = 'info') {
     const banner = document.getElementById('studio-status-banner');
@@ -33,48 +29,71 @@
   function setStudioMode(mode) {
     studioState.mode = mode;
     studioState.points = [];
-    document.querySelectorAll('.studio-tool-btn').forEach(btn => btn.classList.remove('active'));
-    if (mode === 'draw_zone') {
-      document.getElementById('btn-mode-draw-zone')?.classList.add('active');
-      updateStudioStatus('Mode: Draw Zone. Click vertices on video; double-click to close polygon.');
-    } else if (mode === 'draw_tripwire') {
-      document.getElementById('btn-mode-draw-tripwire')?.classList.add('active');
-      updateStudioStatus('Mode: Draw Tripwire. Click start point, then click end point.');
-    } else if (mode === 'calibrate_homography') {
-      document.getElementById('btn-mode-homography')?.classList.add('active');
-      updateStudioStatus('Mode: Calibrate Homography. Click 4 corners (TL -> TR -> BR -> BL).');
-    } else {
-      updateStudioStatus('Ready. Select a tool to begin.');
-    }
+    document.querySelectorAll('.studio-tool-btn').forEach((btn) => btn.classList.remove('active'));
+    const cfg = {
+      draw_zone: ['btn-mode-draw-zone', 'Mode: Draw Zone. Click vertices on video; double-click to close polygon.'],
+      draw_tripwire: ['btn-mode-draw-tripwire', 'Mode: Draw Tripwire. Click start point, then click end point.'],
+      calibrate_homography: ['btn-mode-homography', 'Mode: Calibrate Homography. Click 4 corners (TL -> TR -> BR -> BL).'],
+    }[mode];
+    if (cfg) { document.getElementById(cfg[0])?.classList.add('active'); updateStudioStatus(cfg[1]); }
+    else updateStudioStatus('Ready. Select a tool to begin.');
     drawOverlay();
   }
 
-  function clearStudioLiveImage() {
-    const img = document.getElementById('studio-live-img');
-    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; if (window.MediaEmptyState) window.MediaEmptyState.showEmpty(img, 'No Active Camera Feed', 'Select a camera or recorded video.'); else { img.removeAttribute?.('src'); if (img.style) img.style.display = 'none'; } }
+  function setBevQuadMode(nextMode) {
+    const mode = BEV_QUAD_MODES.includes(nextMode) ? nextMode : 'all';
+    studioState.bevQuadMode = mode;
+    const btn = document.getElementById('btn-studio-bev-quad-toggle');
+    if (btn) {
+      btn.textContent = BEV_QUAD_LABELS[mode];
+      if (btn.dataset) btn.dataset.quadMode = mode;
+      btn.setAttribute?.('aria-pressed', mode !== 'off' ? 'true' : 'false');
+    }
+    drawOverlay();
+    return mode;
   }
+
+  function resolveStudioTracks() {
+    const tel = window.latestTelemetry;
+    if (Array.isArray(tel?.active_tracks) && (!tel.camera_id || tel.camera_id === studioState.activeCamera)) {
+      return { tracks: tel.active_tracks, sourceResolution: tel.frame_size || null };
+    }
+    const vidTracks = window.ScrubberOverlay?.getCurrentTracks?.();
+    return { tracks: Array.isArray(vidTracks) ? vidTracks : [], sourceResolution: null };
+  }
+
+  function clearStudioLiveImage() {
+    if (window.StudioMedia?.clearStudioLiveImage) return window.StudioMedia.clearStudioLiveImage();
+    const img = document.getElementById('studio-live-img');
+    if (!img) return;
+    if (img.dataset) delete img.dataset.activeStreamSrc;
+    if (window.MediaEmptyState) window.MediaEmptyState.showEmpty(img, 'No Active Camera Feed', 'Select a camera or recorded video.');
+    else { img.removeAttribute?.('src'); if (img.style) img.style.display = 'none'; }
+  }
+
   function drawOverlay(cursorPt) {
+    const { tracks, sourceResolution } = resolveStudioTracks();
     window.StudioCanvas?.drawOverlay(
       studioState.ctx, studioState.canvas, studioState.mode, studioState.points, cursorPt,
-      { zones: studioState.zones, tripwires: studioState.tripwires }
+      {
+        zones: studioState.zones, tripwires: studioState.tripwires,
+        homography: studioState.homography, bevQuadMode: studioState.bevQuadMode,
+        tracks, sourceResolution, overlayVisibility: studioState.overlayVisibility,
+      }
     );
   }
 
   function applyStudioChannel(targetId, isVideo) {
     if (!targetId) return;
-    window.StudioCanvas?.attachStudioMedia?.(targetId, isVideo, isStudioTabActive());
+    (window.StudioMedia || window.StudioCanvas)?.attachStudioMedia?.(targetId, isVideo, isStudioTabActive());
     if (isVideo) clearStudioLiveImage();
     else window.StudioOverlays?.loadCameraOverlays(targetId);
   }
 
   function initStudio() {
     studioState.canvas = document.getElementById('studio-drawing-canvas');
-    if (studioState.canvas) {
-      studioState.ctx = studioState.canvas.getContext('2d');
-      setupCanvasListeners();
-    }
+    if (studioState.canvas) { studioState.ctx = studioState.canvas.getContext('2d'); setupCanvasListeners(); }
     studioState.bevCanvas = document.getElementById('bev-minimap-canvas');
-
     window.StudioOverlays?.init(() => studioState);
     window.StudioShapeEditor?.init(() => studioState, { drawOverlay, updateStatus: updateStudioStatus, showToast });
     bindStudioUI();
@@ -82,7 +101,6 @@
     window.WorldMinimapInteractions?.bind?.(() => studioState.activeCamera);
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
-
     loadStudioChannels().then(() => {
       if (studioState.activeCamera) {
         const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
@@ -129,43 +147,26 @@
 
   function handleCanvasClick(pt) {
     if (studioState.mode === 'idle') return;
-
     if (studioState.mode === 'draw_zone') {
-      studioState.points.push([pt.x, pt.y]);
-      drawOverlay();
+      studioState.points.push([pt.x, pt.y]); drawOverlay();
       updateStudioStatus(`Zone vertex #${studioState.points.length} placed at (${pt.x}, ${pt.y}). Double-click to close polygon.`);
     } else if (studioState.mode === 'draw_tripwire') {
-      studioState.points.push([pt.x, pt.y]);
-      drawOverlay();
-      if (studioState.points.length === 2) {
-        window.ScenarioModals?.openTripwireModal(studioState.points);
-      } else {
-        updateStudioStatus(`Tripwire start point set at (${pt.x}, ${pt.y}). Click end point.`);
-      }
-    } else if (studioState.mode === 'calibrate_homography') {
-      if (studioState.points.length < 4) {
-        studioState.points.push([pt.x, pt.y]);
-        drawOverlay();
-        const cornerNames = ['Top-Left', 'Top-Right', 'Bottom-Right', 'Bottom-Left'];
-        const nextIdx = studioState.points.length;
-        if (nextIdx < 4) {
-          updateStudioStatus(`Corner ${nextIdx}/4 placed (${cornerNames[nextIdx - 1]}). Click corner #${nextIdx + 1} (${cornerNames[nextIdx]}).`);
-        } else {
-          updateStudioStatus('All 4 ground corners selected! Enter metric dimensions and click Save Calibration.');
-          window.ScenarioModals?.openHomographyModal(studioState.points);
-        }
-      }
+      studioState.points.push([pt.x, pt.y]); drawOverlay();
+      if (studioState.points.length === 2) window.ScenarioModals?.openTripwireModal(studioState.points);
+      else updateStudioStatus(`Tripwire start point set at (${pt.x}, ${pt.y}). Click end point.`);
+    } else if (studioState.mode === 'calibrate_homography' && studioState.points.length < 4) {
+      studioState.points.push([pt.x, pt.y]); drawOverlay();
+      const cornerNames = ['Top-Left', 'Top-Right', 'Bottom-Right', 'Bottom-Left'];
+      const nextIdx = studioState.points.length;
+      if (nextIdx < 4) updateStudioStatus(`Corner ${nextIdx}/4 placed (${cornerNames[nextIdx - 1]}). Click corner #${nextIdx + 1} (${cornerNames[nextIdx]}).`);
+      else { updateStudioStatus('All 4 ground corners selected! Enter metric dimensions and click Save Calibration.'); window.ScenarioModals?.openHomographyModal(studioState.points); }
     }
   }
 
   function handleCanvasDblClick() {
-    if (studioState.mode === 'draw_zone') {
-      if (studioState.points.length >= 3) {
-        window.ScenarioModals?.openZoneModal(studioState.points);
-      } else {
-        showToast('Validation Error', 'A polygonal zone requires at least 3 vertices.', 'warning');
-      }
-    }
+    if (studioState.mode !== 'draw_zone') return;
+    if (studioState.points.length >= 3) window.ScenarioModals?.openZoneModal(studioState.points);
+    else showToast('Validation Error', 'A polygonal zone requires at least 3 vertices.', 'warning');
   }
 
   async function loadCameraScenario(cameraId) {
@@ -205,54 +206,41 @@
     } catch (err) { showToast(errTitle, err.message, 'error'); }
   }
 
+  const jsonPost = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
   function saveZone(zoneData) {
     if (!zoneData?.camera_id && !requireActiveCamera()) return Promise.resolve();
-    return studioRequest('/api/scenarios/zones', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(zoneData),
-    }, 'Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'Error saving zone', () => {
-      updateStudioStatus(`Zone '${zoneData.name}' saved successfully.`);
-      loadCameraScenario(zoneData.camera_id);
+    return studioRequest('/api/scenarios/zones', jsonPost(zoneData), 'Zone Saved', `Spatial zone '${zoneData.name}' saved.`, 'Error saving zone', () => {
+      updateStudioStatus(`Zone '${zoneData.name}' saved successfully.`); loadCameraScenario(zoneData.camera_id);
     });
   }
 
   function deleteZone(camera_id, zone_name) {
     if (!camera_id || !confirm(`Delete zone '${zone_name}'?`)) return;
-    return studioRequest(`/api/scenarios/zones/${encodeURIComponent(camera_id)}/${encodeURIComponent(zone_name)}`, {
-      method: 'DELETE',
-    }, 'Zone Deleted', `Zone '${zone_name}' removed.`, 'Error deleting zone', () => {
-      updateStudioStatus(`Deleted zone '${zone_name}'.`);
-      loadCameraScenario(camera_id);
-    });
+    return studioRequest(`/api/scenarios/zones/${encodeURIComponent(camera_id)}/${encodeURIComponent(zone_name)}`, { method: 'DELETE' },
+      'Zone Deleted', `Zone '${zone_name}' removed.`, 'Error deleting zone', () => { updateStudioStatus(`Deleted zone '${zone_name}'.`); loadCameraScenario(camera_id); });
   }
 
   function saveTripwire(tripwireData) {
     if (!tripwireData?.camera_id && !requireActiveCamera()) return Promise.resolve();
-    return studioRequest('/api/scenarios/tripwires', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tripwireData),
-    }, 'Tripwire Saved', `Directional tripwire '${tripwireData.name}' saved.`, 'Error saving tripwire', () => {
-      updateStudioStatus(`Tripwire '${tripwireData.name}' saved successfully.`);
-      loadCameraScenario(tripwireData.camera_id);
+    return studioRequest('/api/scenarios/tripwires', jsonPost(tripwireData), 'Tripwire Saved', `Directional tripwire '${tripwireData.name}' saved.`, 'Error saving tripwire', () => {
+      updateStudioStatus(`Tripwire '${tripwireData.name}' saved successfully.`); loadCameraScenario(tripwireData.camera_id);
     });
   }
 
   function deleteTripwire(camera_id, tripwire_name) {
     if (!camera_id || !confirm(`Delete tripwire '${tripwire_name}'?`)) return;
-    return studioRequest(`/api/scenarios/tripwires/${encodeURIComponent(camera_id)}/${encodeURIComponent(tripwire_name)}`, {
-      method: 'DELETE',
-    }, 'Tripwire Deleted', `Tripwire '${tripwire_name}' removed.`, 'Error deleting tripwire', () => {
-      updateStudioStatus(`Deleted tripwire '${tripwire_name}'.`);
-      loadCameraScenario(camera_id);
-    });
+    return studioRequest(`/api/scenarios/tripwires/${encodeURIComponent(camera_id)}/${encodeURIComponent(tripwire_name)}`, { method: 'DELETE' },
+      'Tripwire Deleted', `Tripwire '${tripwire_name}' removed.`, 'Error deleting tripwire', () => { updateStudioStatus(`Deleted tripwire '${tripwire_name}'.`); loadCameraScenario(camera_id); });
   }
 
   function saveHomographyCalibration(data) {
     if (!data?.camera_id && !requireActiveCamera()) return Promise.resolve();
-    return studioRequest('/api/scenarios/homography', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
-    }, 'Calibration Saved', `Homography calibrated for ${data.camera_id}.`, 'Calibration Error', (result) => {
-      studioState.homography = result.homography;
+    return studioRequest('/api/scenarios/homography', jsonPost(data), 'Calibration Saved', `Homography calibrated for ${data.camera_id}.`, 'Calibration Error', (result) => {
+      studioState.homography = result.homography || data;
+      studioState.points = []; studioState.mode = 'idle';
       updateStudioStatus(`Homography calibrated for ${data.camera_id} (${data.metric_width}m x ${data.metric_height}m).`);
-      renderBEVMinimap();
+      drawOverlay(); renderBEVMinimap();
     });
   }
 
@@ -262,35 +250,39 @@
       if (!res.ok) return;
       studioState.topologyLinks = await res.json();
       window.StudioOverlays?.renderTopologyLinksUI();
-    } catch (err) {
-      console.warn('Failed to load topology transitions:', err);
-    }
+    } catch (err) { console.warn('Failed to load topology transitions:', err); }
   }
 
-  function saveTopologyLink(linkData) {
-    return studioRequest('/api/topology/transitions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(linkData),
-    }, 'Transition Saved', 'Spatial transition link established.', 'Transition Error', () => {
-      updateStudioStatus('Transition link active.');
-      loadTopologyLinks();
-    });
-  }
+  const saveTopologyLink = (linkData) => studioRequest('/api/topology/transitions', jsonPost(linkData), 'Transition Saved', 'Spatial transition link established.', 'Transition Error', () => {
+    updateStudioStatus('Transition link active.'); loadTopologyLinks();
+  });
 
   function deleteTopologyLink(linkId) {
     if (!confirm(`Remove transition link '${linkId}'?`)) return;
-    return studioRequest(`/api/topology/transitions/${encodeURIComponent(linkId)}`, {
-      method: 'DELETE',
-    }, 'Transition Removed', `Link '${linkId}' deleted.`, 'Transition Delete Error', () => loadTopologyLinks());
+    return studioRequest(`/api/topology/transitions/${encodeURIComponent(linkId)}`, { method: 'DELETE' }, 'Transition Removed', `Link '${linkId}' deleted.`, 'Transition Delete Error', () => loadTopologyLinks());
+  }
+
+  function mountStudioOverlayBar() {
+    const bar = document.getElementById('studio-overlay-control-bar');
+    if (!bar || !window.OverlayControlBar?.renderScrubberBar) return;
+    window.OverlayControlBar.renderScrubberBar(bar, {
+      descriptors: [], showFeaturePills: true, featureVisibility: studioState.overlayVisibility,
+      onToggleFeature: (key, enabled) => { studioState.overlayVisibility[key] = Boolean(enabled); drawOverlay(); },
+    });
   }
 
   function bindStudioUI() {
     document.getElementById('btn-mode-draw-zone')?.addEventListener('click', () => setStudioMode('draw_zone'));
     document.getElementById('btn-mode-draw-tripwire')?.addEventListener('click', () => setStudioMode('draw_tripwire'));
     document.getElementById('btn-mode-homography')?.addEventListener('click', () => setStudioMode('calibrate_homography'));
+    document.getElementById('btn-studio-bev-quad-toggle')?.addEventListener('click', () => {
+      setBevQuadMode(BEV_QUAD_MODES[(BEV_QUAD_MODES.indexOf(studioState.bevQuadMode) + 1) % BEV_QUAD_MODES.length]);
+    });
     document.getElementById('btn-studio-clear')?.addEventListener('click', () => {
       setStudioMode('idle'); studioState.points = []; drawOverlay(); updateStudioStatus('Canvas cleared. Mode: Idle.');
     });
-    window.StudioCanvas?.bindFreezeControl?.(() => studioState.activeCamera);
+    (window.StudioMedia || window.StudioCanvas)?.bindFreezeControl?.(() => studioState.activeCamera);
+    mountStudioOverlayBar();
     document.getElementById('studio-live-img')?.addEventListener?.('load', () => drawOverlay());
     document.getElementById('studio-video-player')?.addEventListener?.('loadedmetadata', () => drawOverlay());
     document.getElementById('studio-video-player')?.addEventListener?.('seeked', () => drawOverlay());
@@ -303,9 +295,7 @@
       window.ActiveSourceContext?.set?.(isVideo ? { kind: 'video', videoFilename: targetId } : { kind: 'camera', cameraId: targetId });
       updateStudioStatus(`Loaded scenario profile for '${targetId}'.`); loadCameraScenario(targetId); applyStudioChannel(targetId, isVideo);
     });
-    document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
-      window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);
-    });
+    document.getElementById('btn-add-transition-link')?.addEventListener('click', () => window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera));
     window.ScenarioModals?.init({
       onSaveZone: (data) => requireActiveCamera() && saveZone({ ...data, camera_id: studioState.activeCamera }),
       onSaveTripwire: (data) => requireActiveCamera() && saveTripwire({ ...data, camera_id: studioState.activeCamera }),
@@ -319,9 +309,7 @@
   const isStudioTabActive = () => Boolean(document.getElementById('tab-studio')?.classList?.contains('active'));
   function startMinimapLoop() {
     if (minimapTimer !== null) return;
-    minimapTimer = setInterval(() => {
-      if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap();
-    }, 250);
+    minimapTimer = setInterval(() => { if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap(); }, 250);
   }
   function stopMinimapLoop() { if (minimapTimer !== null) { clearInterval(minimapTimer); minimapTimer = null; } }
   function syncStudioTabState(isActive) {
@@ -329,17 +317,15 @@
     if (active) {
       if (studioState.activeCamera) {
         const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
-        window.StudioCanvas?.attachStudioMedia?.(studioState.activeCamera, isVideo, true);
+        (window.StudioMedia || window.StudioCanvas)?.attachStudioMedia?.(studioState.activeCamera, isVideo, true);
       }
       renderBEVMinimap(); startMinimapLoop();
     } else { stopMinimapLoop(); }
   }
-  window.addEventListener('tab-changed', (ev) => {
-    const activeTab = ev?.detail?.activeTab;
-    syncStudioTabState(activeTab ? activeTab === 'tab-studio' : isStudioTabActive());
-  });
+  window.addEventListener('tab-changed', (ev) => syncStudioTabState(ev?.detail?.activeTab ? ev.detail.activeTab === 'tab-studio' : isStudioTabActive()));
   window.Studio = {
-    init: initStudio, setMode: setStudioMode, deleteZone, deleteTripwire, deleteTopologyLink,
+    init: initStudio, setMode: setStudioMode, setBevQuadMode, getBevQuadMode: () => studioState.bevQuadMode,
+    drawOverlay, saveHomographyCalibration, deleteZone, deleteTripwire, deleteTopologyLink,
     loadStudioChannels, renderBEV: renderBEVMinimap, startMinimapLoop, stopMinimapLoop,
     syncStudioTabState, syncTabVisibility: syncStudioTabState,
     selectZoneById: (id) => window.StudioCanvas?.selectZoneById?.(id, studioState, { updateStatus: updateStudioStatus, drawOverlay }),

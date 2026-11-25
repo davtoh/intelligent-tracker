@@ -18,6 +18,10 @@
                 title="Calibrate 4-point Ground Plane Homography">
                 📐 Calibrate BEV (4 Pts)
               </button>
+              <button type="button" class="btn btn-sm btn-outline" id="btn-studio-bev-quad-toggle"
+                data-quad-mode="all" aria-pressed="true" title="Cycle saved 4-point BEV quad overlay (All / Selected / Off)">
+                📐 BEV Quad: All
+              </button>
               <button class="btn btn-sm btn-outline" id="btn-studio-clear" title="Clear current points and exit mode">
                 ✕ Clear / Reset
               </button>
@@ -28,6 +32,9 @@
               <button type="button" class="btn btn-sm btn-outline" id="btn-studio-freeze-toggle" aria-pressed="false" title="Freeze live camera frame for drawing">⏸ Freeze Frame</button>
             </div>
           </div>
+
+          <!-- Shared Studio Overlay Feature Toggles -->
+          <div class="studio-overlay-bar" id="studio-overlay-control-bar"></div>
 
           <!-- Studio Status Notification Banner -->
           <div class="studio-status-banner" id="studio-status-banner" style="display: none;">
@@ -50,6 +57,14 @@
             <div class="panel-header">
               <h3>🗺️ 2D Top-Down Minimap (BEV)</h3>
               <span class="badge" id="bev-metric-scale">Calibrated</span>
+            </div>
+            <div class="bev-minimap-controls">
+              <div class="bev-minimap-zoom-group" role="group" aria-label="Minimap zoom controls">
+                <button type="button" class="btn btn-xs btn-outline" id="btn-minimap-zoom-in" title="Zoom in minimap">+</button>
+                <button type="button" class="btn btn-xs btn-outline" id="btn-minimap-zoom-out" title="Zoom out minimap">−</button>
+                <button type="button" class="btn btn-xs btn-outline" id="btn-minimap-fit" title="Fit all cameras and zones">Fit</button>
+              </div>
+              <button type="button" class="btn btn-xs btn-outline" id="btn-minimap-view-toggle" data-view-mode="world" title="Switch between multi-camera World Map and single-camera metric BEV">🗺️ World Map</button>
             </div>
             <div class="bev-canvas-wrapper">
               <canvas id="bev-minimap-canvas" width="320" height="320"></canvas>

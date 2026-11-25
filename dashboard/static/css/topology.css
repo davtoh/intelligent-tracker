@@ -242,3 +242,31 @@
   color: var(--text-muted);
 }
 
+/* Studio Overlay Bar & Minimap Viewport Controls */
+.studio-overlay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 42, 0.45);
+  min-width: 0;
+}
+
+.bev-minimap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bev-minimap-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+

@@ -1,13 +1,13 @@
 /**
- * Intelligent Tracker - Interactive 2D World Minimap Pointer Controls.
- * Supports clicking a camera FOV cone to focus it in #studio-camera-select,
- * dragging a camera origin handle (origin_x, origin_y), and dragging its
- * yaw/range tip handle (yaw_deg, range_m) with live #world-pose-* sync.
+ * Intelligent Tracker - Interactive 2D World Minimap Pointer & Viewport Controls.
+ * Supports clicking a camera FOV cone to focus it, dragging camera origin/tip handles,
+ * wheel zoom around cursor, empty-canvas drag-to-pan, and #btn-minimap-* controls.
  */
 (function () {
   const PAD = 20;
   const HANDLE_RADIUS = 12;
   let dragState = null;
+  let panState = null;
   let pendingFocusId = null;
 
   function getCanvasPoint(canvas, ev) {
@@ -31,15 +31,14 @@
   function getCameraGeom(cam, bounds, width, height) {
     const view = window.WorldTacticalMinimapView;
     const b = view.normalizeBounds(bounds);
+    const zoom = Number(view.getViewport?.().zoom) || 1;
     const spanX = Math.max(1e-3, b[2] - b[0]);
-    const pxPerMeter = (width - PAD * 2) / spanX;
+    const pxPerMeter = ((width - PAD * 2) / spanX) * zoom;
     const pose = cam.world_pose || {};
-    const ox = Number(pose.origin_x ?? 0);
-    const oy = Number(pose.origin_y ?? 0);
     const yawRad = (Number(pose.yaw_deg ?? 0) * Math.PI) / 180;
     const halfFov = ((Number(pose.fov_deg ?? 75) * Math.PI) / 180) / 2;
     const rangePx = Math.max(12, Number(pose.range_m ?? 12) * pxPerMeter);
-    const [cx, cy] = view.toCanvasXY(ox, oy, b, width, height, PAD);
+    const [cx, cy] = view.toCanvasXY(Number(pose.origin_x ?? 0), Number(pose.origin_y ?? 0), b, width, height, PAD);
     return {
       cam, cx, cy, yawRad, halfFov, rangePx,
       tipX: cx + Math.cos(yawRad) * rangePx,
@@ -106,12 +105,13 @@
 
   async function commitDragEnd(canvas, getActiveCameraId) {
     const view = window.WorldTacticalMinimapView;
+    if (panState) {
+      panState = null;
+      if (canvas.style) canvas.style.cursor = 'grab';
+      return;
+    }
     if (!dragState) {
-      if (pendingFocusId) {
-        const cid = pendingFocusId;
-        pendingFocusId = null;
-        focusCamera(cid);
-      }
+      if (pendingFocusId) { const cid = pendingFocusId; pendingFocusId = null; focusCamera(cid); }
       return;
     }
     const { cameraId, pose, moved } = dragState;
@@ -125,12 +125,10 @@
     }
     try {
       await view.savePose(cameraId, {
-        origin_x: Number(pose.origin_x ?? 0),
-        origin_y: Number(pose.origin_y ?? 0),
+        origin_x: Number(pose.origin_x ?? 0), origin_y: Number(pose.origin_y ?? 0),
         yaw_deg: Number(pose.yaw_deg ?? 0),
         fov_deg: Math.max(10, Math.min(180, Number(pose.fov_deg ?? 75))),
-        range_m: Math.max(1, Number(pose.range_m ?? 12)),
-        scale: Number(pose.scale ?? 1.0),
+        range_m: Math.max(1, Number(pose.range_m ?? 12)), scale: Number(pose.scale ?? 1.0),
       });
       view.setDragPreview(null, null);
       await view.fetchAndRender(canvas, getActiveCameraId?.() || cameraId, null, []);
@@ -140,40 +138,76 @@
     }
   }
 
+  function bindMinimapControls(canvas, getActiveCameraId) {
+    const view = window.WorldTacticalMinimapView;
+    const rerender = () => view?.rerender?.(canvas, getActiveCameraId?.());
+    const bindBtn = (id, fn) => {
+      const btn = document.getElementById(id);
+      if (!btn || btn.dataset?.minimapBound === '1') return;
+      if (btn.dataset) btn.dataset.minimapBound = '1';
+      btn.addEventListener('click', () => { fn(); rerender(); });
+    };
+    bindBtn('btn-minimap-zoom-in', () => view?.setZoom?.((view.getViewport?.().zoom || 1) * 1.25));
+    bindBtn('btn-minimap-zoom-out', () => view?.setZoom?.((view.getViewport?.().zoom || 1) / 1.25));
+    bindBtn('btn-minimap-fit', () => view?.fitToBounds?.());
+    bindBtn('btn-minimap-view-toggle', () => view?.toggleViewMode?.());
+  }
+
+  function handleWheelZoom(canvas, ev, getActiveCameraId) {
+    const view = window.WorldTacticalMinimapView;
+    const worldMap = view?.getCachedWorldMap?.();
+    if (!view || !worldMap || view.getViewport?.().viewMode === 'camera') return;
+    ev.preventDefault?.();
+    const [cx, cy] = getCanvasPoint(canvas, ev);
+    const factor = Number(ev.deltaY) < 0 ? 1.2 : 1 / 1.2;
+    const nextZoom = (view.getViewport?.().zoom || 1) * factor;
+    view.setZoom?.(nextZoom, [cx, cy], worldMap.bounds, canvas.width || 320, canvas.height || 320, PAD);
+    view.rerender?.(canvas, getActiveCameraId?.());
+  }
+
   function bind(getActiveCameraId) {
     const canvas = document.getElementById('bev-minimap-canvas');
     if (!canvas || canvas.dataset?.interactionsBound === '1') return;
     if (canvas.dataset) canvas.dataset.interactionsBound = '1';
     if (canvas.style) canvas.style.cursor = 'grab';
+    bindMinimapControls(canvas, getActiveCameraId);
+
+    canvas.addEventListener('wheel', (ev) => handleWheelZoom(canvas, ev, getActiveCameraId), { passive: false });
 
     canvas.addEventListener('mousedown', (ev) => {
-      const worldMap = window.WorldTacticalMinimapView?.getCachedWorldMap?.();
-      if (!worldMap) return;
+      const view = window.WorldTacticalMinimapView;
+      const worldMap = view?.getCachedWorldMap?.();
+      if (!worldMap || view?.getViewport?.().viewMode === 'camera') return;
       const [cx, cy] = getCanvasPoint(canvas, ev);
       const hit = hitTestMinimap(cx, cy, worldMap, getActiveCameraId?.());
-      if (!hit) return;
-      if (hit.type === 'cone') {
-        pendingFocusId = hit.cam.camera_id;
+      if (!hit) {
+        panState = { lastX: cx, lastY: cy };
+        if (canvas.style) canvas.style.cursor = 'grabbing';
         return;
       }
-      dragState = {
-        mode: hit.type,
-        cameraId: hit.cam.camera_id,
-        pose: { ...(hit.cam.world_pose || {}) },
-        moved: false,
-      };
+      if (hit.type === 'cone') { pendingFocusId = hit.cam.camera_id; return; }
+      dragState = { mode: hit.type, cameraId: hit.cam.camera_id, pose: { ...(hit.cam.world_pose || {}) }, moved: false };
       if (canvas.style) canvas.style.cursor = 'grabbing';
     });
 
     canvas.addEventListener('mousemove', (ev) => {
-      if (!dragState) return;
       const [cx, cy] = getCanvasPoint(canvas, ev);
-      applyDragMove(canvas, cx, cy, getActiveCameraId);
+      if (panState) {
+        const view = window.WorldTacticalMinimapView;
+        const worldMap = view?.getCachedWorldMap?.();
+        if (worldMap) {
+          view.panBy?.(cx - panState.lastX, cy - panState.lastY, worldMap.bounds, canvas.width || 320, canvas.height || 320, PAD);
+          panState.lastX = cx; panState.lastY = cy;
+          view.rerender?.(canvas, getActiveCameraId?.());
+        }
+        return;
+      }
+      if (dragState) applyDragMove(canvas, cx, cy, getActiveCameraId);
     });
 
     canvas.addEventListener('mouseup', () => commitDragEnd(canvas, getActiveCameraId));
     canvas.addEventListener('mouseleave', () => {
-      if (dragState) commitDragEnd(canvas, getActiveCameraId);
+      if (dragState || panState) commitDragEnd(canvas, getActiveCameraId);
       pendingFocusId = null;
     });
   }

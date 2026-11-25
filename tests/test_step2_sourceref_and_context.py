@@ -184,7 +184,7 @@ class TestStep2Milestone3Frontend(unittest.TestCase):
         const found = sandbox.StudioCanvas.selectZoneById('z_9', state, { updateStatus() {}, drawOverlay() {} });
         console.log(JSON.stringify({ frozenState, resumedState, found, selected: sandbox.StudioShapeEditor.getSelected(), mode: state.mode }));
         """
-        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "studio_shape_editor.js", JS_DIR / "studio_canvas.js"], body)
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "studio_shape_editor.js", JS_DIR / "studio_media.js", JS_DIR / "studio_canvas.js"], body)
         self.assertTrue(out["frozenState"]["frozen"])
         self.assertEqual(out["frozenState"]["src"], "data:image/jpeg;base64,FREEZE")
         self.assertIn("Resume", out["frozenState"]["text"])
