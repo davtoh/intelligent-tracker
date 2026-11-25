@@ -15,14 +15,14 @@
 ---
 
 ## Step 1: P0 Integration Seams, High-Visibility Fixes & Seam-Level Probe Hardening
-- [ ] **Child Plan**: `.TODO/step_1_p0_integration_seams_and_probe_hardening.md` (`--parent integration_seams_entity_persistence_master_roadmap --milestone 1`).
-- [ ] **Goal**: Eliminate `BUG-10`..`BUG-21` and `BUG-27`..`BUG-29` at their cross-layer integration seams (Re-ID dimension parity, deep-merged per-camera detector control + replay signature match, SQLite-SSOT alerts + checkboxes, `App.navigate` deep links + `switchCamera` sync, Studio drag-to-`PUT` geometry edits, video-enrollment sightings provenance, modal grid ergonomics, standby SVG, connection pill) and upgrade `system-diagnostics` + workspace probes so `INFRA_UNAVAILABLE` and seam regressions are caught automatically.
-- [ ] **Verifier**:
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_seams_backend.py tests/test_step1_seams_frontend.py`
-  - `python -m unittest discover -s "<config_dir>/skills/system-diagnostics/tests" -p "test_*.py"`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run effective_config_probe` (and `deep_link_navigation_probe`, `studio_drag_put_probe`, `alerts_store_probe`, `sightings_provenance_probe`, `spa_nine_tab_cdp_probe` — all passing outright, never `INFRA_UNAVAILABLE`)
-  - `MPLBACKEND=Agg python -m unittest discover tests; python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
-- [ ] **Review Gate**: Fresh reviewer inspects diff, `diagnose.py audit --path <modified_files>`, and probe/test output before marking Step 1 complete.
+- [x] **Child Plan**: `.TODO/step_1_p0_integration_seams_and_probe_hardening.md` (`--parent integration_seams_entity_persistence_master_roadmap --milestone 1`).
+- [x] **Goal**: Eliminate `BUG-10`..`BUG-21` and `BUG-27`..`BUG-29` at their cross-layer integration seams (Re-ID dimension parity, deep-merged per-camera detector control + replay signature match, SQLite-SSOT alerts + checkboxes, `App.navigate` deep links + `switchCamera` sync, Studio drag-to-`PUT` geometry edits, video-enrollment sightings provenance, modal grid ergonomics, standby SVG, connection pill) and upgrade `system-diagnostics` + workspace probes so `INFRA_UNAVAILABLE` and seam regressions are caught automatically.
+- [x] **Verifier**:
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_seams_backend.py tests/test_step1_seams_frontend.py`
+  - [x] `python -m unittest discover -s "<config_dir>/skills/system-diagnostics/tests" -p "test_*.py"`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run effective_config_probe` (and `deep_link_navigation_probe`, `studio_drag_put_probe`, `alerts_store_probe`, `sightings_provenance_probe`, `spa_nine_tab_cdp_probe` — all passing outright, never `INFRA_UNAVAILABLE`)
+  - [x] `MPLBACKEND=Agg python -m unittest discover tests; python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
+- [x] **Review Gate**: Fresh reviewer inspects diff, `diagnose.py audit --path <modified_files>`, and probe/test output before marking Step 1 complete.
 
 ---
 

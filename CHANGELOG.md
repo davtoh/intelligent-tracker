@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-11-25] feat: Step 1: P0 Integration Seams and Probe Hardening
+- **Type**: feat
+- **Summary**: Upgraded probe_runner, cdp_inspect/audit_layout, cross_module_rules (SILENT_SHAPE_SKIP), and surface_contracts/surface_verifier; added 5 workspace seam probes and hardened spa_nine_tab_cdp_probe.
+- **Files** (2):
+  - `.diagnostics/probes/`
+  - `CHANGELOG.md`
+
 ## [2026-11-24] feat: Step 4 M3: Minimap Interactions and Stale Camera Pruning
 - **Type**: feat
 - **Summary**: Pruned stale cameras from /api/topology/world-map via world_map_service, cleaned up camera_world_poses on CameraPool.remove_camera, and added interactive 2D minimap cone-focus and origin/yaw/range drag controls.
