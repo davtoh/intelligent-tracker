@@ -203,23 +203,39 @@
 
   function setupCanvasEventListeners(canvas, handlers) {
     if (!canvas) return;
+    let dragging = false;
+    let activePointerId = null;
     canvas.addEventListener('click', (evt) => {
       const pt = getCanvasCoords(evt, canvas);
       handlers.onClick?.(pt);
     });
-    canvas.addEventListener('mousedown', (evt) => {
-      const pt = getCanvasCoords(evt, canvas);
-      handlers.onMouseDown?.(pt, evt);
-    });
-    canvas.addEventListener('mousemove', (evt) => {
-      const pt = getCanvasCoords(evt, canvas);
-      handlers.onMouseMove?.(pt);
-    });
-    canvas.addEventListener('mouseup', (evt) => {
-      const pt = getCanvasCoords(evt, canvas);
-      handlers.onMouseUp?.(pt, evt);
-    });
-    canvas.addEventListener('dblclick', (evt) => {
+    const onDown = (evt) => {
+      dragging = true;
+      if (evt.pointerId !== undefined && typeof canvas.setPointerCapture === 'function') {
+        activePointerId = evt.pointerId;
+        try { canvas.setPointerCapture(evt.pointerId); } catch (_) {}
+      }
+      handlers.onMouseDown?.(getCanvasCoords(evt, canvas), evt);
+    };
+    const onMove = (evt) => handlers.onMouseMove?.(getCanvasCoords(evt, canvas));
+    const onUp = (evt) => {
+      if (!dragging && evt.currentTarget !== canvas) return;
+      dragging = false;
+      if (activePointerId !== null && typeof canvas.releasePointerCapture === 'function') {
+        try { canvas.releasePointerCapture(activePointerId); } catch (_) {}
+        activePointerId = null;
+      }
+      handlers.onMouseUp?.(getCanvasCoords(evt, canvas), evt);
+    };
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('mouseup', onUp);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('dblclick', () => {
       handlers.onDblClick?.();
     });
   }

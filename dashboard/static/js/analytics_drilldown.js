@@ -113,13 +113,17 @@
       outflow: Number(bucket.outflow || 0),
     };
     state.lastDrilldown = record;
-    window.switchTab?.(targetTab);
-    if (targetTab === 'tab-alerts') {
-      window.AlertsView?.loadAlerts?.({ offset: 0, filters: { camera_id: camId, start_time: bStart, end_time: bEnd } });
-    } else if (window.TimelineView?.applyFilter) {
-      window.TimelineView.applyFilter({ source: camId, startTime: bStart, endTime: bEnd, offset: 0 });
+    if (targetTab === 'tab-timeline' && window.App?.navigate) {
+      window.App.navigate('tab-timeline', { source: camId, startTime: bStart, endTime: bEnd, offset: 0 });
     } else {
-      window.GalleryTimeline?.loadSightings?.({ resetOffset: true });
+      window.switchTab?.(targetTab);
+      if (targetTab === 'tab-alerts') {
+        window.AlertsView?.loadAlerts?.({ offset: 0, filters: { camera_id: camId, start_time: bStart, end_time: bEnd } });
+      } else if (window.TimelineView?.applyFilter) {
+        window.TimelineView.applyFilter({ source: camId, startTime: bStart, endTime: bEnd, offset: 0 });
+      } else {
+        window.GalleryTimeline?.loadSightings?.({ resetOffset: true });
+      }
     }
     window.showToast?.('Flow Peak Drill-Down', `Filtered ${camId || 'All Cameras'} (${bucket.label || ''})`, 'info');
     return record;
@@ -148,11 +152,15 @@
       density: cell.density,
     };
     state.lastDrilldown = record;
-    window.switchTab?.('tab-timeline');
-    if (window.TimelineView?.applyFilter) {
-      window.TimelineView.applyFilter({ source: camId, offset: 0 });
+    if (window.App?.navigate) {
+      window.App.navigate('tab-timeline', { source: camId, offset: 0 });
     } else {
-      window.GalleryTimeline?.loadSightings?.({ resetOffset: true });
+      window.switchTab?.('tab-timeline');
+      if (window.TimelineView?.applyFilter) {
+        window.TimelineView.applyFilter({ source: camId, offset: 0 });
+      } else {
+        window.GalleryTimeline?.loadSightings?.({ resetOffset: true });
+      }
     }
     window.showToast?.('Hotspot Drill-Down', `Cell (${cell.col},${cell.row}) · ${Math.round(cell.density * 100)}% density`, 'info');
     return record;

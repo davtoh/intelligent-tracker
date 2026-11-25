@@ -81,6 +81,7 @@
       ).join('');
       trackerSelect.value = currentVal;
     }
+    window.DetectorConfigPanel?.hydrateCocoClasses?.(capabilities);
     window.CameraFormHelpers?.syncTrackedCategoriesUI?.(capabilities);
   }
 
@@ -156,24 +157,23 @@
     }
     const detSelect = document.getElementById('cam-detector-select');
     if (detSelect) detSelect.addEventListener('change', handleDetectorChange);
+    window.DetectorConfigPanel?.bindPanelEvents?.();
   }
 
   function getValues() {
-    const detSelect = document.getElementById('cam-detector-select');
-    const trackerSelect = document.getElementById('cam-tracker-select');
-    const confInput = document.getElementById('cam-conf-input');
-    const classesInput = document.getElementById('cam-classes-input');
-    const armedCb = document.getElementById('cam-armed-checkbox');
-    const confVal = parseFloat(confInput?.value || '0.40');
-    const classesRaw = (classesInput?.value || '').trim();
+    if (window.DetectorConfigPanel?.readValues) return window.DetectorConfigPanel.readValues();
+    const confVal = parseFloat(document.getElementById('cam-conf-input')?.value || '0.40');
+    const classesRaw = (document.getElementById('cam-classes-input')?.value || '').trim();
     const catsRaw = (document.getElementById('cam-tracked-categories-input')?.value || '').trim();
+    const nmsEl = document.getElementById('cam-agnostic-nms-checkbox');
     return {
-      detector: detSelect?.value || 'yolov8',
-      tracker: trackerSelect?.value || 'centroid',
+      detector: document.getElementById('cam-detector-select')?.value || 'yolov8',
+      tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
       confidence: isNaN(confVal) ? 0.40 : Math.min(Math.max(confVal, 0.05), 1.00),
       classes: classesRaw ? classesRaw.split(',').map(s => s.trim()).filter(Boolean) : null,
       tracked_categories: catsRaw ? catsRaw.split(',').map(s => s.trim()).filter(Boolean) : null,
-      armed: Boolean(armedCb?.checked),
+      armed: Boolean(document.getElementById('cam-armed-checkbox')?.checked),
+      agnostic_nms: nmsEl ? Boolean(nmsEl.checked) : true,
     };
   }
 
@@ -195,6 +195,7 @@
     if (armedCb) armedCb.checked = Boolean(cam.armed);
     const activeClasses = classesInput ? classesInput.value.trim() : '';
     getPresetButtons().forEach(btn => btn.classList.toggle('active', (btn.getAttribute('data-classes') || '').trim() === activeClasses));
+    window.DetectorConfigPanel?.applyValues?.(cam);
   }
 
   function resetValues() {
@@ -207,6 +208,7 @@
     const armedCb = document.getElementById('cam-armed-checkbox');
     if (armedCb) armedCb.checked = false;
     getPresetButtons().forEach(btn => btn.classList.remove('active'));
+    window.DetectorConfigPanel?.resetPanel?.();
   }
 
   function resolveInitialCameraId(activeCameras, currentId = null) {
@@ -269,11 +271,7 @@
     init, loadCapabilities, getValues, setValues, resetValues, syncConfidence, isSyntheticSource,
     resolveInitialCameraId, renderArmButton, bindArmButtons,
   };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
 

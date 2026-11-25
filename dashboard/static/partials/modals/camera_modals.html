@@ -119,65 +119,7 @@
                 </div>
               </div>
 
-              <!-- AI Detector & Tracking Intelligence -->
-              <div class="ai-config-section">
-                <div class="ai-config-header">
-                  <h4 class="ai-config-title">
-                    🧠 AI Detector & Tracking Intelligence
-                  </h4>
-                  <span class="ai-config-badge">Hardware Accelerated</span>
-                </div>
-
-                <div class="form-row">
-                  <div class="form-group col-6">
-                    <label for="cam-detector-select">Detector Model</label>
-                    <select id="cam-detector-select" class="form-input">
-                      <option value="yolov8" selected>YOLOv8 (High Accuracy)</option>
-                      <option value="yolo11">YOLO11 (SOTA Real-time)</option>
-                      <option value="haar">Haar Cascade (Ultra Fast)</option>
-                      <option value="face_yunet">YuNet (Face Detection)</option>
-                      <option value="movementdetector">Movement (Frame Diff)</option>
-                      <option value="mock">Synthetic Mock (Testing)</option>
-                    </select>
-                  </div>
-                  <div class="form-group col-6">
-                    <label for="cam-tracker-select">Tracking Engine</label>
-                    <select id="cam-tracker-select" class="form-input">
-                      <option value="centroid" selected>Centroid (Fast Distance)</option>
-                      <option value="sort">SORT (Kalman + Hungarian)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <label for="cam-conf-range" style="margin-bottom: 0;">Detection Confidence Threshold</label>
-                    <span id="cam-conf-display" style="font-size: 0.82rem; font-weight: 700; color: var(--accent-color, #38bdf8); font-family: monospace;">0.40</span>
-                  </div>
-                  <div class="slider-container">
-                    <input type="range" id="cam-conf-range" class="slider-range-input" min="0.05" max="1.00" step="0.05" value="0.40" />
-                    <input type="number" id="cam-conf-input" class="form-input slider-number-input" min="0.05" max="1.00" step="0.01" value="0.40" />
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                    <input type="checkbox" id="cam-armed-checkbox" />
-                    <span>🛡️ Armed (AI Alarm Promotion in Eco / Focus-Only Mode)</span>
-                  </label>
-                </div>
-
-                <div class="form-group">
-                  <label for="cam-classes-input">Target Class Filter (comma-separated, empty for all)</label>
-                  <input type="text" id="cam-classes-input" class="form-input" placeholder="e.g. person, car" />
-                  <div class="class-presets-bar">
-                    <button type="button" class="btn-tag-preset" data-classes="person">👤 Person</button>
-                    <button type="button" class="btn-tag-preset" data-classes="car, motorcycle, bus, truck, bicycle">🚗 Vehicles</button>
-                    <button type="button" class="btn-tag-preset" data-classes="person, car, truck, motorcycle, backpack">🛡️ Security</button>
-                    <button type="button" class="btn-tag-preset" data-classes="">🌐 All Classes</button>
-                  </div>
-                </div>
-              </div>
+              {% include "partials/modals/detector_config_panel.html" %}
 
               <!-- Live Snapshot Connection Preview Box -->
               <div class="connection-test-box glass-panel">

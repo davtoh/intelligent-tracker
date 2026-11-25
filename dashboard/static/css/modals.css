@@ -40,9 +40,9 @@
 }
 
 .modal-card.modal-lg {
-  width: min(94dvw, 1240px);
-  max-width: 1280px;
-  min-width: min(94dvw, 640px);
+  width: min(96dvw, 1400px);
+  max-width: 1400px;
+  min-width: min(96dvw, 640px);
   min-height: 420px;
   resize: both;
   overflow: hidden;
@@ -155,8 +155,13 @@
 /* Multi-Column Modal Body */
 .modal-body-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
   gap: 20px;
+}
+
+.modal-left-col,
+.modal-right-col {
+  min-width: 0;
 }
 
 @media (max-width: 800px) {
@@ -175,8 +180,10 @@
 
 .section-subhead {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border-subtle);

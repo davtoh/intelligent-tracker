@@ -79,8 +79,15 @@
     }
   }
 
+  function getActiveVideoCurrentTime() {
+    const player = document.getElementById('scrubber-video-player');
+    const t = Number(player?.currentTime);
+    return Number.isFinite(t) && t > 0 ? t : 0;
+  }
+
   window.EnrollmentStageController = {
     getActiveVideoFilename,
+    getActiveVideoCurrentTime,
     isVideoStudioActive,
     resolvePreferredSource,
     updateSourceBadge,

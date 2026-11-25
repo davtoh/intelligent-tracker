@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const drawerTabs = document.querySelectorAll('.drawer-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
 
-  function switchTab(targetTabId, updateHash = true) {
+  function switchTab(targetTabId, updateHash = true, opts = {}) {
     const previousTab = state.activeTab;
     state.activeTab = targetTabId;
 
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
       pane.classList.toggle('active', pane.id === targetTabId);
     });
 
-    handleTabLifecycle(previousTab, targetTabId);
+    handleTabLifecycle(previousTab, targetTabId, opts);
 
     if (updateHash) {
       const cleanHash = '#' + targetTabId.replace('tab-', '');
@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.switchTab = switchTab;
 
-  function handleTabLifecycle(previousTab, targetTabId) {
+  function handleTabLifecycle(previousTab, targetTabId, opts = {}) {
     if (previousTab === 'tab-videos' && targetTabId !== 'tab-videos') {
       window.VideoScrubber?.onTabLeave?.();
     } else if (previousTab === 'tab-live' && targetTabId !== 'tab-live') {
@@ -107,8 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (targetTabId === 'tab-gallery') {
       window.GalleryTimeline?.loadGallery();
     } else if (targetTabId === 'tab-timeline') {
-      window.GalleryTimeline?.loadTimelineFilters();
-      window.GalleryTimeline?.loadSightings();
+      if (!opts.skipTimelineAutoLoad) {
+        Promise.resolve(window.GalleryTimeline?.loadTimelineFilters?.()).then(() => {
+          window.GalleryTimeline?.loadSightings?.();
+        });
+      }
     } else if (targetTabId === 'tab-analytics') {
       window.AnalyticsView?.initChart();
       window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
@@ -124,7 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleHashRoute() {
-    const raw = (window.location.hash || '').replace('#', '').trim().toLowerCase();
+    const parsed = window.AppNavigation?.parseHash?.(window.location.hash) || {
+      route: (window.location.hash || '').replace('#', '').split('?')[0].trim().toLowerCase(),
+      params: {},
+    };
+    const raw = parsed.route;
     if (!raw) return;
     const modalMap = {
       cameras: 'modal-camera-manager',
@@ -140,16 +147,33 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const tabId = raw.startsWith('tab-') ? raw : ('tab-' + raw);
-    if (document.getElementById(tabId)) switchTab(tabId, false);
+    if (!document.getElementById(tabId)) return;
+    const sourceRef = window.AppNavigation?.paramsToSourceRef?.(parsed.params || {}) || {};
+    if (window.AppNavigation?.navigate) window.AppNavigation.navigate(tabId, sourceRef, { updateHash: false });
+    else switchTab(tabId, false);
   }
 
+  let _syncingCamera = false;
   function switchCamera(camId) {
     if (!camId || camId === activeCameraId) return;
     activeCameraId = camId;
+    try { window.localStorage?.setItem('it_focused_camera_id', camId); } catch (_) {}
+    const camSel = document.getElementById('active-camera-select');
+    if (camSel && camSel.value !== camId) camSel.value = camId;
+    const titleEl = document.getElementById('video-stream-title');
+    if (titleEl && !titleEl.textContent.includes(`(${camId})`)) {
+      titleEl.textContent = `Camera Feed: ${camId}`;
+      titleEl.title = titleEl.textContent;
+    }
+    if (!_syncingCamera) {
+      _syncingCamera = true;
+      try { window.CameraManager?.focusCamera?.(camId); } finally { _syncingCamera = false; }
+    }
     if (state.activeTab === 'tab-live') {
       activeLiveWsCamId = camId;
       pendingLiveWsCamId = null;
       window.TelemetryGateway?.initWebSocket(camId, onTelemetryReceived, onWsStatusChange);
+      if (!window.LivePlayer?.isPaused?.()) attachLiveStream(true);
     } else {
       pendingLiveWsCamId = camId;
     }
@@ -173,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window.AnalyticsView?.updateChart(totalCrossed);
     }
     window.TelemetryGateway?.updateKpiDisplays(data, state.tracks.length, totalCrossed);
+    window.TelemetryGateway?.updateConnectionStatus?.(data, activeCameraId);
 
     if (data.zones) window.TelemetryGateway?.renderZones(data.zones);
     if (data.tripwires) window.TelemetryGateway?.renderTripwires(data.tripwires);
@@ -196,9 +221,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function onWsStatusChange(isOnline) {
     if (connStatusPill) connStatusPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
+    const drawerPill = document.getElementById('drawer-connection-status-pill');
+    if (drawerPill) {
+      drawerPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
+      const span = drawerPill.querySelector?.('span:last-child');
+      if (span) span.textContent = isOnline ? 'Online' : 'Offline';
+    }
     if (connStatusText) {
       const fullText = isOnline ? `Connected (${activeCameraId})` : 'Reconnecting...';
-      if (window.TextTruncationManager && isOnline && activeCameraId.length > 14) {
+      if (window.TextTruncationManager && isOnline && activeCameraId && activeCameraId.length > 14) {
         window.TextTruncationManager.apply(connStatusText, {
           fullText: fullText,
           mode: 'middle',
@@ -316,6 +347,11 @@ document.addEventListener('DOMContentLoaded', () => {
   window.App = {
     switchCamera: switchCamera,
     getActiveCameraId: () => activeCameraId,
+    navigate: (tab, sourceRef, opts) => (
+      window.AppNavigation?.navigate
+        ? window.AppNavigation.navigate(tab, sourceRef, opts)
+        : switchTab(String(tab || 'tab-live').startsWith('tab-') ? tab : `tab-${tab}`)
+    ),
   };
   window.App.switchCamera = switchCamera;
   window.showSnapshotModal = (imgUrl, title) => window.GalleryTimeline?.showSnapshotModal(imgUrl, title);

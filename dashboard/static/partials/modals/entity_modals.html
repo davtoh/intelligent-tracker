@@ -60,11 +60,11 @@
       <div class="modal-body-scroll">
         <div class="modal-body-grid">
           <!-- Left: Interactive Freeze-Frame Canvas / Image Upload -->
-          <div class="modal-left-col">
-            <div class="section-subhead">
+          <div class="modal-left-col" style="min-width: 0;">
+            <div class="section-subhead" style="flex-wrap: wrap; gap: 8px;">
               <h4>Freeze-Frame Bounding Box Selector</h4>
-              <div style="display: flex; gap: 6px; align-items: center;">
-                <select id="enroll-camera-select" class="form-input" aria-label="Camera Source" style="width: auto; min-width: 140px; padding: 3px 8px; font-size: 12px;"><option value="">Select camera...</option></select>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0;">
+                <select id="enroll-camera-select" class="form-input" aria-label="Camera Source" style="width: auto; min-width: 0; max-width: 100%; padding: 3px 8px; font-size: 12px;"><option value="">Select camera...</option></select>
                 <button type="button" class="btn btn-xs btn-outline" id="btn-capture-freeze">📷 Grab Frame</button>
                 <button type="button" class="btn btn-xs btn-outline" id="btn-upload-enroll-crop">📁 Upload</button>
                 <input type="file" id="enroll-file-input" accept="image/*" style="display: none;" />

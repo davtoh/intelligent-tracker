@@ -15,7 +15,7 @@
   let _escapeBound = false;
 
   const clonePts = (pts) => (Array.isArray(pts) ? pts.map((p) => [Math.round(p[0]), Math.round(p[1])]) : []);
-  const pointsChanged = (a, b) => a.length !== b.length || a.some((p, i) => p[0] !== b[i][0] || p[1] !== b[1][1]);
+  const pointsChanged = (a, b) => a.length !== b.length || a.some((p, i) => p[0] !== b[i][0] || p[1] !== b[i][1]);
 
   function pointInPolygon(pt, poly) {
     if (!Array.isArray(poly) || poly.length < 3) return false;

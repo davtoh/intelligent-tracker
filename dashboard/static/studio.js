@@ -25,28 +25,29 @@
     }
   }
 
-  function updateStudioStatus(msg) {
+  function updateStudioStatus(msg, level = 'info') {
     const banner = document.getElementById('studio-status-banner');
-    if (banner) banner.textContent = msg;
+    if (!banner) return;
+    banner.textContent = msg;
+    const show = level === 'warning' || level === 'error' || /error|warn|fail/i.test(String(msg || ''));
+    if (banner.style) banner.style.display = show ? 'block' : 'none';
   }
 
   function setStudioMode(mode) {
     studioState.mode = mode;
     studioState.points = [];
-    const banner = document.getElementById('studio-status-banner');
-
     document.querySelectorAll('.studio-tool-btn').forEach(btn => btn.classList.remove('active'));
     if (mode === 'draw_zone') {
       document.getElementById('btn-mode-draw-zone')?.classList.add('active');
-      if (banner) banner.textContent = 'Mode: Draw Zone. Click vertices on video; double-click to close polygon.';
+      updateStudioStatus('Mode: Draw Zone. Click vertices on video; double-click to close polygon.');
     } else if (mode === 'draw_tripwire') {
       document.getElementById('btn-mode-draw-tripwire')?.classList.add('active');
-      if (banner) banner.textContent = 'Mode: Draw Tripwire. Click start point, then click end point.';
+      updateStudioStatus('Mode: Draw Tripwire. Click start point, then click end point.');
     } else if (mode === 'calibrate_homography') {
       document.getElementById('btn-mode-homography')?.classList.add('active');
-      if (banner) banner.textContent = 'Mode: Calibrate Homography. Click 4 corners (TL -> TR -> BR -> BL).';
+      updateStudioStatus('Mode: Calibrate Homography. Click 4 corners (TL -> TR -> BR -> BL).');
     } else {
-      if (banner) banner.textContent = 'Ready. Select a tool to begin.';
+      updateStudioStatus('Ready. Select a tool to begin.');
     }
     drawOverlay();
   }
@@ -339,7 +340,7 @@
   });
   window.Studio = {
     init: initStudio, setMode: setStudioMode, deleteZone, deleteTripwire, deleteTopologyLink,
-    renderBEV: renderBEVMinimap, startMinimapLoop, stopMinimapLoop,
+    loadStudioChannels, renderBEV: renderBEVMinimap, startMinimapLoop, stopMinimapLoop,
     syncStudioTabState, syncTabVisibility: syncStudioTabState,
     searchJourney: (q) => window.JourneySearch?.search(q), exportJourney: (q) => window.JourneySearch?.exportVideo(q),
   };

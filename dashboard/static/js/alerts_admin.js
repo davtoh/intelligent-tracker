@@ -160,13 +160,22 @@
 
   function jumpToLiveMonitor(cameraId) {
     if (!cameraId) return false;
+    if (window.App?.navigate) {
+      window.App.navigate('tab-live', { cameraId });
+      return true;
+    }
     window.switchTab?.('tab-live');
     window.App?.switchCamera?.(cameraId);
     return true;
   }
 
-  function jumpToScenarioStudio(cameraId, zoneId = '') {
+  async function jumpToScenarioStudio(cameraId, zoneId = '') {
+    if (window.App?.navigate) {
+      await window.App.navigate('tab-studio', { cameraId, zoneId });
+      return true;
+    }
     window.switchTab?.('tab-studio');
+    await window.Studio?.loadStudioChannels?.();
     const sel = document.getElementById('studio-camera-select');
     if (sel && cameraId) {
       sel.value = cameraId;

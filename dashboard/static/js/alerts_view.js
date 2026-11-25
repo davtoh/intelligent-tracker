@@ -11,6 +11,8 @@
     total: 0,
     hasMore: false,
     eventsByIndex: [],
+    selectedIds: new Set(),
+    selectAllMatching: false,
     featureVisibility: {
       bboxes: true, track_ids: true, dwell_timers: true,
       velocity: false, zones: true, tripwires: true,
@@ -85,8 +87,11 @@
     const rowClass = ev.is_read ? 'alert-row-read' : 'alert-row-unread';
     const sourceCell = window.AlertsAdmin?.buildSourceLinkHtml?.(ev) || escapeHtml(ev.zone_id || ev.camera_id || 'System');
     const actionCell = window.AlertsAdmin?.buildActionButtonsHtml?.(ev) || '<span class="text-subtle">--</span>';
+    const evId = ev.id !== undefined && ev.id !== null ? String(ev.id) : '';
+    const isChecked = state.selectAllMatching || (evId && state.selectedIds.has(evId));
     return `
-      <tr class="${rowClass}" data-event-id="${escapeHtml(ev.id ?? '')}" data-is-read="${ev.is_read ? '1' : '0'}">
+      <tr class="${rowClass}" data-event-id="${escapeHtml(evId)}" data-is-read="${ev.is_read ? '1' : '0'}">
+        <td><input type="checkbox" class="alert-row-select" data-event-id="${escapeHtml(evId)}" ${isChecked ? 'checked' : ''} onchange="window.AlertsView?.toggleRowSelection?.('${escapeHtml(evId)}', this.checked)" /></td>
         <td>${escapeHtml(timeStr)}</td><td><strong>${escapeHtml(type)}</strong></td>
         <td><span class="${severityClass}">${escapeHtml(severityText)}</span></td>
         <td>${sourceCell}</td>
@@ -196,11 +201,11 @@
       }
       tbody.innerHTML = items.length
         ? items.map(buildAlertRowHtml).join('')
-        : '<tr><td colspan="8" class="text-center">No alerts match the current filters.</td></tr>';
+        : '<tr><td colspan="9" class="text-center">No alerts match the current filters.</td></tr>';
       syncPaginationControls(items.length);
       return items;
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
       return [];
     }
   }
@@ -258,6 +263,73 @@
         loadAlerts();
       });
     }
+    const selAll = document.getElementById('alerts-select-all');
+    if (selAll && !selAll.dataset.bound) {
+      selAll.dataset.bound = '1';
+      selAll.addEventListener('change', (e) => toggleSelectAllVisible(Boolean(e.target?.checked)));
+    }
+    const selMatch = document.getElementById('alerts-select-all-matching');
+    if (selMatch && !selMatch.dataset.bound) {
+      selMatch.dataset.bound = '1';
+      selMatch.addEventListener('change', (e) => toggleSelectAllMatching(Boolean(e.target?.checked)));
+    }
+    const ackSelBtn = document.getElementById('btn-alerts-ack-selected');
+    if (ackSelBtn && !ackSelBtn.dataset.bound) {
+      ackSelBtn.dataset.bound = '1';
+      ackSelBtn.addEventListener('click', () => bulkAckSelected(true));
+    }
+    const delSelBtn = document.getElementById('btn-alerts-delete-selected');
+    if (delSelBtn && !delSelBtn.dataset.bound) {
+      delSelBtn.dataset.bound = '1';
+      delSelBtn.addEventListener('click', () => bulkDeleteSelected());
+    }
+  }
+
+  function toggleRowSelection(eventId, checked) {
+    if (!eventId) return;
+    if (checked) state.selectedIds.add(String(eventId));
+    else { state.selectedIds.delete(String(eventId)); state.selectAllMatching = false; }
+  }
+
+  function toggleSelectAllVisible(checked) {
+    state.selectAllMatching = false;
+    state.eventsByIndex.forEach((ev) => {
+      if (ev?.id === undefined || ev?.id === null) return;
+      if (checked) state.selectedIds.add(String(ev.id));
+      else state.selectedIds.delete(String(ev.id));
+    });
+    document.querySelectorAll?.('.alert-row-select')?.forEach?.((cb) => { cb.checked = checked; });
+  }
+
+  function toggleSelectAllMatching(checked) {
+    state.selectAllMatching = Boolean(checked);
+    toggleSelectAllVisible(Boolean(checked));
+    state.selectAllMatching = Boolean(checked);
+  }
+
+  async function bulkAckSelected(isRead = true) {
+    if (state.selectAllMatching) {
+      return window.AlertsAdmin?.acknowledgeEvents?.({ markAll: true, isRead });
+    }
+    const ids = Array.from(state.selectedIds).map((id) => Number(id)).filter(Number.isFinite);
+    if (!ids.length) return null;
+    state.selectedIds.clear();
+    return window.AlertsAdmin?.acknowledgeEvents?.({ eventIds: ids, isRead });
+  }
+
+  async function bulkDeleteSelected() {
+    if (state.selectAllMatching) {
+      state.selectAllMatching = false;
+      state.selectedIds.clear();
+      return window.AlertsAdmin?.clearMatchingEvents?.(readFiltersFromDom());
+    }
+    const ids = Array.from(state.selectedIds);
+    if (!ids.length) return null;
+    state.selectedIds.clear();
+    for (const id of ids) {
+      await window.AlertsAdmin?.deleteEvent?.(id);
+    }
+    return { deleted: ids.length };
   }
 
   window.AlertsView = {
@@ -268,5 +340,10 @@
     openAlertSnapshot,
     renderSnapshotOverlay,
     bindControls,
+    toggleRowSelection,
+    toggleSelectAllVisible,
+    toggleSelectAllMatching,
+    bulkAckSelected,
+    bulkDeleteSelected,
   };
 })();
