@@ -42,6 +42,7 @@ description: Apply when editing dashboard/static/ (HTML, CSS, JS), multiview (/w
   - Keep `analytics.html` free of eager `src="/analytics/heatmap"` so cold-boot `#live` never fetches heatmaps early; attach on `#tab-analytics` entry or active init.
   - When probing MJPEG `<img>` streams in headless Chrome, wait on `naturalWidth > 0` (never `img.complete`), and ensure `#studio-camera-select` `change` is dispatched after channel load.
   - Always grep legacy Node VM contract tests before changing URL query-param formats or eager HTML `src` attributes.
+  - Plain JS DOM stubs in Node VM tests do not coerce numeric `input.value` to string like real `HTMLInputElement`; coerce in the stub or assert `String(el.value)`. Pass `json.dumps`-wrapped JS source strings to `vm.runInContext` instead of outer JS template literals when inner scripts contain backticks.
 
 ## 4. Modal Ergonomics, `MediaEmptyState`, Tag UX & Interactive Studio (`ADRs 10–12`)
 - **Responsive Modal Grid & `MediaEmptyState`**: Keep wide dialogs adaptive (`width: min(94dvw, 1240px)`, `resize: both`, `@container (inline-size < 900px)` collapse, `min-width: 0` on `.modal-left-col`/`.modal-right-col`) with defined `.form-row`/`.col-*` rules (`modal_forms_grid.css`); never render raw empty `img.src = ''` or unguarded `<img>` icons — mount shared `MediaEmptyState` (`media_empty_state.js`) across `#studio-live-img`, `#static-heatmap-img`, `#tag-roi-crop-img`, `#snapshot-modal-img`, `#enroll-crop-preview-img`, and `#test-preview-img`.
