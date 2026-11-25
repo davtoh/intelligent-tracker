@@ -69,11 +69,11 @@ class TestLearnedClassesBackend(unittest.TestCase):
 
     def test_schema_v4_idempotency(self) -> None:
         ver = self.db._conn.execute("PRAGMA user_version;").fetchone()[0]
-        self.assertEqual(ver, 4)
+        self.assertGreaterEqual(ver, 4)
         db2 = TrackerDB(self.db_path)
         self.addCleanup(db2.close)
         ver2 = db2._conn.execute("PRAGMA user_version;").fetchone()[0]
-        self.assertEqual(ver2, 4)
+        self.assertEqual(ver2, ver)
         self.assertEqual(db2.list_learned_classes(), [])
 
     def test_repository_write_calls_rollback_on_error(self) -> None:

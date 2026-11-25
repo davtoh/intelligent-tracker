@@ -187,3 +187,15 @@ The following items from `.TODO/reid_unification_traceability_and_studio_ux_mast
 | **Short data & default viewport** | `BUG-20` | `audit_layout.js` checks `scrollWidth` at one viewport with short text (`Cam1`). | Extend `audit_layout.js` + `cdp_inspect.py` with child-box-outside-parent overflow checks across `960`/`1280`/`1920` viewports and long `<option>` strings. |
 | **No `data:image` decode or pixel luminance check** | `BUG-19`, `BUG-21` | `audit_layout.js` checks only initial `<img>` `naturalWidth > 0`. | Add `data:image/svg+xml` XML decode verification and first-frame enrollment canvas luminance check. |
 | **No provenance or jump contract** | `BUG-16`, `BUG-17`, `BUG-30` | No schema or surface rule checks `SourceRef` carry-through on produced artifacts or jump buttons. | Add `sightings_provenance_probe` + `surface_contracts.py` fetch-method parity and `App.navigate` jump-button verification. |
+
+---
+
+## 7. Integration Seams & Entity Persistence Master Roadmap Completion (`BUG-10`..`BUG-30`)
+
+All 4 steps of `.TODO/integration_seams_entity_persistence_master_roadmap.md` (`ADR-13`..`ADR-20`) are implemented, including Step 4 (`step_4_reversible_review_and_studio_ux.md`):
+
+- **Reversible `review_decisions` Audit Trail (`PRAGMA user_version = 5`, `ADR-19`, `BUG-24`)**: `intelligent_tracker/repositories/review_schema.py`, `review_decision_repo.py` (`ReviewDecisionMixin`), `dashboard/services/reversible_review_service.py`, `dashboard/schemas_review.py`, and `dashboard/routers/review.py` / `tagging.py` (`/api/review/decisions`, `/undo`, `/report-wrong`, `/api/tag/correct`).
+- **Recurring Unknowns & Timeline/Tag UX (`BUG-24`)**: `ActiveLearningTriage(unknown_min_dwell_sec=3.0)`, `_gallery_matching.py`, `video_scenario_reeval_service.py`, `tag_modal_state.js`, `tag_feedback_actions.js`, and `review_undo_and_flag.js`.
+- **Studio Minimap Zoom/Fit/Pan, 4-Point BEV Quad & `< 260L` Split (`BUG-25`)**: `dashboard/static/js/studio_media.js` split from `studio_canvas.js` (`< 260L`), `world_minimap.js`, and `world_minimap_interactions.js`.
+- **Journey, Analytics & Snapshot Overlay Isolation (`ADRs 09, 12`)**: `journey_search.js` empty-prefix suggestions, `analytics_flow_helpers.py` (`zone_id`, `event_type`, `page`, `page_size`, `video:<filename>`), and `dashboard/static/js/snapshot_modal_overlay.js` (`ResizeObserver` + `#timeline` reset).
+- **Seam Probe**: `.diagnostics/probes/reversible_review_and_minimap_probe.py` alongside the 9 workspace seam probes.

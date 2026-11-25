@@ -68,6 +68,7 @@ def _recompute_mismatched_signatures(db: Any, extractor: Any, expected_dim: int)
         dim = int(emb.shape[0]) if hasattr(emb, "shape") and emb.ndim == 1 else (int(emb.size) if hasattr(emb, "size") else 0)
         crop_path = str(sig.get("crop_path") or "").strip()
         if dim == expected_dim:
+            logger.debug("Signature id=%s already matches expected_dim=%d", sig.get("id"), expected_dim)
             continue
         if not crop_path or not os.path.exists(crop_path):
             logger.debug("Signature id=%s dim=%d mismatch without readable crop_path", sig.get("id"), dim)

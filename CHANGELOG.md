@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-25] feat: Step 4: Reversible Review Audit & Studio / Analytics / Alerts UX
+- **Type**: feat
+- **Summary**: Complete Step 4 (review_decisions v5 audit/undo, recurring unknown queueing, Studio minimap zoom/BEV quad, Journey/Analytics/Snapshot overlay isolation) and close integration_seams_entity_persistence_master_roadmap
+- **Files** (13):
+  - `AGENTS.md`
+  - `dashboard/services/multiview/limits.py`
+  - `dashboard/static/app.js`
+  - `dashboard/static/js/scrubber_timeline_slider.js`
+  - `docs/architecture/CURRENT_ARCHITECTURE.md`
+  - `intelligent_tracker/homography.py`
+  - `intelligent_tracker/matching/gallery.py`
+  - `intelligent_tracker/matching/learned_class_matcher.py`
+  - ... (+5 more)
+
 ## [2026-11-25] feat: Step 3 M4: Exemplar Learned Classes & Per-Camera COCO Overrides
 - **Type**: feat
 - **Summary**: Added schema v4, LearnedClassMixin, LearnedClassMatcher, LearnedClassService, /api/classes/* router, and unified Classes & Badges 3-tab gallery sub-view.
@@ -131,17 +145,3 @@
   - `intelligent_tracker/world/_lifecycle.py`
   - ... (+5 more)
 - **Verification**: .venv/Scripts/python.exe -m unittest discover tests
-
-## [2026-11-23] fix: Step 1: Critical Bug Remediations & Tooling Elevation
-- **Type**: fix
-- **Summary**: Resolved Findings 1-7 and BE-1..BE-4 across backend/frontend, elevated SPA 9-tab CDP and Video Studio probes, and added broken-img, script wrap-order, query-param, and repo-rollback rules to system-diagnostics.
-- **Files** (8):
-  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-  - `tests/test_database_concurrency.py`
-  - `tests/test_live_studio_sync.py`
-  - `tests/test_step2_studio_minimap_gating.py`
-  - `tests/test_step2_tab_scoped_perf_integration.py`
-  - `tests/test_step3_e2e_tagging_flow.py`
-  - `tests/test_step4_m3_spa_and_video_contracts.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

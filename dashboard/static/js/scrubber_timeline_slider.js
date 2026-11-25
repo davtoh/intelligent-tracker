@@ -144,7 +144,7 @@
       const dataUrl = captureFrameToCanvas(vid, canvas);
       if (dataUrl && typeof onFrameCaptured === 'function') onFrameCaptured(dataUrl);
     };
-    const seekInitial = () => { if (targetTime > 0 && Number.isFinite(targetTime)) try { vid.currentTime = targetTime; } catch (_) {} grab(); };
+    const seekInitial = () => { if (targetTime > 0 && Number.isFinite(targetTime)) try { vid.currentTime = targetTime; } catch (err) { console.debug('Scrubber initial seek failed:', err); } grab(); };
     if (!vid.dataset?.sliderBound) {
       if (vid.dataset) vid.dataset.sliderBound = '1';
       _enrollSliderCtrl = create({

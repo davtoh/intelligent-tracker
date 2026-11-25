@@ -88,6 +88,7 @@ class LearnedClassMatcher:
         for item in exemplars:
             vec = _l2_normalize(item.get("embedding", np.empty(0, dtype=np.float32)))
             if vec.size == 0:
+                logger.debug("LearnedClassMatcher: skipping empty exemplar for class_id=%s", item.get("class_id"))
                 continue
             cid = int(item["class_id"])
             bucket = grouped.setdefault(

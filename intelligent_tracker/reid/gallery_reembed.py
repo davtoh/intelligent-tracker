@@ -66,6 +66,7 @@ def reembed_mismatched_signatures(
         emb = sig.get("embedding")
         dim = int(emb.shape[0]) if hasattr(emb, "shape") and len(emb.shape) > 0 else 0
         if dim == target_dim:
+            logger.debug("Gallery re-embed: signature id=%s already at target_dim=%d", sig.get("id"), target_dim)
             continue
         mismatched += 1
         ok, active_extractor = _reembed_single_signature(db, sig, target_dim, active_extractor, profile)

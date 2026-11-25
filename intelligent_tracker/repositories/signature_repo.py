@@ -5,9 +5,12 @@ Manages Re-ID feature embedding serialization, signature vectors, and gallery
 matrices for visual re-identification matching.
 """
 
+import logging
 import time
 from typing import Optional, Dict, Any, Tuple, List
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class SignatureMixin:
@@ -216,6 +219,7 @@ class SignatureMixin:
         for row in rows:
             vec = self.deserialize_embedding(row["embedding"])
             if vec is None or vec.size == 0:
+                logger.debug("Skipping empty gallery signature row for entity_id=%s", row["entity_id"])
                 continue
             dim = vec.shape[0] if vec.ndim == 1 else vec.size
             if target_dim is not None and dim != target_dim:

@@ -92,7 +92,7 @@ class TestStep2Milestone1Backend(unittest.TestCase):
 
         db = TrackerDB(db_path)
         self.addCleanup(db.close)
-        self.assertEqual(db.get_schema_version(), 3)
+        self.assertGreaterEqual(db.get_schema_version(), 3)
         cols = {r[1] for r in db._conn.execute("PRAGMA table_info(world_timeline_events);").fetchall()}
         self.assertIn("run_id", cols)
         idxs = {r[1] for r in db._conn.execute("PRAGMA index_list(world_timeline_events);").fetchall()}

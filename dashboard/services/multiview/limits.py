@@ -8,7 +8,10 @@ send timeouts, and thumbnail JPEG quality.
 """
 
 from dataclasses import dataclass
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LAYOUT_CAPS_RAW = "2x2:15:640,3x3:10:480,4x4:6:320"
 DEFAULT_LAYOUT_CAPS: dict[str, tuple[int, int]] = {
@@ -37,6 +40,7 @@ def parse_layout_caps(raw: str | None = None) -> dict[str, tuple[int, int]]:
     for entry in source.split(","):
         parts = [p.strip() for p in entry.split(":")]
         if len(parts) != 3 or not parts[0]:
+            logger.debug("Ignoring malformed multiview layout cap entry: %r", entry)
             continue
         try:
             fps = max(1, int(parts[1]))
