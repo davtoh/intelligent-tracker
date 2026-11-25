@@ -166,18 +166,54 @@ class SignatureMixin:
             finally:
                 cursor.close()
 
+    def update_signature_embedding(self, sig_id: int, embedding: np.ndarray) -> bool:
+        """Update an existing signature's serialized embedding vector in place."""
+        blob = self.serialize_embedding(embedding)
+        with self._lock:
+            if self._conn is None:
+                return False
+            cursor = self._conn.cursor()
+            try:
+                cursor.execute(
+                    "UPDATE entity_signatures SET embedding = ? WHERE id = ?",
+                    (blob, int(sig_id)),
+                )
+                self._conn.commit()
+                return cursor.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
+            finally:
+                cursor.close()
+
     def _build_gallery_matrix(
         self, rows: List[Any], expected_dim: Optional[int]
     ) -> Tuple[np.ndarray, List[int], List[str], List[str]]:
         """Assemble normalized 2D float32 embedding matrix from raw DB rows."""
         vectors, entity_ids, names, categories = [], [], [], []
         target_dim = expected_dim
+        skipped = 0
+        warned = getattr(self, "_gallery_mismatch_warned_dims", None)
+        if warned is None:
+            warned = set()
+            self._gallery_mismatch_warned_dims = warned
         for row in rows:
             vec = self.deserialize_embedding(row["embedding"])
             if vec is None or vec.size == 0:
                 continue
             dim = vec.shape[0] if vec.ndim == 1 else vec.size
             if target_dim is not None and dim != target_dim:
+                skipped += 1
+                pair = (int(dim), int(target_dim))
+                if pair not in warned:
+                    warned.add(pair)
+                    import logging
+
+                    logging.getLogger(__name__).warning(
+                        "Skipping gallery signature with dim=%d (expected_dim=%d).",
+                        dim,
+                        target_dim,
+                    )
                 continue
             if target_dim is None:
                 target_dim = dim
@@ -185,6 +221,7 @@ class SignatureMixin:
             entity_ids.append(row["entity_id"])
             names.append(row["name"])
             categories.append(row["category"])
+        self._last_gallery_mismatch_count = skipped
         if not vectors:
             out_dim = expected_dim if expected_dim is not None else 0
             return np.empty((0, out_dim), dtype=np.float32), [], [], []

@@ -22,6 +22,7 @@ from dashboard.routers.camera_recording import router as camera_recording_router
 from dashboard.routers.categories import router as categories_router
 from dashboard.routers.categories_and_collision import router as categories_and_collision_router
 from dashboard.routers.events_admin import router as events_admin_router
+from dashboard.routers.gallery_health import router as gallery_health_router
 from dashboard.routers.multiview import router as multiview_router
 from dashboard.routers.processing_mode import router as processing_mode_router
 from dashboard.routers.review import router as review_router

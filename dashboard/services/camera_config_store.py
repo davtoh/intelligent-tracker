@@ -154,13 +154,17 @@ class CameraConfigStore:
             if updates.get("source") is not None:
                 updates["source"] = _normalize_cfg_source(updates["source"])
             restart_keys = ("source", "enabled", "device_name", "detector", "tracker", "confidence", "classes", "tracked_categories")
-            needs_restart = any(updates.get(k) is not None and updates[k] != cfg.get(k) for k in restart_keys)
+            nullable_keys = {"classes", "tracked_categories"}
+            needs_restart = any(
+                (k in updates and (updates[k] is not None or k in nullable_keys)) and updates[k] != cfg.get(k)
+                for k in restart_keys
+            )
             field_map = {"cam_type": "type"}
             for key, val in updates.items():
-                if val is None:
+                if val is None and key not in nullable_keys:
                     continue
                 target_key = field_map.get(key, key)
-                cfg[target_key] = float(val) if target_key == "confidence" else val
+                cfg[target_key] = float(val) if target_key == "confidence" and val is not None else val
             return True, needs_restart, cfg
 
     def remove_entry(self, camera_id: str) -> dict[str, Any] | None:

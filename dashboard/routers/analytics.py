@@ -245,11 +245,13 @@ async def query_sightings(
 
 
 @router.get("/sightings/sources")
-async def list_sighting_sources(db: TrackerDB = Depends(get_db)):
-    """List distinct sighting sources with counts for timeline filter dropdowns."""
-    if db is None:
-        return []
-    return await asyncio.to_thread(db.list_sighting_sources)
+async def list_sighting_sources(request: Request, db: TrackerDB = Depends(get_db)):
+    """List distinct sighting sources merged with known cameras and videos."""
+    from dashboard.dependencies import VIDEOS_DIR, get_camera_pool
+    from dashboard.services.analytics_query_service import list_all_sighting_sources
+
+    pool = get_camera_pool(conn=request)
+    return await asyncio.to_thread(list_all_sighting_sources, db, pool=pool, videos_dir=VIDEOS_DIR)
 
 
 @router.get("/events")

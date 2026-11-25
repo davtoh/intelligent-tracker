@@ -168,6 +168,7 @@ class OnnxDetector(Detector):
         labels: Optional[Any] = None,
         input_size: Optional[Any] = None,
         providers: Optional[Any] = None,
+        agnostic_nms: bool = True,
     ):
         super().__init__()
         import onnxruntime as ort
@@ -175,6 +176,7 @@ class OnnxDetector(Detector):
         self.model_path = resolve_model_path(model_path)
         self.conf_threshold = float(conf_threshold)
         self.iou_threshold = float(iou_threshold)
+        self.agnostic_nms = bool(agnostic_nms)
         self.custom_input_size = input_size
         self.labels = resolve_labels(labels)
         self.classes = resolve_classes(classes, self.labels)
@@ -252,7 +254,7 @@ class OnnxDetector(Detector):
         orig_y2 = np.clip((y2 - pad_y) / r, 0.0, float(orig_h))
 
         boxes_xyxy = np.column_stack([orig_x1, orig_y1, orig_x2, orig_y2])
-        offset = class_ids[:, None].astype(float) * 4096.0
+        offset = 0.0 if self.agnostic_nms else class_ids[:, None].astype(float) * 4096.0
         keep = nms_numpy(boxes_xyxy + offset, confidences, self.iou_threshold)
 
         results = []

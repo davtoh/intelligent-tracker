@@ -67,6 +67,7 @@ def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[di
             "label": trk.label,
             "confidence": round(float(trk.confidence), 2),
             "dwell_time": round(float(trk.dwell_time), 1),
+            "entity_id": getattr(trk, "entity_id", None),
             "entity_name": getattr(trk, "entity_name", getattr(trk, "identity_label", None)),
             "category": getattr(trk, "category", "person"),
             "is_cluttered": bool(getattr(trk, "is_cluttered", False)),

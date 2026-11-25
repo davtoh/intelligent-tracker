@@ -143,13 +143,19 @@ def _resolve_reid_and_db(
     probe_db_reid: bool, default_reid_model: str = "color",
 ) -> tuple[str | None, str | None]:
     """Resolve normalized Re-ID model and database path from config blocks."""
+    from intelligent_tracker.reid.profile import resolve_reid_profile
+
     resolved_db = db_path if db_path is not None else db_cfg.get("path")
     reid_raw = reid_cfg.get("model")
-    if reid_raw is None and probe_db_reid:
-        reid_raw = _probe_db_reid_model(resolved_db or "data/tracker.db")
-    if reid_raw is None and (resolved_db is not None or "model" not in reid_cfg):
-        reid_raw = default_reid_model
-    reid_model = _normalize_reid_name(reid_raw)
+    if default_reid_model == "dual":
+        profile = resolve_reid_profile({"reid": reid_cfg})
+        reid_model = profile.model_name
+    else:
+        if reid_raw is None and probe_db_reid:
+            reid_raw = _probe_db_reid_model(resolved_db or "data/tracker.db")
+        if reid_raw is None and (resolved_db is not None or "model" not in reid_cfg):
+            reid_raw = default_reid_model
+        reid_model = _normalize_reid_name(reid_raw)
     if resolved_db is None and reid_model is not None:
         resolved_db = "data/tracker.db"
     return reid_model, resolved_db
@@ -174,6 +180,7 @@ def _extract_runtime_kwargs(data: dict[str, Any], raw_source: Any, default_detec
         "detector_model": str(det_cfg.get("model", default_detector)).strip().lower(),
         "detector_confidence": float(det_cfg.get("confidence", 0.25)),
         "detector_classes": parse_classes(det_cfg.get("classes")),
+        "detector_agnostic_nms": bool(det_cfg.get("agnostic_nms", True)),
         "tracker_type": tracker_type,
         "max_disappeared": int(trk_cfg.get("max_disappeared", trk_cfg.get("max_age", 30))),
         "min_hits": int(trk_cfg.get("min_hits", 2)),
@@ -230,6 +237,7 @@ class PipelineConfig:
     detector_model: str = "mock"
     detector_confidence: float = 0.25
     detector_classes: list[str] | None = None
+    detector_agnostic_nms: bool = True
     detector_fallback_mock: bool = False
     tracker_type: str = "centroid"
     max_disappeared: int = 30

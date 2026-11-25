@@ -92,6 +92,7 @@ class CachedReplayProvider:
         tolerance_s: float = 0.45,
         run_reid: bool = False,
         replay_coast_seconds: float | None = None,
+        detector_signature: dict[str, Any] | None = None,
     ) -> None:
         self._processor = processor
         self._bundle = bundle
@@ -102,7 +103,7 @@ class CachedReplayProvider:
             max(0.0, float(replay_coast_seconds)) if replay_coast_seconds is not None else None
         )
         self.replay = replay_provider or FileDetectionReplayProvider(
-            db, video_source, run_id=run_id, tolerance_s=tolerance_s
+            db, video_source, run_id=run_id, tolerance_s=tolerance_s, detector_signature=detector_signature
         )
         self._last_media_time_s: float | None = None
         self._last_frame_seq: int | None = None

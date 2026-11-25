@@ -32,7 +32,7 @@ _CORE_TABLES_DDL = (
         id INTEGER PRIMARY KEY AUTOINCREMENT, entity_id INTEGER, track_id INTEGER,
         source TEXT DEFAULT '', timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         zone_id TEXT DEFAULT '', bbox TEXT DEFAULT '', confidence REAL DEFAULT 1.0,
-        snapshot_path TEXT DEFAULT '',
+        snapshot_path TEXT DEFAULT '', camera_id TEXT DEFAULT '', run_id TEXT DEFAULT '',
         FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
     );""",
     """CREATE TABLE IF NOT EXISTS descriptor_versions (
@@ -225,6 +225,22 @@ class SchemaMixin:
                 pass
         apply_memory_schema_migrations(cursor)
         apply_video_schema_migrations(cursor)
+        ver_row = cursor.execute("PRAGMA user_version;").fetchone()
+        cur_ver = int(ver_row[0]) if ver_row else 0
+        if cur_ver < 2:
+            for col_def in ("camera_id TEXT DEFAULT ''", "run_id TEXT DEFAULT ''"):
+                try:
+                    cursor.execute(f"ALTER TABLE sightings ADD COLUMN {col_def};")
+                except sqlite3.OperationalError:
+                    pass
+            cursor.execute(
+                "UPDATE sightings SET camera_id = source "
+                "WHERE (camera_id IS NULL OR camera_id = '') AND source != '' "
+                "AND (video_filename IS NULL OR video_filename = '');"
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sightings_camera_id ON sightings(camera_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sightings_run_id ON sightings(run_id);")
+            cursor.execute("PRAGMA user_version = 2;")
 
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""

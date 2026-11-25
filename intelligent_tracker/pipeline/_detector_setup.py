@@ -28,6 +28,8 @@ def _build_detector_kwargs(config: PipelineConfig, det_name: str) -> dict[str, A
         kwargs["conf_threshold"] = config.detector_confidence
         if config.detector_classes:
             kwargs["classes"] = config.detector_classes
+        if det_name == "onnx":
+            kwargs["agnostic_nms"] = getattr(config, "detector_agnostic_nms", True)
     elif det_name in _MOCK_NAMES:
         kwargs["confidence"] = config.detector_confidence
     return kwargs

@@ -305,7 +305,10 @@ def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManage
     mgr = get_active_stream_manager(conn=conn)
     if mgr and mgr.enrollment_manager:
         return mgr.enrollment_manager
-    return UniversalEnrollmentManager(db=get_db(conn))
+    from intelligent_tracker.reid.factory import ReIDExtractorFactory
+    from intelligent_tracker.reid.profile import resolve_reid_profile
+    ext = ReIDExtractorFactory.create(resolve_reid_profile(getattr(mgr, "cfg", None)).model_name or "dual")
+    return UniversalEnrollmentManager(db=get_db(conn), extractor=ext)
 
 
 def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:  # type: ignore[assignment]

@@ -28,9 +28,11 @@ def _emit_feedback(
     if confidence_engine is not None:
         try:
             sim = item.get("similarity") if isinstance(item, dict) else None
+            cam_id = item.get("camera_id") if isinstance(item, dict) else None
+            zone_id = item.get("zone_id") if isinstance(item, dict) else None
             confidence_engine.record_human_feedback(
                 entity_id=entity_id, action=action, previous_entity_id=previous_entity_id,
-                similarity=sim, reviewer=reviewer,
+                similarity=sim, reviewer=reviewer, camera_id=cam_id, zone_id=zone_id,
             )
         except Exception as exc:
             logger.warning("Active learning confidence_engine update failed: %s", exc)
@@ -53,6 +55,11 @@ def _finalize_anchor_resolution(
     """Persist locked anchor signature, descriptor version, review status, and reload gallery."""
     db.add_signature(entity_id=entity_id, embedding=embedding, crop_path=crop_path, is_anchor=1, locked=1)
     db.record_descriptor_version(entity_id=entity_id, embedding=embedding, crop_path=crop_path, source=source, notes=notes)
+    if hasattr(db, "add_sighting"):
+        db.add_sighting(
+            entity_id=entity_id, source=source or "active_learning",
+            zone_id="active_learning", confidence=1.0, snapshot_path=crop_path,
+        )
     db.update_review_status(review_id, status=status, reviewed_by=reviewer)
     if matcher and hasattr(matcher, "reload_gallery"):
         matcher.reload_gallery()

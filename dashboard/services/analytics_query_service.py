@@ -183,3 +183,32 @@ def query_sightings_page(
 
     total = db.count_sightings(**filters)
     return {"items": items, "total": total, "offset": safe_offset, "limit": safe_limit, "has_more": (safe_offset + len(items)) < total}
+
+
+def list_all_sighting_sources(
+    db: Any, *, pool: Any = None, videos_dir: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return DB sighting sources merged with all known cameras and video files."""
+    by_source: dict[str, dict[str, Any]] = {}
+    if db is not None and hasattr(db, "list_sighting_sources"):
+        for row in db.list_sighting_sources():
+            src = str(row.get("source") or "").strip()
+            if src:
+                by_source[src] = dict(row)
+    if pool is not None:
+        cam_ids = set(getattr(pool, "camera_configs", {}) or {})
+        from dashboard.services.camera_pool_queries import snapshot_pool_streams
+
+        cam_ids.update(snapshot_pool_streams(pool).keys())
+        for cid in sorted(cam_ids):
+            by_source.setdefault(str(cid), {"source": str(cid), "count": 0, "has_video": False})
+    if db is not None and hasattr(db, "list_video_runs"):
+        for run in db.list_video_runs():
+            vname = str(run.get("video_filename") or "").strip()
+            if vname:
+                by_source.setdefault(vname, {"source": vname, "count": 0, "has_video": True})
+    if videos_dir and os.path.isdir(videos_dir):
+        for name in sorted(os.listdir(videos_dir)):
+            if name.lower().endswith((".mp4", ".avi", ".mkv", ".mov", ".webm", ".m4v")):
+                by_source.setdefault(name, {"source": name, "count": 0, "has_video": True})
+    return sorted(by_source.values(), key=lambda r: (-int(r.get("count") or 0), str(r.get("source") or "")))

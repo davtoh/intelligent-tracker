@@ -34,6 +34,38 @@ def _parse_json(raw: str | None, default: Any) -> Any:
         return default
 
 
+def _normalize_detector_sig(cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize detector signature fields for replay compatibility checks."""
+    data = cfg if isinstance(cfg, dict) else {}
+    det = str(data.get("detector") or data.get("detector_model") or "").strip().lower()
+    raw_classes = data.get("classes") if data.get("classes") is not None else data.get("detector_classes")
+    if isinstance(raw_classes, str):
+        classes = sorted(c.strip().lower() for c in raw_classes.split(",") if c.strip())
+    elif isinstance(raw_classes, (list, tuple, set)):
+        classes = sorted(str(c).strip().lower() for c in raw_classes if str(c).strip())
+    else:
+        classes = []
+    raw_conf = data.get("confidence") if data.get("confidence") is not None else data.get("detector_confidence")
+    conf = round(float(raw_conf), 3) if raw_conf is not None else None
+    raw_nms = data.get("agnostic_nms") if data.get("agnostic_nms") is not None else data.get("detector_agnostic_nms")
+    agnostic_nms = bool(True if raw_nms is None else raw_nms)
+    return {"detector": det, "confidence": conf, "classes": classes, "agnostic_nms": agnostic_nms}
+
+
+def detector_signature_matches(run_cfg: dict[str, Any] | None, expected_sig: dict[str, Any] | None) -> bool:
+    """Return True when a cached video_run config matches the active detector signature."""
+    if not expected_sig:
+        return True
+    exp, got = _normalize_detector_sig(expected_sig), _normalize_detector_sig(run_cfg)
+    if exp["detector"] and got["detector"] and exp["detector"] != got["detector"]:
+        return False
+    if exp["confidence"] is not None and got["confidence"] is not None and exp["confidence"] != got["confidence"]:
+        return False
+    if exp["classes"] != got["classes"]:
+        return False
+    return exp["agnostic_nms"] == got["agnostic_nms"]
+
+
 def _hydrate_video_run(row: sqlite3.Row, include_detections: bool = False) -> dict[str, Any]:
     """Convert a ``video_runs`` SQLite row into a clean dictionary."""
     data = dict(row)
@@ -198,6 +230,41 @@ class VideoRunRepositoryMixin:
             "frame_count": len(dets_list),
             "frame_detections": dets_list,
         }
+
+    def get_latest_run_matching(
+        self, video_filename: str, detector_signature: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        """Return newest detection stream for video_filename matching detector_signature."""
+        aliases = expand_video_aliases(video_filename)
+        if not aliases:
+            return None
+        ph = ",".join("?" for _ in aliases)
+        params: list[Any] = aliases + aliases
+        sql = (
+            "SELECT run_id, video_filename, base_filename, run_type, generated_at, "
+            "source_resolution, source_fps, config_json, frame_detections_json "
+            f"FROM video_runs WHERE (video_filename IN ({ph}) OR base_filename IN ({ph})) "
+            "AND frame_detections_json IS NOT NULL ORDER BY timestamp DESC"
+        )
+        with self._lock:
+            if self._conn is None:
+                return None
+            rows = self._conn.execute(sql, params).fetchall()
+        for row in rows:
+            cfg = _parse_json(row["config_json"], {})
+            if not detector_signature_matches(cfg, detector_signature):
+                continue
+            detections = _parse_json(row["frame_detections_json"], [])
+            dets_list = detections if isinstance(detections, list) else []
+            return {
+                "run_id": row["run_id"], "filename": row["video_filename"],
+                "base_filename": row["base_filename"], "run_type": row["run_type"],
+                "generated_at": row["generated_at"],
+                "source_resolution": _parse_json(row["source_resolution"], None),
+                "source_fps": row["source_fps"], "config": cfg,
+                "frame_count": len(dets_list), "frame_detections": dets_list,
+            }
+        return None
 
     def update_video_run_resolution(
         self, run_id: str, source_resolution: list[int] | None, source_fps: float | None = None

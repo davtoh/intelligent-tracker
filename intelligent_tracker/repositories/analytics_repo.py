@@ -45,8 +45,9 @@ def _format_sighting_bbox(bbox: Union[str, Tuple[int, int, int, int], List[int]]
 _INSERT_SIGHTING_SQL = """
 INSERT INTO sightings (
     entity_id, track_id, source, timestamp, zone_id, bbox,
-    confidence, snapshot_path, video_filename, media_offset_sec
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    confidence, snapshot_path, video_filename, media_offset_sec,
+    camera_id, run_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -69,12 +70,18 @@ class AnalyticsMixin:
         snapshot_path: str = "",
         video_filename: str = "",
         media_offset_sec: float = 0.0,
+        camera_id: str = "",
+        run_id: str = "",
     ) -> int:
         """Log an entity sighting to the audit trail and return its ID."""
+        src = source.strip()
+        vfile = str(video_filename or "").strip()
+        cam_id = str(camera_id or "").strip() or (src if src and not vfile else "")
         params = (
-            entity_id, track_id, source.strip(), _format_sighting_timestamp(timestamp),
+            entity_id, track_id, src, _format_sighting_timestamp(timestamp),
             zone_id.strip(), _format_sighting_bbox(bbox), float(confidence),
-            snapshot_path.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
+            snapshot_path.strip(), vfile, float(media_offset_sec or 0.0),
+            cam_id, str(run_id or "").strip(),
         )
         with self._lock:
             if self._conn is None:

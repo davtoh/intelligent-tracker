@@ -61,6 +61,7 @@ from dashboard.routers import (
     categories_router,
     categories_and_collision_router,
     events_admin_router,
+    gallery_health_router,
     multiview_router,
     processing_mode_router,
     review_router,
@@ -183,6 +184,12 @@ def _init_runtime_services(application: FastAPI):
     from dashboard.services.camera_pool_queries import snapshot_pool_streams
     for sm in snapshot_pool_streams(pool).values():
         scen_mgr.apply_to_stream_manager(sm)
+    try:
+        from intelligent_tracker.reid.gallery_reembed import reembed_mismatched_signatures
+
+        reembed_mismatched_signatures(db)
+    except Exception as exc:
+        logger.warning("Startup gallery re-embed check skipped: %s", exc)
     return pool, primary_sm, lifecycle_mgr, owned_db
 
 
@@ -250,7 +257,7 @@ def create_app() -> FastAPI:
     for router in (
         system_router, cameras_router, camera_diagnostics_router,
         camera_recording_router, categories_router, categories_and_collision_router,
-        events_admin_router, processing_mode_router, multiview_router,
+        events_admin_router, gallery_health_router, processing_mode_router, multiview_router,
         streaming_router, scenarios_router, review_router, rsac_router, analytics_router,
         tagging_router, videos_router, topology_router, world_router,
     ):

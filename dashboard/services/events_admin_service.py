@@ -58,12 +58,16 @@ def delete_event(db: Any, event_id: int) -> dict[str, Any] | None:
 def clear_events(
     db: Any, *, camera_id: str | None = None, severity: str | None = None,
     event_type: str | None = None, zone_id: str | None = None, read_only: bool = False,
+    event_ids: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Clear timeline events matching filters and return remaining unread count."""
-    deleted = db.clear_timeline_events(
-        camera_id=camera_id, severity=severity, event_type=event_type,
-        zone_id=zone_id, read_only=read_only,
-    )
+    """Clear timeline events by explicit event_ids or filters and return remaining unread count."""
+    if event_ids:
+        deleted = sum(1 for eid in event_ids if db.delete_timeline_event(int(eid)))
+    else:
+        deleted = db.clear_timeline_events(
+            camera_id=camera_id, severity=severity, event_type=event_type,
+            zone_id=zone_id, read_only=read_only,
+        )
     invalidate_unread_alert_cache()
     return {"deleted": deleted, "unread_alert_count": db.count_unread_timeline_events()}
 

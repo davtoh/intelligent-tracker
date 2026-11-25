@@ -219,11 +219,14 @@ class ScenarioStorageMixin:
         return self.cameras[camera_id]
 
     def load_scenarios(self) -> None:
-        """Load scenarios from SQLite TrackerDB, falling back to YAML if DB is empty."""
-        if not load_scenarios_from_db(self.db, self._ensure_camera_entry, self.cameras, self.topology):
-            if os.path.exists(self.config_path):
-                self.load_from_yaml(self.config_path)
-                return
+        """Load scenarios from SQLite TrackerDB, upserting missing YAML shapes."""
+        db_loaded = load_scenarios_from_db(self.db, self._ensure_camera_entry, self.cameras, self.topology)
+        if not db_loaded and os.path.exists(self.config_path):
+            self.load_from_yaml(self.config_path)
+            return
+        if db_loaded and os.path.exists(self.config_path):
+            from intelligent_tracker.scenario_yaml_sync import upsert_missing_scenarios_from_yaml
+            upsert_missing_scenarios_from_yaml(self.config_path, self._ensure_camera_entry, self.cameras, self.db, self.topology)
         sync_loaded_scenarios_to_world(getattr(self, "world_graph", None), getattr(self, "coordinate_mapper", None), self.cameras)
 
     def load_from_yaml(self, path: str) -> None:

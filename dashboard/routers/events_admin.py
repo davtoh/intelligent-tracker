@@ -28,6 +28,7 @@ class AcknowledgeEventsRequest(BaseModel):
 
 
 class ClearEventsRequest(BaseModel):
+    event_ids: Optional[list[int]] = None
     camera_id: Optional[str] = None
     severity: Optional[str] = None
     event_type: Optional[str] = None
@@ -70,6 +71,7 @@ async def clear_events_route(req: ClearEventsRequest, db: TrackerDB = Depends(ge
     return await asyncio.to_thread(
         clear_events, db, camera_id=req.camera_id, severity=req.severity,
         event_type=req.event_type, zone_id=req.zone_id, read_only=req.read_only,
+        event_ids=req.event_ids,
     )
 
 
@@ -82,6 +84,7 @@ async def export_events_route(
     zone_id: Optional[str] = None,
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
+    event_ids: Optional[str] = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     db: TrackerDB = Depends(get_db),
 ):
@@ -97,6 +100,9 @@ async def export_events_route(
         if db is not None
         else []
     )
+    if event_ids:
+        wanted = {int(x) for x in event_ids.split(",") if x.strip().isdigit()}
+        rows = [r for r in rows if int(r.get("id") or -1) in wanted]
     if fmt == "csv":
         return Response(
             content=format_events_csv(rows),

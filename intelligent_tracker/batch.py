@@ -133,7 +133,10 @@ class VideoIndexer:
         self.fts_index = fts_index
         self.detector = _create_batch_detector(detector_name, conf_threshold, classes)
         self.tracker = TrackerFactory.create(tracker_type)
-        self.extractor = ReIDExtractorFactory.create(reid_name)
+        from intelligent_tracker.reid.profile import resolve_reid_profile
+
+        profile = resolve_reid_profile({"reid": {"model": reid_name, "threshold": reid_threshold}})
+        self.extractor = ReIDExtractorFactory.create(profile.model_name or "dual")
         self.matcher = GalleryMatcher(
             db=self.db, extractor=self.extractor, reid_threshold=reid_threshold,
             sighting_interval=1.0, active_learning=active_learning,
