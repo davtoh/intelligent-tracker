@@ -252,6 +252,46 @@ class SchemaMixin:
                 pass
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_run_id ON world_timeline_events(run_id);")
             cursor.execute("PRAGMA user_version = 3;")
+        if cur_ver < 4:
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS learned_classes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    slug TEXT UNIQUE NOT NULL,
+                    parent_coco_class TEXT DEFAULT '',
+                    color TEXT DEFAULT '#06B6D4',
+                    threshold REAL DEFAULT 0.65,
+                    description TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );"""
+            )
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS learned_class_exemplars (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    class_id INTEGER NOT NULL,
+                    embedding BLOB NOT NULL,
+                    crop_path TEXT DEFAULT '',
+                    source_camera_id TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (class_id) REFERENCES learned_classes(id) ON DELETE CASCADE
+                );"""
+            )
+            cursor.execute(
+                """CREATE TABLE IF NOT EXISTS camera_class_overrides (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    camera_id TEXT NOT NULL,
+                    coco_class TEXT NOT NULL,
+                    action TEXT NOT NULL DEFAULT 'suppress',
+                    relabel_to TEXT DEFAULT '',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(camera_id, coco_class)
+                );"""
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_learned_exemplars_class ON learned_class_exemplars(class_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_camera_class_overrides_cam ON camera_class_overrides(camera_id);")
+            cursor.execute("PRAGMA user_version = 4;")
 
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""

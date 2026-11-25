@@ -36,15 +36,15 @@
 
 ---
 
-## Step 3: SORT + ByteTrack Persistence, Multi-Box Tag Queue & Learned Classes *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Stabilize per-frame tracking and entity identity via `sort` + ByteTrack two-stage association and hysteresis locking (`K=3` matches `>= 0.65`, `BUG-23`), render entity names/avatars on boxes, preserve person+bag ownership classes, support multi-box selection & Quick-Tag queues inside `#modal-tag-entity` (`BUG-22`), and launch exemplar-based Learned Classes + `Classes & Badges` management (`ADR-17`, `ADR-18`).
-- [ ] **Target Scope**:
-  - Default tracker to `sort` with ByteTrack 2-stage low-confidence association, per-camera tuning, and hysteresis identity binding so detector dropouts/class flips reinforce rather than replace `WorldEntity` bindings (`BUG-23`).
-  - Return all overlapping tracks on canvas hit-test and queue Quick-Tag boxes in a reusable track picker strip inside `#modal-tag-entity` without dropping untagged tracks on submit (`BUG-22`).
-  - Implement exemplar-based Learned Classes (ROI crop prototypes, per-camera COCO suppression/relabel) and a `Classes & Badges` management view unifying COCO classes, learned classes, and Semantic Category badges with cosine collision checks (`ADR-18`; YOLO-World remains deferred to a future SPIKE).
-  - [ ] **Granularity Guard**: Split into `Step 3A` (SORT + ByteTrack 2-stage, `K=3` hysteresis & `#modal-tag-entity` multi-box queue) and `Step 3B` (Exemplar Learned Classes & `Classes & Badges` UI), or 4 milestones strictly capped at `<= 6` modified production files per milestone (`~50–85` steps/turn).
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_tracking_hysteresis_and_multitag.py tests/test_step3_learned_classes.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe`.
-- [ ] **Review Gate**: Fresh reviewer verifies tracker stability metrics, multi-box queue persistence, modularity budgets, and probe outputs before advancing.
+## Step 3: SORT + ByteTrack Persistence, Multi-Box Tag Queue & Learned Classes
+- [x] **Goal**: Stabilize per-frame tracking and entity identity via `sort` + ByteTrack two-stage association and hysteresis locking (`K=3` matches `>= 0.65`, `BUG-23`), render entity names/avatars on boxes, preserve person+bag ownership classes, support multi-box selection & Quick-Tag queues inside `#modal-tag-entity` (`BUG-22`), and launch exemplar-based Learned Classes + `Classes & Badges` management (`ADR-17`, `ADR-18`).
+- [x] **Target Scope**:
+  - [x] Default tracker to `sort` with ByteTrack 2-stage low-confidence association, per-camera tuning, and hysteresis identity binding so detector dropouts/class flips reinforce rather than replace `WorldEntity` bindings (`BUG-23`).
+  - [x] Return all overlapping tracks on canvas hit-test and queue Quick-Tag boxes in a reusable track picker strip inside `#modal-tag-entity` without dropping untagged tracks on submit (`BUG-22`).
+  - [x] Implement exemplar-based Learned Classes (ROI crop prototypes, per-camera COCO suppression/relabel) and a `Classes & Badges` management view unifying COCO classes, learned classes, and Semantic Category badges with cosine collision checks (`ADR-18`; YOLO-World remains deferred to a future SPIKE).
+  - [x] **Granularity Guard**: Split into `Step 3A` (SORT + ByteTrack 2-stage, `K=3` hysteresis & `#modal-tag-entity` multi-box queue) and `Step 3B` (Exemplar Learned Classes & `Classes & Badges` UI), or 4 milestones strictly capped at `<= 6` modified production files per milestone (`~50–85` steps/turn).
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_tracking_hysteresis_and_multitag.py tests/test_step3_learned_classes.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe`.
+- [x] **Review Gate**: Fresh reviewer verifies tracker stability metrics, multi-box queue persistence, modularity budgets, and probe outputs before advancing.
 
 ---
 

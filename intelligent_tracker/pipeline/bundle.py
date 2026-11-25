@@ -55,6 +55,7 @@ class PipelineBundle:
     analytics: AnalyticsEngine | None = None
     reid_extractor: Any = None
     gallery_matcher: GalleryMatcher | None = None
+    learned_class_matcher: Any = None
     rsac_manager: RSACManager | None = None
     active_learning: ActiveLearningManager | None = None
     enrollment_manager: UniversalEnrollmentManager | None = None

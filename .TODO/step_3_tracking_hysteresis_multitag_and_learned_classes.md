@@ -99,26 +99,26 @@
 
 ---
 
-## Milestone 4: Exemplar Learned Classes, Per-Camera COCO Overrides, `Classes & Badges` Sub-View & Sign-Off *(Deferred to Next Turn / Milestone)*
+## Milestone 4: Exemplar Learned Classes, Per-Camera COCO Overrides, `Classes & Badges` Sub-View & Sign-Off
 
 **Goal**: Implement exemplar-based Learned Classes (DualModel ROI crop prototypes + cosine collision checks), per-camera COCO suppression/relabel overrides wired live into `FrameProcessor`, and the unified `Classes & Badges` sub-view inside `#tab-gallery`, followed by full Step 3 verification and Review Gate sign-off (`ADR-18`).
 
-- [ ] **intelligent_tracker/repositories/schema_manager.py**: Add idempotent `PRAGMA user_version = 4` migration creating `learned_classes`, `learned_class_exemplars`, and `camera_class_overrides` tables with indexes.
-- [ ] **intelligent_tracker/repositories/learned_class_repo.py**: Create `LearnedClassMixin` (`<= 220L`, `<= 12` methods, every write calling `self._conn.rollback()` in `except`) and compose it into `TrackerDB` (`intelligent_tracker/database.py`).
-- [ ] **intelligent_tracker/matching/learned_class_matcher.py**: Create `LearnedClassMatcher` (`<= 190L`) loading DualModel exemplar prototypes from `TrackerDB`, scoring ROI crop embeddings via cosine similarity, enforcing per-camera COCO suppression/relabel rules, and providing `check_collision()` against existing learned classes and gallery entities; wire into `intelligent_tracker/pipeline/bundle.py` and `intelligent_tracker/pipeline/frame_processor.py` (`_run_detector()`).
-- [ ] **dashboard/services/learned_class_service.py**: Create service (`<= 210L`) handling learned class CRUD, ROI crop extraction/embedding enrollment via canonical `DualModel` (`ReidProfile` SSOT), collision check responses, per-camera COCO override persistence, and live matcher reload across `CameraPool`.
-- [ ] **dashboard/routers/learned_classes.py**: Create thin FastAPI router (`<= 160L`, routes `<= 25L`) exposing `/api/classes/learned*` and `/api/classes/overrides/{camera_id}`, mounted in `dashboard/app.py`.
-- [ ] **dashboard/static/js/classes_badges_manager.js**: Create unified `Classes & Badges` sub-view controller (`<= 290L`) plus `dashboard/static/css/classes_badges.css` (`<= 120L`), elevating `#gallery-category-crud-panel` in `dashboard/static/partials/tabs/gallery.html` (`#gallery?view=classes-badges`) into 3 tabs: COCO Detector Classes + per-camera suppress/relabel rules, Learned Exemplar Classes (with collision guard), and Semantic Category Badges (delegating CRUD directly to `dashboard/static/js/category_badge_manager.js`).
-- [ ] **tests/test_step3_learned_classes_backend.py**: Add backend tests covering schema v4 idempotency, repository rollback on error, `LearnedClassMatcher` prototype matching & collision detection, per-camera COCO suppress/relabel in `FrameProcessor`, and `/api/classes/*` FastAPI router CRUD.
-- [ ] **tests/test_step3_learned_classes.py**: Add Node VM tests for `ClassesBadgesManager` (3-section view switching, COCO override save, learned class enrollment + collision prompt, badge delegation to `CategoryBadgeManager`) and `#gallery?view=classes-badges` deep-link activation.
-- [ ] **CHANGELOG.md**: Record Step 3 completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
-- [ ] **Verifier (M4 & Step 3 Sign-Off)**:
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path intelligent_tracker/repositories/learned_class_repo.py intelligent_tracker/matching/learned_class_matcher.py dashboard/services/learned_class_service.py dashboard/routers/learned_classes.py dashboard/static/js/classes_badges_manager.js tests/test_step3_learned_classes_backend.py tests/test_step3_learned_classes.py --max-lines 350 --max-fn-lines 40`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" scan --path .`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_tracking_hysteresis_backend.py tests/test_step3_tracking_hysteresis_and_multitag.py tests/test_step3_multitag_queue_ui.py tests/test_step3_learned_classes_backend.py tests/test_step3_learned_classes.py`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe`
-  - `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe`
-  - `MPLBACKEND=Agg python -m unittest discover tests`
-  - `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
-  - **Review Gate**: Fresh reviewer inspects Step 3 diff, modularity audit, tracker stability metrics, multi-box queue persistence, and non-`INFRA_UNAVAILABLE` probe outputs before advancing Master Roadmap Milestone 3.
+- [x] **intelligent_tracker/repositories/schema_manager.py**: Add idempotent `PRAGMA user_version = 4` migration creating `learned_classes`, `learned_class_exemplars`, and `camera_class_overrides` tables with indexes.
+- [x] **intelligent_tracker/repositories/learned_class_repo.py**: Create `LearnedClassMixin` (`<= 220L`, `<= 12` methods, every write calling `self._conn.rollback()` in `except`) and compose it into `TrackerDB` (`intelligent_tracker/database.py`).
+- [x] **intelligent_tracker/matching/learned_class_matcher.py**: Create `LearnedClassMatcher` (`<= 190L`) loading DualModel exemplar prototypes from `TrackerDB`, scoring ROI crop embeddings via cosine similarity, enforcing per-camera COCO suppression/relabel rules, and providing `check_collision()` against existing learned classes and gallery entities; wire into `intelligent_tracker/pipeline/bundle.py` and `intelligent_tracker/pipeline/frame_processor.py` (`_run_detector()`).
+- [x] **dashboard/services/learned_class_service.py**: Create service (`<= 210L`) handling learned class CRUD, ROI crop extraction/embedding enrollment via canonical `DualModel` (`ReidProfile` SSOT), collision check responses, per-camera COCO override persistence, and live matcher reload across `CameraPool`.
+- [x] **dashboard/routers/learned_classes.py**: Create thin FastAPI router (`<= 160L`, routes `<= 25L`) exposing `/api/classes/learned*` and `/api/classes/overrides/{camera_id}`, mounted in `dashboard/app.py`.
+- [x] **dashboard/static/js/classes_badges_manager.js**: Create unified `Classes & Badges` sub-view controller (`<= 290L`) plus `dashboard/static/css/classes_badges.css` (`<= 120L`), elevating `#gallery-category-crud-panel` in `dashboard/static/partials/tabs/gallery.html` (`#gallery?view=classes-badges`) into 3 tabs: COCO Detector Classes + per-camera suppress/relabel rules, Learned Exemplar Classes (with collision guard), and Semantic Category Badges (delegating CRUD directly to `dashboard/static/js/category_badge_manager.js`).
+- [x] **tests/test_step3_learned_classes_backend.py**: Add backend tests covering schema v4 idempotency, repository rollback on error, `LearnedClassMatcher` prototype matching & collision detection, per-camera COCO suppress/relabel in `FrameProcessor`, and `/api/classes/*` FastAPI router CRUD.
+- [x] **tests/test_step3_learned_classes.py**: Add Node VM tests for `ClassesBadgesManager` (3-section view switching, COCO override save, learned class enrollment + collision prompt, badge delegation to `CategoryBadgeManager`) and `#gallery?view=classes-badges` deep-link activation.
+- [x] **CHANGELOG.md**: Record Step 3 completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
+- [x] **Verifier (M4 & Step 3 Sign-Off)**:
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path intelligent_tracker/repositories/learned_class_repo.py intelligent_tracker/matching/learned_class_matcher.py dashboard/services/learned_class_service.py dashboard/routers/learned_classes.py dashboard/static/js/classes_badges_manager.js tests/test_step3_learned_classes_backend.py tests/test_step3_learned_classes.py --max-lines 350 --max-fn-lines 40`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" scan --path .`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_tracking_hysteresis_backend.py tests/test_step3_tracking_hysteresis_and_multitag.py tests/test_step3_multitag_queue_ui.py tests/test_step3_learned_classes_backend.py tests/test_step3_learned_classes.py`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe`
+  - [x] `MPLBACKEND=Agg python -m unittest discover tests`
+  - [x] `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`
+  - [x] **Review Gate**: Fresh reviewer inspects Step 3 diff, modularity audit, tracker stability metrics, multi-box queue persistence, and non-`INFRA_UNAVAILABLE` probe outputs before advancing Master Roadmap Milestone 3.

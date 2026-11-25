@@ -207,15 +207,23 @@ class FrameProcessor:
                     setattr(internal, attr, getattr(trk, attr))
 
     def _run_detector(self, frame: np.ndarray) -> list[Any]:
-        """Run object detector on the prepared frame."""
+        """Run object detector on the prepared frame and apply learned-class / override rules."""
         detector = self.bundle.detector
         if detector is None:
             return []
         try:
-            return list(detector.detect(frame) or [])
+            dets = list(detector.detect(frame) or [])
         except Exception as exc:
             logger.debug("Detector error: %s", exc)
             return []
+        lc_matcher = getattr(self.bundle, "learned_class_matcher", None)
+        if lc_matcher is not None and dets:
+            try:
+                cam_id = getattr(self.bundle.config, "camera_id", "") if getattr(self.bundle, "config", None) else ""
+                dets = lc_matcher.apply_to_detections(frame, dets, camera_id=cam_id)
+            except Exception as exc:
+                logger.debug("LearnedClassMatcher apply error: %s", exc)
+        return dets
 
     def _run_tracker(self, detections: list[Any], timestamp: float) -> dict[int, Any]:
         """Update multi-object tracker using detections and timestamp."""
