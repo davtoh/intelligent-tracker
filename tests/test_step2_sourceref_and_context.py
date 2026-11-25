@@ -9,12 +9,16 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
+from fastapi.testclient import TestClient
 
+from dashboard.app import app
+from dashboard.dependencies import get_db
 from dashboard.services import video_analytics_service, video_report_store
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.events.bus import EventBus
 from intelligent_tracker.events.types import ZoneEvent
+from intelligent_tracker.journey import TrajectoryJourneySearcher
 from intelligent_tracker.matching._gallery_matching import _notify_active_learning
 from intelligent_tracker.matching._gallery_signals import emit_periodic_sighting
 from intelligent_tracker.memory._event_formatters import normalize_event_doc
@@ -199,3 +203,115 @@ class TestStep2Milestone1Backend(unittest.TestCase):
         self.assertEqual(captured["matcher_run_id"], rid)
         self.assertEqual(captured["al_run_id"], rid)
         self.assertIsNotNone(db.get_video_run(rid, video_filename="sample.mp4"))
+
+
+class TestStep2Milestone2Backend(unittest.TestCase):
+    """Milestone 2 tests: JourneyHop provenance, closed-DB guard, flow/heatmap/sighting media refs."""
+
+    def _setup_app_db(self) -> tuple[TrackerDB, TestClient]:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db = TrackerDB(os.path.join(tmp.name, "m2.db"))
+        self.addCleanup(db.close)
+        prev = dict(app.dependency_overrides)
+        app.dependency_overrides[get_db] = lambda: db
+        self.addCleanup(lambda: app.dependency_overrides.clear() or app.dependency_overrides.update(prev))
+        return db, TestClient(app)
+
+    def test_journey_hop_provenance_and_search_route_roundtrip(self) -> None:
+        db, client = self._setup_app_db()
+        eid = db.add_entity(name="Elena", category="person")
+        db.add_sighting(
+            entity_id=eid, track_id=42, source="clip.mp4", camera_id="cam_lobby",
+            timestamp=1700000010.0, zone_id="entry", bbox=[10, 20, 50, 80],
+            snapshot_path="data/crops/hop1.jpg", video_filename="clip.mp4",
+            media_offset_sec=3.5, run_id="run_j1",
+        )
+        for query in (f"entity_id={eid}", "track_id=42"):
+            res = client.get(f"/api/journey/search?{query}")
+            self.assertEqual(res.status_code, 200)
+            hop = res.json()["hops"][0]
+            self.assertEqual(hop["camera_id"], "cam_lobby")
+            self.assertEqual(hop["track_id"], 42)
+            self.assertEqual(hop["run_id"], "run_j1")
+            self.assertEqual(hop["snapshot_url"], "/api/crops/hop1.jpg")
+            self.assertEqual(hop["source_ref"]["kind"], "video")
+            self.assertEqual(hop["source_ref"]["camera_id"], "cam_lobby")
+            self.assertEqual(hop["source_ref"]["video_filename"], "clip.mp4")
+            self.assertEqual(hop["source_ref"]["run_id"], "run_j1")
+            self.assertEqual(hop["source_ref"]["bbox"], [10, 20, 50, 80])
+
+    def test_journey_searcher_closed_db_guard(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db = TrackerDB(os.path.join(tmp.name, "closed.db"))
+        db.close()
+        searcher = TrajectoryJourneySearcher(db)
+        self.assertEqual(searcher._fetch_sightings(None, 99, None, None), ([], None))
+        journey = searcher.search_journey(track_id=99)
+        self.assertEqual(journey.total_hops, 0)
+        self.assertEqual(journey.hops, [])
+
+    def test_analytics_flows_camera_or_source_and_media_refs(self) -> None:
+        db, client = self._setup_app_db()
+        base_ts = 1_700_000_000.0
+        with db._lock:
+            cur = db._conn.cursor()
+            cur.execute(
+                "INSERT INTO world_timeline_events (event_type, camera_id, zone_id, timestamp, "
+                "video_filename, media_offset_sec, run_id, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("zone_enter", "cam_lobby", "gate", base_ts + 15, "clip.mp4", 1.5, "run_f1", '{"track_id": 7}'),
+            )
+            db._conn.commit()
+        db.add_sighting(
+            entity_id=None, track_id=7, source="clip.mp4", camera_id="cam_lobby",
+            timestamp=base_ts + 20, zone_id="gate", snapshot_path="data/crops/s1.jpg",
+            video_filename="clip.mp4", media_offset_sec=2.0, run_id="run_f1",
+        )
+        res = client.get(f"/analytics/flows?camera_id=cam_lobby&range_sec=120&bucket_sec=60&end_time={base_ts + 120}")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["source_ref"], {"kind": "camera", "camera_id": "cam_lobby"})
+        self.assertEqual(body["totals"]["inflow"], 1)
+        self.assertEqual(body["totals"]["sightings"], 1)
+        refs = body["buckets"][0]["media_refs"]
+        self.assertEqual(len(refs), 2)
+        self.assertEqual(refs[0]["run_id"], "run_f1")
+        self.assertEqual(refs[1]["snapshot_url"], "/api/crops/s1.jpg")
+        self.assertEqual(refs[1]["source_ref"]["video_filename"], "clip.mp4")
+        vid_flows = db.get_traffic_flows(base_ts, base_ts + 120, bucket_sec=60, camera_id="clip.mp4")
+        self.assertEqual(vid_flows["source_ref"], {"kind": "video", "video_filename": "clip.mp4"})
+        self.assertEqual(vid_flows["totals"]["sightings"], 1)
+
+    def test_heatmap_json_and_sightings_source_ref(self) -> None:
+        db, client = self._setup_app_db()
+        db.add_sighting(
+            entity_id=None, track_id=3, source="cam_a", camera_id="cam_a",
+            timestamp=1700000005.0, zone_id="door", bbox=[1, 2, 3, 4],
+            snapshot_path="data/crops/sig.jpg", run_id="run_s1",
+        )
+        density = np.zeros((24, 32), dtype=np.float32)
+        density[12, 16] = 4.0
+        hm = SimpleNamespace(width=640, height=480, density=density, colormap=2, decay_rate=0.99, radius=20)
+        fake_mgr = SimpleNamespace(camera_id="cam_a", video_filename="", run_id="run_h1", analytics=SimpleNamespace(heatmap=hm))
+        with patch("dashboard.routers.analytics.get_active_stream_manager", return_value=fake_mgr):
+            hm_res = client.get("/analytics/heatmap?format=json&camera_id=cam_a")
+            self.assertEqual(hm_res.status_code, 200)
+            hm_json = hm_res.json()
+            self.assertEqual(hm_json["image_url"], "/analytics/heatmap?camera_id=cam_a")
+            self.assertEqual(hm_json["freeze_frame_url"], "/api/cameras/cam_a/freeze_frame")
+            self.assertEqual(hm_json["source_ref"], {"kind": "camera", "camera_id": "cam_a", "run_id": "run_h1"})
+            peak = hm_json["peak_media_ref"]
+            self.assertEqual((peak["col"], peak["row"]), (16, 12))
+            self.assertEqual(peak["source_ref"]["bbox"], [320, 240, 340, 260])
+            fake_mgr.analytics.heatmap = None
+            empty_json = client.get("/analytics/heatmap?format=json&camera_id=cam_a").json()
+            self.assertIsNone(empty_json["peak_media_ref"])
+            self.assertEqual(empty_json["hotspots"], [])
+
+        s_res = client.get("/sightings?source=cam_a")
+        self.assertEqual(s_res.status_code, 200)
+        item = s_res.json()[0]
+        self.assertEqual(item["source_ref"]["camera_id"], "cam_a")
+        self.assertEqual(item["source_ref"]["run_id"], "run_s1")
+        self.assertEqual(item["source_ref"]["snapshot_url"], "/crops/sig.jpg")

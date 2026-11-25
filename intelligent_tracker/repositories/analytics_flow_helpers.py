@@ -5,8 +5,23 @@ import math
 import time
 from typing import Any, Optional
 
+from intelligent_tracker.source_ref import build_source_ref, snapshot_path_to_url
+
 _INFLOW_DIRECTIONS = frozenset({"in", "enter", "entry", "inflow", "a_to_b", "forward"})
 _OUTFLOW_DIRECTIONS = frozenset({"out", "exit", "egress", "outflow", "b_to_a", "reverse", "backward"})
+_MAX_BUCKET_MEDIA_REFS = 5
+_VIDEO_EXTS = (".mp4", ".avi", ".mkv", ".mov", ".webm", ".m4v")
+
+
+def _parse_meta_json(metadata_json: str) -> dict[str, Any]:
+    """Safely parse a JSON metadata blob into a dictionary."""
+    if not metadata_json:
+        return {}
+    try:
+        parsed = json.loads(metadata_json)
+        return parsed if isinstance(parsed, dict) else {}
+    except (ValueError, TypeError):
+        return {}
 
 
 def _classify_flow_direction(event_type: str, metadata_json: str) -> tuple[int, int, int]:
@@ -16,18 +31,49 @@ def _classify_flow_direction(event_type: str, metadata_json: str) -> tuple[int, 
     if event_type == "zone_exit":
         return 0, 1, 1
     if event_type == "tripwire_cross":
-        direction = ""
-        if metadata_json:
-            try:
-                direction = str(json.loads(metadata_json).get("direction") or "").strip().lower()
-            except (ValueError, TypeError):
-                direction = ""
+        direction = str(_parse_meta_json(metadata_json).get("direction") or "").strip().lower()
         if direction in _INFLOW_DIRECTIONS:
             return 1, 0, 1
         if direction in _OUTFLOW_DIRECTIONS:
             return 0, 1, 1
         return 0, 0, 1
     return 0, 0, 0
+
+
+def _build_flow_media_ref(
+    *,
+    camera_id: str = "",
+    video_filename: str = "",
+    media_offset_sec: Any = 0.0,
+    run_id: str = "",
+    snapshot_path: str = "",
+    zone_id: str = "",
+    ts: float | None = None,
+    track_id: Any = None,
+    entity_id: Any = None,
+    bbox: Any = None,
+) -> dict[str, Any]:
+    """Build a bounded flow-bucket media reference paired with canonical SourceRef."""
+    vfile = str(video_filename or "").strip()
+    cam_id = str(camera_id or "").strip()
+    rid = str(run_id or "").strip()
+    zid = str(zone_id or "").strip()
+    snap_url = snapshot_path_to_url(snapshot_path)
+    try:
+        offset = round(max(0.0, float(media_offset_sec or 0.0)), 3)
+    except (TypeError, ValueError):
+        offset = 0.0
+    tid = int(track_id) if track_id not in (None, "") else None
+    eid = int(entity_id) if entity_id not in (None, "") else None
+    ref = build_source_ref(
+        camera_id=cam_id, video_filename=vfile, run_id=rid,
+        media_offset_sec=offset if (vfile or offset) else None, ts=ts,
+        track_id=tid, entity_id=eid, zone_id=zid, bbox=bbox, snapshot_url=snap_url,
+    )
+    return {
+        "camera_id": cam_id, "video_filename": vfile, "media_offset_sec": offset,
+        "run_id": rid, "snapshot_url": snap_url, "zone_id": zid, "source_ref": ref,
+    }
 
 
 def _init_flow_buckets(start_time: float, end_time: float, bucket_sec: int) -> list[dict[str, Any]]:
@@ -46,6 +92,7 @@ def _init_flow_buckets(start_time: float, end_time: float, bucket_sec: int) -> l
             "outflow": 0,
             "total": 0,
             "sightings": 0,
+            "media_refs": [],
         })
     return buckets
 
@@ -70,23 +117,37 @@ def _accumulate_timeline_events(
     safe_bucket: int,
     cam: Optional[str],
 ) -> None:
-    """Query world_timeline_events and accumulate inflow/outflow/total per bucket."""
-    cam_clause = " AND camera_id = ?" if cam else ""
-    ev_params: list[Any] = [safe_start, safe_end] + ([cam] if cam else [])
+    """Query world_timeline_events and accumulate inflow/outflow/total and media_refs per bucket."""
+    lookup = cam[6:].strip() if (cam and cam.startswith("video:")) else cam
+    cam_clause = " AND (camera_id = ? OR video_filename = ?)" if lookup else ""
+    ev_params: list[Any] = [safe_start, safe_end] + ([lookup, lookup] if lookup else [])
     cursor.execute(
-        "SELECT event_type, timestamp, metadata_json FROM world_timeline_events "
+        "SELECT event_type, timestamp, camera_id, zone_id, entity_id, "
+        "video_filename, media_offset_sec, run_id, metadata_json FROM world_timeline_events "
         "WHERE event_type IN ('tripwire_cross', 'zone_enter', 'zone_exit') "
         f"AND timestamp >= ? AND timestamp <= ?{cam_clause}",
         ev_params,
     )
     for row in cursor.fetchall():
-        idx = _bucket_index(float(row["timestamp"]), safe_start, safe_bucket, len(buckets))
+        ts_val = float(row["timestamp"])
+        idx = _bucket_index(ts_val, safe_start, safe_bucket, len(buckets))
         if idx is None:
             continue
         inf, outf, tot = _classify_flow_direction(row["event_type"], row["metadata_json"] or "")
         buckets[idx]["inflow"] += inf
         buckets[idx]["outflow"] += outf
         buckets[idx]["total"] += tot
+        if len(buckets[idx]["media_refs"]) < _MAX_BUCKET_MEDIA_REFS:
+            meta = _parse_meta_json(row["metadata_json"] or "")
+            buckets[idx]["media_refs"].append(_build_flow_media_ref(
+                camera_id=row["camera_id"] or "",
+                video_filename=row["video_filename"] or meta.get("video_filename") or "",
+                media_offset_sec=row["media_offset_sec"] if row["media_offset_sec"] not in (None, 0.0, "") else meta.get("media_offset_sec", 0.0),
+                run_id=row["run_id"] or meta.get("run_id") or "",
+                snapshot_path=meta.get("snapshot_path") or meta.get("crop_path") or "",
+                zone_id=row["zone_id"] or meta.get("zone_id") or "",
+                ts=ts_val, track_id=meta.get("track_id"), entity_id=row["entity_id"], bbox=meta.get("bbox"),
+            ))
 
 
 def _accumulate_sightings(
@@ -97,12 +158,15 @@ def _accumulate_sightings(
     safe_bucket: int,
     cam: Optional[str],
 ) -> None:
-    """Query sightings and accumulate sighting counts per bucket."""
-    src_clause = " AND source = ?" if cam else ""
-    sig_params: list[Any] = [safe_start, safe_end] + ([cam] if cam else [])
+    """Query sightings and accumulate sighting counts and media_refs per bucket."""
+    lookup = cam[6:].strip() if (cam and cam.startswith("video:")) else cam
+    src_clause = " AND (camera_id = ? OR source = ?)" if lookup else ""
+    sig_params: list[Any] = [safe_start, safe_end] + ([lookup, lookup] if lookup else [])
     cursor.execute(
         "SELECT CASE WHEN typeof(timestamp) IN ('integer', 'real') THEN CAST(timestamp AS REAL) "
-        "ELSE CAST(strftime('%s', timestamp) AS REAL) END AS ts_epoch "
+        "ELSE CAST(strftime('%s', timestamp) AS REAL) END AS ts_epoch, "
+        "entity_id, track_id, source, camera_id, zone_id, bbox, snapshot_path, "
+        "video_filename, media_offset_sec, run_id "
         f"FROM sightings WHERE ts_epoch >= ? AND ts_epoch <= ?{src_clause}",
         sig_params,
     )
@@ -111,8 +175,27 @@ def _accumulate_sightings(
         if ts_val is None:
             continue
         idx = _bucket_index(float(ts_val), safe_start, safe_bucket, len(buckets))
-        if idx is not None:
-            buckets[idx]["sightings"] += 1
+        if idx is None:
+            continue
+        buckets[idx]["sightings"] += 1
+        if len(buckets[idx]["media_refs"]) < _MAX_BUCKET_MEDIA_REFS:
+            vfile = str(row["video_filename"] or "").strip()
+            cam_id = str(row["camera_id"] or "").strip() or ("" if vfile else str(row["source"] or "").strip())
+            buckets[idx]["media_refs"].append(_build_flow_media_ref(
+                camera_id=cam_id, video_filename=vfile, media_offset_sec=row["media_offset_sec"],
+                run_id=row["run_id"] or "", snapshot_path=row["snapshot_path"] or "",
+                zone_id=row["zone_id"] or "", ts=float(ts_val), track_id=row["track_id"],
+                entity_id=row["entity_id"], bbox=row["bbox"],
+            ))
+
+
+def _resolve_flow_source_ref(cam: Optional[str]) -> dict[str, Any]:
+    """Build top-level SourceRef for a camera or video flow query."""
+    if not cam:
+        return {}
+    lookup = cam[6:].strip() if cam.startswith("video:") else cam
+    is_vid = cam.startswith("video:") or lookup.lower().endswith(_VIDEO_EXTS)
+    return build_source_ref(video_filename=lookup) if is_vid else build_source_ref(camera_id=cam)
 
 
 def query_traffic_flows_sync(
@@ -140,6 +223,7 @@ def query_traffic_flows_sync(
     }
     return {
         "camera_id": cam,
+        "source_ref": _resolve_flow_source_ref(cam),
         "start_time": safe_start,
         "end_time": safe_end,
         "bucket_sec": safe_bucket,

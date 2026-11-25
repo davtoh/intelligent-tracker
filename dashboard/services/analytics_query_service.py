@@ -2,8 +2,11 @@
 
 import os
 from typing import Any, Optional
+from urllib.parse import quote
 
 import numpy as np
+
+from intelligent_tracker.source_ref import build_source_ref, source_ref_from_row
 
 _COLORMAP_NAMES = {
     2: "JET",
@@ -83,13 +86,60 @@ def _resolve_colormap_name(hm: Any) -> str:
     return _COLORMAP_NAMES.get(int(cmap_val), str(cmap_val)) if isinstance(cmap_val, int) else str(cmap_val)
 
 
+def _build_heatmap_hotspots(
+    grid: list[list[float]],
+    width: int,
+    height: int,
+    resolved_cam: Optional[str],
+    vfile: str,
+    rid: str,
+    image_url: str,
+    freeze_frame_url: str,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    """Extract top normalized 32x24 heatmap hotspot cells with SourceRef drill-down metadata."""
+    rows = len(grid)
+    cols = len(grid[0]) if rows else 0
+    if not rows or not cols:
+        return []
+    candidates = sorted(
+        ((float(val), r, c) for r, rv in enumerate(grid) for c, val in enumerate(rv) if float(val) > 0.0),
+        key=lambda item: (-item[0], item[1], item[2]),
+    )
+    hotspots: list[dict[str, Any]] = []
+    for val, r, c in candidates[:limit]:
+        px = round(((c + 0.5) / cols) * width) if width > 0 else c
+        py = round(((r + 0.5) / rows) * height) if height > 0 else r
+        cell_bbox = (
+            [round((c / cols) * width), round((r / rows) * height), round(((c + 1) / cols) * width), round(((r + 1) / rows) * height)]
+            if width > 0 and height > 0 else None
+        )
+        cell_ref = build_source_ref(camera_id=str(resolved_cam or ""), video_filename=vfile, run_id=rid, bbox=cell_bbox)
+        hotspots.append({
+            "col": c, "row": r, "px": px, "py": py, "bbox": cell_bbox, "density": val,
+            "camera_id": resolved_cam, "image_url": image_url,
+            "freeze_frame_url": freeze_frame_url, "source_ref": cell_ref,
+        })
+    return hotspots
+
+
 def build_heatmap_json(mgr: Any, camera_id: Optional[str]) -> dict[str, Any]:
     """Build enriched JSON metadata payload for the spatial density heatmap."""
     resolved_cam = camera_id or getattr(mgr, "camera_id", None)
+    raw_vfile = getattr(mgr, "video_filename", "")
+    raw_rid = getattr(mgr, "run_id", "")
+    vfile = raw_vfile.strip() if isinstance(raw_vfile, str) else ""
+    rid = raw_rid.strip() if isinstance(raw_rid, str) else ""
+    q_cam = quote(str(resolved_cam), safe="") if resolved_cam else ""
+    image_url = f"/analytics/heatmap?camera_id={q_cam}" if q_cam else "/analytics/heatmap"
+    freeze_frame_url = f"/api/cameras/{q_cam}/freeze_frame" if q_cam else ""
+    base_ref = build_source_ref(camera_id=str(resolved_cam or ""), video_filename=vfile, run_id=rid)
     if not mgr.analytics or not mgr.analytics.heatmap:
         return {
             "density": [], "initialized": False, "camera_id": resolved_cam,
             "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS], "grid": [], "x_ticks": [], "y_ticks": [],
+            "source_ref": base_ref, "image_url": image_url, "freeze_frame_url": freeze_frame_url,
+            "peak_media_ref": None, "hotspots": [],
         }
     hm = mgr.analytics.heatmap
     raw_density = getattr(hm, "density", None)
@@ -97,20 +147,18 @@ def build_heatmap_json(mgr: Any, camera_id: Optional[str]) -> dict[str, Any]:
     has_data = arr.ndim == 2 and arr.size > 0
     width = int(getattr(hm, "width", 0) or (arr.shape[1] if arr.ndim == 2 else 0))
     height = int(getattr(hm, "height", 0) or (arr.shape[0] if arr.ndim == 2 else 0))
+    grid = _downsample_heatmap_grid(arr, _HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS)
+    hotspots = _build_heatmap_hotspots(grid, width, height, resolved_cam, vfile, rid, image_url, freeze_frame_url)
     return {
-        "initialized": True,
-        "camera_id": resolved_cam,
-        "resolution": [width, height],
+        "initialized": True, "camera_id": resolved_cam, "resolution": [width, height],
         "max_value": float(np.max(arr)) if has_data else 0.0,
         "mean_value": float(np.mean(arr)) if has_data else 0.0,
-        "colormap": _resolve_colormap_name(hm),
-        "decay_rate": getattr(hm, "decay_rate", None),
-        "radius": getattr(hm, "radius", None),
-        "stops": _DEFAULT_HEATMAP_STOPS,
-        "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS],
-        "grid": _downsample_heatmap_grid(arr, _HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS),
-        "x_ticks": _build_axis_ticks(width),
-        "y_ticks": _build_axis_ticks(height),
+        "colormap": _resolve_colormap_name(hm), "decay_rate": getattr(hm, "decay_rate", None),
+        "radius": getattr(hm, "radius", None), "stops": _DEFAULT_HEATMAP_STOPS,
+        "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS], "grid": grid,
+        "x_ticks": _build_axis_ticks(width), "y_ticks": _build_axis_ticks(height),
+        "source_ref": base_ref, "image_url": image_url, "freeze_frame_url": freeze_frame_url,
+        "peak_media_ref": hotspots[0] if hotspots else None, "hotspots": hotspots,
     }
 
 
@@ -135,6 +183,7 @@ def enrich_sighting(s: dict[str, Any], db: Any) -> dict[str, Any]:
             if cp:
                 s_dict["snapshot_url"] = f"/crops/{os.path.basename(cp)}"
                 break
+    s_dict["source_ref"] = source_ref_from_row(s_dict)
     return s_dict
 
 
