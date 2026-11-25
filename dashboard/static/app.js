@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function switchCamera(camId) {
     if (!camId || camId === activeCameraId) return;
     activeCameraId = camId;
-    try { window.localStorage?.setItem('it_focused_camera_id', camId); } catch (_) {}
+    if (window.ActiveSourceContext) window.ActiveSourceContext.set({ kind: 'camera', cameraId: camId }, { silent: true }); else try { window.localStorage?.setItem('it_focused_camera_id', camId); } catch (_) {}
     const camSel = document.getElementById('active-camera-select');
     if (camSel && camSel.value !== camId) camSel.value = camId;
     const titleEl = document.getElementById('video-stream-title');

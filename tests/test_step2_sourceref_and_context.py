@@ -1,317 +1,195 @@
-"""Milestone 1+ tests for Step 2: SourceRef SSOT, schema v3 migration, and run_id wiring."""
+"""Milestone 3+ Node VM frontend tests for Step 2: ActiveSourceContext, SourceRef routing, Analytics & Studio freeze."""
 
-import os
-import sqlite3
-import tempfile
+import json
+import subprocess
 import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
+from pathlib import Path
 
-import cv2
-import numpy as np
-from fastapi.testclient import TestClient
+ROOT = Path(__file__).resolve().parents[1]
+JS_DIR = ROOT / "dashboard" / "static" / "js"
 
-from dashboard.app import app
-from dashboard.dependencies import get_db
-from dashboard.services import video_analytics_service, video_report_store
-from intelligent_tracker.active_learning import ActiveLearningManager
-from intelligent_tracker.database import TrackerDB
-from intelligent_tracker.events.bus import EventBus
-from intelligent_tracker.events.types import ZoneEvent
-from intelligent_tracker.journey import TrajectoryJourneySearcher
-from intelligent_tracker.matching._gallery_matching import _notify_active_learning
-from intelligent_tracker.matching._gallery_signals import emit_periodic_sighting
-from intelligent_tracker.memory._event_formatters import normalize_event_doc
-from intelligent_tracker.memory.fts_index import EventFTSIndex
-from intelligent_tracker.repositories.sightings_query_helpers import build_sightings_where_clause
-from intelligent_tracker.source_ref import build_source_ref, snapshot_path_to_url
-
-
-def _write_tiny_mp4(path: str, frames: int = 5) -> None:
-    """Write a tiny synthetic MP4 fixture for mock VideoIndexer tests."""
-    fourcc = getattr(cv2, "VideoWriter_fourcc")(*"mp4v")
-    writer = cv2.VideoWriter(path, fourcc, 5.0, (64, 64))
-    try:
-        for idx in range(frames):
-            img = np.full((64, 64, 3), 40 + idx * 20, dtype=np.uint8)
-            writer.write(img)
-    finally:
-        writer.release()
-
-
-class TestStep2Milestone1Backend(unittest.TestCase):
-    """Isolated backend tests for SourceRef, schema v3, and pipeline run_id propagation."""
-
-    def _make_temp_db(self, db_name: str = "test.db") -> tuple[str, TrackerDB]:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        db = TrackerDB(os.path.join(tmp.name, db_name))
-        self.addCleanup(db.close)
-        return tmp.name, db
-
-    def test_build_source_ref_and_snapshot_url(self) -> None:
-        self.assertEqual(snapshot_path_to_url(r"data\crops\sighting_1.jpg"), "/api/crops/sighting_1.jpg")
-        self.assertEqual(snapshot_path_to_url("/api/crops/existing.jpg"), "/api/crops/existing.jpg")
-        self.assertEqual(snapshot_path_to_url("../secret/bad.jpg"), "")
-        cam_ref = build_source_ref(
-            camera_id="cam_front", ts=1700.0, track_id=3, entity_id=7,
-            zone_id="lobby", bbox="[10, 20, 30, 40]", snapshot_path="data/crops/a.jpg",
-        )
-        self.assertEqual(cam_ref["kind"], "camera")
-        self.assertEqual(cam_ref["bbox"], [10, 20, 30, 40])
-        self.assertEqual(cam_ref["snapshot_url"], "/api/crops/a.jpg")
-        self.assertNotIn("video_filename", cam_ref)
-        vid_ref = build_source_ref(
-            video_filename="clip.mp4", run_id="run_1234", media_offset_sec=4.1256,
-        )
-        self.assertEqual(vid_ref["kind"], "video")
-        self.assertEqual(vid_ref["media_offset_sec"], 4.126)
-        self.assertEqual(vid_ref["run_id"], "run_1234")
-
-    def test_user_version_3_migration_from_v2_is_idempotent(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        db_path = os.path.join(tmp.name, "legacy_v2.db")
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            "CREATE TABLE world_timeline_events ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL DEFAULT 'sighting', "
-            "entity_id INTEGER, entity_name TEXT DEFAULT '', category TEXT DEFAULT '', "
-            "camera_id TEXT DEFAULT '', zone_id TEXT DEFAULT '', timestamp REAL NOT NULL, "
-            "confidence REAL DEFAULT 1.0, title TEXT DEFAULT '', summary TEXT NOT NULL DEFAULT '', "
-            "tags TEXT DEFAULT '', metadata_json TEXT DEFAULT '{}', "
-            "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-        )
-        conn.execute(
-            "INSERT INTO world_timeline_events (event_type, camera_id, timestamp, summary) "
-            "VALUES ('sighting', 'cam_1', 500.0, 'Legacy v2 event')"
-        )
-        conn.execute("PRAGMA user_version = 2;")
-        conn.commit()
-        conn.close()
-
-        db = TrackerDB(db_path)
-        self.addCleanup(db.close)
-        self.assertEqual(db.get_schema_version(), 3)
-        cols = {r[1] for r in db._conn.execute("PRAGMA table_info(world_timeline_events);").fetchall()}
-        self.assertIn("run_id", cols)
-        idxs = {r[1] for r in db._conn.execute("PRAGMA index_list(world_timeline_events);").fetchall()}
-        self.assertIn("idx_timeline_run_id", idxs)
-        row = db.get_timeline_event(1)
-        self.assertIsNotNone(row)
-        self.assertEqual(row["summary"], "Legacy v2 event")
-
-    def test_sightings_where_clause_camera_id_or_source_and_run_id(self) -> None:
-        _, db = self._make_temp_db()
-        eid = db.add_entity(name="Alice", category="person")
-        db.add_sighting(
-            entity_id=eid, track_id=1, source="clip.mp4", camera_id="cam_lobby",
-            video_filename="clip.mp4", media_offset_sec=2.5, run_id="run_aaa",
-        )
-        db.add_sighting(
-            entity_id=eid, track_id=2, source="cam_gate", camera_id="cam_gate", run_id="run_bbb",
-        )
-        where_sql, params = build_sightings_where_clause(source="cam_lobby", run_id="run_aaa")
-        self.assertIn("(s.camera_id = ? OR s.source = ?)", where_sql)
-        self.assertEqual(params, ["cam_lobby", "cam_lobby", "run_aaa"])
-        hits = db.get_sightings(source="cam_lobby", run_id="run_aaa")
-        self.assertEqual(len(hits), 1)
-        self.assertEqual(hits[0]["camera_id"], "cam_lobby")
-        self.assertEqual(db.count_sightings(camera_id="cam_gate", run_id="run_bbb"), 1)
-
-    def test_timeline_event_run_id_and_source_ref_roundtrip(self) -> None:
-        _, db = self._make_temp_db()
-        bus = EventBus()
-        self.addCleanup(bus.stop)
-        fts = EventFTSIndex(db=db, event_bus=bus, auto_attach=True)
-        self.addCleanup(fts.stop)
-        ev = ZoneEvent(
-            camera_id="cam_a", zone_id="entry", track_id=5, entity_id=None,
-            entity_name="Guest", timestamp=1234.5, bbox=(1, 2, 30, 40),
-            metadata={"video_filename": "demo.mp4", "media_offset_sec": 1.5, "run_id": "run_z9"},
-        )
-        doc = normalize_event_doc(ev)
-        self.assertEqual(doc["run_id"], "run_z9")
-        self.assertEqual(doc["source_ref"]["kind"], "video")
-        self.assertEqual(doc["source_ref"]["run_id"], "run_z9")
-        row_id = fts.handle_event(ev)
-        stored = db.get_timeline_event(int(row_id))
-        self.assertEqual(stored["run_id"], "run_z9")
-        self.assertEqual(stored["source_ref"]["video_filename"], "demo.mp4")
-        self.assertEqual(stored["source_ref"]["zone_id"], "entry")
-
-    def test_gallery_matching_and_signals_forward_run_id_and_camera_id(self) -> None:
-        tmpdir, db = self._make_temp_db()
-        eid = db.add_entity(name="Bob", category="person")
-        al = ActiveLearningManager(db=db, min_confidence=0.4, max_confidence=0.75, crops_dir=tmpdir)
-        matcher = SimpleNamespace(
-            db=db, active_learning=al, gallery_entity_ids=[eid], gallery_names=["Bob"],
-            gallery_categories=["person"], video_filename="clip.mp4",
-            current_media_offset_sec=3.25, run_id="run_match1", camera_id="cam_dock",
-            crops_dir=tmpdir, sighting_interval=0.0, _last_sighting_time={}, fts_index=EventFTSIndex(db=db),
-        )
-        frame = np.full((64, 64, 3), 180, dtype=np.uint8)
-        trk = SimpleNamespace(track_id=11, bbox=(4, 4, 40, 50))
-        _notify_active_learning(matcher, trk, frame, 0, 0.55, "clip.mp4", 100.0)
-        pending = db.list_review_items(status="pending")
-        self.assertEqual(len(pending), 1)
-        self.assertEqual(pending[0]["run_id"], "run_match1")
-        self.assertEqual(pending[0]["video_filename"], "clip.mp4")
-        self.assertAlmostEqual(float(pending[0]["media_offset_sec"]), 3.25)
-
-        emitted = emit_periodic_sighting(
-            matcher, entity_id=eid, name="Bob", category="person", track=trk,
-            confidence=0.92, source="clip.mp4", zone_id="bay", timestamp=200.0, frame=frame,
-        )
-        self.assertTrue(emitted)
-        sightings = db.get_sightings(entity_id=eid, run_id="run_match1")
-        self.assertEqual(len(sightings), 1)
-        self.assertEqual(sightings[0]["camera_id"], "cam_dock")
-        timeline = db.search_timeline_events(entity_id=eid)
-        self.assertEqual(timeline[0]["run_id"], "run_match1")
-
-    def test_video_analytics_service_propagates_pregenerated_run_id(self) -> None:
-        tmpdir, db = self._make_temp_db("tracker.db")
-        mp4_path = os.path.join(tmpdir, "sample.mp4")
-        _write_tiny_mp4(mp4_path, frames=5)
-        reports_dir = os.path.join(tmpdir, "reports")
-        captured: dict[str, str] = {}
-
-        orig_create = video_analytics_service.create_video_indexer
-
-        def _spy_create(*args, **kwargs):
-            idx = orig_create(*args, **kwargs)
-            captured["indexer_run_id"] = getattr(idx, "run_id", "")
-            captured["matcher_run_id"] = getattr(getattr(idx, "matcher", None), "run_id", "")
-            captured["al_run_id"] = getattr(getattr(idx, "active_learning", None), "run_id", "")
-            return idx
-
-        opts = {
-            "detector": "mock", "sample_rate": 2, "confidence": 0.4,
-            "classes": None, "tracked_categories": None, "scenario_camera_id": None,
-        }
-        with (
-            patch.object(video_analytics_service, "_resolve_db", return_value=db),
-            patch.object(video_report_store, "REPORTS_DIR", reports_dir),
-            patch.object(video_analytics_service, "create_video_indexer", side_effect=_spy_create),
-        ):
-            report = video_analytics_service.run_sync_analytics("sample.mp4", mp4_path, opts)
-
-        rid = str(report.get("run_id") or "")
-        self.assertTrue(rid.startswith("run_"))
-        self.assertEqual(captured["indexer_run_id"], rid)
-        self.assertEqual(captured["matcher_run_id"], rid)
-        self.assertEqual(captured["al_run_id"], rid)
-        self.assertIsNotNone(db.get_video_run(rid, video_filename="sample.mp4"))
+_VM_PREAMBLE = """
+const fs = require('fs');
+const vm = require('vm');
+const byId = new Map();
+function makeEl(id, tag = 'div') {
+  const listeners = {}, cls = new Set(), attrs = {};
+  const el = {
+    id, tagName: tag.toUpperCase(), value: '', textContent: '', innerHTML: '', href: '', src: '',
+    disabled: false, hidden: false, style: {}, dataset: {}, options: [], children: [],
+    parentElement: { appendChild: (c) => { byId.set(c.id, c); return c; } },
+    classList: {
+      add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c),
+      toggle: (c, f) => (f === undefined ? (cls.has(c) ? cls.delete(c) : cls.add(c)) : (f ? cls.add(c) : cls.delete(c))),
+    },
+    getAttribute: (k) => (k === 'data-tab' ? id : (attrs[k] ?? null)),
+    setAttribute: (k, v) => { attrs[k] = String(v); },
+    removeAttribute: (k) => { delete attrs[k]; if (k === 'src') el.src = ''; },
+    insertAdjacentElement: (_pos, c) => { byId.set(c.id, c); },
+    addEventListener: (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); },
+    dispatchEvent: (ev) => { (listeners[ev.type || ev] || []).forEach((fn) => fn(ev)); },
+    click: () => { (listeners.click || []).forEach((fn) => fn({ preventDefault() {}, stopPropagation() {} })); },
+    querySelector: (sel) => (sel === '.media-empty-state-title' ? (el._titleEl || (el._titleEl = makeEl(id + '-t'))) : sel === '.media-empty-state-sub' ? (el._subEl || (el._subEl = makeEl(id + '-s'))) : null),
+    querySelectorAll: () => [],
+    appendChild: (c) => { el.children.push(c); if (c.tagName === 'OPTGROUP') el.options.push(...c.options); else if (c.tagName === 'OPTION') el.options.push(c); return c; },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 640, height: 480 }),
+    getContext: () => ({ clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, fill() {}, arc() {}, closePath() {}, save() {}, restore() {}, fillText() {}, fillRect() {}, strokeRect() {}, drawImage() {} }),
+  };
+  return el;
+}
+const store = new Map(), winListeners = {}, docListeners = {}, events = [];
+const sandbox = {
+  console, Math, Date, Number, String, Boolean, Array, Object, Set, Map, JSON, URLSearchParams,
+  encodeURIComponent, decodeURIComponent, Promise, setTimeout, clearTimeout, byId, makeEl, store, events,
+  winListeners, docListeners, process,
+  Event: function (t) { this.type = t; },
+  CustomEvent: function (t, init) { this.type = t; this.detail = init?.detail; },
+  localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
+  history: { pushState: (_s, _t, u) => { sandbox.location.hash = u; } },
+  location: { hash: '' },
+  fetch: async () => ({ ok: true, json: async () => ([]) }),
+  document: {
+    readyState: 'complete',
+    getElementById: (id) => byId.get(id) || null,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    createElement: (tag) => makeEl('tmp_' + Math.random().toString(36).slice(2, 7), tag),
+    addEventListener: (ev, fn) => { (docListeners[ev] = docListeners[ev] || []).push(fn); },
+  },
+  addEventListener: (ev, fn) => { (winListeners[ev] = winListeners[ev] || []).push(fn); },
+  dispatchEvent: (ev) => { events.push(ev); (winListeners[ev.type] || []).forEach((fn) => fn(ev)); },
+};
+sandbox.window = sandbox; sandbox.globalThis = sandbox; sandbox.sandbox = sandbox;
+const ctx = vm.createContext(sandbox);
+"""
 
 
-class TestStep2Milestone2Backend(unittest.TestCase):
-    """Milestone 2 tests: JourneyHop provenance, closed-DB guard, flow/heatmap/sighting media refs."""
+def _run_vm(files: list[Path], body: str) -> dict:
+    file_list = json.dumps([str(p.relative_to(ROOT)).replace("\\", "/") for p in files])
+    script = (
+        _VM_PREAMBLE
+        + f"\nfor (const f of {file_list}) {{ vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, {{ filename: f }}); }}\n"
+        + f"vm.runInContext(`(async () => {{\n{body}\n}})().catch((e) => {{ console.error(e); process.exit(1); }});`, ctx);\n"
+    )
+    proc = subprocess.run(["node", "-e", script], cwd=str(ROOT), capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise AssertionError(f"Node VM failed:\nSTDOUT: {proc.stdout}\nSTDERR: {proc.stderr}")
+    return json.loads(proc.stdout.strip().splitlines()[-1])
 
-    def _setup_app_db(self) -> tuple[TrackerDB, TestClient]:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        db = TrackerDB(os.path.join(tmp.name, "m2.db"))
-        self.addCleanup(db.close)
-        prev = dict(app.dependency_overrides)
-        app.dependency_overrides[get_db] = lambda: db
-        self.addCleanup(lambda: app.dependency_overrides.clear() or app.dependency_overrides.update(prev))
-        return db, TestClient(app)
 
-    def test_journey_hop_provenance_and_search_route_roundtrip(self) -> None:
-        db, client = self._setup_app_db()
-        eid = db.add_entity(name="Elena", category="person")
-        db.add_sighting(
-            entity_id=eid, track_id=42, source="clip.mp4", camera_id="cam_lobby",
-            timestamp=1700000010.0, zone_id="entry", bbox=[10, 20, 50, 80],
-            snapshot_path="data/crops/hop1.jpg", video_filename="clip.mp4",
-            media_offset_sec=3.5, run_id="run_j1",
-        )
-        for query in (f"entity_id={eid}", "track_id=42"):
-            res = client.get(f"/api/journey/search?{query}")
-            self.assertEqual(res.status_code, 200)
-            hop = res.json()["hops"][0]
-            self.assertEqual(hop["camera_id"], "cam_lobby")
-            self.assertEqual(hop["track_id"], 42)
-            self.assertEqual(hop["run_id"], "run_j1")
-            self.assertEqual(hop["snapshot_url"], "/api/crops/hop1.jpg")
-            self.assertEqual(hop["source_ref"]["kind"], "video")
-            self.assertEqual(hop["source_ref"]["camera_id"], "cam_lobby")
-            self.assertEqual(hop["source_ref"]["video_filename"], "clip.mp4")
-            self.assertEqual(hop["source_ref"]["run_id"], "run_j1")
-            self.assertEqual(hop["source_ref"]["bbox"], [10, 20, 50, 80])
+class TestStep2Milestone3Frontend(unittest.TestCase):
+    """Node VM tests for ActiveSourceContext, full SourceRef routing, Analytics sync & Studio freeze."""
 
-    def test_journey_searcher_closed_db_guard(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        db = TrackerDB(os.path.join(tmp.name, "closed.db"))
-        db.close()
-        searcher = TrajectoryJourneySearcher(db)
-        self.assertEqual(searcher._fetch_sightings(None, 99, None, None), ([], None))
-        journey = searcher.search_journey(track_id=99)
-        self.assertEqual(journey.total_hops, 0)
-        self.assertEqual(journey.hops, [])
+    def test_active_source_context_storage_and_hash_pin_override(self) -> None:
+        body = """
+        sandbox.ActiveSourceContext.set({ kind: 'camera', cameraId: 'cam_02' });
+        const storedCam = JSON.parse(store.get('it_active_source_ref'));
+        const legacyCam = store.get('it_focused_camera_id');
+        sandbox.location.hash = '#analytics?video=clip.mp4&run_id=r9&offset_sec=4.5';
+        const pinned = sandbox.ActiveSourceContext.get();
+        const unpinned = sandbox.ActiveSourceContext.get({ ignoreHash: true });
+        const selVal = sandbox.ActiveSourceContext.toSelectValue(pinned);
+        console.log(JSON.stringify({ storedCam, legacyCam, pinned, unpinned, selVal }));
+        """
+        out = _run_vm([JS_DIR / "app_navigation.js", JS_DIR / "active_source_context.js"], body)
+        self.assertEqual(out["storedCam"]["cameraId"], "cam_02")
+        self.assertEqual(out["legacyCam"], "cam_02")
+        self.assertTrue(out["pinned"]["pinned"])
+        self.assertEqual(out["pinned"]["videoFilename"], "clip.mp4")
+        self.assertEqual(out["pinned"]["runId"], "r9")
+        self.assertEqual(out["unpinned"]["cameraId"], "cam_02")
+        self.assertEqual(out["selVal"], "video:clip.mp4")
 
-    def test_analytics_flows_camera_or_source_and_media_refs(self) -> None:
-        db, client = self._setup_app_db()
-        base_ts = 1_700_000_000.0
-        with db._lock:
-            cur = db._conn.cursor()
-            cur.execute(
-                "INSERT INTO world_timeline_events (event_type, camera_id, zone_id, timestamp, "
-                "video_filename, media_offset_sec, run_id, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                ("zone_enter", "cam_lobby", "gate", base_ts + 15, "clip.mp4", 1.5, "run_f1", '{"track_id": 7}'),
-            )
-            db._conn.commit()
-        db.add_sighting(
-            entity_id=None, track_id=7, source="clip.mp4", camera_id="cam_lobby",
-            timestamp=base_ts + 20, zone_id="gate", snapshot_path="data/crops/s1.jpg",
-            video_filename="clip.mp4", media_offset_sec=2.0, run_id="run_f1",
-        )
-        res = client.get(f"/analytics/flows?camera_id=cam_lobby&range_sec=120&bucket_sec=60&end_time={base_ts + 120}")
-        self.assertEqual(res.status_code, 200)
-        body = res.json()
-        self.assertEqual(body["source_ref"], {"kind": "camera", "camera_id": "cam_lobby"})
-        self.assertEqual(body["totals"]["inflow"], 1)
-        self.assertEqual(body["totals"]["sightings"], 1)
-        refs = body["buckets"][0]["media_refs"]
-        self.assertEqual(len(refs), 2)
-        self.assertEqual(refs[0]["run_id"], "run_f1")
-        self.assertEqual(refs[1]["snapshot_url"], "/api/crops/s1.jpg")
-        self.assertEqual(refs[1]["source_ref"]["video_filename"], "clip.mp4")
-        vid_flows = db.get_traffic_flows(base_ts, base_ts + 120, bucket_sec=60, camera_id="clip.mp4")
-        self.assertEqual(vid_flows["source_ref"], {"kind": "video", "video_filename": "clip.mp4"})
-        self.assertEqual(vid_flows["totals"]["sightings"], 1)
+    def test_full_sourceref_hash_serialization_and_videos_routing(self) -> None:
+        body = """
+        ['scrubber-video-player'].forEach((id) => byId.set(id, makeEl(id, 'video')));
+        sandbox.fetch = async (u) => ({ ok: true, json: async () => (u === '/api/videos' ? [{ filename: 'clip.mp4', video_url: '/videos/clip.mp4', web_compatible: true, codec: 'h264' }] : []) });
+        const loaded = [], dets = [], seeks = [];
+        winListeners['video-seek-request'] = [(e) => seeks.push(e.detail)];
+        sandbox.switchTab = () => {};
+        sandbox.VideoScrubber = { loadVideosList: async () => {}, loadVideoIntoPlayer: (...a) => loaded.push(a), loadDetections: (...a) => dets.push(a) };
+        const ref = { kind: 'video', cameraId: 'cam_1', videoFilename: 'clip.mp4', runId: 'run_8', mediaOffsetSec: 7.25, ts: 1700, trackId: 4, entityId: 9, zoneId: 'dock', bbox: [1, 2, 30, 40] };
+        const hash = sandbox.AppNavigation.buildHash('tab-videos', ref);
+        const parsed = sandbox.AppNavigation.parseHash(hash);
+        const roundtrip = sandbox.AppNavigation.paramsToSourceRef(parsed.params);
+        await sandbox.AppNavigation.navigate('tab-videos', ref);
+        console.log(JSON.stringify({ hash, roundtrip, loaded, dets, seeks }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "app_navigation.js"], body)
+        self.assertIn("run_id=run_8", out["hash"])
+        self.assertIn("offset_sec=7.25", out["hash"])
+        self.assertIn("track_id=4", out["hash"])
+        self.assertEqual(out["roundtrip"]["bbox"], [1, 2, 30, 40])
+        self.assertEqual(out["loaded"][0][1], "clip.mp4")
+        self.assertEqual(out["dets"], [["clip.mp4", "run_8"]])
+        self.assertEqual(out["seeks"], [{"filename": "clip.mp4", "offsetSec": 7.25}])
 
-    def test_heatmap_json_and_sightings_source_ref(self) -> None:
-        db, client = self._setup_app_db()
-        db.add_sighting(
-            entity_id=None, track_id=3, source="cam_a", camera_id="cam_a",
-            timestamp=1700000005.0, zone_id="door", bbox=[1, 2, 3, 4],
-            snapshot_path="data/crops/sig.jpg", run_id="run_s1",
-        )
-        density = np.zeros((24, 32), dtype=np.float32)
-        density[12, 16] = 4.0
-        hm = SimpleNamespace(width=640, height=480, density=density, colormap=2, decay_rate=0.99, radius=20)
-        fake_mgr = SimpleNamespace(camera_id="cam_a", video_filename="", run_id="run_h1", analytics=SimpleNamespace(heatmap=hm))
-        with patch("dashboard.routers.analytics.get_active_stream_manager", return_value=fake_mgr):
-            hm_res = client.get("/analytics/heatmap?format=json&camera_id=cam_a")
-            self.assertEqual(hm_res.status_code, 200)
-            hm_json = hm_res.json()
-            self.assertEqual(hm_json["image_url"], "/analytics/heatmap?camera_id=cam_a")
-            self.assertEqual(hm_json["freeze_frame_url"], "/api/cameras/cam_a/freeze_frame")
-            self.assertEqual(hm_json["source_ref"], {"kind": "camera", "camera_id": "cam_a", "run_id": "run_h1"})
-            peak = hm_json["peak_media_ref"]
-            self.assertEqual((peak["col"], peak["row"]), (16, 12))
-            self.assertEqual(peak["source_ref"]["bbox"], [320, 240, 340, 260])
-            fake_mgr.analytics.heatmap = None
-            empty_json = client.get("/analytics/heatmap?format=json&camera_id=cam_a").json()
-            self.assertIsNone(empty_json["peak_media_ref"])
-            self.assertEqual(empty_json["hotspots"], [])
+    def test_unavailable_source_media_empty_state_across_tabs(self) -> None:
+        body = """
+        ['live-stream-img', 'static-heatmap-img', 'studio-live-img'].forEach((id) => byId.set(id, makeEl(id, 'img')));
+        byId.set('video-stream-title', makeEl('video-stream-title'));
+        byId.set('analytics-source-select', makeEl('analytics-source-select', 'select'));
+        byId.set('studio-camera-select', makeEl('studio-camera-select', 'select'));
+        sandbox.fetch = async (u) => ({ ok: true, json: async () => (u === '/api/cameras' ? [{ id: 'cam_01' }] : []) });
+        sandbox.switchTab = () => {}; sandbox.LivePlayer = { detachLiveStream() {} };
+        sandbox.Studio = { loadStudioChannels: async () => {} }; sandbox.AnalyticsView = { initSourceSelect: async () => {} };
+        await sandbox.AppNavigation.navigate('tab-live', { cameraId: 'missing_cam' });
+        await sandbox.AppNavigation.navigate('tab-analytics', { cameraId: 'missing_cam' });
+        await sandbox.AppNavigation.navigate('tab-studio', { videoFilename: 'missing.mp4' });
+        const titles = ['live-stream-img', 'static-heatmap-img', 'studio-live-img'].map((id) => byId.get(id + '-empty-state').querySelector('.media-empty-state-title').textContent);
+        console.log(JSON.stringify({ titles, liveTitle: byId.get('video-stream-title').textContent }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "app_navigation.js"], body)
+        self.assertEqual(out["titles"][:2], ["Camera Unavailable", "Camera Unavailable"])
+        self.assertEqual(out["titles"][2], "Recorded Video Unavailable")
+        self.assertIn("missing_cam", out["liveTitle"])
 
-        s_res = client.get("/sightings?source=cam_a")
-        self.assertEqual(s_res.status_code, 200)
-        item = s_res.json()[0]
-        self.assertEqual(item["source_ref"]["camera_id"], "cam_a")
-        self.assertEqual(item["source_ref"]["run_id"], "run_s1")
-        self.assertEqual(item["source_ref"]["snapshot_url"], "/crops/sig.jpg")
+    def test_analytics_source_select_sync_and_drilldown_app_navigate(self) -> None:
+        body = """
+        const sel = makeEl('analytics-source-select', 'select');
+        ['trafficChart', 'tab-analytics', 'heatmap-camera-badge', 'btn-download-heatmap', 'static-heatmap-img', 'heatmap-hotspot-canvas', 'heatmap-axis-x', 'heatmap-axis-y', 'heatmap-hotspot-tooltip'].forEach((id) => byId.set(id, makeEl(id)));
+        byId.set('analytics-source-select', sel);
+        sandbox.fetch = async (u) => ({ ok: true, json: async () => (u === '/api/cameras' ? [{ id: 'cam_a', name: 'Lobby' }] : u === '/api/videos' ? [{ filename: 'clip.mp4' }] : { camera_id: 'cam_a', grid_size: [32, 24], hotspots: [{ col: 16, row: 12, source_ref: { kind: 'video', video_filename: 'clip.mp4', run_id: 'r1', media_offset_sec: 5.0 } }] }) });
+        const navCalls = []; sandbox.App = { navigate: (t, r) => navCalls.push({ t, r }), getActiveCameraId: () => 'cam_a' };
+        await sandbox.AnalyticsView.initSourceSelect();
+        sel.value = 'video:clip.mp4'; sel.dispatchEvent({ type: 'change' });
+        const storedAfter = sandbox.ActiveSourceContext.get({ ignoreHash: true });
+        sandbox.AnalyticsDrilldown.setFlowData({ camera_id: 'cam_a', bucket_sec: 60 });
+        sandbox.AnalyticsDrilldown.drillDownToTimeWindow({ bucket_start: 100, media_refs: [{ source_ref: { kind: 'camera', camera_id: 'cam_a', run_id: 'r_flow' } }] }, 'tab-alerts');
+        sandbox.AnalyticsDrilldown.setHeatmapData({ camera_id: 'cam_a', grid_size: [32, 24], hotspots: [{ col: 16, row: 12, source_ref: { kind: 'video', video_filename: 'clip.mp4', run_id: 'r1', media_offset_sec: 5.0 } }] });
+        sandbox.AnalyticsDrilldown.handleHeatmapClick(byId.get('heatmap-hotspot-canvas'), 330, 250);
+        console.log(JSON.stringify({ opts: sel.options.map((o) => o.value), storedAfter, navCalls }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "analytics_drilldown.js", JS_DIR / "analytics_view.js"], body)
+        self.assertIn("video:clip.mp4", out["opts"])
+        self.assertEqual(out["storedAfter"]["videoFilename"], "clip.mp4")
+        self.assertEqual(out["navCalls"][0]["t"], "tab-alerts")
+        self.assertEqual(out["navCalls"][0]["r"]["runId"], "r_flow")
+        self.assertEqual(out["navCalls"][1]["t"], "tab-timeline")
+        self.assertEqual(out["navCalls"][1]["r"]["mediaOffsetSec"], 5.0)
+
+    def test_studio_freeze_frame_toggle_and_select_zone_by_id(self) -> None:
+        body = """
+        const btn = makeEl('btn-studio-freeze-toggle', 'button'), img = makeEl('studio-live-img', 'img');
+        ['studio-video-player', 'studio-drawing-canvas', 'studio-camera-select', 'studio-status-banner'].forEach((id) => byId.set(id, makeEl(id)));
+        byId.set('btn-studio-freeze-toggle', btn); byId.set('studio-live-img', img);
+        sandbox.fetch = async (u) => ({ ok: true, json: async () => (u.includes('/freeze_frame') ? { camera_id: 'cam_01', width: 640, height: 480, image_base64: 'data:image/jpeg;base64,FREEZE' } : {}) });
+        const ctrl = sandbox.StudioCanvas.bindFreezeControl(() => 'cam_01');
+        await ctrl.freeze();
+        const frozenState = { text: btn.textContent, src: img.src, pressed: btn.getAttribute('aria-pressed'), frozen: ctrl.isFrozen() };
+        ctrl.resume();
+        const resumedState = { text: btn.textContent, src: img.src, pressed: btn.getAttribute('aria-pressed'), frozen: ctrl.isFrozen() };
+        const state = { activeCamera: 'cam_01', mode: 'draw_zone', zones: [{ id: 'z_9', name: 'vault', polygon: [[0, 0], [10, 0], [10, 10]] }], tripwires: [] };
+        sandbox.StudioShapeEditor.init(() => state, { drawOverlay() {} });
+        const found = sandbox.StudioCanvas.selectZoneById('z_9', state, { updateStatus() {}, drawOverlay() {} });
+        console.log(JSON.stringify({ frozenState, resumedState, found, selected: sandbox.StudioShapeEditor.getSelected(), mode: state.mode }));
+        """
+        out = _run_vm([JS_DIR / "media_empty_state.js", JS_DIR / "active_source_context.js", JS_DIR / "studio_shape_editor.js", JS_DIR / "studio_canvas.js"], body)
+        self.assertTrue(out["frozenState"]["frozen"])
+        self.assertEqual(out["frozenState"]["src"], "data:image/jpeg;base64,FREEZE")
+        self.assertIn("Resume", out["frozenState"]["text"])
+        self.assertFalse(out["resumedState"]["frozen"])
+        self.assertIn("/stream/cam_01?t=", out["resumedState"]["src"])
+        self.assertTrue(out["found"])
+        self.assertEqual(out["selected"], {"type": "zone", "name": "vault"})
+        self.assertEqual(out["mode"], "idle")

@@ -18,11 +18,8 @@
   };
 
   function showToast(title, body, type = 'info') {
-    if (typeof window.showToast === 'function') {
-      window.showToast(title, body, type);
-    } else {
-      console.warn(`[${type.toUpperCase()}] ${title}: ${body}`);
-    }
+    if (typeof window.showToast === 'function') window.showToast(title, body, type);
+    else console.warn(`[${type.toUpperCase()}] ${title}: ${body}`);
   }
 
   function updateStudioStatus(msg, level = 'info') {
@@ -114,7 +111,9 @@
     appendGroup('Camera Profiles', cams, (c) => c?.id && Object.assign(document.createElement('option'), { value: c.id, textContent: c.name ? `${c.name} (${c.id})` : c.id }));
     appendGroup('Recorded Videos', vids, (v) => v?.filename && Object.assign(document.createElement('option'), { value: v.filename, textContent: `🎬 ${v.filename}` }));
     if (!sel.options.length) sel.innerHTML = '<option value="">No cameras available</option>';
-    if (studioState.activeCamera && [...sel.options].some((o) => o.value === studioState.activeCamera)) sel.value = studioState.activeCamera;
+    const ctxRef = window.ActiveSourceContext?.get?.();
+    const pref = studioState.activeCamera || ctxRef?.videoFilename || ctxRef?.cameraId || '';
+    if (pref && [...sel.options].some((o) => o.value === pref)) { sel.value = pref; studioState.activeCamera = pref; }
     else studioState.activeCamera = sel.value || null;
   }
 
@@ -291,17 +290,18 @@
     document.getElementById('btn-studio-clear')?.addEventListener('click', () => {
       setStudioMode('idle'); studioState.points = []; drawOverlay(); updateStudioStatus('Canvas cleared. Mode: Idle.');
     });
+    window.StudioCanvas?.bindFreezeControl?.(() => studioState.activeCamera);
     document.getElementById('studio-live-img')?.addEventListener?.('load', () => drawOverlay());
     document.getElementById('studio-video-player')?.addEventListener?.('loadedmetadata', () => drawOverlay());
     document.getElementById('studio-video-player')?.addEventListener?.('seeked', () => drawOverlay());
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
-      const targetId = e.target.value;
-      if (!targetId) return;
+      const rawVal = e.target.value;
+      if (!rawVal) return;
+      const isVideo = rawVal.startsWith('video:') || e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
+      const targetId = rawVal.startsWith('video:') ? rawVal.slice(6) : rawVal;
       studioState.activeCamera = targetId;
-      const isVideo = e.target.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
-      updateStudioStatus(`Loaded scenario profile for '${targetId}'.`);
-      loadCameraScenario(targetId);
-      applyStudioChannel(targetId, isVideo);
+      window.ActiveSourceContext?.set?.(isVideo ? { kind: 'video', videoFilename: targetId } : { kind: 'camera', cameraId: targetId });
+      updateStudioStatus(`Loaded scenario profile for '${targetId}'.`); loadCameraScenario(targetId); applyStudioChannel(targetId, isVideo);
     });
     document.getElementById('btn-add-transition-link')?.addEventListener('click', () => {
       window.ScenarioModals?.openTransitionLinkModal(studioState.activeCamera);
@@ -342,6 +342,7 @@
     init: initStudio, setMode: setStudioMode, deleteZone, deleteTripwire, deleteTopologyLink,
     loadStudioChannels, renderBEV: renderBEVMinimap, startMinimapLoop, stopMinimapLoop,
     syncStudioTabState, syncTabVisibility: syncStudioTabState,
+    selectZoneById: (id) => window.StudioCanvas?.selectZoneById?.(id, studioState, { updateStatus: updateStudioStatus, drawOverlay }),
     searchJourney: (q) => window.JourneySearch?.search(q), exportJourney: (q) => window.JourneySearch?.exportVideo(q),
   };
   document.addEventListener('DOMContentLoaded', initStudio);

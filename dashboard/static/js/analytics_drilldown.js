@@ -97,12 +97,39 @@
     }
   }
 
+  function normalizeNavMediaRef(rawRef, fallbackSource) {
+    if (!rawRef || typeof rawRef !== 'object') return fallbackSource ? { source: fallbackSource } : {};
+    const src = rawRef.source_ref && typeof rawRef.source_ref === 'object' ? rawRef.source_ref : rawRef;
+    const ref = {};
+    if (src.kind) ref.kind = src.kind;
+    const camId = src.cameraId || src.camera_id || src.camera || '';
+    if (camId) ref.cameraId = camId;
+    const videoFn = src.videoFilename || src.video_filename || src.video || '';
+    if (videoFn) ref.videoFilename = videoFn;
+    const runId = src.runId || src.run_id || '';
+    if (runId) ref.runId = runId;
+    const offsetSec = src.mediaOffsetSec ?? src.media_offset_sec ?? src.offset_sec;
+    if (offsetSec !== undefined && offsetSec !== null && Number.isFinite(Number(offsetSec))) ref.mediaOffsetSec = Number(offsetSec);
+    if (src.ts !== undefined && src.ts !== null && Number.isFinite(Number(src.ts))) ref.ts = Number(src.ts);
+    const trackId = src.trackId ?? src.track_id;
+    if (trackId !== undefined && trackId !== null && Number.isFinite(Number(trackId))) ref.trackId = Number(trackId);
+    const entityId = src.entityId ?? src.entity_id;
+    if (entityId !== undefined && entityId !== null && entityId !== '') ref.entityId = entityId;
+    const zoneId = src.zoneId || src.zone_id || '';
+    if (zoneId) ref.zoneId = zoneId;
+    if (Array.isArray(src.bbox) && src.bbox.length >= 4) ref.bbox = src.bbox.slice(0, 4);
+    if (fallbackSource) ref.source = fallbackSource;
+    return ref;
+  }
+
   function drillDownToTimeWindow(bucket, targetTab = 'tab-timeline') {
     if (!bucket) return null;
     const bStart = Number(bucket.bucket_start);
     const bSec = Number(state.flowData?.bucket_sec || 60);
     const bEnd = Number.isFinite(Number(bucket.bucket_end)) ? Number(bucket.bucket_end) : (bStart + bSec);
-    const camId = state.flowData?.camera_id || window.App?.getActiveCameraId?.() || '';
+    const camId = state.flowData?.camera_id || window.AnalyticsView?.getSelectedSource?.()?.id || window.App?.getActiveCameraId?.() || '';
+    const firstMedia = Array.isArray(bucket.media_refs) && bucket.media_refs.length ? bucket.media_refs[0] : state.flowData?.source_ref;
+    const navRef = { ...normalizeNavMediaRef(firstMedia, camId), startTime: bStart, endTime: bEnd, from: bStart, to: bEnd, offset: 0 };
     const record = {
       type: 'flow_peak',
       targetTab,
@@ -111,10 +138,12 @@
       endTime: bEnd,
       inflow: Number(bucket.inflow || 0),
       outflow: Number(bucket.outflow || 0),
+      sourceRef: navRef,
     };
     state.lastDrilldown = record;
-    if (targetTab === 'tab-timeline' && window.App?.navigate) {
-      window.App.navigate('tab-timeline', { source: camId, startTime: bStart, endTime: bEnd, offset: 0 });
+    const navFn = window.App?.navigate || window.AppNavigation?.navigate;
+    if (navFn) {
+      navFn(targetTab, navRef);
     } else {
       window.switchTab?.(targetTab);
       if (targetTab === 'tab-alerts') {
@@ -140,7 +169,12 @@
   function handleHeatmapClick(canvas, clientX, clientY) {
     const cell = resolveCellFromPointer(canvas, clientX, clientY);
     if (!cell) return null;
-    const camId = state.heatmapData?.camera_id || window.App?.getActiveCameraId?.() || '';
+    const camId = state.heatmapData?.camera_id || window.AnalyticsView?.getSelectedSource?.()?.id || window.App?.getActiveCameraId?.() || '';
+    const hotspots = Array.isArray(state.heatmapData?.hotspots) ? state.heatmapData.hotspots : [];
+    const matched = hotspots.find((h) => Number(h?.col) === cell.col && Number(h?.row) === cell.row);
+    const peak = state.heatmapData?.peak_media_ref;
+    const rawRef = matched || (peak && Number(peak.col) === cell.col && Number(peak.row) === cell.row ? peak : null) || state.heatmapData?.source_ref;
+    const navRef = { ...normalizeNavMediaRef(rawRef, camId), offset: 0 };
     const record = {
       type: 'heatmap_cell',
       targetTab: 'tab-timeline',
@@ -150,10 +184,12 @@
       px: cell.px,
       py: cell.py,
       density: cell.density,
+      sourceRef: navRef,
     };
     state.lastDrilldown = record;
-    if (window.App?.navigate) {
-      window.App.navigate('tab-timeline', { source: camId, offset: 0 });
+    const navFn = window.App?.navigate || window.AppNavigation?.navigate;
+    if (navFn) {
+      navFn('tab-timeline', navRef);
     } else {
       window.switchTab?.('tab-timeline');
       if (window.TimelineView?.applyFilter) {

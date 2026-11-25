@@ -263,6 +263,14 @@
     ctx.restore();
   }
 
+  function selectShape(type, name) {
+    const item = findShape(type, name);
+    if (!item) return false;
+    _selected = { type, name: item.name };
+    _callbacks.drawOverlay?.();
+    return true;
+  }
+
   window.StudioShapeEditor = {
     init,
     hitTest,
@@ -272,6 +280,7 @@
     cancelDrag,
     renameShape,
     drawSelection,
+    selectShape,
     getSelected: () => _selected,
   };
 })();

@@ -61,9 +61,56 @@
     }
   }
 
+  function resolveAnalyticsSource() {
+    const sel = document.getElementById('analytics-source-select');
+    const selVal = sel?.value ? String(sel.value).trim() : '';
+    if (selVal) {
+      const ref = window.ActiveSourceContext?.fromSelectValue?.(selVal, sel)
+        || (selVal.startsWith('video:') ? { kind: 'video', videoFilename: selVal.slice(6), cameraId: '' } : { kind: 'camera', cameraId: selVal, videoFilename: '' });
+      return { id: ref.videoFilename || ref.cameraId || '', kind: ref.kind || 'camera', ref };
+    }
+    if (sel?.dataset?.userSelected === '1') return { id: '', kind: '', ref: null };
+    const ctxRef = window.ActiveSourceContext?.get?.();
+    if (ctxRef?.videoFilename) return { id: ctxRef.videoFilename, kind: 'video', ref: ctxRef };
+    if (ctxRef?.cameraId) return { id: ctxRef.cameraId, kind: 'camera', ref: ctxRef };
+    const fallback = window.App?.getActiveCameraId?.() || '';
+    return { id: fallback, kind: fallback ? 'camera' : '', ref: fallback ? { kind: 'camera', cameraId: fallback } : null };
+  }
+
+  function syncHeatmapBadgeAndLink(src) {
+    const badge = document.getElementById('heatmap-camera-badge');
+    const dlBtn = document.getElementById('btn-download-heatmap');
+    if (badge) badge.textContent = src.id ? `${src.kind === 'video' ? 'Video' : 'Camera'}: ${src.id}` : 'All Cameras';
+    if (dlBtn) dlBtn.href = src.id ? `/analytics/heatmap?camera_id=${encodeURIComponent(src.id)}` : '/analytics/heatmap';
+  }
+
+  async function initSourceSelect() {
+    const sel = document.getElementById('analytics-source-select');
+    if (!sel || !window.ActiveSourceContext?.populateSelect) return null;
+    const catalog = await window.ActiveSourceContext.populateSelect(sel, { includeAll: true, allLabel: 'All Sources' });
+    if (!sel.dataset.sourceBound) {
+      sel.dataset.sourceBound = '1';
+      sel.addEventListener('change', () => {
+        sel.dataset.userSelected = '1';
+        const ref = window.ActiveSourceContext?.fromSelectValue?.(sel.value, sel) || null;
+        if (ref) window.ActiveSourceContext?.set?.(ref);
+        loadTrafficFlows();
+        loadHeatmapMetadata();
+        window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
+      });
+    }
+    const src = resolveAnalyticsSource();
+    syncHeatmapBadgeAndLink(src);
+    if (src.ref) {
+      const avail = window.ActiveSourceContext.checkAvailability(src.ref, catalog);
+      if (!avail.available) window.ActiveSourceContext.showUnavailable(document.getElementById('static-heatmap-img'), avail);
+    }
+    return catalog;
+  }
+
   async function loadTrafficFlows() {
     lastFlowRefreshAt = Date.now();
-    const camId = window.App?.getActiveCameraId?.() || '';
+    const camId = resolveAnalyticsSource().id;
     const params = new URLSearchParams({ range_sec: String(rangeSec) });
     if (camId) params.set('camera_id', camId);
     if (!isLive && endTime !== null) params.set('end_time', String(endTime));
@@ -93,12 +140,16 @@
   }
 
   async function loadHeatmapMetadata() {
-    const camId = window.App?.getActiveCameraId?.() || '';
-    const url = camId
-      ? `/analytics/heatmap?format=json&camera_id=${encodeURIComponent(camId)}`
-      : '/analytics/heatmap?format=json';
+    const src = resolveAnalyticsSource();
+    const camId = src.id;
+    syncHeatmapBadgeAndLink(src);
+    const url = camId ? `/analytics/heatmap?format=json&camera_id=${encodeURIComponent(camId)}` : '/analytics/heatmap?format=json';
     try {
       const res = await fetch(url);
+      if (!res.ok) {
+        window.MediaEmptyState?.showEmpty?.(document.getElementById('static-heatmap-img'), 'Heatmap Unavailable', camId ? `No live heatmap for '${camId}'.` : 'Heatmap unavailable.');
+        return null;
+      }
       const data = await res.json();
       const minEl = document.getElementById('heatmap-legend-min');
       const midEl = document.getElementById('heatmap-legend-mid');
@@ -110,16 +161,13 @@
       if (midEl) midEl.textContent = (maxVal * 0.5).toFixed(2);
       if (maxEl) maxEl.textContent = maxVal.toFixed(2);
       if (barEl && Array.isArray(data?.stops) && data.stops.length >= 2) {
-        const stopsCss = data.stops.map((s) => `${s.color} ${Math.round(Number(s.ratio || 0) * 100)}%`).join(', ');
-        barEl.style.background = `linear-gradient(90deg, ${stopsCss})`;
+        barEl.style.background = `linear-gradient(90deg, ${data.stops.map((s) => `${s.color} ${Math.round(Number(s.ratio || 0) * 100)}%`).join(', ')})`;
       }
       if (metaEl) {
-        if (data && data.initialized !== false && Array.isArray(data.resolution)) {
-          const decayStr = data.decay_rate !== null && data.decay_rate !== undefined ? data.decay_rate : 'cumulative';
-          metaEl.textContent = `${data.camera_id || 'All Cameras'} · ${data.colormap || 'JET'} · ${data.resolution[0]}x${data.resolution[1]} · r=${data.radius || 25}px · decay=${decayStr}`;
-        } else {
-          metaEl.textContent = `${data?.camera_id || 'All Cameras'} · Heatmap uninitialized`;
-        }
+        const decayStr = data?.decay_rate !== null && data?.decay_rate !== undefined ? data.decay_rate : 'cumulative';
+        metaEl.textContent = (data && data.initialized !== false && Array.isArray(data.resolution))
+          ? `${data.camera_id || 'All Cameras'} · ${data.colormap || 'JET'} · ${data.resolution[0]}x${data.resolution[1]} · r=${data.radius || 25}px · decay=${decayStr}`
+          : `${data?.camera_id || 'All Cameras'} · Heatmap uninitialized`;
       }
       window.AnalyticsDrilldown?.setHeatmapData?.(data);
       return data;
@@ -136,21 +184,11 @@
     const liveBtn = document.getElementById('btn-analytics-live');
     if (rangeSel && !rangeSel.dataset.bound) {
       rangeSel.dataset.bound = '1';
-      rangeSel.addEventListener('change', () => {
-        rangeSec = Math.max(60, Number(rangeSel.value) || 3600);
-        endTime = null;
-        isLive = true;
-        loadTrafficFlows();
-      });
+      rangeSel.addEventListener('change', () => { rangeSec = Math.max(60, Number(rangeSel.value) || 3600); endTime = null; isLive = true; loadTrafficFlows(); });
     }
     if (prevBtn && !prevBtn.dataset.bound) {
       prevBtn.dataset.bound = '1';
-      prevBtn.addEventListener('click', () => {
-        const nowSec = Math.floor(Date.now() / 1000);
-        endTime = (isLive || endTime === null) ? (nowSec - rangeSec) : (endTime - rangeSec);
-        isLive = false;
-        loadTrafficFlows();
-      });
+      prevBtn.addEventListener('click', () => { const nowSec = Math.floor(Date.now() / 1000); endTime = (isLive || endTime === null) ? (nowSec - rangeSec) : (endTime - rangeSec); isLive = false; loadTrafficFlows(); });
     }
     if (nextBtn && !nextBtn.dataset.bound) {
       nextBtn.dataset.bound = '1';
@@ -158,22 +196,13 @@
         if (isLive || endTime === null) return;
         const nowSec = Math.floor(Date.now() / 1000);
         const nextEnd = endTime + rangeSec;
-        if (nextEnd >= nowSec) {
-          endTime = null;
-          isLive = true;
-        } else {
-          endTime = nextEnd;
-        }
+        if (nextEnd >= nowSec) { endTime = null; isLive = true; } else { endTime = nextEnd; }
         loadTrafficFlows();
       });
     }
     if (liveBtn && !liveBtn.dataset.bound) {
       liveBtn.dataset.bound = '1';
-      liveBtn.addEventListener('click', () => {
-        endTime = null;
-        isLive = true;
-        loadTrafficFlows();
-      });
+      liveBtn.addEventListener('click', () => { endTime = null; isLive = true; loadTrafficFlows(); });
     }
   }
 
@@ -183,13 +212,10 @@
       const gridStyle = { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b' } };
       trafficChart = new Chart(chartCanvas.getContext('2d'), {
         type: 'line',
-        data: {
-          labels: [],
-          datasets: [
-            { label: 'Inflow (Entries / Crossings)', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.35 },
-            { label: 'Outflow (Exits / Crossings)', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', fill: true, tension: 0.35 },
-          ],
-        },
+        data: { labels: [], datasets: [
+          { label: 'Inflow (Entries / Crossings)', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.35 },
+          { label: 'Outflow (Exits / Crossings)', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', fill: true, tension: 0.35 },
+        ] },
         options: {
           responsive: true, maintainAspectRatio: false,
           onClick: (evt, elements, chart) => window.AnalyticsDrilldown?.handleChartClick?.(evt, elements, chart),
@@ -202,16 +228,18 @@
       });
     }
     bindFlowControls();
-    loadTrafficFlows();
-    loadHeatmapMetadata();
+    if (window.ActiveSourceContext?.populateSelect && document.getElementById('analytics-source-select')) {
+      initSourceSelect().then(() => { loadTrafficFlows(); loadHeatmapMetadata(); });
+    } else {
+      loadTrafficFlows();
+      loadHeatmapMetadata();
+    }
   }
 
   function updateTrafficChart() {
     if (!isLive) return;
     if (!document.getElementById('tab-analytics')?.classList?.contains('active')) return;
-    if (Date.now() - lastFlowRefreshAt >= 5000) {
-      loadTrafficFlows();
-    }
+    if (Date.now() - lastFlowRefreshAt >= 5000) loadTrafficFlows();
   }
 
   function buildAlertRowHtml(ev) {
@@ -221,11 +249,9 @@
     let severityClass = 'panel-badge';
     let severityText = rawSev || 'INFO';
     if (rawSev === 'CRITICAL' || rawSev === 'HIGH' || (!rawSev && (type.includes('intrusion') || type.includes('restricted')))) {
-      severityClass = 'badge-category restricted';
-      severityText = rawSev || 'CRITICAL';
+      severityClass = 'badge-category restricted'; severityText = rawSev || 'CRITICAL';
     } else if (rawSev === 'WARNING' || rawSev === 'MEDIUM' || (!rawSev && (type.includes('threshold') || type.includes('capacity')))) {
-      severityClass = 'badge-category vip';
-      severityText = rawSev || 'WARNING';
+      severityClass = 'badge-category vip'; severityText = rawSev || 'WARNING';
     }
     const entityLabel = ev.name || ev.entity_name || ev.suggested_name || (ev.entity_id ? '#' + ev.entity_id : 'Unknown');
     const detailText = ev.message || ev.reason || ev.title || ev.summary || JSON.stringify(ev.metadata || {});
@@ -235,32 +261,20 @@
     const vFile = ev.video_filename || ev.metadata?.video_filename || '';
     const vOffset = ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0;
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(vFile, vOffset) || '';
-    return `
-      <tr>
-        <td>${escapeHtml(timeStr)}</td><td><strong>${escapeHtml(type)}</strong></td>
-        <td><span class="${severityClass}">${escapeHtml(severityText)}</span></td>
-        <td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td>
-        <td>${escapeHtml(entityLabel)}</td><td>${escapeHtml(detailText)}</td>
-        <td>${snapshotBtn}${seekBtn}</td>
-      </tr>`;
+    return `<tr><td>${escapeHtml(timeStr)}</td><td><strong>${escapeHtml(type)}</strong></td><td><span class="${severityClass}">${escapeHtml(severityText)}</span></td><td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td><td>${escapeHtml(entityLabel)}</td><td>${escapeHtml(detailText)}</td><td>${snapshotBtn}${seekBtn}</td></tr>`;
   }
 
   async function loadAlertsTable(opts) {
-    if (window.AlertsView?.loadAlerts) {
-      return window.AlertsView.loadAlerts(opts);
-    }
+    if (window.AlertsView?.loadAlerts) return window.AlertsView.loadAlerts(opts);
     const tbody = document.getElementById('alerts-table-body');
     const badge = document.getElementById('total-alerts-count');
     if (!tbody) return;
     try {
       const camId = window.App?.getActiveCameraId?.();
-      const url = camId ? `/events?limit=50&camera_id=${encodeURIComponent(camId)}` : '/events?limit=50';
-      const res = await fetch(url);
+      const res = await fetch(camId ? `/events?limit=50&camera_id=${encodeURIComponent(camId)}` : '/events?limit=50');
       const events = await res.json();
       if (badge) badge.textContent = `${events.length} event${events.length !== 1 ? 's' : ''}`;
-      tbody.innerHTML = events.length
-        ? events.map(buildAlertRowHtml).join('')
-        : '<tr><td colspan="7" class="text-center">No alerts logged yet.</td></tr>';
+      tbody.innerHTML = events.length ? events.map(buildAlertRowHtml).join('') : '<tr><td colspan="7" class="text-center">No alerts logged yet.</td></tr>';
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
     }
@@ -270,7 +284,6 @@
     let heatmapActive = false;
     const toggleBtn = document.getElementById('toggle-heatmap-btn');
     const refreshBtn = document.getElementById('btn-refresh-heatmap');
-
     toggleBtn?.addEventListener('click', async () => {
       try {
         const res = await fetch('/analytics/heatmap/toggle', { method: 'POST' });
@@ -278,11 +291,8 @@
         heatmapActive = data.draw_heatmap;
         toggleBtn.textContent = heatmapActive ? '🔥 Heatmap: ON' : '🔥 Heatmap: OFF';
         toggleBtn.classList.toggle('active', heatmapActive);
-      } catch (err) {
-        console.error('Heatmap toggle error:', err);
-      }
+      } catch (err) { console.error('Heatmap toggle error:', err); }
     });
-
     refreshBtn?.addEventListener('click', () => {
       const img = document.getElementById('static-heatmap-img');
       if (window.LivePlayer?.attachHeatmapImage) window.LivePlayer.attachHeatmapImage(img);
@@ -296,11 +306,8 @@
   }
 
   window.AnalyticsView = {
-    initChart: initTrafficChart,
-    updateChart: updateTrafficChart,
-    loadTrafficFlows,
-    loadHeatmapMetadata,
-    loadAlerts: loadAlertsTable,
-    initHeatmap: initHeatmapControls,
+    initChart: initTrafficChart, updateChart: updateTrafficChart, loadTrafficFlows,
+    loadHeatmapMetadata, loadAlerts: loadAlertsTable, initHeatmap: initHeatmapControls,
+    initSourceSelect, getSelectedSource: resolveAnalyticsSource,
   };
 })();

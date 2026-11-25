@@ -195,10 +195,8 @@
       return;
     }
     const annotatedParam = burnedAnnotationMode ? 'true' : 'false';
-    if (isSameHealthyStream(videoImg, cleanBase, annotatedParam, forceReconnect)) {
-      setStreamStatus('online');
-      return;
-    }
+    if (isSameHealthyStream(videoImg, cleanBase, annotatedParam, forceReconnect)) { setStreamStatus('online'); return; }
+    window.MediaEmptyState?.hideEmpty?.(videoImg, 'block');
     videoImg.src = `${cleanBase}?annotated=${annotatedParam}&t=${Date.now()}`;
     window.MjpegReconnect?.attach?.(videoImg);
     setStreamStatus('online');
@@ -230,12 +228,13 @@
   function attachHeatmapImage(heatmapImg) {
     if (!heatmapImg) return;
     const baseSrc = (heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap').split('?')[0];
-    const camId = window.App?.getActiveCameraId?.() || '';
+    const selSrc = window.AnalyticsView?.getSelectedSource?.();
+    const camId = selSrc ? selSrc.id : (window.App?.getActiveCameraId?.() || '');
     const url = camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`;
     if (window.MediaEmptyState) window.MediaEmptyState.setSource(heatmapImg, url);
     else heatmapImg.src = url;
     const badge = document.getElementById('heatmap-camera-badge');
-    if (badge) badge.textContent = camId ? `Camera: ${camId}` : 'All Cameras';
+    if (badge) badge.textContent = camId ? `${selSrc?.kind === 'video' ? 'Video' : 'Camera'}: ${camId}` : 'All Cameras';
   }
 
   function syncTabStreams(previousTabId, targetTabId) {

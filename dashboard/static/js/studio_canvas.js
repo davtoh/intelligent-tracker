@@ -14,9 +14,80 @@
     return document.getElementById('studio-live-img') || null;
   }
 
+  let freezeCtrl = null;
+  let freezeFallbackState = { frozen: false };
+
+  function syncFreezeButtonVisibility(isVideo, hasTarget) {
+    const btn = document.getElementById('btn-studio-freeze-toggle');
+    if (!btn) return;
+    btn.disabled = Boolean(isVideo || !hasTarget);
+    if (isVideo || !hasTarget) {
+      freezeFallbackState.frozen = false;
+      btn.textContent = '⏸ Freeze Frame';
+      btn.setAttribute?.('aria-pressed', 'false');
+      btn.classList?.remove?.('active');
+      freezeCtrl?.reset?.();
+    }
+  }
+
+  function bindFreezeControl(getCameraId) {
+    const btn = document.getElementById('btn-studio-freeze-toggle');
+    const img = document.getElementById('studio-live-img');
+    if (!btn) return null;
+    if (window.ActiveSourceContext?.bindFreezeToggle) {
+      freezeCtrl = window.ActiveSourceContext.bindFreezeToggle({
+        button: btn,
+        img,
+        getCameraId,
+        onError: (msg) => window.showToast?.('Freeze Frame', msg, 'warning'),
+      });
+      return freezeCtrl;
+    }
+    if (!btn.dataset?.freezeBound) {
+      if (btn.dataset) btn.dataset.freezeBound = '1';
+      btn.addEventListener('click', async () => {
+        const camId = String(getCameraId?.() || '').trim();
+        if (freezeFallbackState.frozen) {
+          freezeFallbackState.frozen = false;
+          btn.textContent = '⏸ Freeze Frame';
+          btn.setAttribute?.('aria-pressed', 'false');
+          btn.classList?.remove?.('active');
+          if (img && camId) attachStudioMedia(camId, false, true);
+          return;
+        }
+        if (!camId) return;
+        const res = await fetch(`/api/cameras/${encodeURIComponent(camId)}/freeze_frame`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.image_base64) return;
+        if (img) {
+          if (window.MediaEmptyState?.setSource) window.MediaEmptyState.setSource(img, data.image_base64);
+          else { if (img.style) img.style.display = 'block'; img.src = data.image_base64; }
+        }
+        freezeFallbackState.frozen = true;
+        btn.textContent = '▶ Resume Live';
+        btn.setAttribute?.('aria-pressed', 'true');
+        btn.classList?.add?.('active');
+      });
+    }
+    return { isFrozen: () => freezeFallbackState.frozen };
+  }
+
+  function selectZoneById(zoneId, state, callbacks = {}) {
+    if (!zoneId || !state) return false;
+    const zones = Array.isArray(state.zones) ? state.zones : [];
+    const target = zones.find((z) => z?.id === zoneId || z?.zone_id === zoneId || z?.name === zoneId);
+    if (!target) return false;
+    state.mode = 'idle';
+    window.StudioShapeEditor?.selectShape?.('zone', target.name);
+    callbacks.updateStatus?.(`Selected zone '${target.name}'. Drag vertices to edit.`);
+    callbacks.drawOverlay?.();
+    return true;
+  }
+
   function attachStudioMedia(targetId, isVideo, isActive = true) {
     const img = document.getElementById('studio-live-img');
     const vid = document.getElementById('studio-video-player');
+    syncFreezeButtonVisibility(isVideo, Boolean(targetId));
     if (isVideo) {
       if (img) {
         if (img.dataset) delete img.dataset.activeStreamSrc;
@@ -243,6 +314,8 @@
   window.StudioCanvas = {
     resolveStudioMediaElement: resolveStudioMediaElement,
     attachStudioMedia: attachStudioMedia,
+    bindFreezeControl: bindFreezeControl,
+    selectZoneById: selectZoneById,
     syncCanvasBox: syncCanvasBox,
     getCanvasCoords: getCanvasCoords,
     drawOverlay: drawStudioOverlay,
