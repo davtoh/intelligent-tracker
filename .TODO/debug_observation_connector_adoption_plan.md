@@ -1,7 +1,19 @@
 # Adoption Plan: Debug Observation Connector in `intelligent-tracker` (the app side of the contract)
 
-> **Purpose:** this file is written to be copied into `davtoh/intelligent-tracker` (PR #13, `.TODO/debug_observation_connector_adoption_plan.md`) so that project implements **its half** of the debug observation contract owned by the `antigravity-skills` repo (`system-diagnostics` skill). It is self-contained: the wire contract is copied below. The skill side is specified in `.TODO/universal_debug_observation_connector_plan.md` of the skills repo (a 6-milestone master roadmap, **not yet implemented**).
-> **Status:** proposed 2026-11-26, not started. **Unverified:** this plan was written without access to the `intelligent-tracker` repository or to the version of this file already in PR #13. Anything about the app's structure is marked *assumption* and must be confirmed by the app owner. If the PR already has this file, merge the two and keep the wire contract section verbatim.
+> **Purpose:** this file is shipped into `davtoh/intelligent-tracker` (PR #13, `.TODO/debug_observation_connector_adoption_plan.md`) so that project implements **its half** of the debug observation contract owned by the `antigravity-skills` repo (`system-diagnostics` skill). It is self-contained: the wire contract is copied below.
+> **Status (updated 2026-11-26):** the **skill side is implemented** (store, HUD, wire routes and scaffold, `observations pull`, `observations verify-connector`, `brief`, audit mode). The **app side is not started**. The wire contract below was checked against the skills repo's published contract (`system-diagnostics/references/observation-connector-contract.md` and `observation_contract.schema.json`); the three fingerprint test vectors were reproduced by the skill's code. Anything about the app's structure is marked *assumption* and must be confirmed by the app owner.
+
+## How an agent should use this file (instructions and ready-to-paste prompt)
+
+1. If this file already existed in the project in another version, **merge, do not overwrite**: keep the project's milestones, rules and wording; replace only the **Wire Contract v1** section with the one below (it wins on conflicts) and keep the test vectors verbatim.
+2. Resolve every *assumption* (A1-A5) against the real code before editing, and write the confirmed answers into the plan.
+3. Work one milestone per turn; never enable `FRONTIER_DEBUG_OBSERVATIONS` outside local development.
+
+**Ready-to-paste prompt (Claude Code or Gemini/Antigravity):**
+
+```text
+Read .TODO/debug_observation_connector_adoption_plan.md. Adapt it to this repository: confirm assumptions A1-A5 by reading the code (framework, dashboard origin, .diagnostics conventions, AGENTS.md size rules), rewrite the placeholders (<backend_dir>, <dashboard_dir>, <router or app setup file>) with real paths, and choose Tier A or Tier B (ask me with ask_question / AskUserQuestion if unclear). Do not change the Wire Contract v1 section. Then execute Milestone 1 only: routes behind FRONTIER_DEBUG_OBSERVATIONS=1, loopback only, tests in tests/test_diagnostics_contract.py, and the manual conformance checklist. Run the verifier, report Verified / Not verified, and stop. I will say "continue" for the next milestone.
+```
 
 ## What the user wants (intent)
 
@@ -21,7 +33,7 @@
 | `/frontier-architect audit <app>` recipe | Keep `docs/architecture/*.md` current |
 | Optional Python scaffold (`traces --scaffold ... --with-observations`) | Choose it (Tier A) or implement the contract by hand (Tier B) |
 
-**Timeline dependency:** skill Milestones 1-2 (store, HUD) and 3 (routes, scaffold, published contract) come first; `pull` and `verify-connector` are Milestone 4; `brief` and audit mode Milestones 5-6. The app side can start **now** with Tier B against this document and the curl checklist; the conformance command arrives with skill Milestone 4.
+**Timeline:** all skill-side pieces are available now (HUD, routes, scaffold, `pull`, `verify-connector`, `brief`, audit mode). Either tier can start immediately; run `verify-connector` for conformance.
 
 ## Assumptions to verify (about this app; none confirmed)
 
@@ -33,9 +45,9 @@
 
 ## Decision needed from the app owner
 
-**Tier A (recommended once skill Milestone 3 ships):** generate the bridge with `python "<skill_dir>/scripts/diagnose.py" traces --scaffold fastapi --dest <backend_dir> --with-observations` (use `generic` or `flask` if the framework differs), then wire 3 lines. **Tier B (available now):** implement the routes below by hand in the app's own router, storing observations wherever suits the app (recommended layout: `.diagnostics/observations.jsonl` plus `.diagnostics/observation_catalog.json`, so local agent runs can also read them directly). Both tiers must pass `verify-connector`.
+**Tier A (recommended for Python apps; available now):** generate the bridge with `python "<skill_dir>/scripts/diagnose.py" traces --scaffold fastapi --dest <backend_dir> --with-observations` (use `generic` or `flask` if the framework differs), then wire 3 lines. **Tier B (any language):** implement the routes below by hand in the app's own router, storing observations wherever suits the app (recommended layout: `.diagnostics/observations.jsonl` plus `.diagnostics/observation_catalog.json`, so local agent runs can also read them directly). Both tiers must pass `verify-connector`.
 
-## Wire Contract v1 (canonical copy; the source of truth is `system-diagnostics/references/observation-connector-contract.md` in the skills repo once Milestone 3 lands)
+## Wire Contract v1 (canonical copy; the source of truth is `system-diagnostics/references/observation-connector-contract.md` in the skills repo; machine-readable shapes in `observation_contract.schema.json`)
 
 Base path `/api/diagnostics`. **Availability:** routes exist only when env `FRONTIER_DEBUG_OBSERVATIONS=1`; otherwise answer `404` for all of them. **Access:** loopback clients only (`127.0.0.1`, `::1`); everything else `403`. Every response carries `X-Diagnostics-Contract: 1`. Errors are `{"error":"<code>","message":"..."}` with codes `invalid_json`, `invalid_record`, `payload_too_large`, `forbidden`, `not_found`, `unsupported_media_type`.
 
@@ -43,7 +55,7 @@ Base path `/api/diagnostics`. **Availability:** routes exist only when env `FRON
 | :--- | :--- | :--- | :--- |
 | `GET /health` | none | `200 {"schema":1,"enabled":true,"contract_version":1,"store":"ok"}` | n/a |
 | `POST /observation` | `Content-Type: application/json`, body = record; optional `?dry_run=1` | `201 {"id":"OBS-001","fingerprint":"OBS-ELEMENT-ab12cd","status":"open","deduplicated":false}`; `200` with `"deduplicated":true` if the fingerprint exists; `200` with `"dry_run":true` and nothing stored when `dry_run=1` | `400 invalid_json\|invalid_record`, `403`, `413` (body > 64 KB), `415` |
-| `GET /observations` | `status` (default `active`), `kind`, `limit` (default 20, max 200) | `200 {"schema":1,"count":N,"truncated":false,"observations":[{"id","fingerprint","status","kind","page_path","selector","message","occurrence_count","last_seen"}]}` | `403` |
+| `GET /observations` | `status` (default `active`), `kind`, `limit` (default 20, max 200) | `200 {"schema":1,"count":N,"truncated":false,"observations":[{"id","fingerprint","status","kind","page_path","selector","message","occurrence_count","last_seen"}]}` | `400 invalid_record` (bad `status`, `kind` or `limit`), `403` |
 | `GET /observations/{id_or_fingerprint}` | none | `200` full entry (fields below) | `404 not_found`, `403` |
 | `GET /hud.js` | none | `200`, `Content-Type: application/javascript`, `Cache-Control: no-store`, body = HUD bundle | `403` |
 
@@ -68,7 +80,7 @@ Base path `/api/diagnostics`. **Availability:** routes exist only when env `FRON
 
 ## Milestone 2: HUD in the dashboard, dev only *(Deferred to Next Turn / Milestone)*
 
-Depends on skill Milestone 2 (HUD) and Milestone 3 (`/hud.js` content).
+The HUD bundle is served by the skill's generated bridge (Tier A) or must be copied from `system-diagnostics/assets/hud_*.js` (Tier B). `window.__FRONTIER_OBS_ENDPOINT__` overrides the POST endpoint for a different origin.
 
 - [ ] **`<dashboard_dir>/<dev index or layout template>`**: when the flag is on, include `<script>window.__FRONTIER_DEBUG__ = true;</script><script src="/api/diagnostics/hud.js"></script>`; never in production builds.
 - [ ] **`tests/test_dashboard_debug_hud.py`**: the template contains the two script tags only when the flag is on; none when off.
@@ -90,19 +102,19 @@ Depends on skill Milestone 2 (HUD) and Milestone 3 (`/hud.js` content).
 - [ ] **`docs/architecture/CURRENT_ARCHITECTURE.md`**: add a short "Debug observation connector" section (routes, flag, tier chosen, limits including WebSocket).
 - [ ] **`.agents/rules/debug-observations.md`** (and one pointer line in `AGENTS.md`, keeping it under 10 KB): how to enable the flag, how to run `observations list`, `pull` and `brief`, and the privacy rule that observations never leave the machine.
 - [ ] **FOR AUDITS prompt (project workflow)**: apply the edits in the next section.
-- [ ] **PR notes**: record which tier was chosen, the Milestone 1 and 2 results, and the output of `verify-connector` once available.
+- [ ] **PR notes**: record which tier was chosen, the Milestone 1 and 2 results, and the output of `verify-connector`.
 
-**Verifier**: `python -m unittest discover -s tests -p "test_*.py"` and, when available, `python "<skill_dir>/scripts/diagnose.py" observations verify-connector --url http://127.0.0.1:<port>` (all `PASS`; the loopback rule shows `SKIP`).
+**Verifier**: `python -m unittest discover -s tests -p "test_*.py"` and `python "<skill_dir>/scripts/diagnose.py" observations verify-connector --url http://127.0.0.1:<port>` (all `PASS`; the loopback rule shows `SKIP`).
 **Exit criteria:** an agent that has never seen this repo can enable the flag, list pending observations and run the audit using only the docs.
 
-## Suggested edits to the FOR AUDITS prompt (do not apply until skill Milestones 4-6 ship)
+## Suggested edits to the FOR AUDITS prompt (the skill side has shipped; apply when the app's connector passes `verify-connector`)
 
-- In section 1's command batch, add: `diagnose.py brief --run-probes --pull http://127.0.0.1:<port>` (it replaces running `traces`, `probe list` and `probe run` separately and also shows active observations). Keep `surface --verify`, `scan`, `audit` and `arch-map` if finer output is wanted.
+- In section 1's command batch, add: `diagnose.py brief --run-probes --pull http://127.0.0.1:<port>` (it replaces running `traces`, `probe list` and `probe run` separately and also shows active observations; a section it cannot read shows `UNAVAILABLE (reason)` and counts as UNVERIFIED). Without `--pull`, run `observations pull --url http://127.0.0.1:<port>` first for an app in a container. Keep `surface --verify`, `scan`, `audit` and `arch-map` if finer output is wanted.
 - Replace the `[Finding N]` placeholders in section 2 with: "Findings come from active observations of kinds `element`, `error`, `network`, `note` (`observations list --json`); add any extra findings below."
 - Replace the `[Idea N]` placeholders in section 3 with: "Ideas come from active observations of kind `idea` (`observations list --kind idea --json`); add any extra ideas below."
 - In section 4, record each answer with `observations triage --id <ID> --root-cause "..." --missed-by tests,surface,... --guard "<proposed upgrade>"` so the "why did our tools miss it" analysis stays queryable.
 - After a verified fix, close the loop with `observations resolve --id <ID> --resolution "..." --commit <sha>`.
-- Under Claude Code the prompt's `ask_question` is `AskUserQuestion` and `Model: 'flash'` research subagents are `Explore` agents; the skill's adapter documents the mapping.
+- Under Claude Code the prompt's `ask_question` is `AskUserQuestion` and `Model: 'flash'` research subagents are `Explore` agents; the skill's adapter documents the mapping. `/frontier-architect audit <app>` runs this whole sequence (`frontier-architect/references/audit-recipe.md`).
 
 ## Manual conformance checklist (works with any language; use before `verify-connector` exists)
 
@@ -128,14 +140,14 @@ Flag off by default and absent from production configs; loopback-only enforcemen
 | Dashboard on a different origin from the API (A2) | Run both behind one dev proxy, or set `window.__FRONTIER_OBS_ENDPOINT__` and add a narrowly scoped CORS rule for loopback only |
 | Strict CSP blocks the HUD script | Serve `hud.js` from the same origin (done by design); add a nonce in dev if needed |
 | WebSocket traffic is not recorded (A5) | Out of scope for contract v1; fetch/XHR, clicks, navigation and errors still are |
-| Skill side not yet shipped | Start with Tier B and the manual checklist; swap to Tier A later if desired (contract identical) |
+| Choosing between tiers | Start with Tier B and `verify-connector`; swap to Tier A later if desired (contract identical) |
 | Contract changes | `X-Diagnostics-Contract` and `GET /health` carry the version; `pull` and `verify-connector` refuse a mismatch |
 
 ## Definition of Done (app side)
 
 - [ ] Milestone 1 tests pass and the manual checklist passes (all nine items).
 - [ ] With the flag on, the HUD works in the dashboard; with it off, nothing is mounted, served or injected.
-- [ ] `observations pull` against the running app imports its observations (once skill Milestone 4 exists).
-- [ ] `verify-connector` reports all `PASS` (once available).
+- [ ] `observations pull` against the running app imports its observations.
+- [ ] `verify-connector` reports all `PASS` .
 - [ ] The FOR AUDITS prompt edits are applied after the skill side ships, and a full audit run starts from `brief` and observations.
 - [ ] `CURRENT_ARCHITECTURE.md`, `.agents/rules/` and `AGENTS.md` (< 10 KB) updated; PR notes list the tier chosen and the test evidence.
