@@ -40,7 +40,7 @@ This file defines repository-wide architecture invariants and execution standard
 ## 4. Testing, Verification & Documentation Standards (OS-Agnostic)
 - **Virtualenv & Timeout Guard**: Always execute tests and diagnostics via `.venv\Scripts\python.exe` (Windows) or `.venv/bin/python` (POSIX) using `diagnose.py tests` (`180s` timeout guard) and full suite sign-off (`MPLBACKEND=Agg python -m unittest discover tests`).
 - **Strict Test Isolation & Lightweight Fixtures**:
-  - Never touch live `configs/cameras.json`, `data/*.db`, or `data/reports/`; inject `tempfile.TemporaryDirectory()` and register reverse-order `addCleanup()` teardown (`worker.stop()`, `pool.close()`, `db.close()`).
+  - Never touch live `configs/cameras.json`, `data/*.db`, or `data/reports/`; inject `tempfile.TemporaryDirectory()` and register reverse-order `addCleanup()` teardown (`worker.stop()`, `pool.close()`, `db.close()`). Isolate `TestClient(app)` API suites with a temporary `TrackerDB` in `deps._db` and `app.state.db` so local enrolled entities never cause CI/local divergence.
   - Never run full-video YOLO inference, unmocked `TestClient(app)` lifespans, or hardware camera index `0` in automated tests/probes; use `detector=mock`, `sample_rate=10`, and synthetic 5–10 frame MP4 fixtures.
   - Kill any background test servers (`manage_task kill`) and cancel active test video jobs before ending a turn.
 - **Documentation & Changelog**: Keep Sphinx builds warning-free (`python -m sphinx -W --keep-going documentation/ documentation/_build/html/`), record milestones via `diagnose.py changelog add` (never `MIGRATION_LOG.md`), and never commit `file:///` URIs, local absolute paths, or hardcoded `localhost` URLs.
