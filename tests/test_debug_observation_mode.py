@@ -4,6 +4,8 @@
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -130,6 +132,101 @@ class TestDebugObservationModeBackend(unittest.TestCase):
         correlated_fps = {item["fingerprint"] for item in obs_item["correlated_issues"]}
         self.assertIn(near_fp, correlated_fps)
         self.assertNotIn("oldfp12345", correlated_fps)
+
+
+HUD_JS_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "static" / "js" / "debug_observation_hud.js"
+
+
+def _run_hud_vm(js_body: str, *, debug_mode: bool = True) -> dict:
+    """Execute debug_observation_hud.js inside a Node.js VM sandbox and return JSON output."""
+    js_src = HUD_JS_PATH.read_text(encoding="utf-8")
+    flag = "true" if debug_mode else "false"
+    harness = (
+        "const vm = require('vm');\n"
+        "const docListeners = {}, winListeners = {}, bodyChildren = [], headChildren = [], fetchCalls = [];\n"
+        "function mkEl(tag) { return { tagName: tag.toUpperCase(), className: '', textContent: '', hidden: false, value: '',"
+        "  children: [], listeners: {}, appendChild(c) { this.children.push(c); return c; },"
+        "  addEventListener(t, fn) { this.listeners[t] = fn; }, setAttribute() {},"
+        "  contains(n) { return n === this || this.children.some((c) => c.contains && c.contains(n)); } }; }\n"
+        "const activeTab = { getAttribute: (k) => (k === 'data-tab' ? 'tab-studio' : null) };\n"
+        "const doc = { readyState: 'loading', body: { appendChild: (c) => bodyChildren.push(c) },"
+        "  head: { appendChild: (c) => headChildren.push(c) }, createElement: mkEl,"
+        "  querySelector: (s) => (s === '.nav-tab.active' ? activeTab : null),"
+        "  addEventListener: (t, fn) => { (docListeners[t] = docListeners[t] || []).push(fn); } };\n"
+        "const origFetch = async (url, init) => {\n"
+        "  fetchCalls.push({ url: String(url), method: (init && init.method) || 'GET', body: init && init.body });\n"
+        f"  if (String(url).includes('/api/system/debug/summary')) return {{ ok: true, status: 200, json: async () => ({{ debug_mode: {flag} }}) }};\n"
+        "  if (String(url).includes('/api/fail-test')) return { ok: false, status: 500, json: async () => ({ detail: 'boom' }) };\n"
+        "  return { ok: true, status: 200, json: async () => ({ status: 'recorded' }) }; };\n"
+        "const win = { location: { pathname: '/', search: '', hash: '#tab-studio' }, innerWidth: 1440, innerHeight: 900,"
+        "  fetch: origFetch, addEventListener: (t, fn) => { (winListeners[t] = winListeners[t] || []).push(fn); } };\n"
+        "const _spy = { docListeners, winListeners, bodyChildren, fetchCalls };\n"
+        "const sb = { window: win, document: doc, fetch: origFetch, _spy, Date, Number, String, Boolean, Array, Object, JSON, Promise, console };\n"
+        "const ctx = vm.createContext(sb);\n"
+        f"vm.runInContext({json.dumps(js_src)}, ctx);\n"
+        f"vm.runInContext('(async () => {{ ' + {json.dumps(js_body)} + ' }})()', ctx)\n"
+        "  .then((res) => process.stdout.write(JSON.stringify(res))).catch((e) => { console.error(e); process.exit(1); });\n"
+    )
+    proc = subprocess.run(["node", "-e", harness], capture_output=True, text=True, encoding="utf-8", check=True)
+    return json.loads(proc.stdout.strip())
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is required for JS VM verification")
+class TestDebugObservationHudFrontend(unittest.TestCase):
+    """Verify debug_observation_hud.js gating, 30-item ring buffer, interceptors, and POST payload."""
+
+    def test_hud_noop_when_debug_mode_disabled(self) -> None:
+        out = _run_hud_vm(
+            "const ok = await window.DebugObservationHUD.init();"
+            "return { ok, enabled: window.DebugObservationHUD.isEnabled(), mounted: _spy.bodyChildren.length,"
+            "  clicks: (_spy.docListeners.click || []).length, wrapped: window.fetch !== fetch };",
+            debug_mode=False,
+        )
+        self.assertFalse(out["ok"])
+        self.assertFalse(out["enabled"])
+        self.assertEqual(out["mounted"], 0)
+        self.assertEqual(out["clicks"], 0)
+        self.assertFalse(out["wrapped"])
+
+    def test_hud_ring_buffer_cap_and_interceptors(self) -> None:
+        body = (
+            "await window.DebugObservationHUD.init();"
+            "for (let i = 0; i < 35; i++) window.DebugObservationHUD.pushBreadcrumb({ type: 'click', target: '#item-' + i });"
+            "const capped = window.DebugObservationHUD.getBreadcrumbs();"
+            "_spy.docListeners.click[0]({ target: { tagName: 'BUTTON', id: 'tab-btn-studio', textContent: 'Studio', getAttribute: () => 'tab-studio' } });"
+            "_spy.winListeners.hashchange[0]();"
+            "_spy.winListeners.error[0]({ message: 'Canvas null', lineno: 42 });"
+            "await window.fetch('/api/fail-test', { method: 'POST' });"
+            "await window.fetch('/api/system/debug/summary?limit=1');"
+            "const tail = window.DebugObservationHUD.getBreadcrumbs().slice(-4);"
+            "return { mounted: _spy.bodyChildren.length, cappedLen: capped.length, firstTarget: capped[0].target, tail };"
+        )
+        out = _run_hud_vm(body, debug_mode=True)
+        self.assertEqual(out["mounted"], 1)
+        self.assertEqual(out["cappedLen"], 30)
+        self.assertEqual(out["firstTarget"], "#item-5")
+        self.assertEqual([c["type"] for c in out["tail"]], ["click", "nav", "error", "fetch_error"])
+        self.assertEqual(out["tail"][0]["target"], "button#tab-btn-studio[data-tab=tab-studio]")
+        self.assertEqual(out["tail"][3]["status"], 500)
+        self.assertEqual(out["tail"][3]["url"], "/api/fail-test")
+
+    def test_hud_submits_observation_payload_with_breadcrumbs(self) -> None:
+        body = (
+            "await window.DebugObservationHUD.init();"
+            "_spy.docListeners.click[0]({ target: { tagName: 'BUTTON', id: 'btn-test', textContent: 'Run' } });"
+            "const res = await window.DebugObservationHUD.submitObservation('Overlay misaligned on studio');"
+            "const post = _spy.fetchCalls.find((c) => c.url === '/api/system/debug/observation');"
+            "return { res, method: post && post.method, payload: post ? JSON.parse(post.body) : null };"
+        )
+        out = _run_hud_vm(body, debug_mode=True)
+        self.assertTrue(out["res"]["ok"])
+        self.assertEqual(out["method"], "POST")
+        payload = out["payload"]
+        self.assertEqual(payload["note"], "Overlay misaligned on studio")
+        self.assertEqual(payload["tab"], "tab-studio")
+        self.assertEqual(payload["url"], "/#tab-studio")
+        self.assertEqual(payload["viewport"], {"width": 1440, "height": 900})
+        self.assertEqual(payload["breadcrumbs"][-1]["target"], "button#btn-test")
 
 
 if __name__ == "__main__":

@@ -23,11 +23,11 @@
 - [x] **tests/test_debug_observation_mode.py**: Add FastAPI `TestClient` + temp `TRACKER_DEBUG_DIR` tests for enabled/disabled mode gating and `events.jsonl` persistence.
 - [x] **Verification**: Run `python -m unittest tests/test_debug_session.py tests/test_debug_observation_mode.py` and `diagnose.py audit --path dashboard/services/debug_session.py dashboard/services/debug_triage.py dashboard/routers/system.py`.
 
-## Milestone 2: Frontend `IT_DEBUG_MODE` Click Breadcrumbs & Observation HUD *(Deferred to Next Turn / Milestone)*
+## Milestone 2: Frontend `IT_DEBUG_MODE` Click Breadcrumbs & Observation HUD
 
-- [ ] **dashboard/static/js/debug_observation_hud.js** & **dashboard/static/index.html**: Create a lightweight `< 150L` self-initializing HUD module that probes `/api/system/debug/summary` (no-op when disabled), captures `click`, `hashchange`, `window.onerror`, and failed `fetch()` breadcrumbs in a `30`-item ring buffer, and renders a collapsible floating **Log Observation** pill.
-- [ ] **tests/test_debug_observation_mode.py**: Add Node.js `vm.runInNewContext` tests verifying ring-buffer cap, click/fetch breadcrumb capture, and `POST /api/system/debug/observation` payload.
-- [ ] **Verification**: Run `python -m unittest tests/test_debug_observation_mode.py` and `diagnose.py surface --verify --strict`.
+- [x] **dashboard/static/js/debug_observation_hud.js** & **dashboard/static/index.html**: Create a lightweight `< 150L` self-initializing HUD module that probes `/api/system/debug/summary` (no-op when disabled), captures `click`, `hashchange`, `window.onerror`, and failed `fetch()` breadcrumbs in a `30`-item ring buffer, and renders a collapsible floating **Log Observation** pill.
+- [x] **tests/test_debug_observation_mode.py**: Add Node.js `vm.runInNewContext` tests verifying ring-buffer cap, click/fetch breadcrumb capture, and `POST /api/system/debug/observation` payload.
+- [x] **Verification**: Run `python -m unittest tests/test_debug_observation_mode.py` and `diagnose.py surface --verify --strict`.
 
 ## Milestone 3: CLI Inspector, Workspace Probe & Documentation *(Deferred to Next Turn / Milestone)*
 
