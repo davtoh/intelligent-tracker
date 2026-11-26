@@ -8,35 +8,58 @@ Captures unhandled request panics, background thread exceptions, and
 records contextual metadata (path, method, client) into .diagnostics/traces/.
 """
 
-import sys
 import logging
+import os
 from pathlib import Path
+import sys
 from typing import Any, Optional
+
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 
 logger = logging.getLogger("intelligent_tracker.diagnostic_bridge")
 
-# Attempt importing trace_recorder from standard locations or skills directory
+_SKILL = "system-diagnostics"
+
+
+def _engine_candidates() -> list[Path]:
+    """Return Runtime Parity candidate paths for the system-diagnostics engine."""
+    here = Path(__file__).resolve()
+    roots = list(here.parents)[:4]
+    home = Path.home()
+    found: list[Path] = []
+    if os.environ.get("SYSTEM_DIAGNOSTICS_DIR"):
+        found.append(Path(os.environ["SYSTEM_DIAGNOSTICS_DIR"]))
+    found += [r / ".claude" / "skills" / _SKILL for r in roots]
+    found.append(home / ".claude" / "skills" / _SKILL)
+    found += [r.parent / _SKILL for r in roots]
+    found += [r / "skills" / _SKILL for r in roots]
+    found.append(home / ".gemini" / "config" / "skills" / _SKILL)
+    return [c / "scripts" if (c / "scripts").is_dir() else c for c in found]
+
+
+for _p in _engine_candidates():
+    if (_p / "trace_recorder.py").is_file():
+        if str(_p) not in sys.path:
+            sys.path.insert(0, str(_p))
+        break
+
 _recorder_mod: Optional[Any] = None
+_obs: Optional[Any] = None
 
 try:
     import trace_recorder as _recorder_mod  # type: ignore
 except ImportError:
-    # Try locating system-diagnostics/scripts dynamically
-    _candidates = [
-        Path.home() / ".gemini" / "config" / "skills" / "system-diagnostics" / "scripts",
-        Path(__file__).resolve().parents[2] / "skills" / "system-diagnostics" / "scripts",
-    ]
-    for _p in _candidates:
-        if _p.is_dir() and str(_p) not in sys.path:
-            sys.path.insert(0, str(_p))
-            try:
-                import trace_recorder as _recorder_mod  # type: ignore
-                break
-            except ImportError:
-                continue
+    _recorder_mod = None
+
+try:
+    import observation_routes as _obs  # type: ignore
+except ImportError:
+    _obs = None
+
+DIAGNOSTICS_BASE_PATH = "/api/diagnostics"
+MAX_BODY_READ = 65537  # contract cap (64 KB) + 1 so oversize bodies still answer 413
 
 
 def init_diagnostic_tracer(workspace_root: Optional[Path] = None) -> bool:
@@ -91,4 +114,50 @@ class DiagnosticTraceMiddleware(BaseHTTPMiddleware):
                 logger.exception("Unhandled HTTP 500 on %s %s", request.method, request.url.path)
                 record_debug_event(exc, http_method=request.method, http_path=request.url.path)
             raise exc
+
+
+def _readable(host: str) -> bool:
+    return _obs is not None and host in _obs.LOOPBACK_HOSTS
+
+
+def observations_enabled() -> bool:
+    """Return True when the observation engine is available and FRONTIER_DEBUG_OBSERVATIONS=1."""
+    return _obs is not None and _obs.enabled()
+
+
+def handle_diagnostics_request(
+    method: str,
+    rel_path: str,
+    query: Any,
+    headers: dict[str, str],
+    client_host: str,
+    body: bytes = b"",
+    workspace_root: Optional[Path] = None,
+) -> tuple[int, dict[str, str], bytes]:
+    """Framework-neutral entry point: returns (status, headers, body_bytes)."""
+    if _obs is None:
+        return 404, {"X-Diagnostics-Contract": "1"}, b'{"error": "not_found", "message": "engine unavailable"}'
+    return _obs.handle(method, rel_path, query, headers, client_host, body, workspace_root)
+
+
+def register_observation_routes(app: Any, workspace_root: Optional[Path] = None) -> bool:
+    """Mount the Wire Contract v1 routes on a FastAPI app (only when FRONTIER_DEBUG_OBSERVATIONS=1)."""
+    if not observations_enabled():
+        return False
+
+    @app.api_route(DIAGNOSTICS_BASE_PATH + "/{rest:path}", methods=["GET", "POST"], include_in_schema=False)
+    async def _frontier_diagnostics(rest: str, request: Request) -> Response:
+        host = request.client.host if request.client else ""
+        body = b""
+        if _readable(host):  # never buffer bodies for remote callers; cap the read for local ones
+            async for chunk in request.stream():
+                body += chunk
+                if len(body) >= MAX_BODY_READ:
+                    break
+        status, headers, payload = handle_diagnostics_request(
+            request.method, "/" + rest, request.url.query, dict(request.headers), host, body, workspace_root
+        )
+        return Response(content=payload, status_code=status, headers=headers)
+
+    return True
 

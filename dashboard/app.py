@@ -107,6 +107,7 @@ from dashboard.services.debug_session import (
 from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
+    register_observation_routes,
 )
 from dashboard.services.diagnostic_log_handler import (
     install_diagnostic_log_handler,
@@ -274,6 +275,7 @@ def create_app() -> FastAPI:
     ):
         application.include_router(router)
 
+    register_observation_routes(application)
     return application
 
 

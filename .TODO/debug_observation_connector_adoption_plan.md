@@ -1,12 +1,12 @@
 # Adoption Plan: Debug Observation Connector in `intelligent-tracker` (the app side of the contract)
 
 > **Purpose:** this file is shipped into `davtoh/intelligent-tracker` (PR #13, `.TODO/debug_observation_connector_adoption_plan.md`) so that project implements **its half** of the debug observation contract owned by the `antigravity-skills` repo (`system-diagnostics` skill). It is self-contained: the wire contract is copied below.
-> **Status (updated 2026-11-26):** the **skill side is implemented** (store, HUD, wire routes and scaffold, `observations pull`, `observations verify-connector`, `brief`, audit mode). The **app side is not started**. The wire contract below was checked against the skills repo's published contract (`system-diagnostics/references/observation-connector-contract.md` and `observation_contract.schema.json`); the three fingerprint test vectors were reproduced by the skill's code. Anything about the app's structure is marked *assumption* and must be confirmed by the app owner.
+> **Status (updated 2026-11-26):** the **skill side is implemented** (store, HUD, wire routes and scaffold, `observations pull`, `observations verify-connector`, `brief`, audit mode). **App adaptation in progress (Tier A Adapted — Milestone 1 active).** The wire contract below was checked against the skills repo's published contract (`system-diagnostics/references/observation-connector-contract.md` and `observation_contract.schema.json`); the three fingerprint test vectors were reproduced by the skill's code. Assumptions A1–A5 are now confirmed against the real codebase, and dropped repo-specific items from commit `1c316adab` (`data/debug_session/events.jsonl` migration, debug recording isolation, `debug_session` probe, `documentation/dashboard.rst`) have been merged into Milestones 3–4.
 
 ## How an agent should use this file (instructions and ready-to-paste prompt)
 
 1. If this file already existed in the project in another version, **merge, do not overwrite**: keep the project's milestones, rules and wording; replace only the **Wire Contract v1** section with the one below (it wins on conflicts) and keep the test vectors verbatim.
-2. Resolve every *assumption* (A1-A5) against the real code before editing, and write the confirmed answers into the plan.
+2. Assumptions A1–A5 are confirmed below against the real code.
 3. Work one milestone per turn; never enable `FRONTIER_DEBUG_OBSERVATIONS` outside local development.
 
 **Ready-to-paste prompt (Claude Code or Gemini/Antigravity):**
@@ -35,17 +35,17 @@ Read .TODO/debug_observation_connector_adoption_plan.md. Adapt it to this reposi
 
 **Timeline:** all skill-side pieces are available now (HUD, routes, scaffold, `pull`, `verify-connector`, `brief`, audit mode). Either tier can start immediately; run `verify-connector` for conformance.
 
-## Assumptions to verify (about this app; none confirmed)
+## Confirmed App Facts (A1–A5)
 
-- A1. The backend is a Python ASGI app with a router or DI layer (the audit prompt mentions "Router DI", WebSocket and JSON schemas). *Confirm the framework (FastAPI/Starlette/other).*
-- A2. The UI lives in `dashboard/` and is served by the backend or a dev server on the same origin (the HUD calls the app's own `/api/diagnostics/...`). *If the dashboard uses a different origin, same-origin is lost; see Risks.*
-- A3. The app already has `.diagnostics/` conventions and probes (`.diagnostics/probes/`) and uses `diagnose.py` from `system-diagnostics`. *Confirm the path the app uses to find the skill.*
-- A4. Project rules: `AGENTS.md` must stay under 10 KB and `.agents/rules/` holds extra rules; new UI components need approval (so the HUD is an injected dev overlay, not a dashboard component). *Confirm with the owner.*
-- A5. Much of the app's live traffic is WebSocket. **Contract v1 does not capture WebSocket frames**; only fetch/XHR, clicks, navigation, console and JS errors are recorded.
+- **A1 (Confirmed):** FastAPI (`dashboard/app.py` with `create_app()`, `dashboard/routers/*.py`, `dashboard/dependencies.py`).
+- **A2 (Confirmed):** Same-origin UI — `dashboard/app.py` renders `dashboard/static/index.html` via Jinja2 at `GET /` and mounts `/static`.
+- **A3 (Confirmed):** `.diagnostics/` already exists with `.diagnostics/.gitignore` (`/*` + `!/probes`, so `.diagnostics/observations.jsonl` and `.diagnostics/observation_catalog.json` are already gitignored) and `.diagnostics/probes/debug_session.py`.
+- **A4 (Confirmed):** `AGENTS.md` is 8,726 bytes (< 10 KB budget); `.agents/rules/` holds extra rules; new UI components require approval, so the HUD is an injected dev overlay rather than a dashboard component.
+- **A5 (Confirmed):** Live telemetry/multiview uses WebSockets (`dashboard/routers/multiview.py`). **Contract v1 does not capture WebSocket frames**; only fetch/XHR, clicks, navigation, console and JS errors are recorded.
 
-## Decision needed from the app owner
+## Decision: Tier A (Adapted)
 
-**Tier A (recommended for Python apps; available now):** generate the bridge with `python "<skill_dir>/scripts/diagnose.py" traces --scaffold fastapi --dest <backend_dir> --with-observations` (use `generic` or `flask` if the framework differs), then wire 3 lines. **Tier B (any language):** implement the routes below by hand in the app's own router, storing observations wherever suits the app (recommended layout: `.diagnostics/observations.jsonl` plus `.diagnostics/observation_catalog.json`, so local agent runs can also read them directly). Both tiers must pass `verify-connector`.
+**Tier A (Adapted — chosen):** Upgrade the existing `dashboard/services/diagnostic_bridge.py` in-place to use the `system-diagnostics` Runtime Parity bootstrap (`connector_bridge_common.py`) and FastAPI Wire Contract v1 adapter (`connector_templates_obs.py` -> `observation_routes.handle`), rather than overwriting with raw `diagnose.py traces --scaffold` (which would clobber existing `capture_runtime_exception`, `get_recent_traces`, and `DiagnosticTraceMiddleware`'s `debug_session` hook). Then wire `register_observation_routes(application)` into `dashboard/app.py` (`create_app()`).
 
 ## Wire Contract v1 (canonical copy; the source of truth is `system-diagnostics/references/observation-connector-contract.md` in the skills repo; machine-readable shapes in `observation_contract.schema.json`)
 
@@ -69,40 +69,44 @@ Base path `/api/diagnostics`. **Availability:** routes exist only when env `FRON
 
 **HUD to app header:** while recording, the HUD adds `X-Debug-Recording-Id: rec-<6hex>` to every fetch or XHR. If the app wants exact correlation, it copies that header's value into the context of any exception it logs as `recording_id`.
 
-## Milestone 1: Contract routes behind the debug gate (Tier A or Tier B)
+## Milestone 1: Contract routes behind the debug gate (Tier A Adapted)
 
-- [ ] **`<backend_dir>/diagnostics_observations.<ext>`**: implement `GET /health`, `POST /observation` (with `?dry_run=1`), `GET /observations`, `GET /observations/{id}` and `GET /hud.js` exactly as in the Wire Contract; register them **only** when `FRONTIER_DEBUG_OBSERVATIONS=1`; enforce the loopback check, 64 KB limit, `415` for non-JSON, redaction, dedup by fingerprint and the `X-Diagnostics-Contract: 1` header. Tier A: generated by the skill's scaffold instead of hand-written.
-- [ ] **`<backend_dir>/<router or app setup file>`**: mount the routes (3 lines for Tier A; one include for Tier B). Nothing is mounted and nothing imported at startup when the flag is off.
-- [ ] **`tests/test_diagnostics_contract.py`**: with the app's test client, cover every Wire Contract row: gating (flag off gives 404 for all routes), loopback (a non-loopback client address gives 403), invalid JSON, invalid record, oversize, wrong content type, dedup (`200 deduplicated:true`), `dry_run` stores nothing, redaction (a posted `password` key never appears in `GET`), `GET` list defaults to active items only, `GET` unknown id gives 404, `hud.js` headers, the three fingerprint test vectors.
+- [x] **dashboard/services/diagnostic_bridge.py**: upgrade engine discovery to Runtime Parity order (`connector_bridge_common.py`) and add Tier A Wire Contract v1 adapter (`DIAGNOSTICS_BASE_PATH`, `observations_enabled`, `handle_diagnostics_request`, `register_observation_routes`) delegating to `observation_routes.handle` while preserving `init_diagnostic_tracer`, `capture_runtime_exception`, `get_recent_traces`, and `DiagnosticTraceMiddleware`.
+- [x] **dashboard/app.py**: import and call `register_observation_routes(application)` in `create_app()` (mounts nothing when `FRONTIER_DEBUG_OBSERVATIONS != "1"`, keeping `dashboard/app.py` <= 350 lines).
+- [x] **tests/test_diagnostics_contract.py**: with `TestClient` + isolated `tempfile.TemporaryDirectory()`, cover every Wire Contract v1 row: gating (flag off gives 404 for all routes), loopback (non-loopback client gives 403), invalid JSON, invalid record, oversize, wrong content type, dedup (`200 deduplicated:true`), `dry_run` stores nothing, redaction (posted `value`/`password`/`authorization`/`cookie` never appear in `GET`), `GET` list defaults to active items only, `GET` unknown id gives 404, `hud.js` headers, and the three fingerprint test vectors.
 
-**Verifier**: `python -m unittest discover -s tests -p "test_diagnostics_contract.py"` and the manual checklist at the end of this file.
-**Exit criteria:** every row passes; no new route exists when the flag is off; no observation data in git (`.diagnostics/` ignored).
+**Verifier**: `python -m unittest tests/test_diagnostics_contract.py tests/test_debug_session.py` and the manual checklist at the end of this file.
+**Exit criteria:** every row passes; no new route exists when the flag is off; no observation data in git (`.diagnostics/` ignored via `.diagnostics/.gitignore`).
 
 ## Milestone 2: HUD in the dashboard, dev only *(Deferred to Next Turn / Milestone)*
 
-The HUD bundle is served by the skill's generated bridge (Tier A) or must be copied from `system-diagnostics/assets/hud_*.js` (Tier B). `window.__FRONTIER_OBS_ENDPOINT__` overrides the POST endpoint for a different origin.
+The HUD bundle is served by `dashboard/services/diagnostic_bridge.py` (`/api/diagnostics/hud.js` from `system-diagnostics`). `window.__FRONTIER_OBS_ENDPOINT__` overrides the POST endpoint if needed for a different origin.
 
-- [ ] **`<dashboard_dir>/<dev index or layout template>`**: when the flag is on, include `<script>window.__FRONTIER_DEBUG__ = true;</script><script src="/api/diagnostics/hud.js"></script>`; never in production builds.
-- [ ] **`tests/test_dashboard_debug_hud.py`**: the template contains the two script tags only when the flag is on; none when off.
+- [ ] **dashboard/static/index.html**: replace unconditional `/static/js/debug_observation_hud.js` dev injection when migrating to the standardized HUD, or gate `<script>window.__FRONTIER_DEBUG__ = true;</script><script src="/api/diagnostics/hud.js"></script>` via Jinja template context only when `FRONTIER_DEBUG_OBSERVATIONS=1`; never in production builds.
+- [ ] **dashboard/app.py** & **dashboard/server.py**: pass `frontier_debug_observations` flag into `serve_index` template context (and align `--debug` / `--clean-debug` in `dashboard/server.py` / `prepare_debug_session_env()` if opted-in).
+- [ ] **tests/test_dashboard_debug_hud.py**: the rendered template contains the two script tags only when `FRONTIER_DEBUG_OBSERVATIONS=1`; none when off.
 - [ ] **manual E2E (record the result in the PR)**: open the dashboard, Pick Element, Record, trigger a fetch, Stop, Log Observation; `GET /api/diagnostics/observations` shows it; the request had `X-Debug-Recording-Id`.
 
-**Verifier**: `python -m unittest discover -s tests -p "test_dashboard_debug_hud.py"` plus the manual E2E.
+**Verifier**: `python -m unittest tests/test_dashboard_debug_hud.py` plus the manual E2E.
 **Exit criteria:** HUD invisible and inert without the flag; no new dashboard component created (the HUD is an injected overlay); same-origin posts work.
 
-## Milestone 3: Trace stamping for exact correlation *(Deferred to Next Turn / Milestone)*
+## Milestone 3: Trace stamping, recording isolation & legacy observation migration *(Deferred to Next Turn / Milestone)*
 
-- [ ] **`<backend_dir>/<error logging or trace middleware>`**: copy the `X-Debug-Recording-Id` request header into the exception context as `recording_id` (Tier A: use the skill's trace middleware). Document that WebSocket-handler exceptions are not stamped in v1.
-- [ ] **`tests/test_trace_recording_id.py`**: a request carrying the header that raises produces a trace event whose context holds the same `recording_id`; a request without the header has none.
+- [ ] **dashboard/services/diagnostic_bridge.py**: copy the `X-Debug-Recording-Id` request header into `DiagnosticTraceMiddleware`'s `capture_runtime_exception` context as `recording_id`. Document that WebSocket-handler exceptions (`dashboard/routers/multiview.py`) are not stamped in v1.
+- [ ] **dashboard/services/debug_session.py**: isolate `STORED_RECORDINGS` directory under `data/debug_session/recordings/` when `IT_DEBUG_MODE=1` (preserving existing debug session isolation).
+- [ ] **scripts/debug_inspect.py**: add `--migrate-observations` one-shot import for the 7 existing observations in `data/debug_session/events.jsonl` into `.diagnostics/observation_catalog.json` via `observation_store`.
+- [ ] **tests/test_trace_recording_id.py**: a request carrying `X-Debug-Recording-Id` that raises produces a trace event whose context holds the same `recording_id`; a request without the header has none; plus debug recording isolation and idempotent migration checks.
 
-**Verifier**: `python -m unittest discover -s tests -p "test_trace_recording_id.py"`
-**Exit criteria:** correlated traces appear in `observations show` once the skill side lands.
+**Verifier**: `python -m unittest tests/test_trace_recording_id.py tests/test_debug_session.py`
+**Exit criteria:** correlated traces appear in `observations show`, and existing observations are migrated idempotently.
 
-## Milestone 4: Developer workflow and audit hand-off *(Deferred to Next Turn / Milestone)*
+## Milestone 4: Developer workflow, probe upgrade and audit hand-off *(Deferred to Next Turn / Milestone)*
 
-- [ ] **`docs/architecture/CURRENT_ARCHITECTURE.md`**: add a short "Debug observation connector" section (routes, flag, tier chosen, limits including WebSocket).
-- [ ] **`.agents/rules/debug-observations.md`** (and one pointer line in `AGENTS.md`, keeping it under 10 KB): how to enable the flag, how to run `observations list`, `pull` and `brief`, and the privacy rule that observations never leave the machine.
-- [ ] **FOR AUDITS prompt (project workflow)**: apply the edits in the next section.
-- [ ] **PR notes**: record which tier was chosen, the Milestone 1 and 2 results, and the output of `verify-connector`.
+- [ ] **.diagnostics/probes/debug_session.py**: surface `open_observations_count` from `.diagnostics/observation_catalog.json` and return non-silent attention status (`warn`) when active user observations exist.
+- [ ] **docs/architecture/CURRENT_ARCHITECTURE.md** & **documentation/dashboard.rst**: add a short "Debug observation connector" section (routes, `FRONTIER_DEBUG_OBSERVATIONS=1` flag, Tier A Adapted, limits including WebSocket, HUD workflow, and `OBS-XXX` triage commands).
+- [ ] **.agents/rules/debug-observations.md** (and one pointer line in `AGENTS.md`, keeping `AGENTS.md` under 10 KB): how to enable the flag, how to run `observations list`, `pull` and `brief`, and the privacy rule that observations never leave the machine.
+- [ ] **.TODO/Prompts** (`FOR AUDITS` workflow): apply the edits in the next section.
+- [ ] **PR notes**: record Tier A (Adapted), the Milestone 1 and 2 results, and the output of `verify-connector`.
 
 **Verifier**: `python -m unittest discover -s tests -p "test_*.py"` and `python "<skill_dir>/scripts/diagnose.py" observations verify-connector --url http://127.0.0.1:<port>` (all `PASS`; the loopback rule shows `SKIP`).
 **Exit criteria:** an agent that has never seen this repo can enable the flag, list pending observations and run the audit using only the docs.
