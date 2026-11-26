@@ -107,6 +107,7 @@ from dashboard.services.debug_session import (
 from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
+    observations_enabled,
     register_observation_routes,
 )
 from dashboard.services.diagnostic_log_handler import (
@@ -165,15 +166,11 @@ def _init_runtime_services(application: FastAPI):
     db = TrackerDB(db_file)
     owned_db: Optional[TrackerDB] = db
     scen_mgr = ScenarioManager(
-        config_path=scen_file,
-        db=db,
-        db_path=db_file,
-        world_graph=getattr(pool, "world_graph", None),
-        coordinate_mapper=getattr(pool, "coordinate_mapper", None),
+        config_path=scen_file, db=db, db_path=db_file,
+        world_graph=getattr(pool, "world_graph", None), coordinate_mapper=getattr(pool, "coordinate_mapper", None),
     )
-    handoff = getattr(pool, "handoff_coordinator", None)
-    if handoff is not None:
-        handoff.topology, handoff.transition_registry = scen_mgr.topology, scen_mgr.world_transitions
+    if getattr(pool, "handoff_coordinator", None) is not None:
+        pool.handoff_coordinator.topology, pool.handoff_coordinator.transition_registry = scen_mgr.topology, scen_mgr.world_transitions
     if getattr(pool, "_coordinator", None) is not None:
         pool._coordinator.scenario_manager = scen_mgr
     lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
@@ -193,7 +190,6 @@ def _init_runtime_services(application: FastAPI):
         scen_mgr.apply_to_stream_manager(sm)
     try:
         from intelligent_tracker.reid.gallery_reembed import reembed_mismatched_signatures
-
         reembed_mismatched_signatures(db)
     except Exception as exc:
         logger.warning("Startup gallery re-embed check skipped: %s", exc)
@@ -275,20 +271,21 @@ def create_app() -> FastAPI:
     ):
         application.include_router(router)
 
+    application.add_api_route("/", serve_index, methods=["GET"], response_class=HTMLResponse)
     register_observation_routes(application)
     return application
 
 
-app = create_app()
-
-
-@app.get("/", response_class=HTMLResponse)
 async def serve_index():
     """Serve the modern single-page dashboard."""
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
-        return HTMLResponse(content=_jinja_env.get_template("index.html").render())
+        html = _jinja_env.get_template("index.html").render(frontier_debug_observations=observations_enabled())
+        return HTMLResponse(content=html)
     return HTMLResponse("<h1>Intelligent Tracker Dashboard Initializing...</h1>")
+
+
+app = create_app()
 
 
 __all__ = [

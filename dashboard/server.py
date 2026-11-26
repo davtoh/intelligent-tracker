@@ -35,6 +35,11 @@ def _add_debug_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Custom debug session directory (default: TRACKER_DEBUG_DIR or data/debug_session).",
     )
+    parser.add_argument(
+        "--debug-observations",
+        action="store_true",
+        help="Enable local-only Frontier debug observation connector & HUD (FRONTIER_DEBUG_OBSERVATIONS=1).",
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -95,16 +100,24 @@ def preflight_port_check(port: int, host: str = "0.0.0.0") -> bool:
     return False
 
 
-def main(argv: list[str] | None = None) -> None:
-    """CLI entrypoint for intelligent-tracker-server."""
-    args = parse_args(argv)
-    if args.demo:
-        os.environ["IT_LOAD_DEMO_SCENARIOS"] = "1"
+def _configure_debug_env(args: argparse.Namespace) -> tuple[bool, dict[str, str]]:
+    """Apply CLI debug/observation flags to environment and return (debug_active, debug_env)."""
+    if args.debug_observations:
+        os.environ["FRONTIER_DEBUG_OBSERVATIONS"] = "1"
     debug_active = bool(args.debug or args.clean_debug)
     debug_env: dict[str, str] = {}
     if debug_active:
         debug_dir = Path(args.debug_dir) if args.debug_dir else None
         debug_env = prepare_debug_session_env(debug_dir, clean=bool(args.clean_debug))
+    return debug_active, debug_env
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entrypoint for intelligent-tracker-server."""
+    args = parse_args(argv)
+    if args.demo:
+        os.environ["IT_LOAD_DEMO_SCENARIOS"] = "1"
+    debug_active, debug_env = _configure_debug_env(args)
     host, port, reload = resolve_config(args)
 
     print("=== Starting Intelligent Tracker Dashboard ===")
@@ -114,6 +127,8 @@ def main(argv: list[str] | None = None) -> None:
         print(f"  [DEBUG] Session dir : {debug_env.get('TRACKER_DEBUG_DIR')}")
         print(f"  [DEBUG] Clean start : {bool(args.clean_debug)}")
         print("  [DEBUG] Inspector   : python scripts/debug_inspect.py")
+    if os.getenv("FRONTIER_DEBUG_OBSERVATIONS") == "1":
+        print("  [DEBUG] Observations: enabled (/api/diagnostics/*, loopback only)")
 
     process_supervisor.assign_to_job_object()
     preflight_port_check(port, host=host)

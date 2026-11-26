@@ -78,14 +78,14 @@ Base path `/api/diagnostics`. **Availability:** routes exist only when env `FRON
 **Verifier**: `python -m unittest tests/test_diagnostics_contract.py tests/test_debug_session.py` and the manual checklist at the end of this file.
 **Exit criteria:** every row passes; no new route exists when the flag is off; no observation data in git (`.diagnostics/` ignored via `.diagnostics/.gitignore`).
 
-## Milestone 2: HUD in the dashboard, dev only *(Deferred to Next Turn / Milestone)*
+## Milestone 2: HUD in the dashboard, dev only
 
 The HUD bundle is served by `dashboard/services/diagnostic_bridge.py` (`/api/diagnostics/hud.js` from `system-diagnostics`). `window.__FRONTIER_OBS_ENDPOINT__` overrides the POST endpoint if needed for a different origin.
 
-- [ ] **dashboard/static/index.html**: replace unconditional `/static/js/debug_observation_hud.js` dev injection when migrating to the standardized HUD, or gate `<script>window.__FRONTIER_DEBUG__ = true;</script><script src="/api/diagnostics/hud.js"></script>` via Jinja template context only when `FRONTIER_DEBUG_OBSERVATIONS=1`; never in production builds.
-- [ ] **dashboard/app.py** & **dashboard/server.py**: pass `frontier_debug_observations` flag into `serve_index` template context (and align `--debug` / `--clean-debug` in `dashboard/server.py` / `prepare_debug_session_env()` if opted-in).
-- [ ] **tests/test_dashboard_debug_hud.py**: the rendered template contains the two script tags only when `FRONTIER_DEBUG_OBSERVATIONS=1`; none when off.
-- [ ] **manual E2E (record the result in the PR)**: open the dashboard, Pick Element, Record, trigger a fetch, Stop, Log Observation; `GET /api/diagnostics/observations` shows it; the request had `X-Debug-Recording-Id`.
+- [x] **dashboard/static/index.html**: replace unconditional `/static/js/debug_observation_hud.js` dev injection when migrating to the standardized HUD, or gate `<script>window.__FRONTIER_DEBUG__ = true;</script><script src="/api/diagnostics/hud.js"></script>` via Jinja template context only when `FRONTIER_DEBUG_OBSERVATIONS=1`; never in production builds.
+- [x] **dashboard/app.py** & **dashboard/server.py**: pass `frontier_debug_observations` flag into `serve_index` template context (and align `--debug` / `--clean-debug` in `dashboard/server.py` / `prepare_debug_session_env()` if opted-in).
+- [x] **tests/test_dashboard_debug_hud.py**: the rendered template contains the two script tags only when `FRONTIER_DEBUG_OBSERVATIONS=1`; none when off.
+- [x] **manual E2E (record the result in the PR)**: open the dashboard, Pick Element, Record, trigger a fetch, Stop, Log Observation; `GET /api/diagnostics/observations` shows it; the request had `X-Debug-Recording-Id`.
 
 **Verifier**: `python -m unittest tests/test_dashboard_debug_hud.py` plus the manual E2E.
 **Exit criteria:** HUD invisible and inert without the flag; no new dashboard component created (the HUD is an injected overlay); same-origin posts work.

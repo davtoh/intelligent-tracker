@@ -67,6 +67,7 @@ def prepare_debug_session_env(debug_dir: Optional[Path] = None, *, clean: bool =
         "TRACKER_CROPS_DIR": str(target / "crops"),
         "TRACKER_REPORTS_DIR": str(target / "reports"),
         "PYTHONASYNCIODEBUG": "1",
+        "FRONTIER_DEBUG_OBSERVATIONS": os.environ.get("FRONTIER_DEBUG_OBSERVATIONS") or "1",
     }
     os.environ.update(env_values)
     return env_values
