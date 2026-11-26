@@ -90,12 +90,12 @@ The HUD bundle is served by `dashboard/services/diagnostic_bridge.py` (`/api/dia
 **Verifier**: `python -m unittest tests/test_dashboard_debug_hud.py` plus the manual E2E.
 **Exit criteria:** HUD invisible and inert without the flag; no new dashboard component created (the HUD is an injected overlay); same-origin posts work.
 
-## Milestone 3: Trace stamping, recording isolation & legacy observation migration *(Deferred to Next Turn / Milestone)*
+## Milestone 3: Trace stamping, recording isolation & legacy observation migration
 
-- [ ] **dashboard/services/diagnostic_bridge.py**: copy the `X-Debug-Recording-Id` request header into `DiagnosticTraceMiddleware`'s `capture_runtime_exception` context as `recording_id`. Document that WebSocket-handler exceptions (`dashboard/routers/multiview.py`) are not stamped in v1.
-- [ ] **dashboard/services/debug_session.py**: isolate `STORED_RECORDINGS` directory under `data/debug_session/recordings/` when `IT_DEBUG_MODE=1` (preserving existing debug session isolation).
-- [ ] **scripts/debug_inspect.py**: add `--migrate-observations` one-shot import for the 7 existing observations in `data/debug_session/events.jsonl` into `.diagnostics/observation_catalog.json` via `observation_store`.
-- [ ] **tests/test_trace_recording_id.py**: a request carrying `X-Debug-Recording-Id` that raises produces a trace event whose context holds the same `recording_id`; a request without the header has none; plus debug recording isolation and idempotent migration checks.
+- [x] **dashboard/services/diagnostic_bridge.py**: copy the `X-Debug-Recording-Id` request header into `DiagnosticTraceMiddleware`'s `capture_runtime_exception` context as `recording_id`. Document that WebSocket-handler exceptions (`dashboard/routers/multiview.py`) are not stamped in v1.
+- [x] **dashboard/services/debug_session.py**: isolate `STORED_RECORDINGS` directory under `data/debug_session/recordings/` when `IT_DEBUG_MODE=1` (preserving existing debug session isolation).
+- [x] **scripts/debug_inspect.py**: add `--migrate-observations` one-shot import for the 7 existing observations in `data/debug_session/events.jsonl` into `.diagnostics/observation_catalog.json` via `observation_store`.
+- [x] **tests/test_trace_recording_id.py**: a request carrying `X-Debug-Recording-Id` that raises produces a trace event whose context holds the same `recording_id`; a request without the header has none; plus debug recording isolation and idempotent migration checks.
 
 **Verifier**: `python -m unittest tests/test_trace_recording_id.py tests/test_debug_session.py`
 **Exit criteria:** correlated traces appear in `observations show`, and existing observations are migrated idempotently.

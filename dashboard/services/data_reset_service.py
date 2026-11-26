@@ -229,6 +229,7 @@ def wipe_debug_session(debug_dir: Path) -> bool:
         removed = True
     (debug_dir / "crops").mkdir(parents=True, exist_ok=True)
     (debug_dir / "reports").mkdir(parents=True, exist_ok=True)
+    (debug_dir / "recordings").mkdir(parents=True, exist_ok=True)
     return removed
 
 

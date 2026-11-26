@@ -32,6 +32,16 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Display user-logged debug observations with breadcrumbs and correlated issues.",
     )
+    parser.add_argument(
+        "--migrate-observations",
+        action="store_true",
+        help="Idempotently import legacy OBSERVATION entries from events.jsonl into .diagnostics/observation_catalog.json.",
+    )
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        help="Target workspace root for .diagnostics/ during --migrate-observations (default: repo root).",
+    )
     parser.add_argument("--context", default=None, help="Drill into one issue by #index or fingerprint prefix.")
     parser.add_argument("--lines", type=int, default=15, help="Context lines before/after in debug.log for --context.")
     return parser.parse_args(argv)
@@ -140,10 +150,129 @@ def _emit_observations(summary: dict[str, Any], as_json: bool) -> None:
     print(json.dumps(obs_payload, indent=2, ensure_ascii=False))
 
 
+def _load_observation_store() -> Any:
+    """Resolve and import system-diagnostics observation_store via diagnostic_bridge candidates."""
+    from dashboard.services import diagnostic_bridge  # noqa: F401 - populates sys.path
+
+    for cand in diagnostic_bridge._engine_candidates():
+        if (cand / "observation_store.py").is_file() and str(cand) not in sys.path:
+            sys.path.insert(0, str(cand))
+            break
+    try:
+        import observation_store  # type: ignore
+
+        return observation_store
+    except ImportError:
+        return None
+
+
+def _legacy_obs_to_record(entry: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Map one legacy events.jsonl OBSERVATION dict to a Wire Contract v1 note record."""
+    if str(entry.get("level", "")).upper() != "OBSERVATION":
+        return None
+    message = str(entry.get("note") or entry.get("message") or "").strip()
+    if not message:
+        return None
+    url = str(entry.get("url") or "").strip()
+    tab = str(entry.get("tab") or "").strip()
+    page_path = url or (f"/#{tab}" if tab else "/")
+    record: dict[str, Any] = {
+        "schema": 1,
+        "kind": "note",
+        "page_path": page_path,
+        "message": message,
+        "source_url": url,
+        "timeline": entry.get("breadcrumbs") if isinstance(entry.get("breadcrumbs"), list) else [],
+        "attrs": {
+            "legacy_fingerprint": str(entry.get("fingerprint") or ""),
+            "tab": tab,
+            "viewport": entry.get("viewport") if isinstance(entry.get("viewport"), dict) else {},
+            "migrated_from": "debug_session/events.jsonl",
+        },
+    }
+    if entry.get("ts"):
+        record["ts"] = str(entry["ts"])
+    return record
+
+
+def _read_legacy_records(events_path: Path) -> tuple[list[dict[str, Any]], int]:
+    """Read valid OBSERVATION records from events.jsonl and return (records, invalid_lines)."""
+    records: list[dict[str, Any]] = []
+    invalid = 0
+    with open(events_path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            try:
+                raw_entry = json.loads(line)
+            except ValueError:
+                invalid += 1
+                continue
+            if isinstance(raw_entry, dict):
+                record = _legacy_obs_to_record(raw_entry)
+                if record is not None:
+                    records.append(record)
+    return records, invalid
+
+
+def migrate_legacy_observations(debug_dir: Path, workspace_root: Optional[Path] = None) -> dict[str, Any]:
+    """Idempotently import legacy OBSERVATION lines from events.jsonl into .diagnostics/observation_catalog.json."""
+    store = _load_observation_store()
+    if store is None:
+        raise RuntimeError("system-diagnostics observation_store is unavailable")
+    ws = Path(workspace_root) if workspace_root else REPO_ROOT
+    events_path = Path(debug_dir) / "events.jsonl"
+    result: dict[str, Any] = {
+        "events_path": str(events_path), "workspace": str(ws),
+        "found": 0, "imported": 0, "skipped": 0, "invalid": 0, "ids": [],
+    }
+    if not events_path.is_file():
+        return result
+
+    records, invalid = _read_legacy_records(events_path)
+    result["found"], result["invalid"] = len(records), invalid
+    existing_fps = {e.get("fingerprint") for e in store.load_catalog(ws).get("observations", [])}
+    for record in records:
+        sanitized = store.sanitize_record(record)
+        fp = store.make_fingerprint(
+            sanitized["kind"], sanitized.get("page_path", ""), store._target(sanitized), sanitized["message"]
+        )
+        if fp in existing_fps:
+            result["skipped"] += 1
+            continue
+        created, _ = store.add_observation(ws, record)
+        existing_fps.add(fp)
+        result["imported"] += 1
+        result["ids"].append(created["id"])
+    return result
+
+
+def _emit_migration_result(result: dict[str, Any], as_json: bool) -> None:
+    """Print legacy observation migration summary in JSON or compact human format."""
+    if as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return
+    print(
+        f"[MIGRATE OBSERVATIONS] {result['events_path']} -> {result['workspace']} | "
+        f"found={result['found']} imported={result['imported']} "
+        f"skipped={result['skipped']} invalid={result['invalid']}"
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """Entrypoint for scripts/debug_inspect.py."""
     args = parse_args(argv)
     target = Path(args.dir) if args.dir else get_debug_session_dir()
+
+    if args.migrate_observations:
+        try:
+            workspace = Path(args.workspace) if args.workspace else REPO_ROOT
+            result = migrate_legacy_observations(target, workspace_root=workspace)
+        except RuntimeError as exc:
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            return 1
+        _emit_migration_result(result, args.json)
+        return 0
 
     if args.context:
         ctx = get_issue_context(target, args.context, context_lines=args.lines)

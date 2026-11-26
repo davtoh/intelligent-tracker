@@ -60,6 +60,15 @@ except ImportError:
 
 DIAGNOSTICS_BASE_PATH = "/api/diagnostics"
 MAX_BODY_READ = 65537  # contract cap (64 KB) + 1 so oversize bodies still answer 413
+RECORDING_ID_HEADER = "X-Debug-Recording-Id"
+_MAX_RECORDING_ID = 64
+
+
+def _clean_recording_id(value: Any) -> Optional[str]:
+    """Return a validated recording id or None (request headers are untrusted input)."""
+    text = str(value or "").strip()
+    ok = bool(text) and text.isascii() and len(text) <= _MAX_RECORDING_ID and all(c.isalnum() or c in "-_." for c in text)
+    return text if ok else None
 
 
 def init_diagnostic_tracer(workspace_root: Optional[Path] = None) -> bool:
@@ -96,18 +105,31 @@ def get_recent_traces(limit: int = 10, workspace_root: Optional[Path] = None) ->
 
 
 class DiagnosticTraceMiddleware(BaseHTTPMiddleware):
-    """FastAPI/Starlette middleware capturing unhandled HTTP 500 exceptions into trace catalog."""
+    """FastAPI/Starlette middleware capturing unhandled HTTP 500 exceptions into trace catalog.
+
+    Copies validated ``X-Debug-Recording-Id`` request headers into the trace context as
+    ``recording_id`` for correlation with HUD observations. WebSocket-handler exceptions
+    (e.g. ``dashboard/routers/multiview.py``) are not stamped in v1 because Starlette
+    ``BaseHTTPMiddleware`` intercepts HTTP requests only.
+    """
+
+    def __init__(self, app: Any, workspace_root: Optional[Path] = None) -> None:
+        super().__init__(app)
+        self.workspace_root = workspace_root
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         try:
             return await call_next(request)
         except Exception as exc:
-            context = {
+            context: dict[str, Any] = {
                 "http_method": request.method,
                 "http_path": request.url.path,
                 "client_host": request.client.host if request.client else "unknown",
             }
-            capture_runtime_exception(exc, context=context)
+            recording_id = _clean_recording_id(request.headers.get(RECORDING_ID_HEADER))
+            if recording_id:
+                context["recording_id"] = recording_id
+            capture_runtime_exception(exc, context=context, workspace_root=self.workspace_root)
             from dashboard.services.debug_session import is_debug_mode, record_debug_event
 
             if is_debug_mode():

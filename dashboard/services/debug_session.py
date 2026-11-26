@@ -25,6 +25,7 @@ _FAULT_FILE: Optional[IO[str]] = None
 __all__ = [
     "StructuredJsonlHandler",
     "compute_event_fingerprint",
+    "get_debug_recordings_dir",
     "get_debug_session_dir",
     "get_issue_context",
     "install_debug_runtime",
@@ -48,6 +49,19 @@ def get_debug_session_dir() -> Path:
     return Path(raw) if raw else Path("data") / "debug_session"
 
 
+def get_debug_recordings_dir(debug_dir: Optional[Path] = None) -> Path:
+    """Resolve the isolated recordings directory under data/debug_session/recordings/ when IT_DEBUG_MODE=1."""
+    if debug_dir is not None:
+        return Path(debug_dir) / "recordings"
+    stored = os.getenv("STORED_RECORDINGS", "").strip()
+    if stored:
+        return Path(stored)
+    if is_debug_mode():
+        return get_debug_session_dir() / "recordings"
+    videos = os.getenv("TRACKER_VIDEOS_DIR", "").strip()
+    return Path(videos) if videos else Path("data") / "videos"
+
+
 def prepare_debug_session_env(debug_dir: Optional[Path] = None, *, clean: bool = False) -> dict[str, str]:
     """Prepare isolated debug directories and export environment variables for server and reloader."""
     target = Path(debug_dir) if debug_dir else get_debug_session_dir()
@@ -56,6 +70,8 @@ def prepare_debug_session_env(debug_dir: Optional[Path] = None, *, clean: bool =
     else:
         (target / "crops").mkdir(parents=True, exist_ok=True)
         (target / "reports").mkdir(parents=True, exist_ok=True)
+    recordings_dir = target / "recordings"
+    recordings_dir.mkdir(parents=True, exist_ok=True)
 
     env_values = {
         "IT_DEBUG_MODE": "1",
@@ -66,6 +82,8 @@ def prepare_debug_session_env(debug_dir: Optional[Path] = None, *, clean: bool =
         "SCENARIOS_CONFIG_PATH": str(target / "scenarios.yaml"),
         "TRACKER_CROPS_DIR": str(target / "crops"),
         "TRACKER_REPORTS_DIR": str(target / "reports"),
+        "TRACKER_VIDEOS_DIR": str(recordings_dir),
+        "STORED_RECORDINGS": str(recordings_dir),
         "PYTHONASYNCIODEBUG": "1",
         "FRONTIER_DEBUG_OBSERVATIONS": os.environ.get("FRONTIER_DEBUG_OBSERVATIONS") or "1",
     }
