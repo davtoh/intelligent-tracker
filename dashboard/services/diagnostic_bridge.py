@@ -85,5 +85,10 @@ class DiagnosticTraceMiddleware(BaseHTTPMiddleware):
                 "client_host": request.client.host if request.client else "unknown",
             }
             capture_runtime_exception(exc, context=context)
+            from dashboard.services.debug_session import is_debug_mode, record_debug_event
+
+            if is_debug_mode():
+                logger.exception("Unhandled HTTP 500 on %s %s", request.method, request.url.path)
+                record_debug_event(exc, http_method=request.method, http_path=request.url.path)
             raise exc
 

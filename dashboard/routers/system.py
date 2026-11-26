@@ -276,3 +276,15 @@ async def verify_system_models(model_name: Optional[str] = Query(None)):
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+
+@router.get("/api/system/debug/summary")
+async def get_debug_session_summary(
+    min_level: str = Query("WARNING"),
+    limit: int = Query(20, ge=1, le=200),
+):
+    """Return deduplicated error/warning summary and native crash status for the debug session."""
+    from dashboard.services.debug_session import summarize_debug_session
+
+    return summarize_debug_session(min_level=min_level, limit=limit)
+
+

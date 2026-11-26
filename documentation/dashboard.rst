@@ -239,3 +239,58 @@ Alternatively, launch directly via Uvicorn:
    python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000 --reload
 
 Open your browser at ``http://127.0.0.1:8000``.
+
+Data Reset & Clean Start (``scripts/reset_data.py``)
+----------------------------------------------------
+
+To wipe dashboard state cleanly before testing new features, use ``scripts/reset_data.py``.
+It resolves paths in order of **CLI flag > environment variable > repository default**
+(``TRACKER_DB_PATH`` / ``TRACKER_DB``, ``CAMERAS_CONFIG_PATH``, ``SCENARIOS_CONFIG_PATH``,
+``TRACKER_CROPS_DIR``, ``TRACKER_REPORTS_DIR``, ``TRACKER_VIDEOS_DIR``, ``TRACKER_DEBUG_DIR``).
+
+By default, ``reset_data.py``:
+
+- Exports a pre-reset backup archive to ``data/backups/pre_reset_<timestamp>.zip`` via ``BackupManager`` (pass ``--no-backup`` to skip).
+- Prompts per category: ``[Y/n]`` for ``db``, ``crops``, ``reports``, ``debug_session``, and ``docker_volumes``; ``[y/N]`` for ``videos`` and ``configs``.
+- Refuses non-TTY/headless stdin unless ``--yes``, ``--prompt``, or ``--dry-run`` is passed, and aborts if port ``8000`` is active unless ``--force`` is set.
+
+.. code-block:: bash
+
+   # Preview what would be deleted without modifying files
+   python scripts/reset_data.py --dry-run
+
+   # Interactive per-category reset (works in headless shells with --prompt)
+   python scripts/reset_data.py --prompt
+
+   # Non-interactive local + Docker volume reset (docker compose down -v)
+   python scripts/reset_data.py --target all --yes
+
+   # Reset only a custom test DB and crops without creating a backup
+   TRACKER_DB_PATH=data/test_clean.db python scripts/reset_data.py --only db,crops --yes --no-backup
+
+Isolated Debug Mode & Error Inspector
+-------------------------------------
+
+Launch ``scripts/run_dashboard.py`` with ``--debug`` (or ``--clean-debug`` to wipe the previous
+debug session before booting) to isolate all state under ``data/debug_session/``:
+
+- **Isolated state**: ``tracker.db``, ``cameras.json``, ``scenarios.yaml``, ``crops/``, and ``reports/`` are redirected into ``data/debug_session/``.
+- **Full diagnostics**: Enables ``DEBUG`` logging to rotating ``debug.log``, ``faulthandler.log`` for native C/C++ crashes, ``PYTHONASYNCIODEBUG=1``, ``FastAPI(debug=True)``, and ``events.jsonl`` structured ``WARNING+`` capture.
+
+Use ``scripts/debug_inspect.py`` (or ``GET /api/system/debug/summary``) for a compact,
+deduplicated Jenkins/Sentry-style summary of errors and tracebacks:
+
+.. code-block:: bash
+
+   # Boot a clean isolated debug session
+   python scripts/run_dashboard.py --local --clean-debug
+
+   # Inspect deduplicated warnings/errors/crashes
+   python scripts/debug_inspect.py
+
+   # Drill into issue #1 with full traceback and surrounding debug.log lines
+   python scripts/debug_inspect.py --context 1
+
+   # Emit compact JSON for CI or automated agents
+   python scripts/debug_inspect.py --json
+

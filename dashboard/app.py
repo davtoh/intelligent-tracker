@@ -99,6 +99,11 @@ from dashboard.schemas import (
     WorldQueryRequest,
     ZoneCreateRequest,
 )
+from dashboard.services.debug_session import (
+    install_debug_runtime,
+    is_debug_mode,
+    uninstall_debug_runtime,
+)
 from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
@@ -152,7 +157,7 @@ _probe_video_file = VideoTranscodeService.probe_video
 def _init_runtime_services(application: FastAPI):
     """Initialize CameraPool, ScenarioManager, TrackerDB, and StreamLifecycleManager."""
     cfg_file = os.getenv("CAMERAS_CONFIG_PATH") or "configs/cameras.json"
-    db_file = os.getenv("TRACKER_DB_PATH") or "data/tracker.db"
+    db_file = os.getenv("TRACKER_DB_PATH") or os.getenv("TRACKER_DB") or "data/tracker.db"
     scen_file = os.getenv("SCENARIOS_CONFIG_PATH") or "configs/scenarios.yaml"
     pool = CameraPool(config_file=cfg_file, db_path=db_file)
     primary_sm = pool.primary_stream
@@ -201,6 +206,8 @@ async def lifespan(application: FastAPI):
     set_parent_death_signal()
     start_parent_watchdog()
     log_handler = install_diagnostic_log_handler()
+    if is_debug_mode():
+        install_debug_runtime()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     pool, primary_sm, lifecycle_mgr, owned_db = _init_runtime_services(application)
 
@@ -216,6 +223,8 @@ async def lifespan(application: FastAPI):
     if owned_db is not None:
         owned_db.close()
     clear_app_state(application)
+    if is_debug_mode():
+        uninstall_debug_runtime()
     remove_diagnostic_log_handler(log_handler)
     stop_parent_watchdog()
 
@@ -236,6 +245,7 @@ def create_app() -> FastAPI:
         title="Intelligent Tracker Web Dashboard & VMS",
         description="Edge AI Retail & Security Analytics Multi-Camera VMS Platform",
         version="1.2.0",
+        debug=is_debug_mode(),
         lifespan=lifespan,
     )
 
