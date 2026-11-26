@@ -11,6 +11,7 @@ from typing import Any
 
 from intelligent_tracker.category_registry import DEFAULT_CUSTOM_CATEGORIES, migrate_category_registry
 from intelligent_tracker.repositories.memory_schema import apply_memory_schema_migrations
+from intelligent_tracker.repositories.review_schema import _migrate_v5_review_decisions
 from intelligent_tracker.repositories.video_schema import apply_video_schema_migrations
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ _CORE_TABLES_DDL = (
         id INTEGER PRIMARY KEY AUTOINCREMENT, entity_id INTEGER, track_id INTEGER,
         source TEXT DEFAULT '', timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         zone_id TEXT DEFAULT '', bbox TEXT DEFAULT '', confidence REAL DEFAULT 1.0,
-        snapshot_path TEXT DEFAULT '',
+        snapshot_path TEXT DEFAULT '', camera_id TEXT DEFAULT '', run_id TEXT DEFAULT '',
         FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
     );""",
     """CREATE TABLE IF NOT EXISTS descriptor_versions (
@@ -126,7 +127,8 @@ _LEARNING_TABLES_DDL = (
         reviewed_at TIMESTAMP, reviewed_by TEXT DEFAULT 'operator',
         video_filename TEXT DEFAULT '', media_offset_sec REAL DEFAULT 0.0,
         bbox_json TEXT DEFAULT '', frame_width INTEGER DEFAULT 0,
-        frame_height INTEGER DEFAULT 0, run_id TEXT DEFAULT ''
+        frame_height INTEGER DEFAULT 0, run_id TEXT DEFAULT '',
+        reason TEXT DEFAULT 'borderline'
     );""",
     """CREATE TABLE IF NOT EXISTS custom_categories (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT DEFAULT '#3B82F6',
@@ -173,6 +175,34 @@ _INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_negative_exemplars_entity ON negative_exemplars(entity_id);",
 )
 
+_V4_LEARNED_CLASSES_STATEMENTS = (
+    """CREATE TABLE IF NOT EXISTS learned_classes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, slug TEXT UNIQUE NOT NULL,
+        parent_coco_class TEXT DEFAULT '', color TEXT DEFAULT '#06B6D4', threshold REAL DEFAULT 0.65,
+        description TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
+    """CREATE TABLE IF NOT EXISTS learned_class_exemplars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, class_id INTEGER NOT NULL, embedding BLOB NOT NULL,
+        crop_path TEXT DEFAULT '', source_camera_id TEXT DEFAULT '', notes TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (class_id) REFERENCES learned_classes(id) ON DELETE CASCADE
+    );""",
+    """CREATE TABLE IF NOT EXISTS camera_class_overrides (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, camera_id TEXT NOT NULL, coco_class TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT 'suppress', relabel_to TEXT DEFAULT '',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(camera_id, coco_class)
+    );""",
+    "CREATE INDEX IF NOT EXISTS idx_learned_exemplars_class ON learned_class_exemplars(class_id);",
+    "CREATE INDEX IF NOT EXISTS idx_camera_class_overrides_cam ON camera_class_overrides(camera_id);",
+)
+
+
+def _migrate_v4_learned_classes(cursor: sqlite3.Cursor) -> None:
+    """Create schema v4 learned-classes and per-camera COCO override tables."""
+    for stmt in _V4_LEARNED_CLASSES_STATEMENTS:
+        cursor.execute(stmt)
+    cursor.execute("PRAGMA user_version = 4;")
+
 
 class SchemaMixin:
     """Provides schema creation, index setup, and default data seeding."""
@@ -218,6 +248,7 @@ class SchemaMixin:
             "frame_width INTEGER DEFAULT 0",
             "frame_height INTEGER DEFAULT 0",
             "run_id TEXT DEFAULT ''",
+            "reason TEXT DEFAULT 'borderline'",
         ):
             try:
                 cursor.execute(f"ALTER TABLE review_queue ADD COLUMN {col_def};")
@@ -225,6 +256,37 @@ class SchemaMixin:
                 pass
         apply_memory_schema_migrations(cursor)
         apply_video_schema_migrations(cursor)
+        self._migrate_user_version(cursor)
+
+    def _migrate_user_version(self, cursor: sqlite3.Cursor) -> None:
+        """Apply versioned PRAGMA user_version schema migrations idempotently."""
+        ver_row = cursor.execute("PRAGMA user_version;").fetchone()
+        cur_ver = int(ver_row[0]) if ver_row else 0
+        if cur_ver < 2:
+            for col_def in ("camera_id TEXT DEFAULT ''", "run_id TEXT DEFAULT ''"):
+                try:
+                    cursor.execute(f"ALTER TABLE sightings ADD COLUMN {col_def};")
+                except sqlite3.OperationalError:
+                    pass
+            cursor.execute(
+                "UPDATE sightings SET camera_id = source "
+                "WHERE (camera_id IS NULL OR camera_id = '') AND source != '' "
+                "AND (video_filename IS NULL OR video_filename = '');"
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sightings_camera_id ON sightings(camera_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sightings_run_id ON sightings(run_id);")
+            cursor.execute("PRAGMA user_version = 2;")
+        if cur_ver < 3:
+            try:
+                cursor.execute("ALTER TABLE world_timeline_events ADD COLUMN run_id TEXT DEFAULT '';")
+            except sqlite3.OperationalError:
+                pass
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_timeline_run_id ON world_timeline_events(run_id);")
+            cursor.execute("PRAGMA user_version = 3;")
+        if cur_ver < 4:
+            _migrate_v4_learned_classes(cursor)
+        if cur_ver < 5:
+            _migrate_v5_review_decisions(cursor)
 
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""

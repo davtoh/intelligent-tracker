@@ -30,7 +30,7 @@ def resolve_model_path(model_path: Optional[str]) -> str:
             try:
                 from intelligent_tracker.detectors.model_loader import ensure_model
 
-                candidate = ensure_model("yolov8n")
+                candidate = str(ensure_model("yolov8n"))
             except Exception:
                 pass
         model_path = candidate
@@ -168,13 +168,17 @@ class OnnxDetector(Detector):
         labels: Optional[Any] = None,
         input_size: Optional[Any] = None,
         providers: Optional[Any] = None,
+        agnostic_nms: bool = True,
+        low_conf_threshold: Optional[float] = None,
     ):
         super().__init__()
         import onnxruntime as ort
 
         self.model_path = resolve_model_path(model_path)
         self.conf_threshold = float(conf_threshold)
+        self.low_conf_threshold = float(low_conf_threshold) if low_conf_threshold is not None else None
         self.iou_threshold = float(iou_threshold)
+        self.agnostic_nms = bool(agnostic_nms)
         self.custom_input_size = input_size
         self.labels = resolve_labels(labels)
         self.classes = resolve_classes(classes, self.labels)
@@ -234,7 +238,8 @@ class OnnxDetector(Detector):
             class_ids = np.argmax(scores, axis=1)
             confidences = scores[np.arange(len(scores)), class_ids]
 
-        mask = confidences >= self.conf_threshold
+        min_conf = min(self.conf_threshold, self.low_conf_threshold) if (self.low_conf_threshold is not None and self.low_conf_threshold > 0.0) else self.conf_threshold
+        mask = confidences >= min_conf
         if self.classes is not None:
             mask = mask & np.isin(class_ids, list(self.classes))
         if not np.any(mask):
@@ -252,7 +257,7 @@ class OnnxDetector(Detector):
         orig_y2 = np.clip((y2 - pad_y) / r, 0.0, float(orig_h))
 
         boxes_xyxy = np.column_stack([orig_x1, orig_y1, orig_x2, orig_y2])
-        offset = class_ids[:, None].astype(float) * 4096.0
+        offset = 0.0 if self.agnostic_nms else class_ids[:, None].astype(float) * 4096.0
         keep = nms_numpy(boxes_xyxy + offset, confidences, self.iou_threshold)
 
         results = []
@@ -297,9 +302,9 @@ class OnnxDetector(Detector):
 
 
 # Attach static & class methods for 100% backward compatibility
-OnnxDetector.letterbox = staticmethod(letterbox)
-OnnxDetector.nms_numpy = staticmethod(nms_numpy)
-OnnxDetector.get_available_execution_providers = staticmethod(get_available_execution_providers)
+OnnxDetector.letterbox = staticmethod(letterbox)  # type: ignore[attr-defined]
+OnnxDetector.nms_numpy = staticmethod(nms_numpy)  # type: ignore[attr-defined]
+OnnxDetector.get_available_execution_providers = staticmethod(get_available_execution_providers)  # type: ignore[attr-defined]
 
 
 def _create_yolov8_detector(*args, **kwargs):

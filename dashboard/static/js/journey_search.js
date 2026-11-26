@@ -16,14 +16,32 @@
       .replace(/'/g, '&#39;');
   }
 
+  function handleThumbError(imgEl) {
+    if (!imgEl) return;
+    imgEl.onerror = null;
+    if (window.MediaEmptyState?.showEmpty) {
+      window.MediaEmptyState.showEmpty(imgEl, 'Snapshot Unavailable', 'Crop could not be loaded.', true);
+    } else {
+      imgEl.src = '/static/avatar-placeholder.svg';
+    }
+  }
+
   function renderHopCards(hops) {
     return hops.map((hop) => {
       const startTimeStr = new Date(hop.start_time * 1000).toLocaleTimeString();
       const transitBadge = hop.transit_time_from_prev
         ? `<div class="transit-connector"><span>⏱️ Transit: +${hop.transit_time_from_prev}s</span></div>`
         : '';
-      const thumbUrl = hop.snapshot_path ? `/crops/${hop.snapshot_path.split(/[\\/]/).pop()}` : '';
+      const thumbUrl = hop.snapshot_url || (hop.snapshot_path ? `/crops/${encodeURIComponent(hop.snapshot_path.split(/[\\/]/).pop())}` : '');
       const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(hop.video_filename, hop.media_offset_sec) || '';
+      const hopRef = hop.source_ref && Object.keys(hop.source_ref).length ? hop.source_ref : {
+        cameraId: hop.camera_id, videoFilename: hop.video_filename, runId: hop.run_id,
+        mediaOffsetSec: hop.media_offset_sec, zoneId: hop.zone_id, trackId: hop.track_id,
+      };
+      const jumpBtns = window.VideoTimelineLinks?.buildSourceJumpButtonsHtml?.(hopRef, { includeVideo: false }) || '';
+      const trackBadge = hop.track_id !== undefined && hop.track_id !== null && hop.track_id !== ''
+        ? `<span class="badge badge-secondary hop-track-badge">Track #${escapeHtml(hop.track_id)}</span>`
+        : '';
 
       return `
         ${transitBadge}
@@ -32,16 +50,17 @@
           <div class="hop-details">
             <div class="hop-title">
               <strong>${escapeHtml(hop.camera_name)}</strong>
+              ${trackBadge}
               <span class="hop-time">${startTimeStr}</span>
             </div>
             <div class="hop-meta">
               <span>Zone: ${escapeHtml(hop.zone_id || 'General Area')}</span> •
               <span>Dwell: ${hop.duration_seconds}s</span> •
               <span>Sightings: ${hop.sightings_count}</span>
-              ${seekBtn}
+              ${seekBtn} ${jumpBtns}
             </div>
           </div>
-          ${thumbUrl ? `<div class="hop-thumb"><img src="${thumbUrl}" alt="Snapshot" /></div>` : ''}
+          ${thumbUrl ? `<div class="hop-thumb"><img src="${thumbUrl}" alt="Snapshot" onerror="window.JourneySearch?.handleThumbError?.(this)" /></div>` : ''}
         </div>
       `;
     }).join('');
@@ -142,6 +161,7 @@
   let suggestTimer = null;
   let suggestItems = [];
   let activeSuggestIndex = -1;
+  let outsideDismissBound = false;
 
   function hideSuggestions() {
     const list = document.getElementById('journey-suggest-list');
@@ -181,19 +201,21 @@
     });
   }
 
-  async function fetchSuggestions(query) {
-    const trimmed = (query || '').trim();
-    if (!trimmed) {
-      hideSuggestions();
-      return;
-    }
+  async function fetchSuggestions(query = '') {
+    const trimmed = String(query ?? '').trim();
     try {
       const res = await fetch(`/api/entities/suggest?q=${encodeURIComponent(trimmed)}&limit=8`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        hideSuggestions();
+        return [];
+      }
       const data = await res.json();
-      renderSuggestions(data.items || []);
+      const items = Array.isArray(data?.items) ? data.items : [];
+      renderSuggestions(items);
+      return items;
     } catch (_err) {
       hideSuggestions();
+      return [];
     }
   }
 
@@ -206,6 +228,19 @@
     searchJourney(input?.value || item.name);
   }
 
+  function bindOutsideDismiss() {
+    if (outsideDismissBound || typeof document?.addEventListener !== 'function') return;
+    outsideDismissBound = true;
+    document.addEventListener('pointerdown', (e) => {
+      const target = e?.target;
+      const input = document.getElementById('journey-search-query');
+      const list = document.getElementById('journey-suggest-list');
+      const inInput = input && (target === input || (typeof input.contains === 'function' && input.contains(target)));
+      const inList = list && (target === list || (typeof list.contains === 'function' && list.contains(target)));
+      if (!inInput && !inList) hideSuggestions();
+    });
+  }
+
   function bindJourneySearch() {
     const btnSearch = document.getElementById('btn-journey-search');
     const btnExport = document.getElementById('btn-journey-export');
@@ -215,20 +250,21 @@
     if (btnSearch) {
       btnSearch.addEventListener('click', () => {
         hideSuggestions();
-        const query = (input?.value || '').trim();
-        searchJourney(query);
+        searchJourney((input?.value || '').trim());
       });
     }
 
     if (btnExport) {
       btnExport.addEventListener('click', () => {
         hideSuggestions();
-        const query = (input?.value || '').trim();
-        exportJourneyVideo(query);
+        exportJourneyVideo((input?.value || '').trim());
       });
     }
 
     if (input) {
+      const triggerOpen = () => fetchSuggestions(input.value || '');
+      input.addEventListener('focus', triggerOpen);
+      input.addEventListener('click', triggerOpen);
       input.addEventListener('input', () => {
         if (suggestTimer) ((id) => clearTimeout(id))(suggestTimer);
         suggestTimer = ((fn, ms) => setTimeout(fn, ms))(() => fetchSuggestions(input.value), 180);
@@ -262,6 +298,7 @@
         if (idx >= 0) selectSuggestion(idx);
       });
     }
+    bindOutsideDismiss();
   }
 
   window.JourneySearch = {
@@ -270,6 +307,7 @@
     exportVideo: exportJourneyVideo,
     fetchSuggestions,
     hideSuggestions,
+    handleThumbError,
   };
 })();
 

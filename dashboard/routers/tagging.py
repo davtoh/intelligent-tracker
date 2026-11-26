@@ -22,8 +22,10 @@ from dashboard.dependencies import (
     get_db,
     reload_all_galleries,
 )
+from dashboard.schemas_review import TagCorrectRequest
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from dashboard.services.negative_exemplar_service import NegativeExemplarService
+from dashboard.services.reversible_review_service import correct_known_entity_match
 from dashboard.services.roi_recognition_service import (
     RoiNotFoundError,
     RoiRecognitionService,
@@ -188,6 +190,35 @@ async def commit_roi_tag_endpoint(
     await asyncio.to_thread(_relabel_after_commit, svc, data, req)
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "data": data}
+
+
+@router.post("/api/tag/correct")
+async def correct_roi_tag_endpoint(
+    req: TagCorrectRequest,
+    request: Request,
+    db=Depends(get_db),
+    pool=Depends(get_camera_pool),
+):
+    """Correct a Known-state entity match with negative exemplar, relabel, and undoable audit."""
+    roi_svc = _build_service(request, req.camera_id, db=db, pool=pool)
+    neg_svc = _build_negative_service(request, req.camera_id, db=db, pool=pool)
+    cat = await asyncio.to_thread(_validate_tag_category, request, roi_svc, req.camera_id, req.category)
+    try:
+        return await asyncio.to_thread(
+            correct_known_entity_match,
+            roi_svc.db, roi_svc, neg_svc,
+            prior_entity_id=req.prior_entity_id, entity_name=req.entity_name, category=cat,
+            entity_id=req.entity_id, camera_id=req.camera_id, video_filename=req.video_filename,
+            timestamp_sec=req.timestamp_sec, bbox=req.bbox, crop_base64=req.crop_base64,
+            notes=req.notes, track_id=req.track_id, run_id=req.run_id, reviewer=req.reviewer,
+            pool=roi_svc.camera_pool, request=request, reload_galleries=reload_all_galleries,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RoiNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RoiUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _build_negative_service(

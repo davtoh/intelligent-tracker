@@ -14,9 +14,14 @@ from intelligent_tracker.reid import BaseFeatureExtractor
 from intelligent_tracker.tracker import Track, check_track_occlusions
 from intelligent_tracker.matching.types import EntityIdentifiedEvent
 from intelligent_tracker.matching.feature_buffer import TrackFeatureBuffer
+from intelligent_tracker.matching.identity_hysteresis import IdentityHysteresisTracker
 from intelligent_tracker.matching.session_gallery import SessionGalleryManager
 from intelligent_tracker.matching.adaptive_memory import apply_bounded_ema_update
-from intelligent_tracker.matching._gallery_matching import match_persistent_gallery
+from intelligent_tracker.matching._gallery_matching import (
+    log_skipped_signature_dims,
+    match_persistent_gallery,
+    resolve_entity_avatars,
+)
 
 logger = logging.getLogger(__name__)
 _COASTING_STATES = frozenset({"coasting", "occluded", "predicting"})
@@ -25,6 +30,27 @@ _COASTING_STATES = frozenset({"coasting", "occluded", "predicting"})
 def _is_coasting_or_occluded(track: Track) -> bool:
     """Return True when a track is coasting/occluded and must not pollute Re-ID features."""
     return getattr(track, "missed_frames", 0) > 0 or getattr(track, "state", "") in _COASTING_STATES
+
+
+def _should_skip_track_reid(matcher: "GalleryMatcher", track: Track, now: float) -> bool:
+    """Return True when a track should bypass feature extraction while preserving locked identity."""
+    if getattr(track, "is_cluttered", False):
+        return True
+    locked = matcher.hysteresis.get_locked(track.track_id)
+    if _is_coasting_or_occluded(track):
+        matcher._feature_buffer.mark_active(track.track_id, now)
+        if locked is not None:
+            matcher.hysteresis.apply_to_track(track, locked)
+        else:
+            matcher._feature_buffer.restore_track_identity(track)
+        return True
+    unready = (
+        (track.hits < matcher.min_track_hits and getattr(track, "state", "") != "confirmed")
+        or track.bbox[2] <= 4 or track.bbox[3] <= 4 or matcher.extractor is None
+    )
+    if unready and locked is not None:
+        matcher.hysteresis.apply_to_track(track, locked)
+    return unready
 
 
 def _recompute_mismatched_signatures(db: Any, extractor: Any, expected_dim: int) -> None:
@@ -41,11 +67,16 @@ def _recompute_mismatched_signatures(db: Any, extractor: Any, expected_dim: int)
         emb = sig.get("embedding")
         dim = int(emb.shape[0]) if hasattr(emb, "shape") and emb.ndim == 1 else (int(emb.size) if hasattr(emb, "size") else 0)
         crop_path = str(sig.get("crop_path") or "").strip()
-        if dim == expected_dim or not crop_path or not os.path.exists(crop_path):
+        if dim == expected_dim:
+            logger.debug("Signature id=%s already matches expected_dim=%d", sig.get("id"), expected_dim)
+            continue
+        if not crop_path or not os.path.exists(crop_path):
+            logger.debug("Signature id=%s dim=%d mismatch without readable crop_path", sig.get("id"), dim)
             continue
         try:
             crop = cv2.imread(crop_path)
             if crop is None or getattr(crop, "size", 0) == 0:
+                logger.debug("Empty crop skipped during signature recompute: %s", crop_path)
                 continue
             new_vec = extractor.extract_crop(crop)
             if hasattr(new_vec, "shape") and int(new_vec.shape[0]) == expected_dim and float(np.linalg.norm(new_vec)) > 1e-7:
@@ -87,11 +118,12 @@ class GalleryMatcher:
             if raw_cats is not None
             else None
         )
-        self._init_runtime_caches(kwargs.get("coast_grace_seconds", 2.0))
+        self._init_runtime_caches(kwargs)
         self.reload_gallery()
 
-    def _init_runtime_caches(self, coast_grace_seconds: float) -> None:
-        """Initialize session gallery, feature buffer, and empty gallery matrix."""
+    def _init_runtime_caches(self, kwargs: Dict[str, Any]) -> None:
+        """Initialize session gallery, feature buffer, hysteresis tracker, and gallery arrays."""
+        coast_grace = float(kwargs.get("coast_grace_seconds", 2.0))
         self._session_manager = SessionGalleryManager(
             session_reid_threshold=self.session_reid_threshold,
             spatial_bonus_radius=self.spatial_bonus_radius,
@@ -101,8 +133,13 @@ class GalleryMatcher:
         self.session_entities = self._session_manager.session_entities
         self._active_tracks_cache: Dict[int, Track] = {}
         self._feature_buffer = TrackFeatureBuffer(
-            feature_history_len=self.feature_history_len,
-            coast_grace_seconds=float(coast_grace_seconds),
+            feature_history_len=self.feature_history_len, coast_grace_seconds=coast_grace,
+        )
+        self.hysteresis = IdentityHysteresisTracker(
+            confirm_k=int(kwargs.get("hysteresis_k", kwargs.get("confirm_k", 1))),
+            confirm_threshold=float(kwargs.get("hysteresis_threshold", kwargs.get("confirm_threshold", self.reid_threshold))),
+            contradict_m=int(kwargs.get("hysteresis_contradict_m", kwargs.get("contradict_m", 5))),
+            coast_grace_seconds=coast_grace,
         )
         self._track_features = self._feature_buffer.track_features
         self._last_sighting_time = self._feature_buffer.last_sighting_time
@@ -111,6 +148,7 @@ class GalleryMatcher:
         self.gallery_entity_ids: List[int] = []
         self.gallery_names: List[str] = []
         self.gallery_categories: List[str] = []
+        self.entity_avatars: Dict[int, str] = {}
         self.negative_matrix = np.empty((0, 0), dtype=np.float32)
         self.negative_entity_ids: List[Optional[int]] = []
         self.negative_labels: List[str] = []
@@ -123,42 +161,22 @@ class GalleryMatcher:
         """Reload and vectorize all enrolled active signatures from SQLite database."""
         if self.db is None:
             self.gallery_matrix = np.empty((0, 0), dtype=np.float32)
-            self.gallery_entity_ids = []
-            self.gallery_names = []
-            self.gallery_categories = []
+            self.gallery_entity_ids, self.gallery_names, self.gallery_categories = [], [], []
+            self.entity_avatars = {}
             self.negative_matrix = np.empty((0, 0), dtype=np.float32)
-            self.negative_entity_ids = []
-            self.negative_labels = []
+            self.negative_entity_ids, self.negative_labels = [], []
             return
         expected_dim = getattr(self.extractor, "embedding_dim", None)
         if expected_dim is not None and self.extractor is not None:
             _recompute_mismatched_signatures(self.db, self.extractor, int(expected_dim))
         mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=expected_dim)
-        self.gallery_matrix = mat
-        self.gallery_entity_ids = ids
-        self.gallery_names = names
-        self.gallery_categories = categories
+        self.gallery_matrix, self.gallery_entity_ids = mat, ids
+        self.gallery_names, self.gallery_categories = names, categories
+        self.entity_avatars = resolve_entity_avatars(self.db)
         if hasattr(self.db, "get_negative_embeddings"):
             neg_mat, neg_ids, neg_labels = self.db.get_negative_embeddings(expected_dim=expected_dim)
-            self.negative_matrix = neg_mat
-            self.negative_entity_ids = neg_ids
-            self.negative_labels = neg_labels
-
-        if expected_dim is not None and len(ids) == 0:
-            try:
-                all_sigs = self.db.get_signatures()
-                if all_sigs:
-                    other_dims = {
-                        (s["embedding"].shape[0] if hasattr(s.get("embedding"), "shape") else 0)
-                        for s in all_sigs
-                    }
-                    logger.info(
-                        "GalleryMatcher: %d active signatures skipped (dim mismatch: %s vs %s dim=%d).",
-                        len(all_sigs), ", ".join(str(d) for d in sorted(other_dims) if d > 0),
-                        self.extractor.__class__.__name__, expected_dim,
-                    )
-            except Exception:
-                pass
+            self.negative_matrix, self.negative_entity_ids, self.negative_labels = neg_mat, neg_ids, neg_labels
+        log_skipped_signature_dims(self, expected_dim, ids)
 
     refresh_gallery = reload_gallery
 
@@ -186,19 +204,8 @@ class GalleryMatcher:
         zone_id: str = "",
     ) -> Optional[EntityIdentifiedEvent]:
         """Process a single track: extract feature, smooth embedding, and query gallery."""
-        if getattr(track, "is_cluttered", False):
-            return None
         now = timestamp if timestamp is not None else time.time()
-        if _is_coasting_or_occluded(track):
-            self._feature_buffer.mark_active(track.track_id, now)
-            self._feature_buffer.restore_track_identity(track)
-            return None
-        if (
-            (track.hits < self.min_track_hits and getattr(track, "state", "") != "confirmed")
-            or track.bbox[2] <= 4
-            or track.bbox[3] <= 4
-            or self.extractor is None
-        ):
+        if _should_skip_track_reid(self, track, now):
             return None
 
         source = source or self.camera_id
@@ -252,6 +259,7 @@ class GalleryMatcher:
 
         active_tids = set(tracks.keys())
         self._feature_buffer.prune_stale(active_tids, now)
+        self.hysteresis.prune_stale(active_tids, now)
         self._session_manager.update_exit_telemetry(tracks)
         check_track_occlusions(tracks, timestamp=now)
 
@@ -295,27 +303,23 @@ class GalleryMatcher:
         if not entity:
             return False
 
-        if self.world_bridge is not None:
-            self.world_bridge.reassign_track(
-                self.camera_id, track, new_entity_id,
-                name=entity["name"], category=entity["category"],
-            )
-        else:
-            track.entity_id = new_entity_id
-            track.entity_name = entity["name"]
-            track.entity_category = entity["category"]
-            track.reid_score = 1.0
-
-        self._identified_tracks[track.track_id] = {
-            "entity_id": new_entity_id,
-            "name": entity["name"],
-            "category": entity["category"],
-            "similarity": 1.0,
-        }
-
         if frame is not None and self.extractor is not None and self.db is not None:
             feat = self.extractor.extract(frame, track.bbox)
             self.db.add_signature(new_entity_id, feat)
             self.reload_gallery()
 
+        avatar_url = self.entity_avatars.get(new_entity_id)
+        self.hysteresis.force_bind(
+            track.track_id, new_entity_id, entity["name"], entity["category"],
+            avatar_url=avatar_url, track=track,
+        )
+        if self.world_bridge is not None:
+            self.world_bridge.reassign_track(
+                self.camera_id, track, new_entity_id,
+                name=entity["name"], category=entity["category"],
+            )
+        self._identified_tracks[track.track_id] = {
+            "entity_id": new_entity_id, "name": entity["name"],
+            "category": entity["category"], "similarity": 1.0, "avatar_url": avatar_url,
+        }
         return True

@@ -11,6 +11,8 @@ import sqlite3
 import time
 from typing import Any
 
+from intelligent_tracker.source_ref import source_ref_from_row
+
 _FTS_STOPWORDS = frozenset({
     "a", "an", "and", "are", "at", "be", "been", "by", "did", "do",
     "does", "for", "from", "had", "has", "have", "how", "in", "is",
@@ -39,8 +41,8 @@ _INSERT_TIMELINE_SQL = """
 INSERT INTO world_timeline_events (
     event_type, entity_id, entity_name, category, camera_id, zone_id,
     timestamp, confidence, title, summary, tags, metadata_json,
-    video_filename, media_offset_sec
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    video_filename, media_offset_sec, run_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -72,6 +74,9 @@ def _hydrate_row(row: sqlite3.Row, json_col: str, out_key: str) -> dict[str, Any
     data[out_key] = _parse_json_dict(data.get(json_col))
     if "is_read" in data:
         data["is_read"] = bool(data["is_read"])
+    if out_key == "metadata":
+        data["run_id"] = str(data.get("run_id") or data[out_key].get("run_id") or "").strip()
+        data["source_ref"] = source_ref_from_row(data)
     return data
 
 
@@ -223,17 +228,19 @@ class MemoryMixin:
         timestamp: float | None = None, confidence: float = 1.0, title: str = "",
         tags: str = "", metadata: dict[str, Any] | None = None,
         video_filename: str = "", media_offset_sec: float | None = None,
+        run_id: str = "",
     ) -> int:
         """Insert a timeline event and automatically index it into ``world_timeline_fts``."""
         ts = float(timestamp) if timestamp is not None else time.time()
         meta = dict(metadata or {})
         v_fn = str(video_filename or meta.get("video_filename") or "").strip()
         m_off = float(media_offset_sec if media_offset_sec is not None else (meta.get("media_offset_sec") or 0.0))
+        rid = str(run_id or meta.get("run_id") or "").strip()
         values = (
             event_type.strip(), entity_id, entity_name.strip(), category.strip(),
             camera_id.strip(), zone_id.strip(), ts, float(confidence),
             title.strip(), summary.strip(), tags.strip(), json.dumps(meta, sort_keys=True),
-            v_fn, m_off,
+            v_fn, m_off, rid,
         )
         with self._lock:
             if self._conn is None:

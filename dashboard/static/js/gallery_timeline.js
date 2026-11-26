@@ -11,15 +11,12 @@
   let timelineTotal = 0;
   let timelineHasMore = false;
   let timelineVideoFilename = '';
+  let timelineStartTime = '';
+  let timelineEndTime = '';
 
   function escapeHtml(str) {
     if (!str) return '';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   async function loadGallery() {
@@ -83,6 +80,7 @@
     document.querySelectorAll('.btn-view-sightings').forEach(btn => {
       btn.addEventListener('click', async () => {
         const entId = btn.getAttribute('data-id');
+        if (window.App?.navigate) return window.App.navigate('tab-timeline', { entityId: entId });
         window.switchTab?.('tab-timeline');
         await loadTimelineFilters();
         const sel = document.getElementById('timeline-entity-select');
@@ -165,6 +163,10 @@
 
   function jumpToLiveSource(source) {
     if (!source) return false;
+    if (window.App?.navigate) {
+      window.App.navigate('tab-live', { cameraId: source });
+      return true;
+    }
     window.switchTab?.('tab-live');
     window.App?.switchCamera?.(source);
     return true;
@@ -197,7 +199,7 @@
               <span>🕒 ${escapeHtml(timeStr)}</span> &bull;
               <span>Track #${s.track_id}</span> &bull;
               <span>Match Confidence: ${confPct}%</span>
-              ${seekBtn}${liveBtn}
+              ${seekBtn}${liveBtn}${window.ReviewUndoAndFlag?.buildReportWrongButtonHtml?.(s) || ''}
             </div>
           </div>
         </div>
@@ -235,6 +237,8 @@
     if (zoneId) url += `&zone_id=${encodeURIComponent(zoneId)}`;
     if (sourceVal) url += `&source=${encodeURIComponent(sourceVal)}`;
     if (timelineVideoFilename) url += `&video_filename=${encodeURIComponent(timelineVideoFilename)}`;
+    if (timelineStartTime !== '') url += `&start_time=${encodeURIComponent(timelineStartTime)}`;
+    if (timelineEndTime !== '') url += `&end_time=${encodeURIComponent(timelineEndTime)}`;
     timelineList.innerHTML = '<div class="empty-state">Loading sightings...</div>';
     try {
       const res = await fetch(url);
@@ -261,6 +265,8 @@
     if (opts.source !== undefined && srcSel) srcSel.value = opts.source || '';
     if (opts.limit !== undefined && limSel) limSel.value = String(opts.limit);
     timelineVideoFilename = opts.videoFilename || '';
+    timelineStartTime = opts.startTime ?? opts.from ?? '';
+    timelineEndTime = opts.endTime ?? opts.to ?? '';
     timelineOffset = Math.max(0, Number(opts.offset || 0));
     await loadSightings();
   }
@@ -286,10 +292,10 @@
   }
 
   function showSnapshotModal(imgUrl, title) {
+    window.SnapshotModalOverlay?.reset?.();
     const modalSnapshot = document.getElementById('modal-snapshot-view');
     const modalSnapshotImg = document.getElementById('snapshot-modal-img');
     const modalSnapshotMeta = document.getElementById('snapshot-modal-meta');
-
     if (modalSnapshot && modalSnapshotImg && modalSnapshotMeta) {
       modalSnapshotImg.src = imgUrl;
       modalSnapshotMeta.textContent = title;
@@ -299,6 +305,7 @@
 
   function initSnapshotModal() {
     document.getElementById('modal-snapshot-close')?.addEventListener('click', () => {
+      window.SnapshotModalOverlay?.reset?.();
       const modal = document.getElementById('modal-snapshot-view');
       if (modal) modal.style.display = 'none';
     });
@@ -323,21 +330,12 @@
   }
 
   window.GalleryTimeline = {
-    loadGallery: loadGallery,
-    renderGalleryGrid: renderGalleryGrid,
-    bindGalleryEvents: bindGalleryEvents,
-    loadTimelineFilters: loadTimelineFilters,
-    loadSightings: loadSightings,
-    bindTimelineEvents: bindTimelineEvents,
-    showSnapshotModal: showSnapshotModal,
-    initSnapshotModal: initSnapshotModal,
+    loadGallery, renderGalleryGrid, bindGalleryEvents, loadTimelineFilters,
+    loadSightings, bindTimelineEvents, showSnapshotModal, initSnapshotModal,
   };
 
   window.TimelineView = {
-    applyFilter: applyTimelineFilter,
-    loadSightings: loadSightings,
-    loadTimelineFilters: loadTimelineFilters,
-    jumpToLiveSource: jumpToLiveSource,
+    applyFilter: applyTimelineFilter, loadSightings, loadTimelineFilters, jumpToLiveSource,
   };
 })();
 

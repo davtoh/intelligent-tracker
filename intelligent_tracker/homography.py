@@ -258,6 +258,7 @@ def _draw_bev_zones(
             poly_cam = poly_cam.tolist()
         canvas_pts = [ground_to_canvas(gx, gy) for gx, gy in transform_polygon(poly_cam)]
         if len(canvas_pts) < 3:
+            logger.debug("Skipping BEV zone '%s': fewer than 3 projected vertices (%d)", z_name, len(canvas_pts))
             continue
         pts_arr = np.array(canvas_pts, dtype=np.int32).reshape((-1, 1, 2))
         z_overlay = canvas.copy()

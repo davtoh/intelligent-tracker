@@ -27,23 +27,14 @@
     }),
   };
 
-  function getRenderer() {
-    return window.ScrubberOverlayRenderer || null;
-  }
-
-  function getPalettes() {
-    return window.UnifiedCanvasOverlay?.PALETTES || getRenderer()?.PALETTES || [];
-  }
-
+  function getRenderer() { return window.ScrubberOverlayRenderer || null; }
+  function getPalettes() { return window.UnifiedCanvasOverlay?.PALETTES || getRenderer()?.PALETTES || []; }
   function setFeatureVisibility(key, enabled) {
     if (!key || !(key in featureVisibility)) return;
     featureVisibility[key] = Boolean(enabled);
     render();
   }
-
-  function getFeatureVisibility() {
-    return { ...featureVisibility };
-  }
+  function getFeatureVisibility() { return { ...featureVisibility }; }
 
   function getBaseStem(filename) {
     return filename ? String(filename).trim().replace(/_h264(\.[^.]+)$/i, '$1').replace(/\.[^.]+$/, '') : '';
@@ -61,9 +52,13 @@
   }
 
   function getTracksAtCurrentTime() {
-    const layer = getPrimaryLayer();
-    const rec = layer && videoPlayer ? getRenderer()?.findClosestDetections(layer.frameDetections, videoPlayer.currentTime || 0) : null;
-    return rec?.tracks || [];
+    if (!videoPlayer) return [];
+    const renderer = getRenderer(), t = videoPlayer.currentTime || 0, out = [];
+    for (const layer of activeLayers.values()) {
+      const rec = renderer?.findClosestDetections(layer.frameDetections, t);
+      if (Array.isArray(rec?.tracks)) rec.tracks.forEach((trk) => out.push({ ...trk, _layerId: layer.runId }));
+    }
+    return out;
   }
 
   function bindRoiTagger() {
@@ -79,7 +74,7 @@
         sourceWidth: videoPlayer?.videoWidth || 0, sourceHeight: videoPlayer?.videoHeight || 0,
       }),
       onRenderOverlay: render,
-      onTrackClick: ({ track, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, bbox: track.bbox }),
+      onTrackClick: ({ track, overlappingTracks, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, overlappingTracks, bbox: track.bbox }),
       onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),
     });
   }

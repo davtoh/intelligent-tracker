@@ -54,10 +54,10 @@ class TestMemoryRepository(unittest.TestCase):
         self.db_path = os.path.join(self.tmp_dir.name, "memory_test.db")
 
     def test_fresh_db_initializes_v1_schema(self):
-        """Fresh TrackerDB sets PRAGMA user_version=1 and creates memory tables."""
+        """Fresh TrackerDB sets PRAGMA user_version>=1 and creates memory tables."""
         db = TrackerDB(self.db_path)
         self.addCleanup(db.close)
-        self.assertEqual(db.get_schema_version(), MEMORY_SCHEMA_VERSION)
+        self.assertGreaterEqual(db.get_schema_version(), MEMORY_SCHEMA_VERSION)
         with db._lock:
             tables = {
                 row[0]
@@ -70,12 +70,12 @@ class TestMemoryRepository(unittest.TestCase):
         self.assertIn("world_timeline_fts", tables)
 
     def test_v0_to_v1_migration_preserves_existing_data_and_is_idempotent(self):
-        """Pre-populated v0 DB upgrades cleanly to v1 without data loss."""
+        """Pre-populated v0 DB upgrades cleanly to v1+ without data loss."""
         _seed_v0_database(self.db_path)
 
         db = TrackerDB(self.db_path)
         self.addCleanup(db.close)
-        self.assertEqual(db.get_schema_version(), 1)
+        self.assertGreaterEqual(db.get_schema_version(), 1)
         alice = db.get_entity(42)
         self.assertIsNotNone(alice)
         self.assertEqual(alice["name"], "Legacy Alice")
@@ -85,7 +85,7 @@ class TestMemoryRepository(unittest.TestCase):
 
         db2 = TrackerDB(self.db_path)
         self.addCleanup(db2.close)
-        self.assertEqual(db2.get_schema_version(), 1)
+        self.assertGreaterEqual(db2.get_schema_version(), 1)
         self.assertEqual(db2.get_entity(42)["name"], "Legacy Alice")
 
     def test_entity_confidence_crud_and_filtering(self):

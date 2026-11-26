@@ -106,13 +106,16 @@ def query_merged_events(
     safe_offset = max(0, int(offset))
     fetch_window = safe_limit + safe_offset
     seen: set[tuple[Any, Any, float]] = set()
-    merged, bus_keys = _collect_bus_events(
-        mgr, fetch_window, seen, camera_id, severity, event_type, zone_id, start_time, end_time
-    )
-    db_items, db_total = _collect_db_events(
-        db, fetch_window, seen, bus_keys, camera_id, severity, event_type, zone_id, start_time, end_time
-    )
-    merged.extend(db_items)
+    if db is not None and not getattr(db, "_closed", False) and hasattr(db, "search_timeline_events"):
+        merged, db_total = _collect_db_events(
+            db, fetch_window, seen, set(), camera_id, severity, event_type, zone_id, start_time, end_time
+        )
+        bus_keys: set[tuple[Any, Any, float]] = set()
+    else:
+        merged, bus_keys = _collect_bus_events(
+            mgr, fetch_window, seen, camera_id, severity, event_type, zone_id, start_time, end_time
+        )
+        db_total = 0
     merged.sort(key=lambda e: float(e.get("timestamp") or 0.0), reverse=True)
     page_items = merged[safe_offset : safe_offset + safe_limit]
     if not paginated and safe_offset == 0:

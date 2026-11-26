@@ -4,6 +4,7 @@
 
 import copy
 import logging
+import uuid
 from typing import Any
 
 from dashboard.dependencies import get_db, get_scenario_mgr
@@ -39,6 +40,7 @@ def parse_analyze_options(
     req: VideoAnalyzeRequest | None,
     scenario_camera_id: str | None = None,
     tracked_categories: str | None = None,
+    tracker: str | None = None,
 ) -> dict[str, Any]:
     """Normalize query and JSON body options for batch video analytics."""
     sr = req.sample_rate if (req and req.sample_rate is not None) else sample_rate
@@ -58,12 +60,14 @@ def parse_analyze_options(
     is_async = bool(async_mode) if is_async is None else is_async
     raw_scen = req.scenario_camera_id if (req and req.scenario_camera_id is not None) else scenario_camera_id
     scen_cam = str(raw_scen).strip() if raw_scen and str(raw_scen).strip() else None
+    trk = (getattr(req, "tracker", None) if req else None) or tracker
     return {
         "sample_rate": sr,
         "detector": det,
         "confidence": conf,
         "classes": target_classes,
         "tracked_categories": target_cats,
+        "tracker": str(trk).strip().lower() if trk and str(trk).strip() else None,
         "is_async": is_async,
         "scenario_camera_id": scen_cam,
     }
@@ -108,7 +112,7 @@ def _build_offline_analytics_and_bus(
     event_bus = EventBus(capacity=500)
     event_bus.start()
     collected_alerts: list[dict[str, Any]] = []
-    media_state: dict[str, Any] = {"offset_sec": 0.0, "start_wall_time": None}
+    media_state: dict[str, Any] = {"offset_sec": 0.0, "start_wall_time": None, "run_id": ""}
 
     def _tag_and_collect(event: Any) -> None:
         raw_offset = getattr(event, "media_offset_sec", None)
@@ -117,11 +121,16 @@ def _build_offline_analytics_and_bus(
         offset_sec = float(raw_offset) if raw_offset is not None else (
             round(ev_ts - float(base), 6) if base is not None and ev_ts >= float(base) else float(media_state["offset_sec"])
         )
+        active_run_id = str(media_state.get("run_id") or "").strip()
         setattr(event, "video_filename", safe_name)
         setattr(event, "media_offset_sec", offset_sec)
+        if active_run_id:
+            setattr(event, "run_id", active_run_id)
         meta = getattr(event, "metadata", None)
         if isinstance(meta, dict):
             meta["video_filename"], meta["media_offset_sec"] = safe_name, offset_sec
+            if active_run_id:
+                meta["run_id"] = active_run_id
         if isinstance(event, _ALERT_EVENT_TYPES):
             collected_alerts.append(_serialize_offline_alert(event, safe_name, offset_sec))
 
@@ -132,6 +141,26 @@ def _build_offline_analytics_and_bus(
     )
     _apply_scenario_to_analytics(analytics, scenario_camera_id)
     return analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state
+
+
+def _attach_run_id(indexer: VideoIndexer, run_id: str) -> None:
+    """Attach pre-generated run_id onto indexer, matcher, active_learning, and media state."""
+    rid = str(run_id or "").strip()
+    if not rid:
+        return
+    setattr(indexer, "run_id", rid)
+    matcher = getattr(indexer, "matcher", None)
+    if matcher is not None:
+        setattr(matcher, "run_id", rid)
+    al_mgr = getattr(indexer, "active_learning", None)
+    if al_mgr is not None:
+        setattr(al_mgr, "run_id", rid)
+        triage = getattr(al_mgr, "_triage", None)
+        if triage is not None:
+            setattr(triage, "run_id", rid)
+    state = getattr(indexer, "_media_offset_state", None)
+    if isinstance(state, dict):
+        state["run_id"] = rid
 
 
 def _teardown_indexer_bus(indexer: VideoIndexer | None) -> None:
@@ -176,6 +205,7 @@ def create_video_indexer(
     *,
     confidence_engine: Any = None,
     world_graph: Any = None,
+    run_id: str = "",
 ) -> VideoIndexer:
     """Instantiate VideoIndexer with spatial scenario, RSAC, ActiveLearning, and EventBus wiring."""
     analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state = _build_offline_analytics_and_bus(
@@ -192,6 +222,8 @@ def create_video_indexer(
         "active_learning": al_mgr, "event_bus": event_bus, "video_filename": safe_name,
         "fts_index": fts_index, "confidence_engine": resolved_ce, "world_graph": resolved_wg,
     }
+    if opts.get("tracker"):
+        kwargs["tracker_type"] = opts["tracker"]
     try:
         indexer = VideoIndexer(detector_name=det, **kwargs)
     except Exception as err:
@@ -202,6 +234,7 @@ def create_video_indexer(
     setattr(indexer, "_collected_alerts", collected_alerts)
     setattr(indexer, "_fts_index", fts_index)
     setattr(indexer, "_media_offset_state", media_state)
+    _attach_run_id(indexer, run_id)
     return indexer
 
 
@@ -237,6 +270,7 @@ def finalize_analytics_report(
     summary: dict[str, Any],
     safe_name: str,
     config_meta: dict[str, Any],
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Assemble occurrence report metrics and persist stacked report + detection stream."""
     _teardown_indexer_bus(indexer)
@@ -250,6 +284,7 @@ def finalize_analytics_report(
     report["execution_summary"] = summary
     report.update(_extract_spatial_report_fields(indexer, config_meta))
 
+    resolved_run_id = str(run_id or getattr(indexer, "run_id", "") or "").strip() or None
     run_rec = save_report_run(
         filename=safe_name,
         report=report,
@@ -257,6 +292,7 @@ def finalize_analytics_report(
         frame_detections=summary.get("frame_detections"),
         source_resolution=summary.get("source_resolution"),
         source_fps=summary.get("source_fps"),
+        run_id=resolved_run_id,
     )
     report["run_id"] = run_rec.get("run_id")
     return report
@@ -277,13 +313,14 @@ def submit_async_analytics_job(
     }
 
     def _runner(job, stop_event, progress_cb):
-        indexer = create_video_indexer(db, opts, safe_name=safe_name)
+        run_id = f"run_{uuid.uuid4().hex[:8]}"
+        indexer = create_video_indexer(db, opts, safe_name=safe_name, run_id=run_id)
         try:
             summary = indexer.process_video(
                 video_path=path, verbose=False, progress_callback=progress_cb, stop_event=stop_event,
                 frame_flush_callback=lambda chunk, meta: append_progressive_chunk(job.job_id, safe_name, chunk, meta),
             )
-            return finalize_analytics_report(indexer, summary, safe_name, config_meta)
+            return finalize_analytics_report(indexer, summary, safe_name, config_meta, run_id=run_id)
         finally:
             _teardown_indexer_bus(indexer)
             finalize_progressive_stream(job.job_id)
@@ -301,10 +338,11 @@ def run_sync_analytics(safe_name: str, path: str, opts: dict[str, Any]) -> dict[
         "confidence": opts["confidence"], "classes": opts["classes"],
         "scenario_camera_id": opts.get("scenario_camera_id"),
     }
-    indexer = create_video_indexer(db, opts, safe_name=safe_name)
+    run_id = f"run_{uuid.uuid4().hex[:8]}"
+    indexer = create_video_indexer(db, opts, safe_name=safe_name, run_id=run_id)
     try:
         summary = indexer.process_video(video_path=path, verbose=False)
-        return finalize_analytics_report(indexer, summary, safe_name, config_meta)
+        return finalize_analytics_report(indexer, summary, safe_name, config_meta, run_id=run_id)
     finally:
         _teardown_indexer_bus(indexer)
 

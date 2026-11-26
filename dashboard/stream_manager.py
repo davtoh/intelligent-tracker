@@ -88,7 +88,9 @@ def _init_manager_config(
 
     manager.db_path = db_path or os.environ.get("TRACKER_DB", "data/tracker.db")
     loaded_cfg = load_stream_config(manager.config_path)
-    manager.cfg = {**loaded_cfg, **custom_cfg} if custom_cfg else loaded_cfg
+    from intelligent_tracker.config_merge import deep_merge
+
+    manager.cfg = deep_merge(loaded_cfg, custom_cfg) if custom_cfg else loaded_cfg
 
     manager.db = None
     manager.video_source = None

@@ -8,15 +8,12 @@ from datetime import datetime
 from typing import Any
 
 from intelligent_tracker.journey_models import EntityJourney, JourneyHop
+from intelligent_tracker.source_ref import build_source_ref, snapshot_path_to_url
 from intelligent_tracker.world.coordinates import compute_hop_global_path
 
 __all__ = [
-    "EntityJourney",
-    "JourneyHop",
-    "parse_sighting_timestamp",
-    "build_journey_hop",
-    "segment_sightings_into_hops",
-    "build_journey_narrative",
+    "EntityJourney", "JourneyHop", "parse_sighting_timestamp",
+    "build_journey_hop", "segment_sightings_into_hops", "build_journey_narrative",
 ]
 
 
@@ -68,6 +65,15 @@ def _extract_media_ref(sightings: list[dict[str, Any]]) -> tuple[str, float]:
     return "", 0.0
 
 
+def _extract_hop_provenance(sightings: list[dict[str, Any]]) -> tuple[int | None, int | None, str, str, str]:
+    tid = next((int(s["track_id"]) for s in sightings if s.get("track_id") not in (None, "")), None)
+    eid = next((int(s["entity_id"]) for s in sightings if s.get("entity_id") not in (None, "")), None)
+    rid = next((str(s["run_id"]).strip() for s in sightings if s.get("run_id")), "")
+    cam = next((str(s["camera_id"]).strip() for s in sightings if s.get("camera_id")), "")
+    snap = next((str(s["snapshot_path"]).strip() for s in sightings if s.get("snapshot_path")), "")
+    return tid, eid, rid, cam, snap
+
+
 def build_journey_hop(
     index: int, camera_id: str, sightings: list[dict[str, Any]], previous_hops: list[JourneyHop],
     coordinate_mapper: Any = None, homographies: dict[str, Any] | None = None,
@@ -80,6 +86,15 @@ def build_journey_hop(
 
     snap, zone_id, sample_bboxes = _extract_sighting_summary(sightings)
     video_filename, media_offset_sec = _extract_media_ref(sightings)
+    track_id, entity_id, run_id, explicit_cam, raw_snap = _extract_hop_provenance(sightings)
+    snapshot_url = snapshot_path_to_url(snap or raw_snap)
+    ref_cam = explicit_cam or ("" if (video_filename and camera_id == video_filename) else camera_id)
+    source_ref = build_source_ref(
+        camera_id=ref_cam, video_filename=video_filename, run_id=run_id,
+        media_offset_sec=media_offset_sec if (video_filename or media_offset_sec) else None,
+        ts=start_t, track_id=track_id, entity_id=entity_id, zone_id=zone_id or "",
+        bbox=sample_bboxes[0] if sample_bboxes else None, snapshot_url=snapshot_url,
+    )
     global_path = compute_hop_global_path(camera_id, sightings, coordinate_mapper=coordinate_mapper, homographies=homographies)
     cam_name = camera_id.upper()
     if not cam_name.startswith("CAM"):
@@ -93,9 +108,8 @@ def build_journey_hop(
         sample_bboxes=sample_bboxes,
         global_start_xy=global_path[0] if global_path else None,
         global_end_xy=global_path[-1] if global_path else None,
-        global_path=global_path,
-        video_filename=video_filename,
-        media_offset_sec=media_offset_sec,
+        global_path=global_path, video_filename=video_filename, media_offset_sec=media_offset_sec,
+        track_id=track_id, run_id=run_id, snapshot_url=snapshot_url, source_ref=source_ref,
     )
 
 
@@ -110,7 +124,7 @@ def segment_sightings_into_hops(
     current_cam: str | None = None
 
     for s in sorted_sightings:
-        cam = s.get("source") or "cam_01"
+        cam = str(s.get("camera_id") or "").strip() or str(s.get("source") or "").strip() or "cam_01"
         s_ts = parse_sighting_timestamp(s.get("timestamp"))
         if current_cam is None:
             current_cam = cam

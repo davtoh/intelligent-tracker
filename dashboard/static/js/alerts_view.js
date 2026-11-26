@@ -6,15 +6,9 @@
   'use strict';
 
   const state = {
-    offset: 0,
-    limit: 50,
-    total: 0,
-    hasMore: false,
-    eventsByIndex: [],
-    featureVisibility: {
-      bboxes: true, track_ids: true, dwell_timers: true,
-      velocity: false, zones: true, tripwires: true,
-    },
+    offset: 0, limit: 50, total: 0, hasMore: false,
+    eventsByIndex: [], selectedIds: new Set(), selectAllMatching: false,
+    featureVisibility: { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true },
     activePreviewEvent: null,
   };
 
@@ -30,8 +24,9 @@
     const sevEl = document.getElementById('alerts-filter-severity');
     const typeEl = document.getElementById('alerts-filter-type');
     const zoneEl = document.getElementById('alerts-filter-zone');
+    const cameraVal = camEl ? String(camEl.value ?? '').trim() : String(window.App?.getActiveCameraId?.() ?? '').trim();
     return {
-      camera_id: (camEl?.value ?? window.App?.getActiveCameraId?.() ?? '').trim(),
+      camera_id: cameraVal,
       severity: (sevEl?.value || '').trim(),
       event_type: (typeEl?.value || '').trim(),
       zone_id: (zoneEl?.value || '').trim(),
@@ -85,8 +80,11 @@
     const rowClass = ev.is_read ? 'alert-row-read' : 'alert-row-unread';
     const sourceCell = window.AlertsAdmin?.buildSourceLinkHtml?.(ev) || escapeHtml(ev.zone_id || ev.camera_id || 'System');
     const actionCell = window.AlertsAdmin?.buildActionButtonsHtml?.(ev) || '<span class="text-subtle">--</span>';
+    const evId = ev.id !== undefined && ev.id !== null ? String(ev.id) : '';
+    const isChecked = state.selectAllMatching || (evId && state.selectedIds.has(evId));
     return `
-      <tr class="${rowClass}" data-event-id="${escapeHtml(ev.id ?? '')}" data-is-read="${ev.is_read ? '1' : '0'}">
+      <tr class="${rowClass}" data-event-id="${escapeHtml(evId)}" data-is-read="${ev.is_read ? '1' : '0'}">
+        <td><input type="checkbox" class="alert-row-select" data-event-id="${escapeHtml(evId)}" ${isChecked ? 'checked' : ''} onchange="window.AlertsView?.toggleRowSelection?.('${escapeHtml(evId)}', this.checked)" /></td>
         <td>${escapeHtml(timeStr)}</td><td><strong>${escapeHtml(type)}</strong></td>
         <td><span class="${severityClass}">${escapeHtml(severityText)}</span></td>
         <td>${sourceCell}</td>
@@ -110,69 +108,33 @@
   }
 
   function renderSnapshotOverlay() {
-    const img = document.getElementById('snapshot-modal-img');
-    const canvas = document.getElementById('snapshot-modal-canvas');
-    const U = window.UnifiedCanvasOverlay;
-    if (!img || !canvas || !U) return;
-    const ctx = canvas.getContext?.('2d');
-    if (!ctx) return;
+    if (window.SnapshotModalOverlay?.render) return window.SnapshotModalOverlay.render();
+    const img = document.getElementById('snapshot-modal-img'), canvas = document.getElementById('snapshot-modal-canvas');
+    const U = window.UnifiedCanvasOverlay, ctx = canvas?.getContext?.('2d');
+    if (!img || !canvas || !U || !ctx) return;
     const imgRect = img.getBoundingClientRect?.() || { width: img.naturalWidth || 640, height: img.naturalHeight || 360, left: 0, top: 0 };
     const stageRect = img.parentElement?.getBoundingClientRect?.() || imgRect;
-    const mediaW = img.naturalWidth || imgRect.width || 640;
-    const mediaH = img.naturalHeight || imgRect.height || 360;
+    const mediaW = img.naturalWidth || imgRect.width || 640, mediaH = img.naturalHeight || imgRect.height || 360;
     U.syncCanvasDpr(canvas, ctx, stageRect.width || mediaW, stageRect.height || mediaH, window.devicePixelRatio || 1);
-    const box = U.computeContainBox(imgRect, stageRect, mediaW, mediaH);
-    const ev = state.activePreviewEvent || {};
+    const box = U.computeContainBox(imgRect, stageRect, mediaW, mediaH), ev = state.activePreviewEvent || {};
     const bbox = ev.bbox || ev.metadata?.bbox;
     const scales = U.resolveScaleFactors(box.renderW, box.renderH, ev.source_resolution || ev.metadata?.source_resolution, mediaW, mediaH);
-    const tracks = Array.isArray(bbox) && bbox.length >= 4 ? [{
-      bbox,
-      id: ev.track_id ?? ev.metadata?.track_id,
-      entity_name: ev.entity_name || ev.name || ev.suggested_name,
-      label: ev.event_type || 'alert',
-      confidence: ev.confidence,
-    }] : [];
-    U.renderScene(ctx, {
-      clear: true,
-      clearWidth: stageRect.width || mediaW,
-      clearHeight: stageRect.height || mediaH,
-      visibility: state.featureVisibility,
-      transform: { offsetX: box.offsetX, offsetY: box.offsetY, scaleX: scales.scaleX, scaleY: scales.scaleY },
-      tracks,
-      zones: Array.isArray(ev.zones) ? ev.zones : [],
-    });
+    const tracks = Array.isArray(bbox) && bbox.length >= 4 ? [{ bbox, id: ev.track_id ?? ev.metadata?.track_id, entity_name: ev.entity_name || ev.name || ev.suggested_name, label: ev.event_type || 'alert', confidence: ev.confidence }] : [];
+    U.renderScene(ctx, { clear: true, clearWidth: stageRect.width || mediaW, clearHeight: stageRect.height || mediaH, visibility: state.featureVisibility, transform: { offsetX: box.offsetX, offsetY: box.offsetY, scaleX: scales.scaleX, scaleY: scales.scaleY }, tracks, zones: Array.isArray(ev.zones) ? ev.zones : [] });
   }
 
   function openAlertSnapshot(idx) {
-    const ev = state.eventsByIndex[idx];
-    if (!ev) return;
-    const src = resolveSnapshotSrc(ev);
-    if (!src) return;
+    const ev = state.eventsByIndex[idx], src = ev ? resolveSnapshotSrc(ev) : '';
+    if (!ev || !src) return;
     state.activePreviewEvent = ev;
+    if (window.SnapshotModalOverlay?.open) return window.SnapshotModalOverlay.open(ev, src, { visibility: state.featureVisibility });
     window.AlertsAdmin?.syncSnapshotDownloadButton?.(src, ev);
-    const modal = document.getElementById('modal-snapshot-view');
-    const img = document.getElementById('snapshot-modal-img');
-    const metaEl = document.getElementById('snapshot-modal-meta');
-    const controlsEl = document.getElementById('snapshot-modal-controls');
-    if (img) {
-      img.onload = () => renderSnapshotOverlay();
-      img.src = src;
-    }
-    if (metaEl) {
-      metaEl.textContent = `${ev.event_type || 'alert'} · ${ev.camera_id || 'System'}${ev.zone_id ? ` (${ev.zone_id})` : ''}`;
-    }
+    const modal = document.getElementById('modal-snapshot-view'), img = document.getElementById('snapshot-modal-img');
+    const metaEl = document.getElementById('snapshot-modal-meta'), controlsEl = document.getElementById('snapshot-modal-controls');
+    if (img) { img.onload = () => renderSnapshotOverlay(); img.src = src; }
+    if (metaEl) metaEl.textContent = `${ev.event_type || 'alert'} · ${ev.camera_id || 'System'}${ev.zone_id ? ` (${ev.zone_id})` : ''}`;
     if (controlsEl && window.OverlayControlBar?.mount) {
-      window.OverlayControlBar.mount({
-        container: controlsEl,
-        variant: 'scrubber',
-        descriptors: [],
-        showFeaturePills: true,
-        featureVisibility: state.featureVisibility,
-        onToggleFeature: (key, next) => {
-          state.featureVisibility[key] = Boolean(next);
-          renderSnapshotOverlay();
-        },
-      });
+      window.OverlayControlBar.mount({ container: controlsEl, variant: 'scrubber', descriptors: [], showFeaturePills: true, featureVisibility: state.featureVisibility, onToggleFeature: (k, n) => { state.featureVisibility[k] = Boolean(n); renderSnapshotOverlay(); } });
     }
     if (modal) modal.style.display = 'flex';
     if (img?.complete && img?.naturalWidth > 0) renderSnapshotOverlay();
@@ -196,11 +158,11 @@
       }
       tbody.innerHTML = items.length
         ? items.map(buildAlertRowHtml).join('')
-        : '<tr><td colspan="8" class="text-center">No alerts match the current filters.</td></tr>';
+        : '<tr><td colspan="9" class="text-center">No alerts match the current filters.</td></tr>';
       syncPaginationControls(items.length);
       return items;
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
       return [];
     }
   }
@@ -222,42 +184,78 @@
     return loadAlerts({ offset: state.offset, filters: { ...readFiltersFromDom(), ...filters } });
   }
 
+  function bindOnce(id, ev, fn) {
+    const el = document.getElementById(id);
+    if (el && !el.dataset?.bound) {
+      if (el.dataset) el.dataset.bound = '1';
+      el.addEventListener(ev, fn);
+    }
+  }
+
   function bindControls() {
     window.AlertsAdmin?.bindAdminControls?.(readFiltersFromDom);
-    const applyBtn = document.getElementById('alerts-filter-apply');
-    const resetBtn = document.getElementById('alerts-filter-reset');
-    const prevBtn = document.getElementById('alerts-prev-btn');
-    const nextBtn = document.getElementById('alerts-next-btn');
-    if (applyBtn && !applyBtn.dataset.bound) {
-      applyBtn.dataset.bound = '1';
-      applyBtn.addEventListener('click', () => { state.offset = 0; loadAlerts(); });
-    }
-    if (resetBtn && !resetBtn.dataset.bound) {
-      resetBtn.dataset.bound = '1';
-      resetBtn.addEventListener('click', () => {
-        ['alerts-filter-camera', 'alerts-filter-severity', 'alerts-filter-type', 'alerts-filter-zone'].forEach((id) => {
-          const el = document.getElementById(id);
-          if (el) el.value = '';
-        });
-        state.offset = 0;
-        loadAlerts();
+    bindOnce('alerts-filter-apply', 'click', () => { state.offset = 0; loadAlerts(); });
+    bindOnce('alerts-filter-reset', 'click', () => {
+      ['alerts-filter-camera', 'alerts-filter-severity', 'alerts-filter-type', 'alerts-filter-zone'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
       });
+      state.offset = 0;
+      loadAlerts();
+    });
+    bindOnce('alerts-prev-btn', 'click', () => { state.offset = Math.max(0, state.offset - state.limit); loadAlerts(); });
+    bindOnce('alerts-next-btn', 'click', () => { if (state.hasMore) { state.offset += state.limit; loadAlerts(); } });
+    bindOnce('alerts-select-all', 'change', (e) => toggleSelectAllVisible(Boolean(e.target?.checked)));
+    bindOnce('alerts-select-all-matching', 'change', (e) => toggleSelectAllMatching(Boolean(e.target?.checked)));
+    bindOnce('btn-alerts-ack-selected', 'click', () => bulkAckSelected(true));
+    bindOnce('btn-alerts-delete-selected', 'click', () => bulkDeleteSelected());
+  }
+
+  function toggleRowSelection(eventId, checked) {
+    if (!eventId) return;
+    if (checked) state.selectedIds.add(String(eventId));
+    else { state.selectedIds.delete(String(eventId)); state.selectAllMatching = false; }
+  }
+
+  function toggleSelectAllVisible(checked) {
+    state.selectAllMatching = false;
+    state.eventsByIndex.forEach((ev) => {
+      if (ev?.id === undefined || ev?.id === null) return;
+      if (checked) state.selectedIds.add(String(ev.id));
+      else state.selectedIds.delete(String(ev.id));
+    });
+    document.querySelectorAll?.('.alert-row-select')?.forEach?.((cb) => { cb.checked = checked; });
+  }
+
+  function toggleSelectAllMatching(checked) {
+    state.selectAllMatching = Boolean(checked);
+    toggleSelectAllVisible(Boolean(checked));
+    state.selectAllMatching = Boolean(checked);
+  }
+
+  async function bulkAckSelected(isRead = true) {
+    if (state.selectAllMatching) {
+      return window.AlertsAdmin?.acknowledgeEvents?.({ markAll: true, isRead });
     }
-    if (prevBtn && !prevBtn.dataset.bound) {
-      prevBtn.dataset.bound = '1';
-      prevBtn.addEventListener('click', () => {
-        state.offset = Math.max(0, state.offset - state.limit);
-        loadAlerts();
-      });
+    const ids = Array.from(state.selectedIds).map((id) => Number(id)).filter(Number.isFinite);
+    if (!ids.length) return null;
+    state.selectedIds.clear();
+    return window.AlertsAdmin?.acknowledgeEvents?.({ eventIds: ids, isRead });
+  }
+
+  async function bulkDeleteSelected() {
+    if (state.selectAllMatching) {
+      state.selectAllMatching = false;
+      state.selectedIds.clear();
+      return window.AlertsAdmin?.clearMatchingEvents?.(readFiltersFromDom());
     }
-    if (nextBtn && !nextBtn.dataset.bound) {
-      nextBtn.dataset.bound = '1';
-      nextBtn.addEventListener('click', () => {
-        if (!state.hasMore) return;
-        state.offset += state.limit;
-        loadAlerts();
-      });
+    const ids = Array.from(state.selectedIds);
+    if (!ids.length) return null;
+    state.selectedIds.clear();
+    for (const id of ids) {
+      await window.AlertsAdmin?.deleteEvent?.(id);
     }
+    return { deleted: ids.length };
   }
 
   window.AlertsView = {
@@ -268,5 +266,10 @@
     openAlertSnapshot,
     renderSnapshotOverlay,
     bindControls,
+    toggleRowSelection,
+    toggleSelectAllVisible,
+    toggleSelectAllMatching,
+    bulkAckSelected,
+    bulkDeleteSelected,
   };
 })();

@@ -26,6 +26,10 @@ class JourneyHop:
     global_path: list[tuple[float, float]] = field(default_factory=list)
     video_filename: str = ""
     media_offset_sec: float = 0.0
+    track_id: int | None = None
+    run_id: str = ""
+    snapshot_url: str = ""
+    source_ref: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

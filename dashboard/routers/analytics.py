@@ -24,7 +24,7 @@ from dashboard.services.analytics_query_service import (
     build_heatmap_json,
     enrich_sighting,
     query_sightings_page,
-    resolve_bucket_sec,
+    query_traffic_flows_service,
 )
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from intelligent_tracker.database import TrackerDB
@@ -37,32 +37,29 @@ router = APIRouter(tags=["Analytics & Timeline"])
 @router.get("/analytics/flows")
 async def get_traffic_flows(
     camera_id: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    event_type: Optional[str] = None,
     range_sec: int = Query(3600, ge=60, le=30 * 86400),
     end_time: Optional[float] = None,
     bucket_sec: Optional[int] = Query(None, ge=1, le=86400),
+    page: Optional[int] = Query(None, ge=1),
+    page_size: Optional[int] = Query(None, ge=1, le=500),
     db: TrackerDB = Depends(get_db),
 ):
     """Aggregate time-bucketed tripwire/zone traffic flows and sightings."""
-    is_live = end_time is None
-    resolved_end = float(end_time) if end_time is not None else time.time()
-    resolved_bucket = resolve_bucket_sec(range_sec, bucket_sec)
-    start_time = resolved_end - float(range_sec)
-    if db is None:
-        return {
-            "camera_id": camera_id or None, "start_time": start_time, "end_time": resolved_end,
-            "bucket_sec": resolved_bucket, "buckets": [],
-            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
-            "axes": {
-                "x": {"label": "Time", "unit": "epoch_s", "bucket_sec": resolved_bucket},
-                "y": {"label": "Crossings / Events", "unit": "count"},
-            },
-            "is_live": is_live,
-        }
-    res = await asyncio.to_thread(
-        db.get_traffic_flows, start_time, resolved_end, resolved_bucket, camera_id
+    return await asyncio.to_thread(
+        query_traffic_flows_service,
+        db,
+        camera_id=camera_id,
+        zone_id=zone_id,
+        event_type=event_type,
+        range_sec=range_sec,
+        end_time=end_time,
+        bucket_sec=bucket_sec,
+        page=page,
+        page_size=page_size,
+        now_ts=time.time(),
     )
-    res["is_live"] = is_live
-    return res
 
 
 @router.get("/analytics/heatmap")
@@ -245,11 +242,13 @@ async def query_sightings(
 
 
 @router.get("/sightings/sources")
-async def list_sighting_sources(db: TrackerDB = Depends(get_db)):
-    """List distinct sighting sources with counts for timeline filter dropdowns."""
-    if db is None:
-        return []
-    return await asyncio.to_thread(db.list_sighting_sources)
+async def list_sighting_sources(request: Request, db: TrackerDB = Depends(get_db)):
+    """List distinct sighting sources merged with known cameras and videos."""
+    from dashboard.dependencies import VIDEOS_DIR, get_camera_pool
+    from dashboard.services.analytics_query_service import list_all_sighting_sources
+
+    pool = get_camera_pool(conn=request)
+    return await asyncio.to_thread(list_all_sighting_sources, db, pool=pool, videos_dir=VIDEOS_DIR)
 
 
 @router.get("/events")

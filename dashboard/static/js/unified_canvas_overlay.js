@@ -80,15 +80,20 @@
     return { scaleX: renderW / srcW, scaleY: renderH / srcH };
   }
 
-  function drawLabelPill(ctx, text, x, y, palette) {
+  function drawLabelPill(ctx, text, x, y, palette, avatarImg = null) {
     ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     const pad = 4;
-    const bgW = (ctx.measureText(text)?.width || text.length * 6) + (pad * 2);
+    const hasAvatar = Boolean(avatarImg && Number(avatarImg.naturalWidth ?? avatarImg.width ?? 0) > 0);
+    const avatarInset = hasAvatar ? 18 : 0;
+    const bgW = (ctx.measureText(text)?.width || text.length * 6) + (pad * 2) + avatarInset;
     ctx.fillStyle = palette?.labelBg || 'rgba(8, 145, 178, 0.92)';
     ctx.fillRect(x, y, bgW, 18);
+    if (hasAvatar) {
+      window.OverlayAvatarCache?.drawCircularAvatar?.(ctx, avatarImg, x + 10, y + 9, 7, palette?.text || '#ffffff');
+    }
     ctx.fillStyle = palette?.text || '#ffffff';
     ctx.textBaseline = 'top';
-    ctx.fillText(text, x + pad, y + 2);
+    ctx.fillText(text, x + pad + avatarInset, y + 2);
   }
 
   function buildTrackLabel(track, vis, labelPrefix) {
@@ -119,7 +124,8 @@
       ctx.restore();
     }
     if (vis.track_ids || vis.dwell_timers) {
-      drawLabelPill(ctx, buildTrackLabel(track, vis, options.labelPrefix), x, Math.max(oy, y - 18), palette);
+      const avatarImg = track.avatar_url ? window.OverlayAvatarCache?.getAvatarImage?.(track.avatar_url) : null;
+      drawLabelPill(ctx, buildTrackLabel(track, vis, options.labelPrefix), x, Math.max(oy, y - 18), palette, avatarImg);
     }
   }
 

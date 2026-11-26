@@ -27,6 +27,47 @@ logger = logging.getLogger(__name__)
 _VALID_FEEDBACK_ACTIONS = frozenset({"confirm", "reassign", "enroll_new", "dismiss", "reject"})
 
 
+def _apply_confirmation_state(
+    state: ConfidenceState, act: str, reviewer: str, now: float,
+    similarity: float | None, camera_id: str, zone_id: str,
+) -> ConfidenceState:
+    """Apply positive operator confirmation/reassignment reinforcement to state."""
+    state.confirmation_count += 1
+    state.ambiguity_penalty = clamp01(state.ambiguity_penalty * 0.45)
+    state.last_seen_at = max(state.last_seen_at, now)
+    if camera_id:
+        state.last_camera_id = camera_id
+    if zone_id:
+        state.last_zone_id = zone_id
+    vis = clamp01(similarity) if similarity is not None else float(state.evidence.get("visual_similarity", 0.72) or 0.72)
+    if state.face_score <= 0.0 and state.body_score <= 0.0:
+        state.body_score = max(0.72, vis)
+    state.confidence = max(state.confidence, compute_calibrated_score(state, max(vis, 0.72), 0.0))
+    state.evidence = {**state.evidence, "last_feedback_action": act, "last_reviewer": reviewer}
+    return state
+
+
+def _apply_feedback_reversal_state(
+    state: ConfidenceState, prior_act: str, now: float,
+    camera_id: str | None, zone_id: str | None,
+) -> ConfidenceState:
+    """Undo confirmation or rejection counters and ambiguity penalty on state."""
+    if prior_act in ("dismiss", "reject"):
+        state.rejection_count = max(0, state.rejection_count - 1)
+        state.ambiguity_penalty = clamp01(state.ambiguity_penalty - 0.25)
+    else:
+        state.confirmation_count = max(0, state.confirmation_count - 1)
+    state.last_seen_at = max(state.last_seen_at, now)
+    if camera_id:
+        state.last_camera_id = camera_id
+    if zone_id:
+        state.last_zone_id = zone_id
+    vis = float(state.evidence.get("visual_similarity", state.confidence) or state.confidence)
+    state.confidence = compute_calibrated_score(state, clamp01(vis), 0.0)
+    state.evidence = {**state.evidence, "last_feedback_action": f"undo_{prior_act}"}
+    return state
+
+
 class ConfidenceEngine:
     """Calibrates and persists long-term multi-modal entity confidence."""
 
@@ -149,18 +190,37 @@ class ConfidenceEngine:
             return self._apply_rejection(int(entity_id), act, reviewer, now, camera_id=camera_id, zone_id=zone_id)
 
         state = self._load_or_init_state(int(entity_id), default_confidence=0.65)
-        state.confirmation_count += 1
-        state.ambiguity_penalty = clamp01(state.ambiguity_penalty * 0.45)
-        state.last_seen_at = max(state.last_seen_at, now)
-        if camera_id:
-            state.last_camera_id = camera_id
-        if zone_id:
-            state.last_zone_id = zone_id
-        vis = clamp01(similarity) if similarity is not None else float(state.evidence.get("visual_similarity", 0.72) or 0.72)
-        if state.face_score <= 0.0 and state.body_score <= 0.0:
-            state.body_score = max(0.72, vis)
-        state.confidence = max(state.confidence, compute_calibrated_score(state, max(vis, 0.72), 0.0))
-        state.evidence = {**state.evidence, "last_feedback_action": act, "last_reviewer": reviewer}
+        _apply_confirmation_state(state, act, reviewer, now, similarity, camera_id, zone_id)
+        with self._lock:
+            self._states[state.entity_id] = ConfidenceState(**state.to_dict())
+        self._persist_state(state, force=True)
+        return state
+
+    def revert_human_feedback(
+        self,
+        entity_id: int | None,
+        prior_action: str,
+        *,
+        previous_entity_id: int | None = None,
+        camera_id: str | None = None,
+        zone_id: str | None = None,
+        timestamp: float | None = None,
+    ) -> ConfidenceState | None:
+        """Revert a prior human feedback action on entity confirmation/rejection counts."""
+        act = prior_action.strip().lower()
+        if act not in _VALID_FEEDBACK_ACTIONS:
+            raise ValueError(f"Unsupported active learning feedback action: {prior_action!r}")
+        now = float(timestamp) if timestamp is not None else time.time()
+        if previous_entity_id is not None and previous_entity_id != entity_id and act in ("reassign", "enroll_new"):
+            prev_state = self._load_or_init_state(int(previous_entity_id), default_confidence=0.5)
+            _apply_feedback_reversal_state(prev_state, "reject", now, camera_id, zone_id)
+            with self._lock:
+                self._states[prev_state.entity_id] = ConfidenceState(**prev_state.to_dict())
+            self._persist_state(prev_state, force=True)
+        if entity_id is None:
+            return None
+        state = self._load_or_init_state(int(entity_id), default_confidence=0.5)
+        _apply_feedback_reversal_state(state, act, now, camera_id, zone_id)
         with self._lock:
             self._states[state.entity_id] = ConfidenceState(**state.to_dict())
         self._persist_state(state, force=True)
@@ -189,7 +249,8 @@ class ConfidenceEngine:
 
     def handle_active_learning_feedback(self, payload: dict[str, Any]) -> ConfidenceState | None:
         """Callback adapter compatible with ActiveLearningManager(on_feedback=...)."""
-        item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+        raw_item = payload.get("item")
+        item: dict[str, Any] = raw_item if isinstance(raw_item, dict) else {}
         return self.record_human_feedback(
             entity_id=payload.get("entity_id"),
             action=str(payload.get("action", "")),

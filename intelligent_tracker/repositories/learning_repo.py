@@ -16,8 +16,8 @@ _INSERT_REVIEW_SQL = """
 INSERT INTO review_queue (
     camera_id, track_id, crop_path, timestamp, suggested_entity_id,
     suggested_name, suggested_category, similarity, status,
-    video_filename, media_offset_sec, bbox_json, frame_width, frame_height, run_id
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    video_filename, media_offset_sec, bbox_json, frame_width, frame_height, run_id, reason
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -85,7 +85,7 @@ def _build_review_insert_params(
     camera_id: str, track_id: int, crop_path: str, suggested_entity_id: Optional[int],
     suggested_name: str, suggested_category: str, similarity: float, status: str,
     video_filename: str, media_offset_sec: float, bbox: Any,
-    frame_width: int, frame_height: int, run_id: str, kwargs: dict[str, Any],
+    frame_width: int, frame_height: int, run_id: str, reason: str, kwargs: dict[str, Any],
 ) -> tuple[Any, ...]:
     """Build parameter tuple for ``_INSERT_REVIEW_SQL``."""
     sim = float(kwargs.get("similarity_score", similarity))
@@ -94,10 +94,12 @@ def _build_review_insert_params(
     s_cat = (suggested_category or kwargs.get("matched_category", "")).strip()
     bbox_str = _serialize_bbox(bbox, str(kwargs.get("bbox_json", "")))
     now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    resolved_reason = str(reason or kwargs.get("reason") or "borderline").strip() or "borderline"
     return (
         camera_id, track_id, crop_path.strip(), now, ent_id, s_name, s_cat,
         sim, status.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
         bbox_str, int(frame_width or 0), int(frame_height or 0), str(run_id or "").strip(),
+        resolved_reason,
     )
 
 
@@ -112,13 +114,14 @@ class LearningMixin:
         suggested_entity_id: Optional[int] = None, suggested_name: str = "",
         suggested_category: str = "", similarity: float = 0.0, status: str = "pending",
         video_filename: str = "", media_offset_sec: float = 0.0, bbox: Any = None,
-        frame_width: int = 0, frame_height: int = 0, run_id: str = "", **kwargs,
+        frame_width: int = 0, frame_height: int = 0, run_id: str = "",
+        reason: str = "borderline", **kwargs,
     ) -> int:
         """Add an ambiguous detection to the active learning review queue."""
         params = _build_review_insert_params(
             camera_id, track_id, crop_path, suggested_entity_id, suggested_name,
             suggested_category, similarity, status, video_filename, media_offset_sec,
-            bbox, frame_width, frame_height, run_id, kwargs,
+            bbox, frame_width, frame_height, run_id, reason, kwargs,
         )
         with self._lock:
             if self._conn is None:

@@ -50,6 +50,7 @@ class TrackFeatureBuffer:
         name: str,
         category: str,
         similarity: float,
+        avatar_url: Optional[str] = None,
     ) -> None:
         """Cache confirmed entity identity for a track ID."""
         self.identified_tracks[track_id] = {
@@ -57,6 +58,7 @@ class TrackFeatureBuffer:
             "name": name,
             "category": category,
             "similarity": similarity,
+            "avatar_url": avatar_url,
         }
 
     def restore_track_identity(self, track: Any) -> None:
@@ -66,10 +68,12 @@ class TrackFeatureBuffer:
             return
         if getattr(track, "entity_id", None) is None:
             track.entity_id = cached["entity_id"]
-            track.entity_name = cached["name"]
+            track.entity_name = cached.get("name") or cached.get("entity_name")
             track.entity_category = cached["category"]
-            track.reid_score = cached["similarity"]
-            track.identity_label = cached["name"]
+            track.reid_score = cached.get("similarity", cached.get("reid_score", 1.0))
+            track.identity_label = track.entity_name
+            if cached.get("avatar_url"):
+                track.avatar_url = cached["avatar_url"]
 
     def prune_stale(self, active_tids: Set[int], now: float) -> list[int]:
         """Prune tracks absent longer than coast_grace_seconds while retaining recent dropouts."""

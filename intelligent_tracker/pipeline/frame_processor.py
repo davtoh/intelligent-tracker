@@ -195,20 +195,35 @@ class FrameProcessor:
             internal.is_cluttered = getattr(trk, "is_cluttered", False)
             internal.clutter_partner_id = getattr(trk, "clutter_partner_id", None)
             internal.clutter_start_time = getattr(trk, "clutter_start_time", None)
-            for attr in ("entity_id", "entity_name", "entity_category", "identity_label", "session_id", "reid_score"):
+            if getattr(trk, "_identity_unbound", False):
+                for attr in ("entity_id", "entity_category", "avatar_url", "reid_score"):
+                    if hasattr(internal, attr):
+                        delattr(internal, attr)
+                internal.entity_name = None
+                internal.identity_label = None
+                continue
+            for attr in ("entity_id", "entity_name", "entity_category", "identity_label", "session_id", "reid_score", "avatar_url", "learned_class"):
                 if hasattr(trk, attr):
                     setattr(internal, attr, getattr(trk, attr))
 
     def _run_detector(self, frame: np.ndarray) -> list[Any]:
-        """Run object detector on the prepared frame."""
+        """Run object detector on the prepared frame and apply learned-class / override rules."""
         detector = self.bundle.detector
         if detector is None:
             return []
         try:
-            return list(detector.detect(frame) or [])
+            dets = list(detector.detect(frame) or [])
         except Exception as exc:
             logger.debug("Detector error: %s", exc)
             return []
+        lc_matcher = getattr(self.bundle, "learned_class_matcher", None)
+        if lc_matcher is not None and dets:
+            try:
+                cam_id = getattr(self.bundle.config, "camera_id", "") if getattr(self.bundle, "config", None) else ""
+                dets = lc_matcher.apply_to_detections(frame, dets, camera_id=cam_id)
+            except Exception as exc:
+                logger.debug("LearnedClassMatcher apply error: %s", exc)
+        return dets
 
     def _run_tracker(self, detections: list[Any], timestamp: float) -> dict[int, Any]:
         """Update multi-object tracker using detections and timestamp."""

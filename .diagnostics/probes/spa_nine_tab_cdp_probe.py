@@ -226,7 +226,8 @@ def _parse_cdp_json(stdout: str) -> dict[str, Any]:
     return merged
 
 
-def _run_cdp_subprocess(port: int, js_file: Path, failures: list[str], checks: dict[str, Any]) -> None:
+def _run_cdp_subprocess(port: int, js_file: Path, failures: list[str], checks: dict[str, Any]) -> bool:
+    """Run CDP sweep subprocess; return False when browser/CDP infra is unavailable."""
     cmd = [
         sys.executable,
         str(DIAGNOSE_PY),
@@ -241,30 +242,46 @@ def _run_cdp_subprocess(port: int, js_file: Path, failures: list[str], checks: d
         "--eval-file",
         str(js_file),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=90, check=False)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=90, check=False)
+    except subprocess.TimeoutExpired as exc:
+        checks["infra_error"] = f"CDP subprocess timed out: {exc}"
+        return False
     checks["cdp_exit_code"] = proc.returncode
     try:
-        _evaluate_cdp_output(_parse_cdp_json(proc.stdout or ""), failures, checks)
+        raw = _parse_cdp_json(proc.stdout or "")
     except json.JSONDecodeError:
-        failures.append(
-            f"CDP output not JSON (rc={proc.returncode}): {proc.stdout[:200]} {proc.stderr[:200]}"
-        )
+        checks["infra_error"] = f"CDP output not JSON (rc={proc.returncode}): {(proc.stdout or '')[:200]} {(proc.stderr or '')[:200]}"
+        return False
+    sweep = raw.get("sweep") or raw.get("eval", {}).get("value", {}) or {}
+    if not isinstance(sweep, dict) or not sweep or not (sweep.get("tabs") or {}):
+        checks["infra_error"] = f"Empty CDP sweep (rc={proc.returncode}); Chrome/CDP did not return tab results"
+        return False
+    _evaluate_cdp_output(raw, failures, checks)
+    return True
 
 
 def run_probe() -> dict[str, Any]:
     """Run headless Chrome CDP 9-tab + multiview + modal sweep on isolated server."""
     checks: dict[str, Any] = {}
     failures: list[str] = []
+    infra_ok = True
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         js_file = tmp / "sweep.js"
         js_file.write_text(SWEEP_JS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
         srv, th, port, refs, orig_init = _start_server(tmp)
         try:
-            _run_cdp_subprocess(port, js_file, failures, checks)
+            infra_ok = _run_cdp_subprocess(port, js_file, failures, checks)
         finally:
             _stop_server(srv, th, refs, orig_init)
 
+    if not infra_ok:
+        return {
+            "status": "INFRA_UNAVAILABLE",
+            "summary": f"SPA 9-tab CDP probe infra unavailable: {checks.get('infra_error', 'unknown')}",
+            "details": {"checks": checks, "failures": failures},
+        }
     status = "error" if failures else "ok"
     summary = (
         f"SPA 9-tab CDP probe: {len(failures)} failure(s)"

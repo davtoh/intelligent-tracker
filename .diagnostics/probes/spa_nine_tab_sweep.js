@@ -93,15 +93,27 @@
     }
     if (modalId === '#modal-universal-enrollment') {
       const esel = document.getElementById('enroll-camera-select');
+      const liveToggleBtn = document.getElementById('btn-enroll-live-toggle');
       if (await waitFor(() => esel && Array.from(esel.options).some((o) => o.value === 'cam_short'))) {
         esel.value = 'cam_short'; esel.dispatchEvent(new Event('change', { bubbles: true }));
         const cvs = document.getElementById('enroll-bbox-canvas');
-        enrollChanged = Boolean(await waitFor(() => cvs && cvs.width > 0 && getComputedStyle(cvs).display !== 'none'));
+        enrollChanged = Boolean(liveToggleBtn) && Boolean(await waitFor(() => cvs && cvs.width > 0 && getComputedStyle(cvs).display !== 'none'));
       }
     }
     document.querySelector(closeId)?.click(); await sleep(100);
     modalOk[modalId] = open;
   }
+  const sourceRefRoundTripOk = Boolean(
+    window.AppNavigation?.buildHash && window.AppNavigation?.parseHash && (() => {
+      const h1 = window.AppNavigation.buildHash('tab-analytics', { cameraId: 'cam_short', runId: 'r1' });
+      const h2 = window.AppNavigation.buildHash('tab-videos', { videoFilename: 'clip.mp4', mediaOffsetSec: 3.5, runId: 'r1' });
+      const p1 = window.AppNavigation.parseHash(h1), p2 = window.AppNavigation.parseHash(h2);
+      return p1.route === 'analytics' && p1.params.camera === 'cam_short' && p2.route === 'videos' && p2.params.video === 'clip.mp4';
+    })()
+  );
+  const jumpButtonsHtml = window.VideoTimelineLinks?.buildSourceJumpButtonsHtml?.({ cameraId: 'cam_short', videoFilename: 'clip.mp4', mediaOffsetSec: 2 }) || '';
+  const sourceJumpButtonsOk = jumpButtonsHtml.includes('btn-jump-live') && jumpButtonsHtml.includes('btn-jump-studio');
+  const freezeButtonsOk = Boolean(document.getElementById('btn-studio-freeze-toggle') && document.getElementById('btn-enroll-live-toggle') && document.getElementById('analytics-source-select'));
   const tagModal = document.getElementById('modal-tag-entity');
   const candBox = document.getElementById('tag-identity-candidates');
   if (tagModal && candBox && window.TagFeedbackActions?.attachCandidateDiscourage) {
@@ -114,5 +126,5 @@
     candidateXNonClosing = getComputedStyle(tagModal).display !== 'none';
     tagModal.style.display = 'none';
   }
-  return { tabs: tabResults, grid2x2Active: Boolean(gridParity['2x2']?.active), gridParity, heatmapLoaded, alertsReady, journeyReady, reviewCardReady, studioLiveLoaded, studioOfflineEmptyOk, recordedSelected, enrollChanged, camTableErgonomic, candidateXNonClosing, titleHeights: titleRects, modals: modalOk };
+  return { tabs: tabResults, grid2x2Active: Boolean(gridParity['2x2']?.active), gridParity, heatmapLoaded, alertsReady, journeyReady, reviewCardReady, studioLiveLoaded, studioOfflineEmptyOk, recordedSelected, enrollChanged, camTableErgonomic, candidateXNonClosing, sourceRefRoundTripOk, sourceJumpButtonsOk, freezeButtonsOk, titleHeights: titleRects, modals: modalOk };
 })()

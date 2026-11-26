@@ -101,6 +101,36 @@ def _fetch_runs_with_detections(db: Any) -> list[Any]:
             cur.close()
 
 
+def _backfill_throttled_sightings(
+    db: Any, records: list[dict[str, Any]], *, run_id: str, row_name: str,
+    updated_entity_id: int | None, throttle_sec: float = 5.0,
+) -> int:
+    """Write throttled sighting rows for relabeled tracks in a video run."""
+    if updated_entity_id is None or not hasattr(db, "add_sighting"):
+        return 0
+    last_emit: dict[int, float] = {}
+    written = 0
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        t = float(rec.get("time") or 0.0)
+        for trk in rec.get("tracks") or []:
+            if not isinstance(trk, dict) or trk.get("entity_id") != updated_entity_id:
+                continue
+            tid = int(trk.get("track_id") or 0)
+            prev_t = last_emit.get(tid)
+            if prev_t is not None and (t - prev_t) < throttle_sec:
+                continue
+            last_emit[tid] = t
+            db.add_sighting(
+                entity_id=updated_entity_id, track_id=tid, source=row_name,
+                bbox=trk.get("bbox") or "", confidence=float(trk.get("confidence") or 1.0),
+                video_filename=row_name, media_offset_sec=t, run_id=run_id,
+            )
+            written += 1
+    return written
+
+
 def relabel_video_runs_on_entity_mutation(
     db: Any,
     *,
@@ -134,5 +164,8 @@ def relabel_video_runs_on_entity_mutation(
         ):
             if db.update_video_run_payload(run_id, frame_detections=records):
                 updated_runs += 1
+                _backfill_throttled_sightings(
+                    db, records, run_id=run_id, row_name=row_name, updated_entity_id=updated_entity_id,
+                )
     invalidate_pool_replay_caches(pool)
     return updated_runs

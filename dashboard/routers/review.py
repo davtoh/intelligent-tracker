@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Review Queue & Bidirectional Video Studio Sync Router.
+Review Queue, Bidirectional Video Studio Sync & Reversible Audit Router.
 
-Exposes ``/api/review/*`` endpoints with bidirectional synchronization to
-``video_runs`` without exceeding the line budget on ``dashboard/routers/rsac.py``.
+Exposes ``/api/review/*`` endpoints with reversible ``review_decisions``
+audit trails and bidirectional synchronization to ``video_runs``.
 """
 
 import asyncio
@@ -14,6 +14,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from dashboard.dependencies import (
     get_active_learning_mgr,
+    get_camera_pool,
     get_db,
     reload_all_galleries,
 )
@@ -23,20 +24,33 @@ from dashboard.schemas import (
     ReviewEnrollNewRequest,
     ReviewReassignRequest,
 )
+from dashboard.schemas_review import ReportWrongSightingRequest, ReviewUndoRequest
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
-from dashboard.services.review_sync_service import sync_review_resolution_to_video_runs
+from dashboard.services.reversible_review_service import (
+    execute_review_action_with_audit,
+    report_wrong_sighting,
+    undo_review_decision,
+)
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
 
 router = APIRouter(tags=["Review Queue & Sync"])
 
 
-def _handle_review_result(res: dict[str, Any], item_id: int) -> None:
-    """Raise standard HTTP errors for not_found or failed review actions."""
-    if res.get("status") == "not_found":
-        raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    if res.get("status") == "failed":
+def _handle_review_result(res: dict[str, Any], target_id: int) -> None:
+    """Raise standard HTTP errors for not_found, already_undone, or failed actions."""
+    status = res.get("status")
+    if status == "not_found":
+        raise HTTPException(status_code=404, detail=f"Review target {target_id} not found")
+    if status == "already_undone":
+        raise HTTPException(status_code=409, detail=f"Decision {target_id} was already undone")
+    if status == "failed":
         raise HTTPException(status_code=400, detail="Review action failed (missing entity or invalid state)")
+
+
+def _resolve_confidence_engine(al_mgr: Any, pool: Any) -> Any:
+    """Resolve shared ConfidenceEngine from ActiveLearningManager or CameraPool."""
+    return getattr(al_mgr, "confidence_engine", None) or getattr(pool, "confidence_engine", None)
 
 
 @router.get("/api/review/queue")
@@ -48,6 +62,67 @@ async def list_review_queue(
     """List active learning review items with bbox and source provenance."""
     items = await asyncio.to_thread(db.list_review_items, status=status, limit=limit)
     return {"status": "success", "count": len(items), "items": items}
+
+
+@router.get("/api/review/decisions")
+async def list_review_decisions(
+    review_id: int | None = Query(default=None),
+    include_undone: bool = Query(default=True),
+    limit: int = Query(50, ge=1, le=200),
+    db: TrackerDB = Depends(get_db),
+) -> dict[str, Any]:
+    """List audited active learning review decisions."""
+    items = await asyncio.to_thread(
+        db.list_review_decisions, review_id=review_id, include_undone=include_undone, limit=limit,
+    )
+    return {"status": "success", "count": len(items), "decisions": items}
+
+
+@router.post("/api/review/decisions/{decision_id}/undo")
+async def undo_review_decision_endpoint(
+    decision_id: int,
+    request: Request,
+    req: ReviewUndoRequest | None = Body(default=None),
+    al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
+    db: TrackerDB = Depends(get_db),
+) -> dict[str, Any]:
+    """Undo a specific ``review_decisions`` record by ID."""
+    pool = get_camera_pool(request)
+    res = await asyncio.to_thread(
+        undo_review_decision, db, decision_id=decision_id,
+        confidence_engine=_resolve_confidence_engine(al_mgr, pool),
+        pool=pool, request=request, reload_galleries=reload_all_galleries,
+        undone_by=(req.reviewer if req else "operator"),
+    )
+    _handle_review_result(res, decision_id)
+    return res
+
+
+@router.post("/api/review/report-wrong")
+async def report_wrong_sighting_endpoint(
+    req: ReportWrongSightingRequest,
+    request: Request,
+    al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
+    db: TrackerDB = Depends(get_db),
+) -> dict[str, Any]:
+    """Flag a false-positive sighting from ``#timeline`` into the review queue."""
+    pool = get_camera_pool(request)
+    return await asyncio.to_thread(
+        report_wrong_sighting,
+        db,
+        sighting_id=req.sighting_id,
+        entity_id=req.entity_id,
+        camera_id=req.camera_id,
+        video_filename=req.video_filename,
+        media_offset_sec=req.media_offset_sec,
+        track_id=req.track_id,
+        run_id=req.run_id,
+        crop_path=req.crop_path,
+        bbox=req.bbox,
+        notes=req.notes,
+        reviewer=req.reviewer,
+        confidence_engine=_resolve_confidence_engine(al_mgr, pool),
+    )
 
 
 @router.get("/api/review/{item_id}")
@@ -70,20 +145,14 @@ async def confirm_review_item(
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
     db: TrackerDB = Depends(get_db),
 ) -> dict[str, Any]:
-    """Confirm a review item, reload galleries, and sync matching ``video_runs``."""
-    item = await asyncio.to_thread(db.get_review_item, item_id)
-    notes = (req.notes if req else None) or ""
-    res = await asyncio.to_thread(al_mgr.confirm_candidate, item_id=item_id, notes=notes)
-    _handle_review_result(res, item_id)
-    await asyncio.to_thread(reload_all_galleries, conn=request)
-    sync_meta = await asyncio.to_thread(
-        sync_review_resolution_to_video_runs,
-        db,
-        item=item,
-        action="confirm",
-        entity_id=res.get("entity_id"),
+    """Confirm a review item, record audit decision, reload galleries, and sync runs."""
+    res = await asyncio.to_thread(
+        execute_review_action_with_audit, db, al_mgr, action="confirm", item_id=item_id,
+        request=request, reload_galleries=reload_all_galleries, pool=get_camera_pool(request),
+        notes=(req.notes if req else None) or "",
     )
-    return {**res, "sync": sync_meta}
+    _handle_review_result(res, item_id)
+    return res
 
 
 @router.post("/api/review/{item_id}/reassign")
@@ -95,23 +164,13 @@ async def reassign_review_item(
     db: TrackerDB = Depends(get_db),
 ) -> dict[str, Any]:
     """Reassign a review item to another entity and sync matching ``video_runs``."""
-    item = await asyncio.to_thread(db.get_review_item, item_id)
     res = await asyncio.to_thread(
-        al_mgr.reassign_candidate,
-        item_id=item_id,
-        target_entity_id=req.target_entity_id,
-        notes=req.notes or "",
+        execute_review_action_with_audit, db, al_mgr, action="reassign", item_id=item_id,
+        request=request, reload_galleries=reload_all_galleries, pool=get_camera_pool(request),
+        target_entity_id=req.target_entity_id, notes=req.notes or "",
     )
     _handle_review_result(res, item_id)
-    await asyncio.to_thread(reload_all_galleries, conn=request)
-    sync_meta = await asyncio.to_thread(
-        sync_review_resolution_to_video_runs,
-        db,
-        item=item,
-        action="reassign",
-        entity_id=req.target_entity_id,
-    )
-    return {**res, "sync": sync_meta}
+    return res
 
 
 @router.post("/api/review/{item_id}/enroll-new")
@@ -126,45 +185,48 @@ async def enroll_new_review_item(
     cat = await asyncio.to_thread(
         lambda: ensure_known_category(resolve_rsac_for_request(request, db=db), req.category)
     )
-    item = await asyncio.to_thread(db.get_review_item, item_id)
     res = await asyncio.to_thread(
-        al_mgr.enroll_as_new,
-        item_id=item_id,
-        name=req.name,
-        category=cat,
-        security_role=req.security_role or "",
-        notes=req.notes or "",
+        execute_review_action_with_audit, db, al_mgr, action="enroll_new", item_id=item_id,
+        request=request, reload_galleries=reload_all_galleries, pool=get_camera_pool(request),
+        name=req.name, category=cat, security_role=req.security_role or "", notes=req.notes or "",
     )
     _handle_review_result(res, item_id)
-    await asyncio.to_thread(reload_all_galleries, conn=request)
-    sync_meta = await asyncio.to_thread(
-        sync_review_resolution_to_video_runs,
-        db,
-        item=item,
-        action="enroll_new",
-        entity_id=res.get("entity_id"),
-        entity_name=req.name,
-        category=cat,
-    )
-    return {**res, "sync": sync_meta}
+    return res
 
 
 @router.post("/api/review/{item_id}/dismiss")
 async def dismiss_review_item(
     item_id: int,
+    request: Request,
     req: ReviewDismissRequest | None = Body(default=None),
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
     db: TrackerDB = Depends(get_db),
 ) -> dict[str, Any]:
-    """Dismiss a review item and return sync metadata."""
-    item = await asyncio.to_thread(db.get_review_item, item_id)
-    notes = (req.notes if req else None) or ""
-    res = await asyncio.to_thread(al_mgr.dismiss_candidate, item_id=item_id, notes=notes)
-    _handle_review_result(res, item_id)
-    sync_meta = await asyncio.to_thread(
-        sync_review_resolution_to_video_runs,
-        db,
-        item=item,
-        action="dismiss",
+    """Dismiss a review item, record audit decision, and return sync metadata."""
+    res = await asyncio.to_thread(
+        execute_review_action_with_audit, db, al_mgr, action="dismiss", item_id=item_id,
+        request=request, reload_galleries=reload_all_galleries, pool=get_camera_pool(request),
+        notes=(req.notes if req else None) or "",
     )
-    return {**res, "sync": sync_meta}
+    _handle_review_result(res, item_id)
+    return res
+
+
+@router.post("/api/review/{item_id}/undo")
+async def undo_review_item(
+    item_id: int,
+    request: Request,
+    req: ReviewUndoRequest | None = Body(default=None),
+    al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
+    db: TrackerDB = Depends(get_db),
+) -> dict[str, Any]:
+    """Undo the latest active decision for a review queue item."""
+    pool = get_camera_pool(request)
+    res = await asyncio.to_thread(
+        undo_review_decision, db, review_id=item_id,
+        confidence_engine=_resolve_confidence_engine(al_mgr, pool),
+        pool=pool, request=request, reload_galleries=reload_all_galleries,
+        undone_by=(req.reviewer if req else "operator"),
+    )
+    _handle_review_result(res, item_id)
+    return res

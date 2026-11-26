@@ -73,16 +73,23 @@ class TrajectoryJourneySearcher:
     def _fetch_sightings(
         self, resolved_id: int | None, track_id: int | None, start_time: str | None, end_time: str | None
     ) -> tuple[list[dict[str, Any]], str | None]:
+        if self.db._conn is None:
+            return [], None
         sightings = self.db.query_sightings(
             entity_id=resolved_id, start_time=start_time, end_time=end_time, limit=500
         )
         override_name: str | None = None
         if not sightings and track_id is not None:
             with self.db._lock:
-                cur = self.db._conn.cursor()
+                conn = self.db._conn
+                if conn is None:
+                    return [], None
+                cur = conn.cursor()
                 try:
                     cur.execute(
-                        "SELECT * FROM sightings WHERE track_id = ? ORDER BY timestamp ASC LIMIT 500",
+                        "SELECT id, entity_id, track_id, source, camera_id, run_id, timestamp, "
+                        "zone_id, bbox, confidence, snapshot_path, video_filename, media_offset_sec "
+                        "FROM sightings WHERE track_id = ? ORDER BY timestamp ASC LIMIT 500",
                         (track_id,),
                     )
                     sightings = [dict(r) for r in cur.fetchall()]
@@ -96,7 +103,7 @@ class TrajectoryJourneySearcher:
         self, sightings: list[dict[str, Any]], mapper: Any
     ) -> dict[str, GroundPlaneHomography]:
         resolved = dict(self.homographies)
-        for cam_id in {s.get("source") or "cam_01" for s in sightings}:
+        for cam_id in {str(s.get("camera_id") or "").strip() or s.get("source") or "cam_01" for s in sightings}:
             if cam_id in resolved or (mapper is not None and mapper.has_camera(cam_id)):
                 continue
             h_data = self.db.get_homography_calibration(cam_id)

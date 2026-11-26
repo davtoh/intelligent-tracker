@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const STANDBY_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="40" fill="%231e293b" stroke="%23334155" stroke-width="2"/><polygon points="-10,-18 20,0 -10,18" fill="%2306b6d4"/><text y="70" fill="%2394a3b8" font-family="Inter,sans-serif" font-size="14" font-weight="500">Live Stream Paused &bull; Hibernating</text><text y="92" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Click Resume Feed to reconnect camera</text></g></svg>';
+  const STANDBY_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="40" fill="%231e293b" stroke="%23334155" stroke-width="2"/><polygon points="-10,-18 20,0 -10,18" fill="%2306b6d4"/><text y="70" fill="%2394a3b8" font-family="Inter,sans-serif" font-size="14" font-weight="500">Live Stream Paused %E2%80%A2 Hibernating</text><text y="92" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Click Resume Feed to reconnect camera</text></g></svg>';
   const OFFLINE_POSTER_SVG = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480"><rect width="100%" height="100%" fill="%230f172a"/><g transform="translate(320,240)" text-anchor="middle"><circle r="38" fill="%231e293b" stroke="%23ef4444" stroke-width="2"/><line x1="-14" y1="-14" x2="14" y2="14" stroke="%23ef4444" stroke-width="3"/><line x1="14" y1="-14" x2="-14" y2="14" stroke="%23ef4444" stroke-width="3"/><text y="68" fill="%23f87171" font-family="Inter,sans-serif" font-size="14" font-weight="600">Camera Offline / Unavailable</text><text y="90" fill="%2364748b" font-family="Inter,sans-serif" font-size="11">Check camera source or reconnect in Cameras</text></g></svg>';
   const OFFLINE_STATUSES = new Set(['offline', 'error', 'disabled']);
   const ANNOTATION_MODE_STORAGE_KEY = 'it_live_annotated_mode';
@@ -169,7 +169,8 @@
   }
 
   function attachLiveStream(videoImg, activeCameraId, forceReconnect = false) {
-    if (streamPaused) return;
+    if (streamPaused && !forceReconnect) return;
+    if (forceReconnect) streamPaused = false;
     const gridMode = window.CameraGrid?.getGridMode?.();
     if (gridMode && gridMode !== '1x1') {
       detachLiveStream(videoImg, { keepGrid: true });
@@ -194,10 +195,8 @@
       return;
     }
     const annotatedParam = burnedAnnotationMode ? 'true' : 'false';
-    if (isSameHealthyStream(videoImg, cleanBase, annotatedParam, forceReconnect)) {
-      setStreamStatus('online');
-      return;
-    }
+    if (isSameHealthyStream(videoImg, cleanBase, annotatedParam, forceReconnect)) { setStreamStatus('online'); return; }
+    window.MediaEmptyState?.hideEmpty?.(videoImg, 'block');
     videoImg.src = `${cleanBase}?annotated=${annotatedParam}&t=${Date.now()}`;
     window.MjpegReconnect?.attach?.(videoImg);
     setStreamStatus('online');
@@ -229,12 +228,13 @@
   function attachHeatmapImage(heatmapImg) {
     if (!heatmapImg) return;
     const baseSrc = (heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap').split('?')[0];
-    const camId = window.App?.getActiveCameraId?.() || '';
+    const selSrc = window.AnalyticsView?.getSelectedSource?.();
+    const camId = selSrc ? selSrc.id : (window.App?.getActiveCameraId?.() || '');
     const url = camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`;
     if (window.MediaEmptyState) window.MediaEmptyState.setSource(heatmapImg, url);
     else heatmapImg.src = url;
     const badge = document.getElementById('heatmap-camera-badge');
-    if (badge) badge.textContent = camId ? `Camera: ${camId}` : 'All Cameras';
+    if (badge) badge.textContent = camId ? `${selSrc?.kind === 'video' ? 'Video' : 'Camera'}: ${camId}` : 'All Cameras';
   }
 
   function syncTabStreams(previousTabId, targetTabId) {

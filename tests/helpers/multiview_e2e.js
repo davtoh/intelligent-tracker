@@ -93,8 +93,14 @@
   await waitUntil(() => window.MultiviewWsClient.getState().desired !== null, 3000, 'returning to live re-subscribes WS');
 
   document.querySelector('.grid-switch-btn[data-grid="1x1"]').click();
-  await waitUntil(() => liveImg && !liveImg.src.startsWith('data:') && liveImg.naturalWidth > 0, 8000, '1x1 restored after grid', liveDiag);
-  const restoredDims = { w: liveImg.naturalWidth, h: liveImg.naturalHeight, complete: liveImg.complete };
+  const restoredDims = await waitUntil(
+    () => (liveImg && !liveImg.src.startsWith('data:') && liveImg.naturalWidth > 0
+      ? { w: liveImg.naturalWidth, h: liveImg.naturalHeight, complete: liveImg.complete }
+      : null),
+    8000,
+    '1x1 restored after grid',
+    liveDiag,
+  );
   const tFetch1 = performance.now();
   const pmResp2 = await fetch('/api/system/processing-mode');
   const fetchMsAfter = Math.round(performance.now() - tFetch1);

@@ -9,12 +9,14 @@
         <input type="hidden" id="tag-track-id" />
         <input type="hidden" id="tag-bbox-val" />
         <input type="hidden" id="tag-entity-id" />
+        <input type="hidden" id="tag-prior-entity-id" />
         <input type="hidden" id="tag-source-type" />
         <input type="hidden" id="tag-video-filename" />
         <input type="hidden" id="tag-timestamp-sec" />
         <input type="hidden" id="tag-crop-base64" />
 
         <div class="modal-body-scroll">
+          <div id="tag-track-picker-strip" class="tag-queue-strip" style="display: none;" role="region" aria-label="Track tag queue"></div>
           <div id="tag-roi-preview-panel" style="display: none; align-items: flex-start; gap: 12px; margin-bottom: 12px; padding: 10px; border-radius: 8px; background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(6, 182, 212, 0.35);">
             <img id="tag-roi-crop-img" src="" alt="Selected ROI crop" style="width: 72px; height: 72px; object-fit: contain; border-radius: 6px; border: 1px solid #06b6d4; background: #0b0f19; flex-shrink: 0;" />
             <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px;">
@@ -42,6 +44,7 @@
         </div>
 
         <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="btn-tag-correct" style="display: none;" title="Correct mistaken identity">✏️ Correct...</button>
           <button type="button" class="btn btn-outline" id="btn-tag-discourage" title="Discourage false match or mark as false positive">🚫 Not This / False Positive</button>
           <button type="button" class="btn btn-outline" id="modal-tag-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" id="modal-tag-submit">💾 Enroll to Gallery</button>
@@ -60,17 +63,19 @@
       <div class="modal-body-scroll">
         <div class="modal-body-grid">
           <!-- Left: Interactive Freeze-Frame Canvas / Image Upload -->
-          <div class="modal-left-col">
-            <div class="section-subhead">
+          <div class="modal-left-col" style="min-width: 0;">
+            <div class="section-subhead" style="flex-wrap: wrap; gap: 8px;">
               <h4>Freeze-Frame Bounding Box Selector</h4>
-              <div style="display: flex; gap: 6px; align-items: center;">
-                <select id="enroll-camera-select" class="form-input" aria-label="Camera Source" style="width: auto; min-width: 140px; padding: 3px 8px; font-size: 12px;"><option value="">Select camera...</option></select>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0;">
+                <select id="enroll-camera-select" class="form-input" aria-label="Camera Source" style="width: auto; min-width: 0; max-width: 100%; padding: 3px 8px; font-size: 12px;"><option value="">Select camera...</option></select>
+                <button type="button" class="btn btn-xs btn-outline" id="btn-enroll-live-toggle" aria-pressed="false" title="Toggle live camera preview and freeze frame">▶ Live</button>
                 <button type="button" class="btn btn-xs btn-outline" id="btn-capture-freeze">📷 Grab Frame</button>
                 <button type="button" class="btn btn-xs btn-outline" id="btn-upload-enroll-crop">📁 Upload</button>
                 <input type="file" id="enroll-file-input" accept="image/*" style="display: none;" />
               </div>
             </div>
             <div class="enroll-canvas-wrapper">
+              <img id="enroll-live-preview-img" class="enroll-stage-video" alt="Live camera preview" style="display: none;" />
               <video id="enroll-scrubber-video" class="enroll-stage-video" preload="metadata"></video>
               <canvas id="enroll-bbox-canvas" class="enroll-stage-canvas"></canvas>
               <div id="enroll-canvas-placeholder" style="color: #64748b; font-size: 13px; text-align: center; padding: 24px;">

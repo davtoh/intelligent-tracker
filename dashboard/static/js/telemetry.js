@@ -161,7 +161,41 @@
     if (data.recording) {
       window.CameraRecording?.onTelemetryUpdate?.(data.recording, data.camera_id);
     }
+    updateConnectionStatus(data, data.camera_id);
     window.LivePlayer?.updateInferenceLagHud?.(data);
+  }
+
+  function updateConnectionStatus(data, fallbackCamId) {
+    const raw = String(data?.status || data?.detector_status || '').trim().toLowerCase();
+    if (!raw) return;
+    let stateClass = 'online';
+    let label = 'Online';
+    if (raw === 'offline' || raw === 'error' || raw === 'disabled' || raw === 'disconnected') {
+      stateClass = 'offline';
+      label = 'Offline';
+    } else if (raw === 'hibernating' || raw === 'paused' || raw === 'idle' || raw === 'standby') {
+      stateClass = 'hibernating';
+      label = 'Hibernating';
+    } else if (raw === 'simulation' || raw === 'synthetic' || raw === 'mock' || raw === 'demo') {
+      stateClass = 'simulation';
+      label = 'Simulation';
+    } else {
+      const cam = data?.camera_id || fallbackCamId || '';
+      label = cam ? `Connected (${cam})` : 'Connected';
+    }
+    const pill = document.getElementById('connection-status-pill');
+    const txt = document.getElementById('connection-status-text');
+    const drawerPill = document.getElementById('drawer-connection-status-pill');
+    if (pill) pill.className = `connection-status-pill ${stateClass}`;
+    if (txt) {
+      txt.textContent = label;
+      txt.title = label;
+    }
+    if (drawerPill) {
+      drawerPill.className = `connection-status-pill ${stateClass}`;
+      const span = drawerPill.querySelector?.('span:last-child');
+      if (span) span.textContent = label;
+    }
   }
 
   window.TelemetryGateway = {
@@ -171,6 +205,7 @@
     renderTripwires: renderTripwires,
     renderMiniAlerts: renderMiniAlerts,
     updateKpiDisplays: updateKpiDisplays,
+    updateConnectionStatus: updateConnectionStatus,
   };
 })();
 

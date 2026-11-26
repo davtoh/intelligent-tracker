@@ -6,15 +6,15 @@ Provides thread-safe SQLite CRUD, alias-aware lookup (``clip.mp4`` <->
 
 import json
 import sqlite3
-import time
-import uuid
 from typing import Any
 
+from intelligent_tracker.repositories.video_run_helpers import (
+    build_save_params as _build_save_params,
+    detector_signature_matches,
+)
 from intelligent_tracker.repositories.video_schema import (
     UPSERT_VIDEO_RUN_SQL,
-    canonical_video_base_name,
     expand_video_aliases,
-    safe_video_basename,
 )
 
 _RUN_COLS = (
@@ -32,6 +32,24 @@ def _parse_json(raw: str | None, default: Any) -> Any:
         return json.loads(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_detector_sig(cfg: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize detector signature fields for replay compatibility checks."""
+    data = cfg if isinstance(cfg, dict) else {}
+    det = str(data.get("detector") or data.get("detector_model") or "").strip().lower()
+    raw_classes = data.get("classes") if data.get("classes") is not None else data.get("detector_classes")
+    if isinstance(raw_classes, str):
+        classes = sorted(c.strip().lower() for c in raw_classes.split(",") if c.strip())
+    elif isinstance(raw_classes, (list, tuple, set)):
+        classes = sorted(str(c).strip().lower() for c in raw_classes if str(c).strip())
+    else:
+        classes = []
+    raw_conf = data.get("confidence") if data.get("confidence") is not None else data.get("detector_confidence")
+    conf = round(float(raw_conf), 3) if raw_conf is not None else None
+    raw_nms = data.get("agnostic_nms") if data.get("agnostic_nms") is not None else data.get("detector_agnostic_nms")
+    agnostic_nms = bool(True if raw_nms is None else raw_nms)
+    return {"detector": det, "confidence": conf, "classes": classes, "agnostic_nms": agnostic_nms}
 
 
 def _hydrate_video_run(row: sqlite3.Row, include_detections: bool = False) -> dict[str, Any]:
@@ -57,34 +75,6 @@ def _hydrate_video_run(row: sqlite3.Row, include_detections: bool = False) -> di
         record["frame_detections"] = dets
         record["has_detections"] = dets is not None
     return record
-
-
-def _build_save_params(
-    video_filename: str, report: dict[str, Any], config: dict[str, Any] | None,
-    frame_detections: list[dict[str, Any]] | None, source_resolution: list[int] | None,
-    source_fps: float | None, run_type: str, base_filename: str | None,
-    run_id: str | None, timestamp: float | None, generated_at: str | None,
-    metrics: dict[str, Any] | None,
-) -> tuple[str, tuple[Any, ...]]:
-    """Validate and serialize arguments for ``UPSERT_VIDEO_RUN_SQL``."""
-    safe_name = safe_video_basename(video_filename)
-    if not safe_name:
-        raise ValueError("video_filename must not be empty")
-    canonical = safe_video_basename(base_filename) if base_filename else canonical_video_base_name(safe_name)
-    rid = str(run_id).strip() if run_id else f"run_{uuid.uuid4().hex[:8]}"
-    ts = float(timestamp) if timestamp is not None else time.time()
-    gen_at = generated_at or time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
-    resolved_metrics = metrics if metrics is not None else {
-        k: report.get(k, 0) for k in (
-            "frames_processed", "total_detections", "total_sightings", "unique_entities_identified"
-        )
-    }
-    res_json = json.dumps(source_resolution) if source_resolution is not None else None
-    det_json = json.dumps(frame_detections) if frame_detections is not None else None
-    return rid, (
-        rid, safe_name, canonical, run_type or "batch", gen_at, ts, res_json, source_fps,
-        json.dumps(config or {}), json.dumps(resolved_metrics), json.dumps(report or {}), det_json,
-    )
 
 
 class VideoRunRepositoryMixin:
@@ -198,6 +188,41 @@ class VideoRunRepositoryMixin:
             "frame_count": len(dets_list),
             "frame_detections": dets_list,
         }
+
+    def get_latest_run_matching(
+        self, video_filename: str, detector_signature: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        """Return newest detection stream for video_filename matching detector_signature."""
+        aliases = expand_video_aliases(video_filename)
+        if not aliases:
+            return None
+        ph = ",".join("?" for _ in aliases)
+        params: list[Any] = aliases + aliases
+        sql = (
+            "SELECT run_id, video_filename, base_filename, run_type, generated_at, "
+            "source_resolution, source_fps, config_json, frame_detections_json "
+            f"FROM video_runs WHERE (video_filename IN ({ph}) OR base_filename IN ({ph})) "
+            "AND frame_detections_json IS NOT NULL ORDER BY timestamp DESC"
+        )
+        with self._lock:
+            if self._conn is None:
+                return None
+            rows = self._conn.execute(sql, params).fetchall()
+        for row in rows:
+            cfg = _parse_json(row["config_json"], {})
+            if not detector_signature_matches(cfg, detector_signature):
+                continue
+            detections = _parse_json(row["frame_detections_json"], [])
+            dets_list = detections if isinstance(detections, list) else []
+            return {
+                "run_id": row["run_id"], "filename": row["video_filename"],
+                "base_filename": row["base_filename"], "run_type": row["run_type"],
+                "generated_at": row["generated_at"],
+                "source_resolution": _parse_json(row["source_resolution"], None),
+                "source_fps": row["source_fps"], "config": cfg,
+                "frame_count": len(dets_list), "frame_detections": dets_list,
+            }
+        return None
 
     def update_video_run_resolution(
         self, run_id: str, source_resolution: list[int] | None, source_fps: float | None = None

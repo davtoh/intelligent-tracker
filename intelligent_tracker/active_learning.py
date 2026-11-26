@@ -33,12 +33,14 @@ class ActiveLearningManager:
         event_bus: Any | None = None,
         on_feedback: Callable[[dict[str, Any]], None] | None = None,
         confidence_engine: Any | None = None,
+        unknown_min_dwell_sec: float = 3.0,
     ) -> None:
         self.db = db
         self.matcher = matcher
         self.min_confidence = float(min_confidence)
         self.max_confidence = float(max_confidence)
         self.debounce_interval = float(debounce_interval)
+        self.unknown_min_dwell_sec = max(0.0, float(unknown_min_dwell_sec))
         self.crops_dir = crops_dir
         self.event_bus = event_bus
         self.on_feedback = on_feedback
@@ -51,6 +53,7 @@ class ActiveLearningManager:
             debounce_interval=debounce_interval,
             crops_dir=crops_dir,
             event_bus=event_bus,
+            unknown_min_dwell_sec=unknown_min_dwell_sec,
         )
         self._actions = ActiveLearningActions(
             db=db,
@@ -82,8 +85,9 @@ class ActiveLearningManager:
         video_filename: str = "",
         media_offset_sec: float | None = None,
         run_id: str = "",
+        track_dwell_sec: float | None = None,
     ) -> int | None:
-        """Evaluate track detection in [min_confidence, max_confidence) and queue."""
+        """Evaluate track detection (borderline or recurring unknown) and queue."""
         return self._triage.consider_candidate(
             track=track,
             frame=frame,
@@ -96,6 +100,7 @@ class ActiveLearningManager:
             video_filename=video_filename,
             media_offset_sec=media_offset_sec,
             run_id=run_id,
+            track_dwell_sec=track_dwell_sec,
         )
 
     def maybe_queue_candidate(
@@ -114,6 +119,7 @@ class ActiveLearningManager:
         video_filename: str = "",
         media_offset_sec: float = 0.0,
         run_id: str = "",
+        track_dwell_sec: float = 0.0,
     ) -> dict[str, Any] | None:
         """Evaluate pre-cropped candidate and return queued review item or None."""
         return self._triage.maybe_queue_candidate(
@@ -131,6 +137,7 @@ class ActiveLearningManager:
             video_filename=video_filename,
             media_offset_sec=media_offset_sec,
             run_id=run_id,
+            track_dwell_sec=track_dwell_sec,
         )
 
     def list_pending(self, limit: int = 50) -> list[dict[str, Any]]:

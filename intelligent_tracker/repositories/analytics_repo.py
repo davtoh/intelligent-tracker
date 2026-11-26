@@ -45,8 +45,9 @@ def _format_sighting_bbox(bbox: Union[str, Tuple[int, int, int, int], List[int]]
 _INSERT_SIGHTING_SQL = """
 INSERT INTO sightings (
     entity_id, track_id, source, timestamp, zone_id, bbox,
-    confidence, snapshot_path, video_filename, media_offset_sec
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    confidence, snapshot_path, video_filename, media_offset_sec,
+    camera_id, run_id
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -69,12 +70,18 @@ class AnalyticsMixin:
         snapshot_path: str = "",
         video_filename: str = "",
         media_offset_sec: float = 0.0,
+        camera_id: str = "",
+        run_id: str = "",
     ) -> int:
         """Log an entity sighting to the audit trail and return its ID."""
+        src = source.strip()
+        vfile = str(video_filename or "").strip()
+        cam_id = str(camera_id or "").strip() or (src if src and not vfile else "")
         params = (
-            entity_id, track_id, source.strip(), _format_sighting_timestamp(timestamp),
+            entity_id, track_id, src, _format_sighting_timestamp(timestamp),
             zone_id.strip(), _format_sighting_bbox(bbox), float(confidence),
-            snapshot_path.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
+            snapshot_path.strip(), vfile, float(media_offset_sec or 0.0),
+            cam_id, str(run_id or "").strip(),
         )
         with self._lock:
             if self._conn is None:
@@ -102,6 +109,8 @@ class AnalyticsMixin:
         limit: int = 100,
         offset: int = 0,
         video_filename: Optional[str] = None,
+        camera_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Query sightings audit trail with flexible filtering and offset pagination."""
         query, params = build_sightings_query(
@@ -113,6 +122,8 @@ class AnalyticsMixin:
             limit,
             offset=offset,
             video_filename=video_filename,
+            camera_id=camera_id,
+            run_id=run_id,
         )
         with self._lock:
             if self._conn is None:
@@ -134,6 +145,8 @@ class AnalyticsMixin:
         start_time: Optional[str] = None,
         end_time: Optional[str] = None,
         video_filename: Optional[str] = None,
+        camera_id: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> int:
         """Count total sightings matching the given filter criteria."""
         with self._lock:
@@ -149,6 +162,8 @@ class AnalyticsMixin:
                     start_time=start_time,
                     end_time=end_time,
                     video_filename=video_filename,
+                    camera_id=camera_id,
+                    run_id=run_id,
                 )
             finally:
                 cursor.close()
@@ -305,22 +320,27 @@ class AnalyticsMixin:
         end_time: float,
         bucket_sec: int = 300,
         camera_id: Optional[str] = None,
+        zone_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Aggregate timeline crossing/zone events and sightings into time buckets."""
         with self._lock:
             if self._conn is None:
                 return {
-                    "camera_id": camera_id or None,
-                    "start_time": float(start_time),
-                    "end_time": float(end_time),
-                    "bucket_sec": max(1, int(bucket_sec)),
-                    "buckets": [],
+                    "camera_id": camera_id or None, "zone_id": zone_id or None, "event_type": event_type or None,
+                    "start_time": float(start_time), "end_time": float(end_time),
+                    "bucket_sec": max(1, int(bucket_sec)), "buckets": [],
                     "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+                    "pagination": {"page": 1, "page_size": 0, "total_buckets": 0, "total_pages": 1, "has_prev": False, "has_next": False},
                 }
             cursor = self._conn.cursor()
             try:
                 return query_traffic_flows_sync(
-                    cursor, start_time, end_time, bucket_sec, camera_id=camera_id
+                    cursor, start_time, end_time, bucket_sec,
+                    camera_id=camera_id, zone_id=zone_id, event_type=event_type,
+                    page=page, page_size=page_size,
                 )
             finally:
                 cursor.close()

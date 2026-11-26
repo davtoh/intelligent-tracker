@@ -24,7 +24,7 @@ database:
   path: "data/tracker.db"
 
 reid:
-  model: "color"
+  model: "dual"
   threshold: 0.65
 
 analytics:

@@ -15,6 +15,8 @@
   <link rel="stylesheet" href="/static/css/camera_recording.css">
   <link rel="stylesheet" href="/static/css/processing_mode.css">
   <link rel="stylesheet" href="/static/css/grid_pagination.css">
+  <link rel="stylesheet" href="/static/css/tag_queue.css">
+  <link rel="stylesheet" href="/static/css/classes_badges.css">
 </head>
 <body class="dark-theme">
   <!-- Header & Navigation -->
@@ -119,14 +121,17 @@
   <script src="/static/js/processing_mode.js"></script>
   <script src="/static/js/backup_manager.js"></script>
   <script src="/static/js/live_player.js"></script>
+  <script src="/static/js/overlay_avatar_cache.js"></script>
   <script src="/static/js/unified_canvas_overlay.js"></script>
   <script src="/static/js/roi_draw_tagger.js"></script>
   <script src="/static/js/tag_modal_state.js"></script>
   <script src="/static/js/tag_feedback_actions.js"></script>
+  <script src="/static/js/tag_track_queue.js"></script>
   <script src="/static/js/interactive_canvas.js"></script>
   <script src="/static/js/telemetry.js"></script>
   {% include "partials/scripts_traceability.html" %}
   <script src="/static/js/camera_discovery.js"></script>
+  <script src="/static/js/detector_config_panel.js"></script>
   <script src="/static/js/camera_ai_config.js"></script>
   <script src="/static/js/mjpeg_reconnect.js"></script>
   <script src="/static/js/grid_pagination.js"></script>
@@ -143,6 +148,7 @@
   <script src="/static/js/video_feed_modal.js"></script>
   <script src="/static/js/overlay_control_bar.js"></script>
   <script src="/static/js/category_badge_manager.js"></script>
+  <script src="/static/js/classes_badges_manager.js"></script>
   <script src="/static/js/category_quick_create.js"></script>
   <script src="/static/js/category_chip_picker.js"></script>
   <script src="/static/js/enrollment_stage_controller.js"></script>

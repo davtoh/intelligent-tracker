@@ -114,12 +114,77 @@
     btn.appendChild(xBtn);
   }
 
+  async function submitCorrection(getActiveCameraId) {
+    const priorRaw = (el('tag-prior-entity-id')?.value || '').trim();
+    const name = (el('tag-name-input')?.value || '').trim();
+    if (!priorRaw || !name) return null;
+    const base = buildModalPayload(getActiveCameraId);
+    const payload = {
+      prior_entity_id: parseInt(priorRaw, 10),
+      entity_name: name,
+      category: el('tag-category-select')?.value || 'person',
+      entity_id: base.entity_id,
+      camera_id: base.camera_id,
+      video_filename: base.video_filename,
+      timestamp_sec: base.timestamp_sec,
+      bbox: base.bbox,
+      crop_base64: base.crop_base64,
+      notes: base.notes,
+      track_id: base.track_id,
+    };
+    const res = await fetch('/api/tag/correct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Correction request failed');
+    }
+    const json = await res.json();
+    window.TagModalState?.exitCorrectionMode?.();
+    const adv = window.TagTrackQueue?.markCurrentDoneAndAdvance?.();
+    if (!adv?.advanced) window.InteractiveCanvas?.closeTagModal?.();
+    window.ReviewUndoAndFlag?.recordResolvedDecision?.(json);
+    window.showToast?.('Identity Corrected', `Reassigned match to "${name}".`, 'success');
+    onTagCommitted(payload, json);
+    return json;
+  }
+
+  function initCorrectionControls(getActiveCameraId) {
+    const correctBtn = el('btn-tag-correct');
+    if (correctBtn && !correctBtn.dataset?.correctBound) {
+      if (correctBtn.dataset) correctBtn.dataset.correctBound = '1';
+      correctBtn.addEventListener('click', () => window.TagModalState?.enterCorrectionMode?.());
+    }
+    const form = el('tag-entity-form');
+    if (form && !form.dataset?.correctSubmitBound) {
+      if (form.dataset) form.dataset.correctSubmitBound = '1';
+      form.addEventListener('submit', async (e) => {
+        if (!window.TagModalState?.isCorrecting?.()) return;
+        e.preventDefault();
+        e.stopImmediatePropagation?.();
+        try {
+          await submitCorrection(getActiveCameraId);
+        } catch (err) {
+          window.showToast?.('Correction Failed', err.message || 'Correction failed', 'error');
+        }
+      }, true);
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => initCorrectionControls());
+  }
+
   window.TagFeedbackActions = {
     buildModalPayload,
     submitDiscourage,
+    submitCorrection,
     discourageFromModal,
     discourageCandidate,
     attachCandidateDiscourage,
+    initCorrectionControls,
     onTagCommitted,
   };
 })();

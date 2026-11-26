@@ -55,6 +55,7 @@ class PipelineBundle:
     analytics: AnalyticsEngine | None = None
     reid_extractor: Any = None
     gallery_matcher: GalleryMatcher | None = None
+    learned_class_matcher: Any = None
     rsac_manager: RSACManager | None = None
     active_learning: ActiveLearningManager | None = None
     enrollment_manager: UniversalEnrollmentManager | None = None
@@ -139,12 +140,11 @@ def build_tracker(config: PipelineConfig) -> Any:
     """Instantiate multi-object tracker backend."""
     if config.tracker_type == "sort":
         return TrackerFactory.create(
-            "sort",
-            max_age=config.max_disappeared,
-            min_hits=config.min_hits,
-            iou_threshold=config.iou_threshold,
-            coast_frames=config.tracker_coast_frames,
+            "sort", max_age=config.max_disappeared, min_hits=config.min_hits,
+            iou_threshold=config.iou_threshold, coast_frames=config.tracker_coast_frames,
             coast_seconds=config.tracker_coast_seconds,
+            high_conf_threshold=config.tracker_high_conf_threshold,
+            low_conf_threshold=config.tracker_low_conf_threshold,
         )
     return TrackerFactory.create(
         config.tracker_type,
@@ -201,12 +201,10 @@ def build_reid(
         return None, None
     try:
         extractor = ReIDExtractorFactory.create(config.reid_model)
+        hyst_k = int((config.raw_config.get("reid") or {}).get("hysteresis_k", 3))
         matcher = GalleryMatcher(
-            db=db,
-            extractor=extractor,
-            reid_threshold=config.reid_threshold,
-            camera_id=config.camera_id,
-            tracked_categories=config.tracked_categories,
+            db=db, extractor=extractor, reid_threshold=config.reid_threshold,
+            camera_id=config.camera_id, tracked_categories=config.tracked_categories, hysteresis_k=hyst_k,
         )
         return extractor, matcher
     except Exception as exc:

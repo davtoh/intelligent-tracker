@@ -181,11 +181,13 @@ class FileDetectionReplayProvider:
         run_id: str | None = None,
         tolerance_s: float = 0.45,
         empty_retry_ttl_s: float = 5.0,
+        detector_signature: dict[str, Any] | None = None,
     ) -> None:
         self.db = db
         self.video_source = video_source
         self.run_id = run_id
         self.tolerance_s = float(tolerance_s)
+        self.detector_signature = dict(detector_signature) if isinstance(detector_signature, dict) else None
         self._empty_retry_ttl_s = max(0.0, float(empty_retry_ttl_s))
         self._loaded = False
         self._last_empty_check_at: float | None = None
@@ -224,7 +226,14 @@ class FileDetectionReplayProvider:
         if not filename or self.db is None or not hasattr(self.db, "get_video_detection_stream"):
             return False
         try:
-            stream = self.db.get_video_detection_stream(filename, run_id=self.run_id)
+            if (
+                self.detector_signature is not None
+                and not self.run_id
+                and hasattr(self.db, "get_latest_run_matching")
+            ):
+                stream = self.db.get_latest_run_matching(filename, self.detector_signature)
+            else:
+                stream = self.db.get_video_detection_stream(filename, run_id=self.run_id)
         except Exception as exc:
             logger.debug("FileDetectionReplayProvider lookup failed for %s: %s", filename, exc)
             return False

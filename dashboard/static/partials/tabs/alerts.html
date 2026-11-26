@@ -22,6 +22,12 @@
           <button type="button" class="btn btn-sm btn-primary" id="alerts-filter-apply">Apply</button>
           <button type="button" class="btn btn-sm btn-outline" id="alerts-filter-reset">Reset</button>
           <div class="alerts-admin-toolbar" id="alerts-admin-toolbar">
+            <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer;">
+              <input type="checkbox" id="alerts-select-all-matching" />
+              <span>Select All Matching</span>
+            </label>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-ack-selected">✓ Ack Selected</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-delete-selected">🗑 Delete Selected</button>
             <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-mark-all-read">✓ Mark All Seen</button>
             <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-bulk-clear">🗑 Clear Matching</button>
             <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-export-csv">⬇ Export CSV</button>
@@ -32,6 +38,7 @@
           <table class="data-table" id="alerts-table">
             <thead>
               <tr>
+                <th style="width: 32px;"><input type="checkbox" id="alerts-select-all" aria-label="Select all visible alerts" /></th>
                 <th>Timestamp</th>
                 <th>Type</th>
                 <th>Severity</th>
@@ -44,7 +51,7 @@
             </thead>
             <tbody id="alerts-table-body">
               <tr>
-                <td colspan="8" class="text-center">No alerts recorded in current session.</td>
+                <td colspan="9" class="text-center">No alerts recorded in current session.</td>
               </tr>
             </tbody>
           </table>

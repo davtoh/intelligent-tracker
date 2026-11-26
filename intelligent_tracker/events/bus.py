@@ -37,6 +37,16 @@ class EventBus:
         self._history: deque = deque(maxlen=max(10, int(history_limit)))
         self._history_lock = threading.Lock()
         self._sentinel = object()
+        self._write_through_handler: Optional[Callable[[BaseEvent], Any]] = None
+
+    def set_write_through_handler(self, handler: Optional[Callable[[BaseEvent], Any]]) -> None:
+        """Register synchronous SQLite write-through handler invoked before dispatch."""
+        self._write_through_handler = handler
+
+    def clear_history(self) -> None:
+        """Clear in-memory event ring buffer (used after DB-level alert clear/delete)."""
+        with self._history_lock:
+            self._history.clear()
 
     def subscribe(
         self,
@@ -68,6 +78,14 @@ class EventBus:
         :param event: BaseEvent instance to publish.
         :param sync: If True, execute matching handlers immediately in calling thread.
         """
+        if self._write_through_handler is not None:
+            try:
+                db_id = self._write_through_handler(event)
+                if db_id is not None and not getattr(event, "db_id", None):
+                    setattr(event, "db_id", db_id)
+            except Exception as exc:
+                logger.warning("EventBus write-through persistence failed: %s", exc)
+
         with self._history_lock:
             self._history.append(event)
 

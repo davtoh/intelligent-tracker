@@ -99,25 +99,18 @@ async def enroll_entity_route(
 
     cat = await asyncio.to_thread(ensure_known_category, rsac, req.category)
     try:
+        bbox_arg = (int(req.bbox[0]), int(req.bbox[1]), int(req.bbox[2]), int(req.bbox[3])) if req.bbox and len(req.bbox) == 4 else None
         res = await asyncio.to_thread(
             enrollment_mgr.enroll, name=req.name, category=cat,
             crop=crop_img, notes=req.notes or "", security_role=req.security_role or "",
             is_anchor=req.is_anchor if req.is_anchor is not None else True,
-            merge_entity_id=req.merge_entity_id,
-            force_create_new=bool(req.force_create_new),
+            merge_entity_id=req.merge_entity_id, force_create_new=bool(req.force_create_new),
+            camera_id=req.camera_id or "", source=req.camera_id or "manual_enrollment", bbox=bbox_arg,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    from dashboard.dependencies import get_camera_pool, get_db
-    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
-
-    ent_id = res.get("entity_id") if isinstance(res, dict) else None
-    if ent_id is not None:
-        await asyncio.to_thread(
-            relabel_video_runs_on_entity_mutation,
-            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
-        )
-    await asyncio.to_thread(reload_all_galleries, conn=request)
+    from dashboard.services.rsac_enrollment_helper import finalize_enrollment_side_effects
+    await asyncio.to_thread(finalize_enrollment_side_effects, request, res)
     return res
 
 

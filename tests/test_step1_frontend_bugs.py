@@ -231,7 +231,7 @@ class TestStep1FrontendBugs(unittest.TestCase):
         sandbox.StudioCanvas.attachStudioMedia('demo.mp4', true, true);
         console.log(JSON.stringify({ hmSrc: hm.src, hmBadge: hmBadge.textContent, vidSrc: sVid.src, vidDisp: sVid.style.display, imgDisp: sImg.style.display }));
         """
-        out = _run_node_vm([STATIC_DIR / "js" / "live_player.js", STATIC_DIR / "js" / "studio_canvas.js"], script)
+        out = _run_node_vm([STATIC_DIR / "js" / "live_player.js", STATIC_DIR / "js" / "studio_media.js", STATIC_DIR / "js" / "studio_canvas.js"], script)
         self.assertIn("/analytics/heatmap?camera_id=cam_7", out["hmSrc"])
         self.assertEqual(out["hmBadge"], "Camera: cam_7")
         self.assertEqual(out["vidSrc"], "/videos/demo.mp4")

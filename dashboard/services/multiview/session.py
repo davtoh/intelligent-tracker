@@ -184,14 +184,18 @@ class MultiviewSession:
 
         try:
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            self._stopped = True
             if shutdown_task is not None and shutdown_task in done:
                 with contextlib.suppress(Exception):
-                    await self._ws.close(code=1001, reason="Server shutting down")
+                    await asyncio.wait_for(
+                        self._ws.close(code=1001, reason="Server shutting down"),
+                        timeout=1.0,
+                    )
             for task in pending:
                 task.cancel()
             for task in pending:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await task
+                    await asyncio.wait_for(task, timeout=1.0)
         finally:
             self._stopped = True
             self._release_all_leases()

@@ -2,8 +2,11 @@
 
 import os
 from typing import Any, Optional
+from urllib.parse import quote
 
 import numpy as np
+
+from intelligent_tracker.source_ref import build_source_ref, source_ref_from_row
 
 _COLORMAP_NAMES = {
     2: "JET",
@@ -33,6 +36,42 @@ def resolve_bucket_sec(range_sec: int, bucket_sec: Optional[int]) -> int:
     if range_sec <= 86400:
         return 3600
     return 21600
+
+
+def query_traffic_flows_service(
+    db: Any,
+    *,
+    camera_id: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    range_sec: int = 3600,
+    end_time: Optional[float] = None,
+    bucket_sec: Optional[int] = None,
+    page: Optional[int] = None,
+    page_size: Optional[int] = None,
+    now_ts: float,
+) -> dict[str, Any]:
+    """Query time-bucketed traffic flows with optional zone, event_type, and bucket pagination."""
+    is_live = end_time is None
+    resolved_end = float(end_time) if end_time is not None else float(now_ts)
+    resolved_bucket = resolve_bucket_sec(range_sec, bucket_sec)
+    start_time = resolved_end - float(range_sec)
+    if db is None:
+        return {
+            "camera_id": camera_id or None, "zone_id": zone_id or None, "event_type": event_type or None,
+            "start_time": start_time, "end_time": resolved_end, "bucket_sec": resolved_bucket,
+            "buckets": [], "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+            "pagination": {"page": 1, "page_size": 0, "total_buckets": 0, "total_pages": 1, "has_prev": False, "has_next": False},
+            "axes": {"x": {"label": "Time", "unit": "epoch_s", "bucket_sec": resolved_bucket}, "y": {"label": "Crossings / Events", "unit": "count"}},
+            "is_live": is_live,
+        }
+    res = db.get_traffic_flows(
+        start_time, resolved_end, resolved_bucket,
+        camera_id=camera_id, zone_id=zone_id, event_type=event_type,
+        page=page, page_size=page_size,
+    )
+    res["is_live"] = is_live
+    return res
 
 
 _HEATMAP_GRID_COLS = 32
@@ -83,13 +122,60 @@ def _resolve_colormap_name(hm: Any) -> str:
     return _COLORMAP_NAMES.get(int(cmap_val), str(cmap_val)) if isinstance(cmap_val, int) else str(cmap_val)
 
 
+def _build_heatmap_hotspots(
+    grid: list[list[float]],
+    width: int,
+    height: int,
+    resolved_cam: Optional[str],
+    vfile: str,
+    rid: str,
+    image_url: str,
+    freeze_frame_url: str,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    """Extract top normalized 32x24 heatmap hotspot cells with SourceRef drill-down metadata."""
+    rows = len(grid)
+    cols = len(grid[0]) if rows else 0
+    if not rows or not cols:
+        return []
+    candidates = sorted(
+        ((float(val), r, c) for r, rv in enumerate(grid) for c, val in enumerate(rv) if float(val) > 0.0),
+        key=lambda item: (-item[0], item[1], item[2]),
+    )
+    hotspots: list[dict[str, Any]] = []
+    for val, r, c in candidates[:limit]:
+        px = round(((c + 0.5) / cols) * width) if width > 0 else c
+        py = round(((r + 0.5) / rows) * height) if height > 0 else r
+        cell_bbox = (
+            [round((c / cols) * width), round((r / rows) * height), round(((c + 1) / cols) * width), round(((r + 1) / rows) * height)]
+            if width > 0 and height > 0 else None
+        )
+        cell_ref = build_source_ref(camera_id=str(resolved_cam or ""), video_filename=vfile, run_id=rid, bbox=cell_bbox)
+        hotspots.append({
+            "col": c, "row": r, "px": px, "py": py, "bbox": cell_bbox, "density": val,
+            "camera_id": resolved_cam, "image_url": image_url,
+            "freeze_frame_url": freeze_frame_url, "source_ref": cell_ref,
+        })
+    return hotspots
+
+
 def build_heatmap_json(mgr: Any, camera_id: Optional[str]) -> dict[str, Any]:
     """Build enriched JSON metadata payload for the spatial density heatmap."""
     resolved_cam = camera_id or getattr(mgr, "camera_id", None)
+    raw_vfile = getattr(mgr, "video_filename", "")
+    raw_rid = getattr(mgr, "run_id", "")
+    vfile = raw_vfile.strip() if isinstance(raw_vfile, str) else ""
+    rid = raw_rid.strip() if isinstance(raw_rid, str) else ""
+    q_cam = quote(str(resolved_cam), safe="") if resolved_cam else ""
+    image_url = f"/analytics/heatmap?camera_id={q_cam}" if q_cam else "/analytics/heatmap"
+    freeze_frame_url = f"/api/cameras/{q_cam}/freeze_frame" if q_cam else ""
+    base_ref = build_source_ref(camera_id=str(resolved_cam or ""), video_filename=vfile, run_id=rid)
     if not mgr.analytics or not mgr.analytics.heatmap:
         return {
             "density": [], "initialized": False, "camera_id": resolved_cam,
             "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS], "grid": [], "x_ticks": [], "y_ticks": [],
+            "source_ref": base_ref, "image_url": image_url, "freeze_frame_url": freeze_frame_url,
+            "peak_media_ref": None, "hotspots": [],
         }
     hm = mgr.analytics.heatmap
     raw_density = getattr(hm, "density", None)
@@ -97,20 +183,18 @@ def build_heatmap_json(mgr: Any, camera_id: Optional[str]) -> dict[str, Any]:
     has_data = arr.ndim == 2 and arr.size > 0
     width = int(getattr(hm, "width", 0) or (arr.shape[1] if arr.ndim == 2 else 0))
     height = int(getattr(hm, "height", 0) or (arr.shape[0] if arr.ndim == 2 else 0))
+    grid = _downsample_heatmap_grid(arr, _HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS)
+    hotspots = _build_heatmap_hotspots(grid, width, height, resolved_cam, vfile, rid, image_url, freeze_frame_url)
     return {
-        "initialized": True,
-        "camera_id": resolved_cam,
-        "resolution": [width, height],
+        "initialized": True, "camera_id": resolved_cam, "resolution": [width, height],
         "max_value": float(np.max(arr)) if has_data else 0.0,
         "mean_value": float(np.mean(arr)) if has_data else 0.0,
-        "colormap": _resolve_colormap_name(hm),
-        "decay_rate": getattr(hm, "decay_rate", None),
-        "radius": getattr(hm, "radius", None),
-        "stops": _DEFAULT_HEATMAP_STOPS,
-        "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS],
-        "grid": _downsample_heatmap_grid(arr, _HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS),
-        "x_ticks": _build_axis_ticks(width),
-        "y_ticks": _build_axis_ticks(height),
+        "colormap": _resolve_colormap_name(hm), "decay_rate": getattr(hm, "decay_rate", None),
+        "radius": getattr(hm, "radius", None), "stops": _DEFAULT_HEATMAP_STOPS,
+        "grid_size": [_HEATMAP_GRID_COLS, _HEATMAP_GRID_ROWS], "grid": grid,
+        "x_ticks": _build_axis_ticks(width), "y_ticks": _build_axis_ticks(height),
+        "source_ref": base_ref, "image_url": image_url, "freeze_frame_url": freeze_frame_url,
+        "peak_media_ref": hotspots[0] if hotspots else None, "hotspots": hotspots,
     }
 
 
@@ -135,6 +219,7 @@ def enrich_sighting(s: dict[str, Any], db: Any) -> dict[str, Any]:
             if cp:
                 s_dict["snapshot_url"] = f"/crops/{os.path.basename(cp)}"
                 break
+    s_dict["source_ref"] = source_ref_from_row(s_dict)
     return s_dict
 
 
@@ -183,3 +268,32 @@ def query_sightings_page(
 
     total = db.count_sightings(**filters)
     return {"items": items, "total": total, "offset": safe_offset, "limit": safe_limit, "has_more": (safe_offset + len(items)) < total}
+
+
+def list_all_sighting_sources(
+    db: Any, *, pool: Any = None, videos_dir: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return DB sighting sources merged with all known cameras and video files."""
+    by_source: dict[str, dict[str, Any]] = {}
+    if db is not None and hasattr(db, "list_sighting_sources"):
+        for row in db.list_sighting_sources():
+            src = str(row.get("source") or "").strip()
+            if src:
+                by_source[src] = dict(row)
+    if pool is not None:
+        cam_ids = set(getattr(pool, "camera_configs", {}) or {})
+        from dashboard.services.camera_pool_queries import snapshot_pool_streams
+
+        cam_ids.update(snapshot_pool_streams(pool).keys())
+        for cid in sorted(cam_ids):
+            by_source.setdefault(str(cid), {"source": str(cid), "count": 0, "has_video": False})
+    if db is not None and hasattr(db, "list_video_runs"):
+        for run in db.list_video_runs():
+            vname = str(run.get("video_filename") or "").strip()
+            if vname:
+                by_source.setdefault(vname, {"source": vname, "count": 0, "has_video": True})
+    if videos_dir and os.path.isdir(videos_dir):
+        for name in sorted(os.listdir(videos_dir)):
+            if name.lower().endswith((".mp4", ".avi", ".mkv", ".mov", ".webm", ".m4v")):
+                by_source.setdefault(name, {"source": name, "count": 0, "has_video": True})
+    return sorted(by_source.values(), key=lambda r: (-int(r.get("count") or 0), str(r.get("source") or "")))

@@ -5,10 +5,13 @@ Manages supervised Re-ID negative and false-positive correction exemplars
 in SQLite for per-entity and global clutter suppression.
 """
 
+import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class NegativeExemplarMixin:
@@ -104,8 +107,10 @@ class NegativeExemplarMixin:
         for row in rows:
             vec = np.frombuffer(row["embedding"], dtype=np.float32).copy()
             if vec.size == 0:
+                logger.debug("Skipping empty negative exemplar for entity_id=%s", row["entity_id"])
                 continue
             if expected_dim is not None and vec.shape[0] != expected_dim:
+                logger.debug("Skipping negative exemplar dim=%d (expected_dim=%d)", vec.shape[0], expected_dim)
                 continue
             norm = float(np.linalg.norm(vec))
             if norm > 1e-7:

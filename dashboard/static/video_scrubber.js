@@ -197,6 +197,7 @@
       if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
       window.VideoLibrary?.hideCodecNotice();
 
+      window.MediaEmptyState?.hideEmpty?.(videoPlayer, 'block');
       videoPlayer.src = url;
       if (typeof videoPlayer.load === 'function') videoPlayer.load();
       videoPlayer.currentTime = pendingPlaybackRestore.time;

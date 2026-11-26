@@ -150,9 +150,9 @@ class AsyncInferenceWorker:
                 frame, wall_ts, mono_ts, seq = item
             elif len(item) == 3:
                 frame, wall_ts, seq = item
-                mono_ts = wall_ts
+                mono_ts = time.monotonic()
             else:
-                frame, wall_ts, mono_ts, seq = item[0], item[1], item[1], 0
+                frame, wall_ts, mono_ts, seq = item[0], item[1], time.monotonic(), 0
             self._execute_step(frame, wall_ts, mono_ts, seq)
 
 

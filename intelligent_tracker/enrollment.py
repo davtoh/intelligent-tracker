@@ -148,6 +148,13 @@ class UniversalEnrollmentManager:
         is_anchor: bool = True,
         merge_entity_id: Optional[int] = None,
         force_create_new: bool = False,
+        camera_id: str = "",
+        source: str = "",
+        zone_id: str = "",
+        track_id: Optional[int] = None,
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
+        run_id: str = "",
     ) -> Dict[str, Any]:
         """Universally enroll an entity with dual-model feature extraction."""
         target_crop = self._resolve_target_crop(frame=frame, bbox=bbox, crop=crop)
@@ -166,6 +173,14 @@ class UniversalEnrollmentManager:
             entity_id=entity_id, embedding=embedding, crop_path=crop_path,
             source="manual_enrollment", notes=ver_note, is_anchor=1 if is_anchor else 0,
         )
+        if hasattr(self.db, "add_sighting"):
+            resolved_source = str(source or camera_id or video_filename or "enrollment").strip()
+            self.db.add_sighting(
+                entity_id=entity_id, track_id=track_id, source=resolved_source,
+                zone_id=zone_id or "enrollment", bbox=bbox or "", confidence=1.0,
+                snapshot_path=crop_path, video_filename=video_filename,
+                media_offset_sec=media_offset_sec, camera_id=camera_id, run_id=run_id,
+            )
         if self.matcher and hasattr(self.matcher, "reload_gallery"):
             self.matcher.reload_gallery()
         return {

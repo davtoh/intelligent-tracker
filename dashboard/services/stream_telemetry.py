@@ -58,6 +58,9 @@ def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[di
     telemetry_tracks: list[dict[str, Any]] = []
     for tid, trk in tracks.items():
         gx, gy = homography.track_to_ground(trk.bbox)
+        entity_cat = getattr(trk, "entity_category", None)
+        learned_cls = getattr(trk, "learned_class", None)
+        resolved_cat = entity_cat or getattr(trk, "category", None) or learned_cls or getattr(trk, "label", "person")
         telemetry_tracks.append({
             "id": tid,
             "bbox": [int(x) for x in trk.bbox],
@@ -67,8 +70,12 @@ def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[di
             "label": trk.label,
             "confidence": round(float(trk.confidence), 2),
             "dwell_time": round(float(trk.dwell_time), 1),
+            "entity_id": getattr(trk, "entity_id", None),
             "entity_name": getattr(trk, "entity_name", getattr(trk, "identity_label", None)),
-            "category": getattr(trk, "category", "person"),
+            "entity_category": entity_cat,
+            "category": resolved_cat,
+            "avatar_url": getattr(trk, "avatar_url", None),
+            "learned_class": learned_cls,
             "is_cluttered": bool(getattr(trk, "is_cluttered", False)),
             "clutter_partner_id": getattr(trk, "clutter_partner_id", None),
             "carrying": list(getattr(trk, "carrying", []) or []),

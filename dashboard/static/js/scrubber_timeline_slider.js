@@ -139,26 +139,25 @@
     if (placeholder) placeholder.style.display = 'none';
     window.EnrollmentStageController?.syncVideoStageClasses?.(canvas, true);
     const fps = Number(opts?.fps) || 30;
+    const targetTime = Number(opts?.initialTime ?? window.EnrollmentStageController?.getActiveVideoCurrentTime?.() ?? 0);
     const grab = () => {
       const dataUrl = captureFrameToCanvas(vid, canvas);
       if (dataUrl && typeof onFrameCaptured === 'function') onFrameCaptured(dataUrl);
     };
+    const seekInitial = () => { if (targetTime > 0 && Number.isFinite(targetTime)) try { vid.currentTime = targetTime; } catch (err) { console.debug('Scrubber initial seek failed:', err); } grab(); };
     if (!vid.dataset?.sliderBound) {
       if (vid.dataset) vid.dataset.sliderBound = '1';
       _enrollSliderCtrl = create({
-        videoPlayer: vid, standaloneDisplay: true, fps,
-        slider: document.getElementById('enroll-scrubber-slider'),
-        timeDisplay: document.getElementById('enroll-scrubber-time'),
-        playBtn: document.getElementById('enroll-scrubber-play'),
-        prevBtn: document.getElementById('enroll-scrubber-prev'),
-        nextBtn: document.getElementById('enroll-scrubber-next'),
-        onLoadedMetadata: grab, onSeek: grab, onStep: grab, onTimeUpdate: grab,
+        videoPlayer: vid, standaloneDisplay: true, fps, slider: document.getElementById('enroll-scrubber-slider'),
+        timeDisplay: document.getElementById('enroll-scrubber-time'), playBtn: document.getElementById('enroll-scrubber-play'),
+        prevBtn: document.getElementById('enroll-scrubber-prev'), nextBtn: document.getElementById('enroll-scrubber-next'),
+        onLoadedMetadata: seekInitial, onSeek: grab, onStep: grab, onTimeUpdate: grab,
       });
       _enrollSliderCtrl.bind();
+      vid.addEventListener?.('loadeddata', grab);
+      vid.addEventListener?.('seeked', grab);
       document.getElementById('enroll-scrubber-grab')?.addEventListener('click', grab);
-    } else if (_enrollSliderCtrl && typeof _enrollSliderCtrl.setFps === 'function') {
-      _enrollSliderCtrl.setFps(fps);
-    }
+    } else if (_enrollSliderCtrl?.setFps) _enrollSliderCtrl.setFps(fps);
     vid.src = videoUrl;
     if (typeof vid.load === 'function') vid.load();
     return vid;

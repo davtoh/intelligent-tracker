@@ -78,12 +78,15 @@ class StreamPipelineFactory:
     ) -> StreamPipelineBundle:
         """Instantiate and wire complete computer vision pipeline via PipelineEngine."""
         data = dict(cfg or {})
+        from intelligent_tracker.reid.profile import resolve_reid_profile
+
+        profile = resolve_reid_profile(data)
         raw_source = source_override if source_override is not None else data.get("video", {}).get("source")
         config = PipelineConfig.from_dict(
             data, camera_id=camera_id, camera_name=camera_name, db_path=db_path, source_override=source_override,
             detector_fallback_mock=is_synthetic_source(raw_source, data.get("type")),
             enable_governance=True, enable_event_bus_fallback=True,
-            probe_db_reid=True, default_reid_model="dual",
+            probe_db_reid=True, default_reid_model=profile.model_name or "dual",
         )
         if "loop" not in data.get("video", {}):
             config.loop_video = True

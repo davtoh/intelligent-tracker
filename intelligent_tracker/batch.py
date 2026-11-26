@@ -51,7 +51,7 @@ def _create_batch_detector(detector_name: str, conf_threshold: float, classes: l
         if classes:
             det_kwargs["classes"] = classes
     elif det_clean in ("mock", "mockdetector"):
-        det_kwargs["confidence"] = conf_threshold
+        det_kwargs["confidence"] = max(0.95, min(1.0, float(conf_threshold)))
     return DetectorFactory.create(detector_name, **det_kwargs)
 
 
@@ -87,7 +87,7 @@ class VideoIndexer:
         detector_name: str = "yolov8",
         reid_name: str = "dual",
         reid_threshold: float = 0.65,
-        tracker_type: str = "centroid",
+        tracker_type: str = "sort",
         sample_rate: int = 1,
         conf_threshold: float = 0.25,
         classes: list[str] | None = None,
@@ -133,7 +133,10 @@ class VideoIndexer:
         self.fts_index = fts_index
         self.detector = _create_batch_detector(detector_name, conf_threshold, classes)
         self.tracker = TrackerFactory.create(tracker_type)
-        self.extractor = ReIDExtractorFactory.create(reid_name)
+        from intelligent_tracker.reid.profile import resolve_reid_profile
+
+        profile = resolve_reid_profile({"reid": {"model": reid_name, "threshold": reid_threshold}})
+        self.extractor = ReIDExtractorFactory.create(profile.model_name or "dual")
         self.matcher = GalleryMatcher(
             db=self.db, extractor=self.extractor, reid_threshold=reid_threshold,
             sighting_interval=1.0, active_learning=active_learning,
@@ -148,7 +151,7 @@ class VideoIndexer:
             try:
                 self.db.close()
             finally:
-                self.db = None
+                self.db = None  # type: ignore[assignment]
                 self._owns_db = False
 
     def __enter__(self) -> "VideoIndexer":
@@ -163,13 +166,13 @@ class VideoIndexer:
         if self.frame_processor is not None:
             bundle = self.frame_processor.bundle
             if bundle.gallery_matcher is not None:
-                bundle.gallery_matcher.video_filename = resolved_video
+                bundle.gallery_matcher.video_filename = resolved_video  # type: ignore[attr-defined]
                 if self.fts_index is not None and getattr(bundle.gallery_matcher, "fts_index", None) is None:
                     bundle.gallery_matcher.fts_index = self.fts_index
             if bundle.active_learning is not None:
                 bundle.active_learning.video_filename = resolved_video
             return self.frame_processor
-        self.matcher.video_filename = resolved_video
+        self.matcher.video_filename = resolved_video  # type: ignore[attr-defined]
         if self.fts_index is not None and getattr(self.matcher, "fts_index", None) is None:
             self.matcher.fts_index = self.fts_index
         if self.active_learning is not None:
@@ -236,9 +239,9 @@ class VideoIndexer:
         state["last_video_ts"] = video_ts
         base_epoch = float(state["start_wall_time"])
         if processor.bundle.gallery_matcher is not None:
-            processor.bundle.gallery_matcher.current_media_offset_sec = video_ts
+            processor.bundle.gallery_matcher.current_media_offset_sec = video_ts  # type: ignore[attr-defined]
         if processor.bundle.active_learning is not None:
-            processor.bundle.active_learning.current_media_offset_sec = video_ts
+            processor.bundle.active_learning.current_media_offset_sec = video_ts  # type: ignore[attr-defined]
         media_state = getattr(self, "_media_offset_state", None)
         if isinstance(media_state, dict):
             media_state["start_wall_time"], media_state["offset_sec"] = base_epoch, video_ts

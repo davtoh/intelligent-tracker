@@ -1,5 +1,54 @@
 # Changelog
 
+## [2026-11-25] feat: Step 4: Reversible Review Audit & Studio / Analytics / Alerts UX
+- **Type**: feat
+- **Summary**: Complete Step 4 (review_decisions v5 audit/undo, recurring unknown queueing, Studio minimap zoom/BEV quad, Journey/Analytics/Snapshot overlay isolation) and close integration_seams_entity_persistence_master_roadmap
+- **Files** (13):
+  - `AGENTS.md`
+  - `dashboard/services/multiview/limits.py`
+  - `dashboard/static/app.js`
+  - `dashboard/static/js/scrubber_timeline_slider.js`
+  - `docs/architecture/CURRENT_ARCHITECTURE.md`
+  - `intelligent_tracker/homography.py`
+  - `intelligent_tracker/matching/gallery.py`
+  - `intelligent_tracker/matching/learned_class_matcher.py`
+  - ... (+5 more)
+
+## [2026-11-25] feat: Step 3 M4: Exemplar Learned Classes & Per-Camera COCO Overrides
+- **Type**: feat
+- **Summary**: Added schema v4, LearnedClassMixin, LearnedClassMatcher, LearnedClassService, /api/classes/* router, and unified Classes & Badges 3-tab gallery sub-view.
+- **Files** (17):
+  - `dashboard/app.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/static/index.html`
+  - `dashboard/static/partials/tabs/gallery.html`
+  - `intelligent_tracker/database.py`
+  - `intelligent_tracker/pipeline/bundle.py`
+  - `intelligent_tracker/pipeline/frame_processor.py`
+  - `intelligent_tracker/repositories/__init__.py`
+  - ... (+9 more)
+
+## [2026-11-25] feat: Step 2: Unified SourceRef Provenance, ActiveSourceContext & Media Freeze Controls
+- **Type**: feat
+- **Summary**: Implemented canonical SourceRef provenance, world_timeline_events run_id migration, ActiveSourceContext cross-tab sync, #studio and Enrollment /freeze_frame controls, and #journey/#review deep-link jump buttons.
+- **Files** (9):
+  - `.diagnostics/probes/deep_link_navigation_probe.py`
+  - `.diagnostics/probes/spa_nine_tab_sweep.js`
+  - `dashboard/static/js/enrollment_stage_controller.js`
+  - `dashboard/static/js/journey_search.js`
+  - `dashboard/static/js/universal_enrollment.js`
+  - `dashboard/static/js/video_timeline_links.js`
+  - `dashboard/static/partials/modals/entity_modals.html`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+1 more)
+
+## [2026-11-25] feat: Step 1: P0 Integration Seams and Probe Hardening
+- **Type**: feat
+- **Summary**: Upgraded probe_runner, cdp_inspect/audit_layout, cross_module_rules (SILENT_SHAPE_SKIP), and surface_contracts/surface_verifier; added 5 workspace seam probes and hardened spa_nine_tab_cdp_probe.
+- **Files** (2):
+  - `.diagnostics/probes/`
+  - `CHANGELOG.md`
+
 ## [2026-11-24] feat: Step 4 M3: Minimap Interactions and Stale Camera Pruning
 - **Type**: feat
 - **Summary**: Pruned stale cameras from /api/topology/world-map via world_map_service, cleaned up camera_world_poses on CameraPool.remove_camera, and added interactive 2D minimap cone-focus and origin/yaw/range drag controls.
@@ -96,46 +145,3 @@
   - `intelligent_tracker/world/_lifecycle.py`
   - ... (+5 more)
 - **Verification**: .venv/Scripts/python.exe -m unittest discover tests
-
-## [2026-11-23] fix: Step 1: Critical Bug Remediations & Tooling Elevation
-- **Type**: fix
-- **Summary**: Resolved Findings 1-7 and BE-1..BE-4 across backend/frontend, elevated SPA 9-tab CDP and Video Studio probes, and added broken-img, script wrap-order, query-param, and repo-rollback rules to system-diagnostics.
-- **Files** (8):
-  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-  - `tests/test_database_concurrency.py`
-  - `tests/test_live_studio_sync.py`
-  - `tests/test_step2_studio_minimap_gating.py`
-  - `tests/test_step2_tab_scoped_perf_integration.py`
-  - `tests/test_step3_e2e_tagging_flow.py`
-  - `tests/test_step4_m3_spa_and_video_contracts.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-21] feat: Step 4 & Integration Hardening Master Roadmap Complete (P0-P3)
-- **Type**: feat
-- **Summary**: Hardened 9-tab headless CDP probe + Chrome-gated E2E test, aligned legacy Node VM suites with GridTileOverlay & Zero-CLS HUD hysteresis, and refreshed CURRENT_ARCHITECTURE.md.
-- **Files** (11):
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-  - `dashboard/static/js/bev_minimap.js`
-  - `dashboard/static/js/telemetry.js`
-  - `dashboard/static/studio.js`
-  - `docs/architecture/CURRENT_ARCHITECTURE.md`
-  - `tests/test_camera_grid_teardown.py`
-  - `tests/test_camera_recording_ui.py`
-  - `tests/test_dashboard_ui.py`
-  - ... (+3 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-21] feat: Step 3: P1 Pipeline, Multiview Telemetry, Video Studio & Persistence Hardening
-- **Type**: feat
-- **Summary**: Completed P1-6..P1-13, /ws/multiview JSON telemetry, P3 edge cases, and TRC-018
-- **Files** (32):
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-  - `dashboard/routers/analytics.py`
-  - `dashboard/routers/tagging.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/services/entity_tagger.py`
-  - `dashboard/services/roi_recognition_service.py`
-  - `dashboard/services/video_analytics_service.py`
-  - `dashboard/static/review_and_rsac.js`
-  - ... (+24 more)

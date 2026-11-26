@@ -85,14 +85,17 @@ class TestStep1ReidSightingsAndLocks(unittest.TestCase):
         self.addCleanup(lambda: _teardown_indexer_bus(indexer))
         self.addCleanup(indexer.close)
         summary = indexer.process_video(mp4, verbose=False)
+        dets = summary.get("frame_detections") or [{"frame": 0, "tracks": [{"track_id": 1, "bbox": [10, 10, 50, 90]}]}]
+        target_tid = int(dets[0]["tracks"][0]["track_id"])
+        dets[0]["tracks"][0]["entity_id"] = None
         run = self.db.save_video_run(
-            "clip.mp4", {"summary": "ok"}, {}, frame_detections=summary.get("frame_detections") or [{"frame": 0, "tracks": [{"track_id": 1, "bbox": [10, 10, 50, 90]}]}],
+            "clip.mp4", {"summary": "ok"}, {}, frame_detections=dets,
         )
         mock_provider = MagicMock(spec=CachedReplayProvider)
         mock_stream = MagicMock(_cached_replay_provider=mock_provider, replay_provider=None)
         pool = MagicMock(_lock=threading.RLock(), streams={"cam_1": mock_stream})
         updated = relabel_video_runs_on_entity_mutation(
-            self.db, pool=pool, updated_entity_id=eid, video_filename="clip.mp4", track_id=1,
+            self.db, pool=pool, updated_entity_id=eid, video_filename="clip.mp4", track_id=target_tid,
         )
         self.assertGreaterEqual(updated, 1)
         mock_provider.invalidate.assert_called()

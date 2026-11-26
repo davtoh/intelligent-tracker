@@ -1,10 +1,13 @@
 """Spatial-grid HSV color histogram feature extractor."""
 
+import logging
 from typing import Optional, Tuple
 import cv2
 import numpy as np
 
 from intelligent_tracker.reid.base import BaseFeatureExtractor
+
+logger = logging.getLogger(__name__)
 
 
 class ColorHistogramExtractor(BaseFeatureExtractor):
@@ -66,6 +69,7 @@ class ColorHistogramExtractor(BaseFeatureExtractor):
 
                 sub_hsv = hsv[y_start:y_end, x_start:x_end]
                 if sub_hsv.size == 0:
+                    logger.debug("ColorHistogramExtractor: empty HSV cell (%d,%d) for shape=%s", r, c, hsv.shape)
                     features.append(np.zeros(self._bins_per_cell, dtype=np.float32))
                     continue
 
