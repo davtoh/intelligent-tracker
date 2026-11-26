@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-26] test: CI Parity & Batch Contract Hardening (M2)
+- **Type**: test
+- **Summary**: Added POSIX/Windows avatar URL & ROI propagation tests, bounded 1.0s multiview websocket close timeout test, and isolated TestVideoJobAPI DB state.
+- **Files** (4):
+  - `.TODO/ci_parity_and_batch_contract_hardening.md`
+  - `tests/test_ci_parity_and_batch_contract.py`
+  - `tests/test_multiview_session.py`
+  - `tests/test_video_jobs.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-25] feat: Step 4: Reversible Review Audit & Studio / Analytics / Alerts UX
 - **Type**: feat
 - **Summary**: Complete Step 4 (review_decisions v5 audit/undo, recurring unknown queueing, Studio minimap zoom/BEV quad, Journey/Analytics/Snapshot overlay isolation) and close integration_seams_entity_persistence_master_roadmap
@@ -130,18 +140,3 @@
   - `dashboard/services/stream_pool_coordinator.py`
   - ... (+18 more)
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-23] feat: Step 2 Milestone 3: Person+Bag WorldGraph Ownership and Unattended-Item Alerts
-- **Type**: feat
-- **Summary**: Added WorldEdge/WorldEdgeRegistry, OwnershipAssociationEngine, UnattendedItemAlert with EventFTSIndex formatting, and live governance/telemetry wiring.
-- **Files** (13):
-  - `dashboard/services/stream_telemetry.py`
-  - `intelligent_tracker/events/__init__.py`
-  - `intelligent_tracker/events/types.py`
-  - `intelligent_tracker/memory/_event_formatters.py`
-  - `intelligent_tracker/pipeline/bundle.py`
-  - `intelligent_tracker/pipeline/post_detection_governance.py`
-  - `intelligent_tracker/world/__init__.py`
-  - `intelligent_tracker/world/_lifecycle.py`
-  - ... (+5 more)
-- **Verification**: .venv/Scripts/python.exe -m unittest discover tests

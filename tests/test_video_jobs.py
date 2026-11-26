@@ -9,6 +9,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from dashboard.app import app
+import dashboard.dependencies as deps
 from dashboard.dependencies import VIDEOS_DIR
 from dashboard.services.video_jobs_service import (
     JobStatus,
@@ -17,6 +18,7 @@ from dashboard.services.video_jobs_service import (
 )
 from dashboard.services.video_transcoder import VideoTranscodeService
 from intelligent_tracker.batch import VideoIndexer
+from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.video import PipelineVideoWriter
 
 
@@ -232,6 +234,12 @@ class TestVideoJobAPI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         os.makedirs(VIDEOS_DIR, exist_ok=True)
+        cls._temp_dir = tempfile.TemporaryDirectory()
+        cls._prev_db = deps._db
+        cls._prev_app_db = getattr(app.state, "db", None)
+        cls._test_db = TrackerDB(os.path.join(cls._temp_dir.name, "test_video_jobs.db"))
+        deps._db = cls._test_db
+        app.state.db = cls._test_db
         cls.client = TestClient(app)
         cls.test_filename = "test_job_api_clip.mp4"
         cls.test_path = os.path.join(VIDEOS_DIR, cls.test_filename)
@@ -241,6 +249,16 @@ class TestVideoJobAPI(unittest.TestCase):
     def tearDownClass(cls):
         from dashboard.services.video_jobs_service import reset_video_job_manager
         reset_video_job_manager()
+        deps._db = cls._prev_db
+        app.state.db = cls._prev_app_db
+        try:
+            cls._test_db.close()
+        except Exception:
+            pass
+        try:
+            cls._temp_dir.cleanup()
+        except Exception:
+            pass
         if os.path.exists(cls.test_path):
             try:
                 os.remove(cls.test_path)

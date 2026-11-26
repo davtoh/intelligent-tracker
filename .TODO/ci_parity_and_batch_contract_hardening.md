@@ -21,8 +21,8 @@
 - [x] **tests/test_ci_parity_and_batch_contract.py**: Add unit tests verifying `_create_batch_detector("mock", 0.45, None)` preserves `0.45` and exercises `VideoIndexer` end-to-end under `MockDetector` without local ONNX weights.
 - [x] **Verification**: Run `python -m unittest tests/test_ci_parity_and_batch_contract.py tests/test_step5_e2e_closed_loop_ecosystem.py tests/test_detectors.py` and `diagnose.py audit --path intelligent_tracker/batch.py tests/test_ci_parity_and_batch_contract.py`.
 
-## Milestone 2: Cross-Platform POSIX `/tmp` & Async CI Parity Tests *(Deferred to Next Turn / Milestone)*
+## Milestone 2: Cross-Platform POSIX `/tmp` & Async CI Parity Tests
 
-- [ ] **tests/test_ci_parity_and_batch_contract.py**: Add explicit POSIX path tests for `dashboard.services.entity_tagger._to_avatar_url` (`/tmp/crops/abc.jpg`, `C:\crops\abc.jpg`, `/crops/abc.jpg`, `https://...`, `data:...`) and `roi_recognition_helpers.record_roi_side_effects` avatar propagation.
-- [ ] **tests/test_multiview_session.py**: Verify slow/hanging websocket close completes within bounded `1.0s` timeout without hanging event-loop teardown.
-- [ ] **Verification**: Run `python -m unittest tests/test_ci_parity_and_batch_contract.py tests/test_multiview_session.py tests/test_step3_tracking_hysteresis_and_multitag.py tests/test_step1_reid_sightings_and_locks.py`.
+- [x] **tests/test_ci_parity_and_batch_contract.py**: Add explicit POSIX path tests for `dashboard.services.entity_tagger._to_avatar_url` (`/tmp/crops/abc.jpg`, `C:\crops\abc.jpg`, `/crops/abc.jpg`, `https://...`, `data:...`) and `roi_recognition_helpers.record_roi_side_effects` avatar propagation.
+- [x] **tests/test_multiview_session.py**: Verify slow/hanging websocket close completes within bounded `1.0s` timeout without hanging event-loop teardown.
+- [x] **Verification**: Run `python -m unittest tests/test_ci_parity_and_batch_contract.py tests/test_multiview_session.py tests/test_step3_tracking_hysteresis_and_multitag.py tests/test_step1_reid_sightings_and_locks.py`.
