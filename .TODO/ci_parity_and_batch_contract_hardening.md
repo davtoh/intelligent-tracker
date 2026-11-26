@@ -14,12 +14,12 @@
 
 ---
 
-## Milestone 1: Remove `batch.py` Silent Confidence Clamp & Fix Caller/Test Contract *(Active Execution Target)*
+## Milestone 1: Remove `batch.py` Silent Confidence Clamp & Fix Caller/Test Contract
 
-- [ ] **intelligent_tracker/batch.py**: Inspect all callers of `_create_batch_detector` and `MockDetector(..., confidence=...)` in `tests/` (`git grep -n "_create_batch_detector\|MockDetector" tests/ intelligent_tracker/`), then remove the `max(0.95, ...)` silent clamp on line 54 so `det_kwargs["confidence"] = conf_threshold` honors caller configuration.
-- [ ] **tests/test_step5_e2e_closed_loop_ecosystem.py** *(or whichever CI test triggered the clamp)*: Pass explicit confidence or seed deterministic mock detections cleanly at the test boundary rather than mutating production detector config globally.
-- [ ] **tests/test_ci_parity_and_batch_contract.py**: Add unit tests verifying `_create_batch_detector("mock", 0.45, None)` preserves `0.45` and exercises `VideoIndexer` end-to-end under `MockDetector` without local ONNX weights.
-- [ ] **Verification**: Run `python -m unittest tests/test_ci_parity_and_batch_contract.py tests/test_step5_e2e_closed_loop_ecosystem.py tests/test_detectors.py` and `diagnose.py audit --path intelligent_tracker/batch.py tests/test_ci_parity_and_batch_contract.py`.
+- [x] **intelligent_tracker/batch.py**: Inspect all callers of `_create_batch_detector` and `MockDetector(..., confidence=...)` in `tests/` (`git grep -n "_create_batch_detector\|MockDetector" tests/ intelligent_tracker/`), then remove the `max(0.95, ...)` silent clamp on line 54 so `det_kwargs["confidence"] = conf_threshold` honors caller configuration.
+- [x] **tests/test_step5_e2e_closed_loop_ecosystem.py** *(or whichever CI test triggered the clamp)*: Pass explicit confidence or seed deterministic mock detections cleanly at the test boundary rather than mutating production detector config globally.
+- [x] **tests/test_ci_parity_and_batch_contract.py**: Add unit tests verifying `_create_batch_detector("mock", 0.45, None)` preserves `0.45` and exercises `VideoIndexer` end-to-end under `MockDetector` without local ONNX weights.
+- [x] **Verification**: Run `python -m unittest tests/test_ci_parity_and_batch_contract.py tests/test_step5_e2e_closed_loop_ecosystem.py tests/test_detectors.py` and `diagnose.py audit --path intelligent_tracker/batch.py tests/test_ci_parity_and_batch_contract.py`.
 
 ## Milestone 2: Cross-Platform POSIX `/tmp` & Async CI Parity Tests *(Deferred to Next Turn / Milestone)*
 
