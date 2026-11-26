@@ -15,13 +15,13 @@
 
 ---
 
-## Milestone 1: Backend Observation Endpoint & `debug_triage.py` Correlation *(Active Execution Target)*
+## Milestone 1: Backend Observation Endpoint & `debug_triage.py` Correlation
 
-- [ ] **dashboard/services/debug_session.py**: Add `record_user_observation(note, tab, url, breadcrumbs, viewport, debug_dir=None)` writing a structured `level="OBSERVATION"` event into `events.jsonl` (bounded breadcrumbs `<= 30`, sanitized note length).
-- [ ] **dashboard/services/debug_triage.py**: Update `summarize_debug_session()` to separate/surface recent `observations` alongside deduplicated `issues` so `WARNING`/`ERROR` counts remain unpolluted while exposing correlated time windows.
-- [ ] **dashboard/routers/system.py**: Add `POST /api/system/debug/observation` (guarded by `is_debug_mode()`) and expose `"debug_mode": is_debug_mode()` on `GET /api/system/debug/summary` (or `/status`).
-- [ ] **tests/test_debug_observation_mode.py**: Add FastAPI `TestClient` + temp `TRACKER_DEBUG_DIR` tests for enabled/disabled mode gating and `events.jsonl` persistence.
-- [ ] **Verification**: Run `python -m unittest tests/test_debug_session.py tests/test_debug_observation_mode.py` and `diagnose.py audit --path dashboard/services/debug_session.py dashboard/services/debug_triage.py dashboard/routers/system.py`.
+- [x] **dashboard/services/debug_session.py**: Add `record_user_observation(note, tab, url, breadcrumbs, viewport, debug_dir=None)` writing a structured `level="OBSERVATION"` event into `events.jsonl` (bounded breadcrumbs `<= 30`, sanitized note length).
+- [x] **dashboard/services/debug_triage.py**: Update `summarize_debug_session()` to separate/surface recent `observations` alongside deduplicated `issues` so `WARNING`/`ERROR` counts remain unpolluted while exposing correlated time windows.
+- [x] **dashboard/routers/system.py**: Add `POST /api/system/debug/observation` (guarded by `is_debug_mode()`) and expose `"debug_mode": is_debug_mode()` on `GET /api/system/debug/summary` (or `/status`).
+- [x] **tests/test_debug_observation_mode.py**: Add FastAPI `TestClient` + temp `TRACKER_DEBUG_DIR` tests for enabled/disabled mode gating and `events.jsonl` persistence.
+- [x] **Verification**: Run `python -m unittest tests/test_debug_session.py tests/test_debug_observation_mode.py` and `diagnose.py audit --path dashboard/services/debug_session.py dashboard/services/debug_triage.py dashboard/routers/system.py`.
 
 ## Milestone 2: Frontend `IT_DEBUG_MODE` Click Breadcrumbs & Observation HUD *(Deferred to Next Turn / Milestone)*
 

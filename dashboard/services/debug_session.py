@@ -31,6 +31,7 @@ __all__ = [
     "is_debug_mode",
     "prepare_debug_session_env",
     "record_debug_event",
+    "record_user_observation",
     "summarize_debug_session",
     "uninstall_debug_runtime",
 ]
@@ -169,6 +170,73 @@ def record_debug_event(
     }
     _append_jsonl(target / "events.jsonl", payload, _STATE_LOCK)
     return fp
+
+
+def _sanitize_breadcrumbs(breadcrumbs: Optional[list[Any]], max_items: int = 30) -> list[dict[str, Any]]:
+    """Keep at most the last max_items breadcrumb dicts with bounded scalar field lengths."""
+    if not breadcrumbs:
+        return []
+    cleaned: list[dict[str, Any]] = []
+    for item in list(breadcrumbs)[-max_items:]:
+        if not isinstance(item, dict):
+            continue
+        entry: dict[str, Any] = {}
+        for k, v in list(item.items())[:10]:
+            key = str(k)[:40]
+            if isinstance(v, (int, float, bool)) or v is None:
+                entry[key] = v
+            else:
+                entry[key] = str(v)[:200]
+        if entry:
+            cleaned.append(entry)
+    return cleaned
+
+
+def _sanitize_viewport(viewport: Optional[dict[str, Any]]) -> dict[str, int]:
+    """Extract bounded integer width/height dimensions from a viewport payload."""
+    if not isinstance(viewport, dict):
+        return {}
+    result: dict[str, int] = {}
+    for key in ("width", "height"):
+        val = viewport.get(key)
+        if isinstance(val, (int, float)) and not isinstance(val, bool) and val > 0:
+            result[key] = min(int(val), 16384)
+    return result
+
+
+def record_user_observation(
+    note: str,
+    tab: str = "",
+    url: str = "",
+    breadcrumbs: Optional[list[dict[str, Any]]] = None,
+    viewport: Optional[dict[str, Any]] = None,
+    debug_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Record a structured user observation with bounded breadcrumbs into events.jsonl."""
+    clean_note = " ".join(str(note or "").split())[:1000]
+    if not clean_note:
+        raise ValueError("Observation note cannot be empty")
+    clean_tab = str(tab or "").strip()[:120]
+    clean_url = str(url or "").strip()[:500]
+    epoch = round(time.time(), 3)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(epoch))
+    fp = compute_event_fingerprint("OBSERVATION", "dashboard.observation", "", clean_tab, clean_note)
+    payload: dict[str, Any] = {
+        "ts": ts,
+        "epoch": epoch,
+        "level": "OBSERVATION",
+        "logger": "dashboard.observation",
+        "fingerprint": fp,
+        "note": clean_note,
+        "message": clean_note[:500],
+        "tab": clean_tab,
+        "url": clean_url,
+        "breadcrumbs": _sanitize_breadcrumbs(breadcrumbs, max_items=30),
+        "viewport": _sanitize_viewport(viewport),
+    }
+    target = Path(debug_dir) if debug_dir else get_debug_session_dir()
+    _append_jsonl(target / "events.jsonl", payload, _STATE_LOCK)
+    return payload
 
 
 def install_debug_runtime(debug_dir: Optional[Path] = None) -> dict[str, Any]:

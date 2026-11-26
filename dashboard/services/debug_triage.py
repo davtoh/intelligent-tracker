@@ -11,12 +11,16 @@ _SEVERITY_RANK = {"CRITICAL": 4, "FATAL": 4, "ERROR": 3, "WARNING": 2, "WARN": 2
 _SEVERITY_TAG = {"CRITICAL": "CRIT", "FATAL": "CRIT", "ERROR": "ERR", "WARNING": "WARN", "WARN": "WARN"}
 
 
-def read_jsonl_events(events_path: Path, min_rank: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Read events.jsonl and compute per-severity totals."""
+def _read_jsonl_records(
+    events_path: Path,
+    min_rank: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
+    """Read events.jsonl separating severity-ranked issues from user observations."""
     totals = {"CRITICAL": 0, "ERROR": 0, "WARNING": 0}
     events: list[dict[str, Any]] = []
+    observations: list[dict[str, Any]] = []
     if not events_path.is_file():
-        return events, totals
+        return events, observations, totals
     with open(events_path, "r", encoding="utf-8", errors="replace") as fh:
         for raw in fh:
             line = raw.strip()
@@ -27,12 +31,21 @@ def read_jsonl_events(events_path: Path, min_rank: int) -> tuple[list[dict[str, 
             except json.JSONDecodeError:
                 continue
             lvl = str(ev.get("level", "INFO")).upper()
+            if lvl == "OBSERVATION":
+                observations.append(ev)
+                continue
             rank = _SEVERITY_RANK.get(lvl, 1)
             bucket = "CRITICAL" if rank >= 4 else ("ERROR" if rank == 3 else ("WARNING" if rank == 2 else ""))
             if bucket:
                 totals[bucket] += 1
             if rank >= min_rank:
                 events.append(ev)
+    return events, observations, totals
+
+
+def read_jsonl_events(events_path: Path, min_rank: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Read events.jsonl and compute per-severity totals (excluding OBSERVATION records)."""
+    events, _observations, totals = _read_jsonl_records(events_path, min_rank)
     return events, totals
 
 
@@ -78,19 +91,88 @@ def group_events(events: list[dict[str, Any]], limit: int) -> list[dict[str, Any
     return ordered
 
 
+def _correlate_observation_issues(
+    obs_epoch: Optional[float],
+    raw_events: list[dict[str, Any]],
+    window_sec: float = 30.0,
+) -> list[dict[str, Any]]:
+    """Find deduplicated issues occurring within +/- window_sec of an observation."""
+    if obs_epoch is None:
+        return []
+    seen: dict[str, dict[str, Any]] = {}
+    for ev in raw_events:
+        ev_epoch = ev.get("epoch")
+        if not isinstance(ev_epoch, (int, float)):
+            continue
+        delta = round(float(ev_epoch) - float(obs_epoch), 3)
+        if abs(delta) > window_sec:
+            continue
+        fp = str(ev.get("fingerprint") or "unknown")
+        if fp in seen:
+            seen[fp]["count"] += 1
+            continue
+        lvl = str(ev.get("level", "WARNING")).upper()
+        seen[fp] = {
+            "fingerprint": fp,
+            "level": lvl,
+            "tag": _SEVERITY_TAG.get(lvl, lvl[:4]),
+            "message": str(ev.get("message", ""))[:160],
+            "delta_sec": delta,
+            "count": 1,
+        }
+    return list(seen.values())
+
+
+def build_observation_summaries(
+    observations: list[dict[str, Any]],
+    raw_events: list[dict[str, Any]],
+    *,
+    limit: int = 20,
+    window_sec: float = 30.0,
+) -> list[dict[str, Any]]:
+    """Return newest-first user observations correlated with nearby warning/error events."""
+    recent = list(reversed(observations[-limit:])) if limit > 0 else []
+    summaries: list[dict[str, Any]] = []
+    for idx, obs in enumerate(recent, start=1):
+        obs_epoch = obs.get("epoch") if isinstance(obs.get("epoch"), (int, float)) else None
+        correlated = _correlate_observation_issues(obs_epoch, raw_events, window_sec=window_sec)
+        summaries.append({
+            "index": idx,
+            "ts": obs.get("ts", ""),
+            "epoch": obs_epoch,
+            "fingerprint": obs.get("fingerprint", ""),
+            "note": obs.get("note") or obs.get("message", ""),
+            "tab": obs.get("tab", ""),
+            "url": obs.get("url", ""),
+            "breadcrumbs": obs.get("breadcrumbs") or [],
+            "viewport": obs.get("viewport") or {},
+            "window_sec": window_sec,
+            "correlated_issues": correlated,
+        })
+    return summaries
+
+
 def summarize_debug_session(
     debug_dir: Optional[Path] = None,
     *,
     min_level: str = "WARNING",
     limit: int = 20,
+    observation_limit: int = 20,
+    correlation_window_sec: float = 30.0,
 ) -> dict[str, Any]:
-    """Return a compact, deduplicated summary of errors/warnings and native crashes."""
+    """Return a compact, deduplicated summary of errors/warnings, observations, and native crashes."""
     from dashboard.services.debug_session import get_debug_session_dir
 
     target = Path(debug_dir) if debug_dir else get_debug_session_dir()
     min_rank = _SEVERITY_RANK.get(min_level.strip().upper(), 2)
-    events, totals = read_jsonl_events(target / "events.jsonl", min_rank)
+    events, raw_observations, totals = _read_jsonl_records(target / "events.jsonl", min_rank)
     issues = group_events(events, limit)
+    observations = build_observation_summaries(
+        raw_observations,
+        events,
+        limit=observation_limit,
+        window_sec=correlation_window_sec,
+    )
 
     fault_path = target / "faulthandler.log"
     fault_tail = ""
@@ -103,6 +185,8 @@ def summarize_debug_session(
         "exists": target.is_dir(),
         "totals": totals,
         "unique_issues": len(issues),
+        "observations_count": len(raw_observations),
+        "observations": observations,
         "native_crash_detected": bool(fault_tail.strip()),
         "native_crash_tail": fault_tail,
         "issues": issues,
