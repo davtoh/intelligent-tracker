@@ -100,9 +100,11 @@ class VideoIndexer:
         world_graph: Any = None,
         confidence_engine: Any = None,
         fts_index: Any = None,
+        tracked_categories: list[str] | None = None,
     ) -> None:
         self._owns_db = db is None
         self.db = db if db is not None else TrackerDB(db_path)
+        self._tracked_categories = tracked_categories
         try:
             self._init_components(
                 detector_name, reid_name, reid_threshold, tracker_type, sample_rate,
@@ -136,6 +138,7 @@ class VideoIndexer:
             db=self.db, extractor=self.extractor, reid_threshold=reid_threshold,
             sighting_interval=1.0, active_learning=active_learning,
             confidence_engine=self.confidence_engine, fts_index=self.fts_index,
+            tracked_categories=getattr(self, "_tracked_categories", None),
         )
         self.analytics = analytics
 
@@ -174,7 +177,8 @@ class VideoIndexer:
         det, reid, thresh, trk, conf, classes = self._cfg_meta
         cfg = PipelineConfig(
             camera_id=source_name, detector_model=det, tracker_type=trk,
-            reid_model=reid, reid_threshold=thresh, detector_confidence=conf, detector_classes=classes,
+            reid_model=reid, reid_threshold=thresh, detector_confidence=conf,
+            detector_classes=classes, tracked_categories=getattr(self, "_tracked_categories", None),
         )
         bundle = PipelineBundle(
             config=cfg, db=self.db, detector=self.detector, tracker=self.tracker,

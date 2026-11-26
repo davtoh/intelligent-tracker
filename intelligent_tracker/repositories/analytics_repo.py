@@ -12,6 +12,8 @@ import time
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Union, Tuple
 
+from intelligent_tracker.repositories.analytics_flow_helpers import query_traffic_flows_sync
+
 
 def _format_sighting_timestamp(timestamp: Optional[Union[float, str, datetime]]) -> str:
     """Normalize sighting timestamps into SQLite UTC string format."""
@@ -309,4 +311,31 @@ class AnalyticsMixin:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(sightings, f, indent=2, default=str)
         return output_path
+
+    def get_traffic_flows(
+        self,
+        start_time: float,
+        end_time: float,
+        bucket_sec: int = 300,
+        camera_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Aggregate timeline crossing/zone events and sightings into time buckets."""
+        with self._lock:
+            if self._conn is None:
+                return {
+                    "camera_id": camera_id or None,
+                    "start_time": float(start_time),
+                    "end_time": float(end_time),
+                    "bucket_sec": max(1, int(bucket_sec)),
+                    "buckets": [],
+                    "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+                }
+            cursor = self._conn.cursor()
+            try:
+                return query_traffic_flows_sync(
+                    cursor, start_time, end_time, bucket_sec, camera_id=camera_id
+                )
+            finally:
+                cursor.close()
+
 

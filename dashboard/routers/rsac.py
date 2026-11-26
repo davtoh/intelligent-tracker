@@ -96,11 +96,16 @@ async def enroll_entity_route(
     else:
         raise HTTPException(status_code=400, detail="Either bbox or crop_base64 must be provided")
 
-    res = await asyncio.to_thread(
-        enrollment_mgr.enroll, name=req.name, category=req.category or "person",
-        crop=crop_img, notes=req.notes or "", security_role=req.security_role or "",
-        is_anchor=req.is_anchor if req.is_anchor is not None else True,
-    )
+    try:
+        res = await asyncio.to_thread(
+            enrollment_mgr.enroll, name=req.name, category=req.category or "person",
+            crop=crop_img, notes=req.notes or "", security_role=req.security_role or "",
+            is_anchor=req.is_anchor if req.is_anchor is not None else True,
+            merge_entity_id=req.merge_entity_id,
+            force_create_new=bool(req.force_create_new),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return res
 

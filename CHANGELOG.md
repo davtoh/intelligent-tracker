@@ -1,5 +1,64 @@
 # Changelog
 
+## [2026-11-23] feat: Step 4 M4: Bidirectional #review <-> Video Studio Sync & Full Sign-Off
+- **Type**: feat
+- **Summary**: Migrated review_queue with bbox/frame/run_id provenance, added ReviewSyncService + /api/review/* router, wired frontend VideoBatchReports/Gallery/Review sync, and verified 1008 tests + 4 probes.
+- **Files** (20):
+  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
+  - `dashboard/app.py`
+  - `dashboard/routers/__init__.py`
+  - `dashboard/routers/topology.py`
+  - `dashboard/services/negative_exemplar_service.py`
+  - `dashboard/services/roi_recognition_service.py`
+  - `dashboard/static/css/review.css`
+  - `dashboard/static/js/interactive_canvas.js`
+  - ... (+12 more)
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
+## [2026-11-23] feat: Step 3 Milestone 3: Target Class Filter Split, Enrollment Scrubber & Sign-Off
+- **Type**: feat
+- **Summary**: Split COCO detector_classes vs gallery tracked_categories across API/pipeline/UI and extracted ScrubberTimelineSlider for video_scrubber and Universal Enrollment.
+- **Files** (26):
+  - `dashboard/camera_pool.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/routers/video_jobs.py`
+  - `dashboard/routers/videos.py`
+  - `dashboard/schemas.py`
+  - `dashboard/services/camera_config_store.py`
+  - `dashboard/services/stream_pool_coordinator.py`
+  - ... (+18 more)
+- **Verification**: python -m unittest discover tests
+
+## [2026-11-23] feat: Step 2 Milestone 3: Person+Bag WorldGraph Ownership and Unattended-Item Alerts
+- **Type**: feat
+- **Summary**: Added WorldEdge/WorldEdgeRegistry, OwnershipAssociationEngine, UnattendedItemAlert with EventFTSIndex formatting, and live governance/telemetry wiring.
+- **Files** (13):
+  - `dashboard/services/stream_telemetry.py`
+  - `intelligent_tracker/events/__init__.py`
+  - `intelligent_tracker/events/types.py`
+  - `intelligent_tracker/memory/_event_formatters.py`
+  - `intelligent_tracker/pipeline/bundle.py`
+  - `intelligent_tracker/pipeline/post_detection_governance.py`
+  - `intelligent_tracker/world/__init__.py`
+  - `intelligent_tracker/world/_lifecycle.py`
+  - ... (+5 more)
+- **Verification**: .venv/Scripts/python.exe -m unittest discover tests
+
+## [2026-11-23] fix: Step 1: Critical Bug Remediations & Tooling Elevation
+- **Type**: fix
+- **Summary**: Resolved Findings 1-7 and BE-1..BE-4 across backend/frontend, elevated SPA 9-tab CDP and Video Studio probes, and added broken-img, script wrap-order, query-param, and repo-rollback rules to system-diagnostics.
+- **Files** (8):
+  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
+  - `.diagnostics/probes/video_studio_contract_probe.py`
+  - `tests/test_database_concurrency.py`
+  - `tests/test_live_studio_sync.py`
+  - `tests/test_step2_studio_minimap_gating.py`
+  - `tests/test_step2_tab_scoped_perf_integration.py`
+  - `tests/test_step3_e2e_tagging_flow.py`
+  - `tests/test_step4_m3_spa_and_video_contracts.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-21] feat: Step 4 & Integration Hardening Master Roadmap Complete (P0-P3)
 - **Type**: feat
 - **Summary**: Hardened 9-tab headless CDP probe + Chrome-gated E2E test, aligned legacy Node VM suites with GridTileOverlay & Zero-CLS HUD hysteresis, and refreshed CURRENT_ARCHITECTURE.md.
@@ -82,69 +141,3 @@
   - `documentation/dashboard.rst`
   - ... (+2 more)
 - **Verification**: python -m unittest discover tests
-
-## [2026-11-19] feat: Step 2 Milestone 2: Zero-GPU CachedReplayProvider & Runtime Pool Scheduler Wiring
-- **Type**: feat
-- **Summary**: Extracted shared post_detection_governance.py (FrameProcessor 14->7 methods), implemented zero-GPU CachedReplayProvider with live zone/tripwire/RSAC governance and loop wrap-around resets, wired AnalyticsScheduler & armed P1 gating into StreamWorker/AsyncInferenceWorker, and exposed scheduler/armed telemetry.
-- **Files** (9):
-  - `dashboard/services/async_inference_worker.py`
-  - `dashboard/services/cached_replay_provider.py`
-  - `dashboard/services/camera_pool_queries.py`
-  - `dashboard/services/file_detection_replay.py`
-  - `dashboard/services/stream_telemetry.py`
-  - `dashboard/services/stream_worker.py`
-  - `intelligent_tracker/pipeline/frame_processor.py`
-  - `intelligent_tracker/pipeline/post_detection_governance.py`
-  - ... (+1 more)
-- **Verification**: python -m unittest tests.test_cached_replay_and_pool_scheduler tests.test_live_studio_sync tests.test_step3_worker_hibernation_and_ai_gating tests.test_dashboard_di tests.test_step3_architecture_budgets tests.test_cross_platform_pipeline_hardening tests.test_analytics_scheduler
-
-## [2026-11-19] feat: Step 2 Milestone 1: Core AnalyticsScheduler, 64x36 MotionGate, dt-Aware Trackers & Armed P1
-- **Type**: feat
-- **Summary**: Implemented 64x36 luma MotionGate, P0/P1/P2 AnalyticsScheduler with 3-stage load shedding and IdleRefinementHook, dt-aware persistence in SortTracker/CentroidTracker, and armed P1 vision gating in ProcessingModeService.
-- **Files** (6):
-  - `dashboard/services/processing_mode_service.py`
-  - `intelligent_tracker/tracker/centroid.py`
-  - `intelligent_tracker/tracker/sort.py`
-  - `intelligent_tracker/pipeline/analytics_scheduler.py`
-  - `intelligent_tracker/pipeline/motion_gate.py`
-  - `tests/test_analytics_scheduler.py`
-- **Verification**: MPLBACKEND=Agg python -m unittest tests.test_analytics_scheduler tests.test_tracker tests.test_processing_mode tests.test_processing_mode_invariants tests.test_step3_processing_mode_api tests.test_modernization
-
-## [2026-11-19] feat: Step 1.5 Milestone 2: Live Monitor vs Video Studio Synchronization & Diagnostic Clarity
-- **Type**: feat
-- **Summary**: Add AsyncInferenceWorker frame_seq/lag provenance, FileDetectionReplayProvider for pre-indexed video_file cameras, #live-stream-img ROI tagger fix, source_resolution scaling, and opt-in burned annotation toggle.
-- **Files** (14):
-  - `.TODO/realtime_multiview_master_roadmap.md`
-  - `.TODO/step_1_5_cross_platform_pipeline_hardening.md`
-  - `dashboard/services/async_inference_worker.py`
-  - `dashboard/services/stream_telemetry.py`
-  - `dashboard/services/stream_worker.py`
-  - `dashboard/static/app.js`
-  - `dashboard/static/js/interactive_canvas.js`
-  - `dashboard/static/js/live_player.js`
-  - ... (+6 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests (839 passed)
-
-## [2026-11-19] feat: Multi-View WebSocket Streaming & Grid Scalability (Milestone 4)
-- **Type**: feat
-- **Summary**: Added /ws/multiview frontend protocol/FrameSurface/client with canvas grid tiles, 3-failure MJPEG fallback with auto-restore, armed-paused overlay counter, static-before-wildcard WS router ordering fix, Hub/HTTP2 Sphinx docs, and Node VM + headless CDP E2E tests
-- **Files** (15):
-  - `AGENTS.md`
-  - `dashboard/app.py`
-  - `dashboard/static/css/grid_pagination.css`
-  - `dashboard/static/index.html`
-  - `dashboard/static/js/camera_grid.js`
-  - `dashboard/static/js/live_player.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `dashboard/static/partials/tabs/live.html`
-  - ... (+7 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-17] fix: Eliminate cam_01 stub in processing_mode.js and persist focused camera across reloads
-- **Type**: fix
-- **Summary**: Initialize state.focusedCameraId from localStorage (it_focused_camera_id) instead of hardcoded cam_01 in processing_mode.js, omit focused_camera_id from init() when unset, and restore the last focused camera in CameraAIConfig.resolveInitialCameraId().
-- **Files** (3):
-  - `dashboard/static/js/camera_ai_config.js`
-  - `dashboard/static/js/processing_mode.js`
-  - `tests/test_step4_processing_mode_ui.py`
-- **Verification**: .venv\\Scripts\\python.exe -m unittest tests.test_step4_processing_mode_ui tests.test_step4_e2e_performance_and_modes tests.test_processing_mode tests.test_step1_demo_mode_ui tests.test_step2_live_canvas_delegation

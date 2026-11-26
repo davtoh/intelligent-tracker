@@ -222,6 +222,37 @@ class VideoRunRepositoryMixin:
             finally:
                 cur.close()
 
+    def update_video_run_payload(
+        self,
+        run_id: str,
+        report: dict[str, Any] | None = None,
+        frame_detections: list[dict[str, Any]] | None = None,
+        metrics: dict[str, Any] | None = None,
+    ) -> bool:
+        """Update serialized ``report_json``, ``frame_detections_json``, or ``metrics_json``."""
+        rep_json = json.dumps(report) if report is not None else None
+        det_json = json.dumps(frame_detections) if frame_detections is not None else None
+        met_json = json.dumps(metrics) if metrics is not None else None
+        with self._lock:
+            if self._conn is None:
+                return False
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    "UPDATE video_runs SET "
+                    "report_json = COALESCE(?, report_json), "
+                    "frame_detections_json = COALESCE(?, frame_detections_json), "
+                    "metrics_json = COALESCE(?, metrics_json) WHERE run_id = ?",
+                    (rep_json, det_json, met_json, str(run_id).strip()),
+                )
+                self._conn.commit()
+                return cur.rowcount > 0
+            except Exception:
+                self._conn.rollback()
+                raise
+            finally:
+                cur.close()
+
     def delete_video_run(self, video_filename: str, run_id: str) -> bool:
         """Delete a single video run across all recording aliases."""
         aliases = expand_video_aliases(video_filename)

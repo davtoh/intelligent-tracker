@@ -248,3 +248,23 @@ class ReviewItemQueuedEvent(BaseEvent):
     similarity: float = 0.0
     severity: str = "info"
 
+
+@dataclass
+class UnattendedItemAlert(BaseEvent):
+    """Alert emitted when a carried item is left unattended beyond threshold."""
+    event_type: str = "unattended_item"
+    location: str = ""
+    global_xy: Optional[Tuple[float, float]] = None
+    bbox: Optional[Tuple[int, int, int, int]] = None
+    owner_entity_id: Optional[int] = None
+    owner_world_entity_id: str = ""
+    owner_name: str = ""
+    owner_track_id: Optional[int] = None
+    bag_track_id: int = 0
+    bag_world_entity_id: str = ""
+    item_label: str = "bag"
+    unattended_duration_s: float = 0.0
+    severity: str = "warning"
+    message: str = ""
+
+

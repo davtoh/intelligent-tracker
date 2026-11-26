@@ -55,11 +55,12 @@ class CameraAddRequest(BaseModel):
     tracker: Optional[str] = Field("centroid", description="Tracking algorithm (centroid, sort)")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold (0.01 - 1.0)")
     classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list (e.g. ['person', 'car'])")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Allowed gallery semantic categories filter")
     enabled: Optional[bool] = True
     armed: Optional[bool] = False
     details: Optional[Dict[str, Any]] = None
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -75,8 +76,9 @@ class CameraUpdateRequest(BaseModel):
     tracker: Optional[str] = None
     confidence: Optional[float] = Field(None, ge=0.01, le=1.0, description="Updated confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Updated target class filters")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Updated gallery semantic categories filter")
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -87,10 +89,11 @@ class VideoAnalyzeRequest(BaseModel):
     detector: Optional[str] = Field("yolov8", description="Detector model name (yolov8, mock, etc.)")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Optional target class filters")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Optional gallery semantic categories filter")
     async_mode: Optional[bool] = Field(None, description="Run analysis asynchronously in background")
     scenario_camera_id: Optional[str] = Field(None, description="Optional camera/profile ID whose ScenarioManager zones/tripwires apply")
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -103,8 +106,9 @@ class VideoAddAsCameraRequest(BaseModel):
     tracker: Optional[str] = Field("centroid", description="Tracker algorithm")
     confidence: Optional[float] = Field(0.40, ge=0.01, le=1.0, description="Detection confidence threshold")
     classes: Optional[Union[List[str], str]] = Field(None, description="Target class filter list")
+    tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Allowed gallery semantic categories filter")
 
-    @field_validator("classes", mode="before")
+    @field_validator("classes", "tracked_categories", mode="before")
     @classmethod
     def _parse_classes(cls, v: Any) -> Optional[List[str]]:
         return _parse_classes_list(v)
@@ -160,6 +164,15 @@ class SpatialTransitionRequest(BaseModel):
     active: Optional[bool] = Field(True, description="Whether link is active")
 
 
+class WorldPoseRequest(BaseModel):
+    origin_x: float = Field(0.0, description="World origin X in meters")
+    origin_y: float = Field(0.0, description="World origin Y in meters")
+    yaw_deg: float = Field(0.0, description="Camera heading yaw in degrees")
+    scale: float = Field(1.0, gt=0.0, description="World scale factor")
+    fov_deg: float = Field(75.0, gt=0.0, le=180.0, description="Horizontal field of view in degrees")
+    range_m: float = Field(12.0, gt=0.0, description="Effective FOV cone range in meters")
+
+
 class OverlayUpdateRequest(BaseModel):
     bboxes: Optional[bool] = None
     track_ids: Optional[bool] = None
@@ -190,6 +203,18 @@ class EnrollmentRequest(BaseModel):
     camera_id: Optional[str] = Field("cam_01", description="Camera channel identifier for freeze-frame crop")
     bbox: Optional[List[int]] = Field(None, description="Bounding box [x, y, w, h] from freeze-frame")
     crop_base64: Optional[str] = Field(None, description="Optional Base64-encoded image crop")
+    merge_entity_id: Optional[int] = Field(None, description="Optional existing entity ID to merge signature into")
+    force_create_new: Optional[bool] = Field(False, description="Force creating a new entity even if name/visual collides")
+
+
+class CollisionCheckRequest(BaseModel):
+    camera_id: Optional[str] = Field(None, description="Optional camera channel identifier")
+    video_filename: Optional[str] = Field(None, description="Optional recorded video filename")
+    timestamp_sec: Optional[float] = Field(None, description="Optional timestamp in recorded video")
+    bbox: Optional[List[int]] = Field(None, description="Bounding box [x, y, w, h]")
+    crop_base64: Optional[str] = Field(None, description="Optional Base64-encoded image crop")
+    threshold: float = Field(0.72, ge=0.0, le=1.0, description="Cosine similarity collision threshold")
+    top_k: int = Field(3, ge=1, le=20, description="Maximum collision candidates to return")
 
 
 class ReviewConfirmRequest(BaseModel):
@@ -214,6 +239,13 @@ class ReviewDismissRequest(BaseModel):
 
 class CustomCategoryCreateRequest(BaseModel):
     id: str = Field(..., min_length=1, description="Unique category slug")
+    name: str = Field(..., min_length=1, description="Human readable category name")
+    color: Optional[str] = Field("#3B82F6", description="HEX color string")
+    badge_icon: Optional[str] = Field("", description="Badge icon identifier")
+    description: Optional[str] = Field("", description="Category description")
+
+
+class CustomCategoryUpdateRequest(BaseModel):
     name: str = Field(..., min_length=1, description="Human readable category name")
     color: Optional[str] = Field("#3B82F6", description="HEX color string")
     badge_icon: Optional[str] = Field("", description="Badge icon identifier")

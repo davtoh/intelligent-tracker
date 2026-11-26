@@ -81,6 +81,7 @@ class ActiveLearningManager:
         timestamp: float | None = None,
         video_filename: str = "",
         media_offset_sec: float | None = None,
+        run_id: str = "",
     ) -> int | None:
         """Evaluate track detection in [min_confidence, max_confidence) and queue."""
         return self._triage.consider_candidate(
@@ -94,6 +95,7 @@ class ActiveLearningManager:
             timestamp=timestamp,
             video_filename=video_filename,
             media_offset_sec=media_offset_sec,
+            run_id=run_id,
         )
 
     def maybe_queue_candidate(
@@ -107,6 +109,11 @@ class ActiveLearningManager:
         matched_category: str = "",
         bbox: tuple[int, int, int, int] | None = None,
         timestamp: float | None = None,
+        frame_width: int = 0,
+        frame_height: int = 0,
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
+        run_id: str = "",
     ) -> dict[str, Any] | None:
         """Evaluate pre-cropped candidate and return queued review item or None."""
         return self._triage.maybe_queue_candidate(
@@ -119,6 +126,11 @@ class ActiveLearningManager:
             matched_category=matched_category,
             bbox=bbox,
             timestamp=timestamp,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            video_filename=video_filename,
+            media_offset_sec=media_offset_sec,
+            run_id=run_id,
         )
 
     def list_pending(self, limit: int = 50) -> list[dict[str, Any]]:

@@ -131,6 +131,31 @@ def publish_id_events(
             logger.debug("Event publish error: %s", exc)
 
 
+def _evaluate_ownership(
+    bundle: PipelineBundle,
+    frame: np.ndarray,
+    tracks: dict[int, Any],
+    zone_lookup: dict[int, str],
+    timestamp: float,
+) -> None:
+    """Run OwnershipAssociationEngine and publish UnattendedItemAlerts outside locks."""
+    ownership_engine = getattr(bundle, "ownership_engine", None) or getattr(
+        getattr(bundle, "world_graph", None), "ownership_engine", None
+    )
+    if ownership_engine is None or not tracks:
+        return
+    try:
+        alerts = ownership_engine.update(
+            resolve_camera_id(bundle), tracks, timestamp=timestamp, zone_lookup=zone_lookup, frame=frame,
+        )
+        bus = bundle.event_bus
+        if bus is not None:
+            for alert in alerts:
+                bus.publish(alert)
+    except Exception as exc:
+        logger.debug("Ownership association error: %s", exc)
+
+
 def evaluate_tracks_governance(
     bundle: PipelineBundle,
     frame: np.ndarray,
@@ -160,14 +185,13 @@ def evaluate_tracks_governance(
                 matcher.topology = topology
             if bridge is not None and getattr(matcher, "world_bridge", None) is None:
                 matcher.world_bridge = bridge
-            identifications = list(
-                matcher.match_tracks(
-                    tracks=tracks, frame=frame, source=resolve_camera_id(bundle),
-                    timestamp=timestamp, zone_lookup=zone_lookup,
-                ) or []
-            )
+            identifications = list(matcher.match_tracks(
+                tracks=tracks, frame=frame, source=resolve_camera_id(bundle),
+                timestamp=timestamp, zone_lookup=zone_lookup,
+            ) or [])
             publish_id_events(bundle, frame, tracks, identifications, timestamp)
         except Exception as exc:
             logger.debug("Re-ID matching error: %s", exc)
     sync_world_bridge(bundle, tracks, zone_lookup, timestamp, world_bridge=bridge, run_reid=run_reid)
+    _evaluate_ownership(bundle, frame, tracks, zone_lookup, timestamp)
     return analytics_res, identifications

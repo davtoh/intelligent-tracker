@@ -72,6 +72,13 @@ _SPATIAL_TABLES_DDL = (
         matrix_json TEXT NOT NULL, metric_width REAL DEFAULT 10.0,
         metric_height REAL DEFAULT 10.0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );""",
+    """CREATE TABLE IF NOT EXISTS camera_world_poses (
+        camera_id TEXT PRIMARY KEY,
+        origin_x REAL DEFAULT 0.0, origin_y REAL DEFAULT 0.0,
+        yaw_deg REAL DEFAULT 0.0, scale REAL DEFAULT 1.0,
+        fov_deg REAL DEFAULT 75.0, range_m REAL DEFAULT 12.0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
 )
 
 _SECURITY_TABLES_DDL = (
@@ -115,12 +122,22 @@ _LEARNING_TABLES_DDL = (
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP, suggested_entity_id INTEGER,
         suggested_name TEXT DEFAULT '', suggested_category TEXT DEFAULT '',
         similarity REAL DEFAULT 0.0, status TEXT DEFAULT 'pending',
-        reviewed_at TIMESTAMP, reviewed_by TEXT DEFAULT 'operator'
+        reviewed_at TIMESTAMP, reviewed_by TEXT DEFAULT 'operator',
+        video_filename TEXT DEFAULT '', media_offset_sec REAL DEFAULT 0.0,
+        bbox_json TEXT DEFAULT '', frame_width INTEGER DEFAULT 0,
+        frame_height INTEGER DEFAULT 0, run_id TEXT DEFAULT ''
     );""",
     """CREATE TABLE IF NOT EXISTS custom_categories (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT DEFAULT '#3B82F6',
         badge_icon TEXT DEFAULT '', description TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );""",
+    """CREATE TABLE IF NOT EXISTS negative_exemplars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, entity_id INTEGER,
+        label TEXT DEFAULT '', embedding BLOB NOT NULL,
+        crop_path TEXT DEFAULT '', source TEXT DEFAULT '',
+        notes TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
     );""",
 )
 
@@ -152,6 +169,7 @@ _INDEX_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_desc_versions_entity ON descriptor_versions(entity_id, version_num);",
     "CREATE INDEX IF NOT EXISTS idx_review_queue_status ON review_queue(status, timestamp);",
     "CREATE INDEX IF NOT EXISTS idx_rsac_zone_rules_cam ON rsac_zone_rules(camera_id, zone_id);",
+    "CREATE INDEX IF NOT EXISTS idx_negative_exemplars_entity ON negative_exemplars(entity_id);",
 )
 
 
@@ -194,6 +212,16 @@ class SchemaMixin:
             cursor.execute("ALTER TABLE descriptor_versions ADD COLUMN is_anchor INTEGER DEFAULT 0;")
         except sqlite3.OperationalError:
             pass
+        for col_def in (
+            "bbox_json TEXT DEFAULT ''",
+            "frame_width INTEGER DEFAULT 0",
+            "frame_height INTEGER DEFAULT 0",
+            "run_id TEXT DEFAULT ''",
+        ):
+            try:
+                cursor.execute(f"ALTER TABLE review_queue ADD COLUMN {col_def};")
+            except sqlite3.OperationalError:
+                pass
         apply_memory_schema_migrations(cursor)
         apply_video_schema_migrations(cursor)
 

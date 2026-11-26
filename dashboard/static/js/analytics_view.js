@@ -1,12 +1,16 @@
 /**
  * Intelligent Tracker - Analytics, Traffic Chart & Heatmap Submodule.
- * Handles Chart.js real-time ingress/egress plotting, false-color density heatmaps, and alerts table.
+ * Handles Chart.js time-bucketed ingress/egress flows, range navigation, and heatmap metadata.
  */
 
 (function () {
   'use strict';
 
   let trafficChart = null;
+  let rangeSec = 3600;
+  let endTime = null;
+  let isLive = true;
+  let lastFlowRefreshAt = 0;
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -18,40 +22,184 @@
       .replace(/'/g, '&#39;');
   }
 
-  function initTrafficChart() {
-    if (trafficChart) return;
-    const chartCanvas = document.getElementById('trafficChart');
-    if (!chartCanvas || typeof Chart === 'undefined') return;
-    const gridStyle = { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b' } };
-    trafficChart = new Chart(chartCanvas.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: ['-30s', '-25s', '-20s', '-15s', '-10s', '-5s', 'Now'],
-        datasets: [
-          { label: 'Tripwire Inflow', data: [0, 1, 2, 2, 4, 5, 7], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.35 },
-          { label: 'Tripwire Outflow', data: [0, 0, 1, 1, 2, 3, 4], borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', fill: true, tension: 0.35 },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } } },
-        scales: { x: gridStyle, y: { ...gridStyle, beginAtZero: true } },
-      },
-    });
+  function formatRangeLabel(sec) {
+    if (sec <= 900) return '15m';
+    if (sec <= 3600) return '1h';
+    if (sec <= 21600) return '6h';
+    if (sec <= 86400) return '24h';
+    return '7d';
   }
 
-  function updateTrafficChart(totalCount) {
-    if (!trafficChart) return;
-    const nowLabel = new Date().toLocaleTimeString();
-    if (trafficChart.data.labels.length > 15) {
-      trafficChart.data.labels.shift();
-      trafficChart.data.datasets[0].data.shift();
-      trafficChart.data.datasets[1].data.shift();
+  function formatBucketLabel(bucketStart, fallbackLabel, spanSec) {
+    if (!Number.isFinite(Number(bucketStart))) return fallbackLabel || '';
+    const d = new Date(Number(bucketStart) * 1000);
+    if (spanSec > 86400) {
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' '
+        + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
-    trafficChart.data.labels.push(nowLabel);
-    trafficChart.data.datasets[0].data.push(Math.round(totalCount * 0.6));
-    trafficChart.data.datasets[1].data.push(Math.round(totalCount * 0.4));
-    trafficChart.update('none');
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function syncWindowControls(data) {
+    const labelEl = document.getElementById('analytics-window-label');
+    const nextBtn = document.getElementById('btn-analytics-next');
+    const liveBtn = document.getElementById('btn-analytics-live');
+    if (nextBtn) nextBtn.disabled = isLive;
+    if (liveBtn) {
+      liveBtn.disabled = isLive;
+      liveBtn.classList.toggle('active', !isLive);
+    }
+    if (!labelEl) return;
+    const totals = data?.totals || {};
+    const summary = `In ${totals.inflow || 0} / Out ${totals.outflow || 0}`;
+    if (isLive) {
+      labelEl.textContent = `Live · Last ${formatRangeLabel(rangeSec)} (${summary})`;
+    } else if (data?.start_time && data?.end_time) {
+      const sStr = new Date(data.start_time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const eStr = new Date(data.end_time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      labelEl.textContent = `Window · ${sStr}–${eStr} (${summary})`;
+    }
+  }
+
+  async function loadTrafficFlows() {
+    lastFlowRefreshAt = Date.now();
+    const camId = window.App?.getActiveCameraId?.() || '';
+    const params = new URLSearchParams({ range_sec: String(rangeSec) });
+    if (camId) params.set('camera_id', camId);
+    if (!isLive && endTime !== null) params.set('end_time', String(endTime));
+    try {
+      const res = await fetch(`/analytics/flows?${params.toString()}`);
+      const data = await res.json();
+      const buckets = Array.isArray(data?.buckets) ? data.buckets : [];
+      if (trafficChart) {
+        trafficChart.data.labels = buckets.map((b) => formatBucketLabel(b.bucket_start, b.label, rangeSec));
+        trafficChart.data.datasets[0].data = buckets.map((b) => Number(b.inflow || 0));
+        trafficChart.data.datasets[1].data = buckets.map((b) => Number(b.outflow || 0));
+        trafficChart.update('none');
+      }
+      syncWindowControls(data);
+      return data;
+    } catch (err) {
+      console.error('Traffic flows fetch error:', err);
+      return null;
+    }
+  }
+
+  async function loadHeatmapMetadata() {
+    const camId = window.App?.getActiveCameraId?.() || '';
+    const url = camId
+      ? `/analytics/heatmap?format=json&camera_id=${encodeURIComponent(camId)}`
+      : '/analytics/heatmap?format=json';
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const minEl = document.getElementById('heatmap-legend-min');
+      const midEl = document.getElementById('heatmap-legend-mid');
+      const maxEl = document.getElementById('heatmap-legend-max');
+      const metaEl = document.getElementById('heatmap-meta-summary');
+      const barEl = document.querySelector('#heatmap-colorbar-legend .heatmap-colorbar');
+      const maxVal = Number(data?.max_value || 0);
+      if (minEl) minEl.textContent = '0.00';
+      if (midEl) midEl.textContent = (maxVal * 0.5).toFixed(2);
+      if (maxEl) maxEl.textContent = maxVal.toFixed(2);
+      if (barEl && Array.isArray(data?.stops) && data.stops.length >= 2) {
+        const stopsCss = data.stops.map((s) => `${s.color} ${Math.round(Number(s.ratio || 0) * 100)}%`).join(', ');
+        barEl.style.background = `linear-gradient(90deg, ${stopsCss})`;
+      }
+      if (metaEl) {
+        if (data && data.initialized !== false && Array.isArray(data.resolution)) {
+          const decayStr = data.decay_rate !== null && data.decay_rate !== undefined ? data.decay_rate : 'cumulative';
+          metaEl.textContent = `${data.camera_id || 'All Cameras'} · ${data.colormap || 'JET'} · ${data.resolution[0]}x${data.resolution[1]} · r=${data.radius || 25}px · decay=${decayStr}`;
+        } else {
+          metaEl.textContent = `${data?.camera_id || 'All Cameras'} · Heatmap uninitialized`;
+        }
+      }
+      return data;
+    } catch (err) {
+      console.error('Heatmap metadata fetch error:', err);
+      return null;
+    }
+  }
+
+  function bindFlowControls() {
+    const rangeSel = document.getElementById('analytics-range-select');
+    const prevBtn = document.getElementById('btn-analytics-prev');
+    const nextBtn = document.getElementById('btn-analytics-next');
+    const liveBtn = document.getElementById('btn-analytics-live');
+    if (rangeSel && !rangeSel.dataset.bound) {
+      rangeSel.dataset.bound = '1';
+      rangeSel.addEventListener('change', () => {
+        rangeSec = Math.max(60, Number(rangeSel.value) || 3600);
+        endTime = null;
+        isLive = true;
+        loadTrafficFlows();
+      });
+    }
+    if (prevBtn && !prevBtn.dataset.bound) {
+      prevBtn.dataset.bound = '1';
+      prevBtn.addEventListener('click', () => {
+        const nowSec = Math.floor(Date.now() / 1000);
+        endTime = (isLive || endTime === null) ? (nowSec - rangeSec) : (endTime - rangeSec);
+        isLive = false;
+        loadTrafficFlows();
+      });
+    }
+    if (nextBtn && !nextBtn.dataset.bound) {
+      nextBtn.dataset.bound = '1';
+      nextBtn.addEventListener('click', () => {
+        if (isLive || endTime === null) return;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const nextEnd = endTime + rangeSec;
+        if (nextEnd >= nowSec) {
+          endTime = null;
+          isLive = true;
+        } else {
+          endTime = nextEnd;
+        }
+        loadTrafficFlows();
+      });
+    }
+    if (liveBtn && !liveBtn.dataset.bound) {
+      liveBtn.dataset.bound = '1';
+      liveBtn.addEventListener('click', () => {
+        endTime = null;
+        isLive = true;
+        loadTrafficFlows();
+      });
+    }
+  }
+
+  function initTrafficChart() {
+    const chartCanvas = document.getElementById('trafficChart');
+    if (!trafficChart && chartCanvas && typeof Chart !== 'undefined') {
+      const gridStyle = { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#64748b' } };
+      trafficChart = new Chart(chartCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            { label: 'Inflow (Entries / Crossings)', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.35 },
+            { label: 'Outflow (Exits / Crossings)', data: [], borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)', fill: true, tension: 0.35 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } } },
+          scales: { x: gridStyle, y: { ...gridStyle, beginAtZero: true } },
+        },
+      });
+    }
+    bindFlowControls();
+    loadTrafficFlows();
+    loadHeatmapMetadata();
+  }
+
+  function updateTrafficChart() {
+    if (!isLive) return;
+    if (!document.getElementById('tab-analytics')?.classList?.contains('active')) return;
+    if (Date.now() - lastFlowRefreshAt >= 5000) {
+      loadTrafficFlows();
+    }
   }
 
   function buildAlertRowHtml(ev) {
@@ -85,7 +233,10 @@
       </tr>`;
   }
 
-  async function loadAlertsTable() {
+  async function loadAlertsTable(opts) {
+    if (window.AlertsView?.loadAlerts) {
+      return window.AlertsView.loadAlerts(opts);
+    }
     const tbody = document.getElementById('alerts-table-body');
     const badge = document.getElementById('total-alerts-count');
     if (!tbody) return;
@@ -122,15 +273,22 @@
 
     refreshBtn?.addEventListener('click', () => {
       const img = document.getElementById('static-heatmap-img');
-      if (img) img.src = `/analytics/heatmap?t=${Date.now()}`;
+      if (window.LivePlayer?.attachHeatmapImage) window.LivePlayer.attachHeatmapImage(img);
+      else if (img) img.src = `/analytics/heatmap?t=${Date.now()}`;
+      loadHeatmapMetadata();
     });
+    if (document.getElementById('tab-analytics')?.classList?.contains('active')) {
+      window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
+      loadHeatmapMetadata();
+    }
   }
 
   window.AnalyticsView = {
     initChart: initTrafficChart,
     updateChart: updateTrafficChart,
+    loadTrafficFlows,
+    loadHeatmapMetadata,
     loadAlerts: loadAlertsTable,
     initHeatmap: initHeatmapControls,
   };
 })();
-

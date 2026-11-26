@@ -157,6 +157,42 @@ def _check_entity_tagger_sync(tmp: Path, failures: list[str], checks: dict[str, 
         db.close()
 
 
+def _check_two_step_roi_commit(tmp: Path, vid: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Verify 2-step recognize-roi -> commit with both crop_base64 and bbox preserves (bh, bw) crop."""
+    from fastapi.testclient import TestClient
+    import dashboard.app as app_module
+    import dashboard.routers.tagging as tagging_router
+    from dashboard.dependencies import get_camera_pool, get_db
+    from intelligent_tracker.database import TrackerDB
+
+    db = TrackerDB(str(tmp / "twostep.db"))
+    orig_vdir, orig_cdir = tagging_router.VIDEOS_DIR, tagging_router.CROPS_DIR
+    orig_overrides = dict(app_module.app.dependency_overrides)
+    try:
+        tagging_router.VIDEOS_DIR, tagging_router.CROPS_DIR = str(tmp), str(tmp / "twostep_crops")
+        app_module.app.dependency_overrides[get_db] = lambda: db
+        app_module.app.dependency_overrides[get_camera_pool] = lambda: None
+        client, bbox = TestClient(app_module.app), [20, 20, 140, 170]
+        r1 = client.post("/api/tag/recognize-roi", json={"video_filename": vid.name, "timestamp_sec": 0.4, "bbox": bbox})
+        crop_b64 = (r1.json().get("data") or {}).get("crop_base64", "") if r1.status_code == 200 else ""
+        r2 = client.post("/api/tag/commit", json={
+            "entity_name": "TwoStepProbe", "category": "person", "video_filename": vid.name,
+            "timestamp_sec": 0.4, "bbox": bbox, "crop_base64": crop_b64,
+        })
+        saved_path = (r2.json().get("data") or {}).get("crop_path", "") if r2.status_code == 200 else ""
+        saved_img = cv2.imread(saved_path) if saved_path else None
+        shape_ok = saved_img is not None and saved_img.shape[:2] == (170, 140)
+        std_val = float(np.std(saved_img)) if saved_img is not None else 0.0
+        ok = r1.status_code == 200 and r2.status_code == 200 and bool(crop_b64) and shape_ok and std_val > 1.0
+        checks.update(two_step_roi_commit_ok=ok, two_step_roi_shape=list(saved_img.shape[:2]) if saved_img is not None else None, two_step_roi_std=round(std_val, 3))
+        if not ok:
+            failures.append(f"2-step ROI commit failed (r1={r1.status_code}, r2={r2.status_code}, shape={checks['two_step_roi_shape']}, std={std_val:.2f})")
+    finally:
+        tagging_router.VIDEOS_DIR, tagging_router.CROPS_DIR = orig_vdir, orig_cdir
+        app_module.app.dependency_overrides = orig_overrides
+        db.close()
+
+
 def _check_js_payload_parity(failures: list[str], checks: dict[str, Any]) -> None:
     """Verify frontend JS payload keys match backend contracts (review_queue, events, detections)."""
     bridge_js = (REPO_ROOT / "dashboard/static/js/scrubber_library_bridge.js").read_text(encoding="utf-8")
@@ -199,6 +235,7 @@ def run_probe() -> dict[str, Any]:
         _check_indexer_and_citations(tmp, failures, checks)
         _check_report_isolation(tmp, failures, checks)
         _check_roi_and_confidence(tmp, vid, failures, checks)
+        _check_two_step_roi_commit(tmp, vid, failures, checks)
         _check_entity_tagger_sync(tmp, failures, checks)
         _check_js_payload_parity(failures, checks)
 

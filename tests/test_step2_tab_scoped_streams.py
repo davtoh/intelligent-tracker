@@ -123,7 +123,7 @@ class TestStep2TabScopedStreams(unittest.TestCase):
         """
         out = _run_node_vm([JS_DIR / "live_player.js"], script)
         self.assertTrue(out["liveSrc"].startswith("data:image/svg+xml"))
-        self.assertIn("/analytics/heatmap?t=", out["heatmapSrc"])
+        self.assertIn("/analytics/heatmap?camera_id=cam_01&t=", out["heatmapSrc"])
 
     def test_nav_tabs_manager_and_wrapped_switch_tab_emit_lifecycle(self):
         script = """

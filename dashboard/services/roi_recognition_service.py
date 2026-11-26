@@ -37,42 +37,20 @@ class RoiUnavailableError(RuntimeError):
 
 
 def _resolve_roi_services(
-    db: Any,
-    stream_manager: Any,
-    camera_pool: Any,
-    confidence_engine: Any,
-    fts_index: Any,
+    db: Any, stream_manager: Any, camera_pool: Any, confidence_engine: Any, fts_index: Any,
 ) -> tuple[Any, Any]:
     """Resolve ConfidenceEngine and EventFTSIndex from explicit args, stream, or pool."""
-    ce = (
-        confidence_engine
-        or getattr(stream_manager, "confidence_engine", None)
-        or getattr(camera_pool, "confidence_engine", None)
-    )
+    ce = confidence_engine or getattr(stream_manager, "confidence_engine", None) or getattr(camera_pool, "confidence_engine", None)
     if ce is None and db is not None:
         ce = ConfidenceEngine(db=db)
-    fts = (
-        fts_index
-        or getattr(stream_manager, "event_fts_index", None)
-        or getattr(camera_pool, "event_fts_index", None)
-    )
+    fts = fts_index or getattr(stream_manager, "event_fts_index", None) or getattr(camera_pool, "event_fts_index", None)
     return ce, fts
 
 
 def _record_roi_side_effects(
-    svc: Any,
-    *,
-    entity_id: int,
-    entity_name: str,
-    category: str,
-    emb: np.ndarray,
-    crop_path: str,
-    notes: str,
-    source: str,
-    track_id: int | None,
-    camera_id: str | None,
-    video_filename: str,
-    media_offset_sec: float,
+    svc: Any, *, entity_id: int, entity_name: str, category: str, emb: np.ndarray,
+    crop_path: str, notes: str, source: str, track_id: int | None,
+    camera_id: str | None, video_filename: str, media_offset_sec: float,
 ) -> None:
     """Record descriptor version, confidence feedback, FTS sighting, and live track sync."""
     if hasattr(svc.db, "record_descriptor_version"):
@@ -92,20 +70,16 @@ def _record_roi_side_effects(
             svc.fts_index.index_sighting(
                 entity_id=entity_id, entity_name=entity_name, category=category,
                 camera_id=source, zone_id="manual_roi", confidence=1.0,
-                metadata={"track_id": track_id or 0},
-                video_filename=video_filename, media_offset_sec=media_offset_sec,
+                metadata={"track_id": track_id or 0}, video_filename=video_filename, media_offset_sec=media_offset_sec,
             )
         except Exception as exc:
             logger.debug("ROI FTS indexing skipped: %s", exc)
-    mgr = svc.stream_manager
-    if mgr is None and camera_id and svc.camera_pool is not None:
-        mgr = svc.camera_pool.get_stream(camera_id)
+    mgr = svc.stream_manager or (svc.camera_pool.get_stream(camera_id) if camera_id and svc.camera_pool else None)
     if mgr is not None:
         EntityTaggerService._update_live_track_identity(
             getattr(mgr, "tracker", None), track_id, entity_name, category,
-            getattr(mgr, "gallery_matcher", None),
-            entity_id=entity_id, camera_id=camera_id or source,
-            world_bridge=getattr(mgr, "world_bridge", None),
+            getattr(mgr, "gallery_matcher", None), entity_id=entity_id,
+            camera_id=camera_id or source, world_bridge=getattr(mgr, "world_bridge", None),
         )
 
 
@@ -140,20 +114,12 @@ class RoiRecognitionService:
     """Service for on-demand ROI recognition and tag commitment."""
 
     def __init__(
-        self,
-        db: Any,
-        stream_manager: Any = None,
-        camera_pool: Any = None,
-        videos_dir: str = os.path.join("data", "videos"),
-        crops_dir: str = os.path.join("data", "crops"),
-        confidence_engine: Any = None,
-        fts_index: Any = None,
+        self, db: Any, stream_manager: Any = None, camera_pool: Any = None,
+        videos_dir: str = os.path.join("data", "videos"), crops_dir: str = os.path.join("data", "crops"),
+        confidence_engine: Any = None, fts_index: Any = None,
     ) -> None:
-        self.db = db
-        self.stream_manager = stream_manager
-        self.camera_pool = camera_pool
-        self.videos_dir = videos_dir
-        self.crops_dir = crops_dir
+        self.db, self.stream_manager, self.camera_pool = db, stream_manager, camera_pool
+        self.videos_dir, self.crops_dir = videos_dir, crops_dir
         self.confidence_engine, self.fts_index = _resolve_roi_services(
             db, stream_manager, camera_pool, confidence_engine, fts_index
         )
@@ -225,11 +191,8 @@ class RoiRecognitionService:
             cap.release()
 
     def resolve_roi_frame(
-        self,
-        camera_id: str | None = None,
-        video_filename: str | None = None,
-        timestamp_sec: float | None = None,
-        crop_base64: str | None = None,
+        self, camera_id: str | None = None, video_filename: str | None = None,
+        timestamp_sec: float | None = None, crop_base64: str | None = None,
     ) -> tuple[np.ndarray, bool]:
         """Resolve source frame or direct crop from base64, video, or live camera."""
         if crop_base64 and crop_base64.strip():
@@ -242,13 +205,11 @@ class RoiRecognitionService:
 
     @staticmethod
     def extract_roi_crop(
-        frame: np.ndarray,
-        bbox: list[int] | None,
-        is_direct_crop: bool = False,
+        frame: np.ndarray, bbox: list[int] | None, is_direct_crop: bool = False,
     ) -> tuple[np.ndarray, tuple[int, int, int, int]]:
         """Extract a clamped BGR crop and [x, y, w, h] tuple from a frame."""
         fh, fw = frame.shape[:2]
-        if is_direct_crop and (not bbox or len(bbox) != 4):
+        if is_direct_crop:
             return frame, (0, 0, fw, fh)
         if not bbox or len(bbox) != 4:
             raise ValueError("A 4-element [x, y, w, h] bbox is required")
@@ -268,9 +229,8 @@ class RoiRecognitionService:
                 detections = detector.detect(crop) or []
                 if detections:
                     best = max(detections, key=lambda d: float(getattr(d, "confidence", 0.0)))
-                    label = str(getattr(best, "label", "object") or "object")
-                    conf = float(getattr(best, "confidence", 0.5))
-                    return {"label": label, "confidence": round(conf, 4), "method": "detector"}
+                    return {"label": str(getattr(best, "label", "object") or "object"),
+                            "confidence": round(float(getattr(best, "confidence", 0.5)), 4), "method": "detector"}
             except Exception as exc:
                 logger.warning("Detector ROI classification fallback triggered: %s", exc)
         ch, cw = crop.shape[:2]
@@ -282,10 +242,7 @@ class RoiRecognitionService:
         return {"label": "object", "confidence": 0.5, "method": "heuristic"}
 
     def match_crop_to_gallery(
-        self,
-        crop: np.ndarray,
-        top_k: int = 3,
-        reid_extractor: Any = None,
+        self, crop: np.ndarray, top_k: int = 3, reid_extractor: Any = None,
     ) -> dict[str, Any]:
         """Compute crop embedding and return top-K cosine similarity gallery matches."""
         if reid_extractor is None:
@@ -294,35 +251,20 @@ class RoiRecognitionService:
         mat, ids, names, categories = self.db.get_gallery_embeddings(expected_dim=int(emb.shape[0]))
         if mat.size == 0 or not ids:
             return {"embedding_dim": int(emb.shape[0]), "candidates": [], "best_match": None}
-        scores = batch_cosine_similarity(mat, emb)
         best_by_entity: dict[int, dict[str, Any]] = {}
-        for idx, sim in enumerate(scores):
-            eid = int(ids[idx])
-            score_val = round(float(sim), 4)
+        for idx, sim in enumerate(batch_cosine_similarity(mat, emb)):
+            eid, score_val = int(ids[idx]), round(float(sim), 4)
             prev = best_by_entity.get(eid)
             if prev is None or score_val > prev["similarity"]:
-                best_by_entity[eid] = {
-                    "entity_id": eid,
-                    "name": names[idx],
-                    "category": categories[idx],
-                    "similarity": score_val,
-                }
+                best_by_entity[eid] = {"entity_id": eid, "name": names[idx], "category": categories[idx], "similarity": score_val}
         ranked = sorted(best_by_entity.values(), key=lambda c: c["similarity"], reverse=True)
         candidates = ranked[: max(1, int(top_k))]
-        return {
-            "embedding_dim": int(emb.shape[0]),
-            "candidates": candidates,
-            "best_match": candidates[0] if candidates else None,
-        }
+        return {"embedding_dim": int(emb.shape[0]), "candidates": candidates, "best_match": candidates[0] if candidates else None}
 
     def recognize_roi(
-        self,
-        camera_id: str | None = None,
-        video_filename: str | None = None,
-        timestamp_sec: float | None = None,
-        bbox: list[int] | None = None,
-        crop_base64: str | None = None,
-        top_k: int = 3,
+        self, camera_id: str | None = None, video_filename: str | None = None,
+        timestamp_sec: float | None = None, bbox: list[int] | None = None,
+        crop_base64: str | None = None, top_k: int = 3,
     ) -> dict[str, Any]:
         """Run end-to-end on-demand ROI crop extraction, classification, and Re-ID."""
         frame, is_direct = self.resolve_roi_frame(camera_id, video_filename, timestamp_sec, crop_base64)
@@ -331,11 +273,8 @@ class RoiRecognitionService:
         classification = self.classify_roi_crop(crop, detector=detector)
         matching = self.match_crop_to_gallery(crop, top_k=top_k, reid_extractor=reid_ext)
         return {
-            "bbox": list(box),
-            "classification": classification,
-            "candidates": matching["candidates"],
-            "best_match": matching["best_match"],
-            "embedding_dim": matching["embedding_dim"],
+            "bbox": list(box), "classification": classification, "candidates": matching["candidates"],
+            "best_match": matching["best_match"], "embedding_dim": matching["embedding_dim"],
             "crop_base64": self._encode_jpeg_base64(crop),
         }
 
@@ -361,9 +300,7 @@ class RoiRecognitionService:
         ).replace("\\", "/")
         os.makedirs(os.path.dirname(os.path.abspath(crop_path)), exist_ok=True)
         cv2.imwrite(os.path.abspath(crop_path), crop)
-        sig_id = int(self.db.add_signature(
-            entity_id=resolved_id, embedding=emb, crop_path=crop_path, is_anchor=1, locked=1,
-        ))
+        sig_id = int(self.db.add_signature(entity_id=resolved_id, embedding=emb, crop_path=crop_path, is_anchor=1, locked=1))
         bx, by, bw, bh = box
         sighting_id = int(self.db.record_sighting(
             entity_id=resolved_id, track_id=track_id or 0, source=source,
@@ -371,27 +308,22 @@ class RoiRecognitionService:
             snapshot_path=crop_path, video_filename=video_filename, media_offset_sec=media_offset_sec,
         ))
         _record_roi_side_effects(
-            self, entity_id=resolved_id, entity_name=resolved_name, category=category,
-            emb=emb, crop_path=crop_path, notes=notes, source=source, track_id=track_id,
+            self, entity_id=resolved_id, entity_name=resolved_name, category=category, emb=emb,
+            crop_path=crop_path, notes=notes, source=source, track_id=track_id,
             camera_id=camera_id, video_filename=video_filename, media_offset_sec=media_offset_sec,
         )
-        return {
-            "entity_id": resolved_id, "entity_name": resolved_name, "category": category,
-            "signature_id": sig_id, "sighting_id": sighting_id, "crop_path": crop_path, "bbox": list(box),
-        }
+        from dashboard.services.review_sync_service import sync_studio_feedback_to_review_queue
+        review_sync = sync_studio_feedback_to_review_queue(
+            self.db, action="commit", camera_id=camera_id, video_filename=video_filename,
+            media_offset_sec=media_offset_sec, track_id=track_id, bbox=list(box),
+        )
+        return {"entity_id": resolved_id, "entity_name": resolved_name, "category": category, "signature_id": sig_id, "sighting_id": sighting_id, "crop_path": crop_path, "bbox": list(box), "review_sync": review_sync}
 
     def commit_roi_tag(
-        self,
-        entity_name: str,
-        category: str = "person",
-        entity_id: int | None = None,
-        camera_id: str | None = None,
-        video_filename: str | None = None,
-        timestamp_sec: float | None = None,
-        bbox: list[int] | None = None,
-        crop_base64: str | None = None,
-        notes: str = "",
-        track_id: int | None = None,
+        self, entity_name: str, category: str = "person", entity_id: int | None = None,
+        camera_id: str | None = None, video_filename: str | None = None,
+        timestamp_sec: float | None = None, bbox: list[int] | None = None,
+        crop_base64: str | None = None, notes: str = "", track_id: int | None = None,
     ) -> dict[str, Any]:
         """Persist ROI crop, signature, entity record, and sighting into TrackerDB."""
         frame, is_direct = self.resolve_roi_frame(camera_id, video_filename, timestamp_sec, crop_base64)

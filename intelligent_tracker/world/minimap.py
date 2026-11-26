@@ -1,5 +1,6 @@
 """Multi-camera global world tactical minimap telemetry and BEV canvas renderer."""
 
+import math
 import time
 from typing import Any
 
@@ -91,12 +92,20 @@ class WorldTacticalMinimap:
         for cid, cam_snap in sorted(snapshot.get("cameras", {}).items()):
             pose = _pose_from_camera(cid, cam_snap, self.coordinate_mapper)
             homo = _homography_from_camera(cid, cam_snap, self.coordinate_mapper)
+            extra = cam_snap.get("extra") or {}
             fov_src = homo.src_points.tolist() if homo is not None and homo.src_points is not None else []
             fov_global = self._project_camera_polygon(cid, fov_src, cam_snap) if fov_src else []
             cameras.append({
                 "camera_id": cid, "name": cam_snap.get("name") or cid, "enabled": bool(cam_snap.get("enabled", True)),
                 "calibrated": homo is not None and homo.is_calibrated,
-                "world_pose": {"origin_x": pose.origin_x, "origin_y": pose.origin_y, "yaw_deg": pose.yaw_deg, "scale": pose.scale},
+                "world_pose": {
+                    "origin_x": pose.origin_x,
+                    "origin_y": pose.origin_y,
+                    "yaw_deg": pose.yaw_deg,
+                    "scale": pose.scale,
+                    "fov_deg": float(extra.get("fov_deg", 75.0)),
+                    "range_m": float(extra.get("range_m", 12.0)),
+                },
                 "fov_corners_global": fov_global,
             })
         return cameras
@@ -141,16 +150,27 @@ class WorldTacticalMinimap:
         return transitions
 
     def _build_entities_telemetry(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-        """Serialize live WorldEntities with global coordinates and bounded trajectories."""
+        """Serialize live WorldEntities with global coordinates, trajectories, and velocity vectors."""
         entities: list[dict[str, Any]] = []
         for we_id, ent in sorted(snapshot.get("entities", {}).items()):
             gxy = ent.get("global_xy")
+            traj = [[round(float(p[0]), 4), round(float(p[1]), 4), float(p[2])] for p in ent.get("global_trajectory", [])]
+            vx, vy, speed_mps = 0.0, 0.0, 0.0
+            if len(traj) >= 2:
+                dt = traj[-1][2] - traj[-2][2]
+                if dt > 1e-3:
+                    vx = round((traj[-1][0] - traj[-2][0]) / dt, 4)
+                    vy = round((traj[-1][1] - traj[-2][1]) / dt, 4)
+                    speed_mps = round(math.hypot(vx, vy), 4)
             entities.append({
                 "world_entity_id": ent.get("world_entity_id", we_id), "entity_id": ent.get("entity_id"),
                 "session_id": ent.get("session_id"), "name": ent.get("name", ""), "category": ent.get("category", "unknown"),
                 "restricted": bool(ent.get("restricted", False)), "camera_tracks": dict(ent.get("camera_tracks", {})),
                 "global_xy": [round(float(gxy[0]), 4), round(float(gxy[1]), 4)] if gxy is not None else None,
-                "global_trajectory": [[round(float(p[0]), 4), round(float(p[1]), 4), float(p[2])] for p in ent.get("global_trajectory", [])],
+                "global_trajectory": traj,
+                "vx": vx,
+                "vy": vy,
+                "speed_mps": speed_mps,
                 "active_zones": ent.get("active_zones", {}), "last_seen": ent.get("last_seen"),
             })
         return entities

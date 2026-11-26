@@ -15,6 +15,7 @@ from intelligent_tracker.world._lifecycle import (
     register_camera_child,
     remove_non_camera_node,
 )
+from intelligent_tracker.world.edges import WorldEdgeRegistry, WorldGraphEdgeMixin
 from intelligent_tracker.world.events import (
     NodeAddedEvent,
     NodeRemovedEvent,
@@ -53,7 +54,7 @@ def _merge_existing_camera(
         stored.name = existing.name
 
 
-class WorldGraph:
+class WorldGraph(WorldGraphEdgeMixin):
     """Instance-scoped, thread-safe graph of cameras, zones, tripwires, entities, and policy."""
 
     def __init__(
@@ -67,11 +68,13 @@ class WorldGraph:
         self._event_bus = event_bus
         self.coordinate_mapper = coordinate_mapper
         self.handoff_coordinator = handoff_coordinator
+        self.ownership_engine: Any = None
         self._cameras: dict[str, CameraNode] = {}
         self._zones: dict[str, ZoneNode] = {}
         self._tripwires: dict[str, TripwireNode] = {}
         self._entities: dict[str, WorldEntity] = {}
         self._transitions: dict[str, TransitionEdgeNode] = {}
+        self._edges = WorldEdgeRegistry()
         self._policy: WorldPolicy = policy.clone() if policy is not None else WorldPolicy()
 
     def register_camera(self, camera: CameraNode, *, preserve_defaults: bool = True) -> CameraNode:
@@ -88,15 +91,10 @@ class WorldGraph:
             if existing is not None:
                 _merge_existing_camera(existing, stored, preserve_defaults=preserve_defaults)
             else:
-                events.append(
-                    NodeAddedEvent(
-                        camera_id=stored.camera_id,
-                        node_id=stored.node_id,
-                        node_type="camera",
-                        parent_id=None,
-                        node_snapshot=stored.to_dict(),
-                    )
-                )
+                events.append(NodeAddedEvent(
+                    camera_id=stored.camera_id, node_id=stored.node_id, node_type="camera",
+                    parent_id=None, node_snapshot=stored.to_dict(),
+                ))
             self._cameras[stored.camera_id] = stored
             result = deepcopy(stored)
 
@@ -175,6 +173,7 @@ class WorldGraph:
             )
             trans_ids, trans_events = detach_camera_transitions(self._transitions, camera_id)
             detached_ids.extend(trans_ids)
+            self._edges.prune_for_camera(camera_id)
             events.extend(child_events)
             events.extend(trans_events)
             events.extend(detach_camera_from_entities(self._entities, camera_id, now))
@@ -197,8 +196,8 @@ class WorldGraph:
             is_camera = node_id in self._cameras
             if not is_camera:
                 removed, events = remove_non_camera_node(
-                    self._cameras, self._zones, self._tripwires, self._entities, node_id, time.time(),
-                    transitions=self._transitions,
+                    self._cameras, self._zones, self._tripwires, self._entities,
+                    node_id, time.time(), transitions=self._transitions, edges=self._edges,
                 )
             else:
                 removed, events = False, []
@@ -286,6 +285,7 @@ class WorldGraph:
                 "tripwires": {tid: tw.to_dict() for tid, tw in self._tripwires.items()},
                 "entities": {eid: ent.to_dict() for eid, ent in self._entities.items()},
                 "transitions": {tid: tr.to_dict() for tid, tr in self._transitions.items()},
+                "edges": self._edges.to_dict(),
                 "policy": self._policy.to_dict(),
                 "counts": {
                     "cameras": len(self._cameras),

@@ -147,7 +147,6 @@ class StreamRecordingController:
     ) -> bool:
         """Write raw or annotated frame to active recording and auto-finalize on limit."""
         svc, curr_mode = self._current_processing_mode()
-        deferred_meta: dict[str, Any] | None = None
         with self._lock:
             if self._writer is None or self._active_meta is None:
                 return False
@@ -156,16 +155,14 @@ class StreamRecordingController:
             written = self._writer.write(annotated_frame if use_ann else raw_frame)
             if written and step_res is not None and not is_capture_only:
                 self._capture_step_snapshot(step_res, raw_frame)
-            if not self._writer.is_open:
-                meta, should_defer = self._finalize_locked(status="completed", curr_mode=curr_mode)
-                if should_defer:
-                    deferred_meta = meta
-        if deferred_meta is not None:
-            job_id = _enqueue_deferred_recording(svc, deferred_meta, self.camera_id)
-            if job_id:
-                with self._lock:
-                    if self._last_meta is not None:
-                        self._last_meta["deferred_job_id"] = job_id
+            finalized = (
+                self._finalize_locked(status="completed", curr_mode=curr_mode)
+                if not self._writer.is_open
+                else None
+            )
+        if finalized is not None:
+            meta, should_defer, recorded_frames, stats = finalized
+            self._post_finalize_outside_lock(svc, meta, should_defer, recorded_frames, stats)
         return written
 
     def _capture_step_snapshot(self, step_res: Any, raw_frame: np.ndarray) -> None:
@@ -226,8 +223,10 @@ class StreamRecordingController:
             logger.warning("Failed to persist live_capture run for '%s': %s", meta.get("filename"), exc)
             return None
 
-    def _finalize_locked(self, status: str, curr_mode: str | None = None) -> tuple[dict[str, Any], bool]:
-        """Release active writer and persist final metadata snapshot under lock."""
+    def _finalize_locked(
+        self, status: str, curr_mode: str | None = None,
+    ) -> tuple[dict[str, Any], bool, list[dict[str, Any]], dict[str, Any]]:
+        """Release active writer and snapshot metadata/frames under lock (no SQLite I/O)."""
         meta = dict(self._active_meta or _idle_status(self.camera_id))
         recorded_frames = list(self._recorded_frames)
         stats = dict(self._live_stats)
@@ -240,14 +239,30 @@ class StreamRecordingController:
         meta.update({"status": status, "is_recording": False, "stopped_at": time.time(), "processing_mode": final_mode})
         if is_capture_only:
             meta["annotated"] = False
-        else:
-            run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
-            if run_rec and run_rec.get("run_id"):
-                meta["report_run_id"] = run_rec["run_id"]
         self._writer = None
         self._active_meta = None
         self._last_meta = meta
-        return dict(meta), is_capture_only
+        return dict(meta), is_capture_only, recorded_frames, stats
+
+    def _post_finalize_outside_lock(
+        self, svc: Any, meta: dict[str, Any], should_defer: bool,
+        recorded_frames: list[dict[str, Any]], stats: dict[str, Any],
+    ) -> None:
+        """Persist live_capture run or enqueue deferred indexing strictly outside _lock."""
+        updates: dict[str, Any] = {}
+        if should_defer:
+            job_id = _enqueue_deferred_recording(svc, meta, self.camera_id)
+            if job_id:
+                updates["deferred_job_id"] = job_id
+        else:
+            run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
+            if run_rec and run_rec.get("run_id"):
+                updates["report_run_id"] = run_rec["run_id"]
+        if updates:
+            meta.update(updates)
+            with self._lock:
+                if self._last_meta is not None and self._last_meta.get("recording_id") == meta.get("recording_id"):
+                    self._last_meta.update(updates)
 
     def stop(self) -> dict[str, Any]:
         """Stop an active recording and return finalized file telemetry."""
@@ -255,14 +270,8 @@ class StreamRecordingController:
         with self._lock:
             if self._writer is None:
                 raise RuntimeError(f"No active recording for camera '{self.camera_id}'")
-            meta, should_defer = self._finalize_locked(status="stopped", curr_mode=curr_mode)
-        if should_defer:
-            job_id = _enqueue_deferred_recording(svc, meta, self.camera_id)
-            if job_id:
-                meta["deferred_job_id"] = job_id
-                with self._lock:
-                    if self._last_meta is not None:
-                        self._last_meta["deferred_job_id"] = job_id
+            meta, should_defer, recorded_frames, stats = self._finalize_locked(status="stopped", curr_mode=curr_mode)
+        self._post_finalize_outside_lock(svc, meta, should_defer, recorded_frames, stats)
         return meta
 
     def finalize_if_active(self) -> dict[str, Any] | None:
@@ -271,14 +280,8 @@ class StreamRecordingController:
         with self._lock:
             if self._writer is None:
                 return None
-            meta, should_defer = self._finalize_locked(status="stopped", curr_mode=curr_mode)
-        if should_defer:
-            job_id = _enqueue_deferred_recording(svc, meta, self.camera_id)
-            if job_id:
-                meta["deferred_job_id"] = job_id
-                with self._lock:
-                    if self._last_meta is not None:
-                        self._last_meta["deferred_job_id"] = job_id
+            meta, should_defer, recorded_frames, stats = self._finalize_locked(status="stopped", curr_mode=curr_mode)
+        self._post_finalize_outside_lock(svc, meta, should_defer, recorded_frames, stats)
         return meta
 
     def status(self) -> dict[str, Any]:

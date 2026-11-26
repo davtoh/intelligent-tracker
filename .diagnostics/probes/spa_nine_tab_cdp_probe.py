@@ -25,58 +25,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 DIAGNOSE_PY = Path.home() / ".gemini/config/skills/system-diagnostics/scripts/diagnose.py"
-
-SWEEP_JS = r"""
-(async () => {
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const tabs = [
-    'tab-live', 'tab-videos', 'tab-gallery', 'tab-timeline',
-    'tab-analytics', 'tab-alerts', 'tab-studio', 'tab-journey', 'tab-review',
-  ];
-  const tabResults = {};
-  for (const id of tabs) {
-    const btn = document.querySelector(`.nav-tab[data-tab="${id}"]`);
-    if (!btn) { tabResults[id] = { missing: true }; continue; }
-    btn.click();
-    await sleep(180);
-    const pane = document.getElementById(id);
-    const overflowX = document.documentElement.scrollWidth > window.innerWidth + 1;
-    tabResults[id] = { active: pane?.classList.contains('active') || false, overflowX };
-  }
-  document.querySelector('.nav-tab[data-tab="tab-live"]')?.click();
-  await sleep(150);
-  const g2 = document.querySelector('.grid-switch-btn[data-grid="2x2"]');
-  const g1 = document.querySelector('.grid-switch-btn[data-grid="1x1"]');
-  g2?.click(); await sleep(150);
-  const gridEl = document.getElementById('multi-grid-container');
-  const grid2x2Active = gridEl?.classList.contains('grid-2x2') || false;
-  g1?.click(); await sleep(150);
-  const sel = document.getElementById('active-camera-select');
-  const titleEl = document.getElementById('video-stream-title');
-  const titleRects = [];
-  if (sel && sel.options.length >= 2) {
-    for (const opt of [sel.options[0], sel.options[1]]) {
-      sel.value = opt.value;
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-      await sleep(100);
-      titleRects.push(titleEl ? titleEl.getBoundingClientRect().height : 0);
-    }
-  }
-  const modalOk = {};
-  const pairs = [
-    ['#btn-manage-cameras', '#modal-camera-manager', '#modal-cam-close'],
-    ['#btn-open-enrollment', '#modal-universal-enrollment', '#modal-enroll-close'],
-  ];
-  for (const [openId, modalId, closeId] of pairs) {
-    document.querySelector(openId)?.click(); await sleep(120);
-    const el = document.querySelector(modalId);
-    const open = el?.classList.contains('active') || getComputedStyle(el || document.body).display !== 'none';
-    document.querySelector(closeId)?.click(); await sleep(100);
-    modalOk[modalId] = open;
-  }
-  return { tabs: tabResults, grid2x2Active, titleHeights: titleRects, modals: modalOk };
-})()
-"""
+SWEEP_JS_PATH = Path(__file__).with_name("spa_nine_tab_sweep.js")
 
 
 def _free_port() -> int:
@@ -84,60 +33,77 @@ def _free_port() -> int:
         s.bind(("127.0.0.1", 0))
         return int(s.getsockname()[1])
 
+def _write_synth_mp4(path: Path) -> bytes:
+    import cv2
+    import numpy as np
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10.0, (320, 240))  # type: ignore[attr-defined]
+    frame = np.zeros((240, 320, 3), dtype=np.uint8)
+    cv2.rectangle(frame, (40, 40), (140, 180), (60, 180, 220), -1)
+    try:
+        for _ in range(5):
+            writer.write(frame)
+    finally:
+        writer.release()
+    return cv2.imencode(".jpg", frame)[1].tobytes()
 
-def _seed_spa_env(tmp: Path) -> tuple[str, str, str]:
+
+def _seed_spa_env(tmp: Path) -> tuple[str, str, str, Path, bytes]:
     from intelligent_tracker.database import TrackerDB
-
+    vdir = tmp / "videos"
+    vdir.mkdir(parents=True, exist_ok=True)
+    rec_mp4 = vdir / "recorded_clip.mp4"
+    jpeg_bytes = _write_synth_mp4(rec_mp4)
     cfg_path = tmp / "cameras.json"
-    cfg_path.write_text(
-        json.dumps(
-            [
-                {"id": "cam_short", "name": "Cam1", "source": "0", "enabled": False},
-                {
-                    "id": "cam_long",
-                    "name": "Warehouse North-East Loading Dock Entrance Camera 02",
-                    "source": "1",
-                    "enabled": False,
-                },
-            ]
-        ),
-        encoding="utf-8",
-    )
+    cfg_path.write_text(json.dumps([
+        {"id": "cam_short", "name": "Cam1", "source": str(rec_mp4), "enabled": True},
+        {"id": "cam_long", "name": "Warehouse North-East Loading Dock Entrance Camera 02", "source": "1", "enabled": False},
+        {"id": "usb_2", "name": "USB Cam 2", "source": "2", "enabled": False},
+    ]), encoding="utf-8")
     scen_path = tmp / "scenarios.yaml"
     scen_path.write_text("zones: {}\ntripwires: {}\n", encoding="utf-8")
     db_path = tmp / "tracker.db"
-    TrackerDB(str(db_path)).close()
-    return str(cfg_path), str(db_path), str(scen_path)
+    db = TrackerDB(str(db_path))
+    db.save_video_run(video_filename="recorded_clip.mp4", report={"entities": [], "alerts": []}, frame_detections=[], source_fps=10.0)
+    db.add_review_item(
+        camera_id="cam_short", track_id=1, crop_path="", similarity=0.58,
+        video_filename="recorded_clip.mp4", media_offset_sec=0.5,
+        bbox=[40, 40, 100, 140], frame_width=320, frame_height=240,
+    )
+    db.close()
+    return str(cfg_path), str(db_path), str(scen_path), vdir, jpeg_bytes
 
 
-def _start_server(tmp: Path) -> tuple[uvicorn.Server, threading.Thread, int, dict[str, Any], Any]:
-    import dashboard.app as app_module
+def _make_isolated_init(cfg: str, db_p: str, scen: str, jpeg_bytes: bytes, refs: dict[str, Any]) -> Any:
+    import cv2
+    import numpy as np
     from dashboard.camera_pool import CameraPool
     from dashboard.dependencies import bind_app_state
     from intelligent_tracker.database import TrackerDB
     from intelligent_tracker.lifecycle import StreamLifecycleManager
     from intelligent_tracker.scenarios import ScenarioManager
 
-    cfg, db_p, scen = _seed_spa_env(tmp)
-    refs: dict[str, Any] = {}
-    orig_init = app_module._init_runtime_services
-
     def _isolated_init(application: Any) -> tuple[Any, Any, Any, Any]:
         pool = CameraPool(config_file=cfg, db_path=db_p, autostart=False)
+        if mgr := pool.get_stream("cam_short"):
+            mgr._running = True
+            mgr._latest_raw_frame = cv2.imdecode(np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+            mgr._latest_raw_jpeg = mgr._latest_jpeg = jpeg_bytes
         db = TrackerDB(db_p)
         lm = StreamLifecycleManager(db=db, camera_pool=pool)
         refs.update(pool=pool, db=db)
-        bind_app_state(
-            application,
-            camera_pool=pool,
-            stream_manager=pool.primary_stream,
-            scenario_manager=ScenarioManager(config_path=scen),
-            lifecycle_manager=lm,
-            db=db,
-        )
+        bind_app_state(application, camera_pool=pool, stream_manager=pool.primary_stream, scenario_manager=ScenarioManager(config_path=scen), lifecycle_manager=lm, db=db)
         return pool, pool.primary_stream, lm, None
+    return _isolated_init
 
-    app_module._init_runtime_services = _isolated_init
+
+def _start_server(tmp: Path) -> tuple[uvicorn.Server, threading.Thread, int, dict[str, Any], Any]:
+    import dashboard.app as app_module
+    import dashboard.routers.videos as videos_router
+    cfg, db_p, scen, vdir, jpeg_bytes = _seed_spa_env(tmp)
+    refs: dict[str, Any] = {"orig_vdir": videos_router.VIDEOS_DIR}
+    videos_router.VIDEOS_DIR = str(vdir)
+    orig_init = app_module._init_runtime_services
+    app_module._init_runtime_services = _make_isolated_init(cfg, db_p, scen, jpeg_bytes, refs)
     port = _free_port()
     srv = uvicorn.Server(uvicorn.Config(app_module.app, host="127.0.0.1", port=port, log_level="error"))
     th = threading.Thread(target=srv.run, daemon=True)
@@ -150,11 +116,14 @@ def _start_server(tmp: Path) -> tuple[uvicorn.Server, threading.Thread, int, dic
 
 def _stop_server(srv: uvicorn.Server, th: threading.Thread, refs: dict[str, Any], orig_init: Any) -> None:
     import dashboard.app as app_module
+    import dashboard.routers.videos as videos_router
     from dashboard.dependencies import clear_app_state, set_shutting_down
 
     srv.should_exit = True
     th.join(timeout=5.0)
     app_module._init_runtime_services = orig_init
+    if "orig_vdir" in refs:
+        videos_router.VIDEOS_DIR = refs["orig_vdir"]
     if pool := refs.get("pool"):
         pool.stop_all()
     if db := refs.get("db"):
@@ -199,15 +168,29 @@ def _evaluate_cdp_output(raw: dict[str, Any], failures: list[str], checks: dict[
 
 
 def _evaluate_sweep(sweep: dict[str, Any], failures: list[str]) -> None:
-    """Validate 9-tab activation, 2x2 grid switch, zero-shift title heights, and modals."""
+    """Validate 9-tab activation, 2x2/3x3/4x4 grid overlay parity, media loads, and modals."""
     tabs = sweep.get("tabs") or {}
     if len(tabs) < 9:
         failures.append(f"Expected 9 SPA tabs in sweep, got {len(tabs)}")
     bad_tabs = [k for k, v in tabs.items() if not v.get("active") or v.get("overflowX")]
     if bad_tabs:
         failures.append(f"SPA tab failures: {bad_tabs}")
-    if not sweep.get("grid2x2Active"):
-        failures.append("Multiview 2x2 grid switch did not activate")
+    gp = sweep.get("gridParity") or {}
+    for mode in ("2x2", "3x3", "4x4"):
+        entry = gp.get(mode) or {}
+        if not entry.get("active") or not entry.get("overlayMatch"):
+            failures.append(f"Multiview {mode} grid/overlay parity failed: {entry}")
+    for key, msg in (
+        ("heatmapLoaded", "#static-heatmap-img failed to load (naturalWidth==0)"),
+        ("alertsReady", "#tab-alerts failed to activate"),
+        ("journeyReady", "#tab-journey failed to activate"),
+        ("reviewCardReady", "#tab-review card missing bbox/provenance context"),
+        ("studioLiveLoaded", "#studio-live-img failed to load (naturalWidth==0)"),
+        ("recordedSelected", "#studio Recorded Videos selection failed"),
+        ("enrollChanged", "#enroll-camera-select change did not render freeze-frame"),
+    ):
+        if not sweep.get(key):
+            failures.append(msg)
     heights = sweep.get("titleHeights") or []
     if len(heights) < 2 or min(heights) <= 0 or len(set(heights)) > 1:
         failures.append(f"Camera title height shift detected: {heights}")
@@ -266,7 +249,7 @@ def run_probe() -> dict[str, Any]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         js_file = tmp / "sweep.js"
-        js_file.write_text(SWEEP_JS, encoding="utf-8")
+        js_file.write_text(SWEEP_JS_PATH.read_text(encoding="utf-8"), encoding="utf-8")
         srv, th, port, refs, orig_init = _start_server(tmp)
         try:
             _run_cdp_subprocess(port, js_file, failures, checks)

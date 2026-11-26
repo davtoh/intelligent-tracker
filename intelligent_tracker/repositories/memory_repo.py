@@ -73,24 +73,22 @@ def _hydrate_row(row: sqlite3.Row, json_col: str, out_key: str) -> dict[str, Any
     return data
 
 
-def _build_timeline_query(
+def _build_timeline_where(
     match_expr: str, entity_id: int | None, camera_id: str | None,
     zone_id: str | None, event_type: str | None,
-    start_time: float | None, end_time: float | None, limit: int,
-) -> tuple[str, list[Any]]:
-    """Build parameterized SQL and bind args for timeline FTS/filter queries."""
+    start_time: float | None, end_time: float | None,
+    severity: str | None = None,
+) -> tuple[str, str, list[Any], str]:
+    """Build shared FROM/WHERE/ORDER BY SQL clauses for timeline queries."""
     clauses: list[str] = []
     params: list[Any] = []
     if match_expr:
-        sql = (
-            "SELECT e.*, bm25(world_timeline_fts) AS rank FROM world_timeline_fts "
-            "JOIN world_timeline_events e ON e.id = world_timeline_fts.rowid"
-        )
+        from_sql = "FROM world_timeline_fts JOIN world_timeline_events e ON e.id = world_timeline_fts.rowid"
         clauses.append("world_timeline_fts MATCH ?")
         params.append(match_expr)
         order_by = "ORDER BY rank ASC, e.timestamp DESC"
     else:
-        sql = "SELECT e.*, 0.0 AS rank FROM world_timeline_events e"
+        from_sql = "FROM world_timeline_events e"
         order_by = "ORDER BY e.timestamp DESC"
 
     filters = (
@@ -105,9 +103,30 @@ def _build_timeline_query(
         if val is not None:
             clauses.append(clause)
             params.append(val)
+    sev = severity.strip().lower() if severity else ""
+    if sev:
+        clauses.append(
+            "(LOWER(COALESCE(json_extract(e.metadata_json, '$.severity'), '')) = ? "
+            "OR (',' || LOWER(COALESCE(e.tags, '')) || ',') LIKE ?)"
+        )
+        params.extend([sev, f"%,{sev},%"])
     where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(max(1, int(limit)))
-    return f"{sql}{where_sql} {order_by} LIMIT ?", params
+    return from_sql, where_sql, params, order_by
+
+
+def _build_timeline_query(
+    match_expr: str, entity_id: int | None, camera_id: str | None,
+    zone_id: str | None, event_type: str | None,
+    start_time: float | None, end_time: float | None, limit: int,
+    severity: str | None = None, offset: int = 0,
+) -> tuple[str, list[Any]]:
+    """Build parameterized SQL and bind args for timeline FTS/filter queries."""
+    from_sql, where_sql, params, order_by = _build_timeline_where(
+        match_expr, entity_id, camera_id, zone_id, event_type, start_time, end_time, severity
+    )
+    select_col = "e.*, bm25(world_timeline_fts) AS rank" if match_expr else "e.*, 0.0 AS rank"
+    params.extend([max(1, int(limit)), max(0, int(offset))])
+    return f"SELECT {select_col} {from_sql}{where_sql} {order_by} LIMIT ? OFFSET ?", params
 
 
 class MemoryMixin:
@@ -261,10 +280,34 @@ class MemoryMixin:
         zone_id: str | None = None, event_type: str | None = None,
         start_time: float | None = None, end_time: float | None = None,
         limit: int = 25, require_all: bool = False,
+        severity: str | None = None, offset: int = 0,
     ) -> list[dict[str, Any]]:
         """Search timeline events using FTS5 BM25 ranking plus structured filters."""
         match_expr = _build_fts_match_expr(query, require_all=require_all)
         sql, params = _build_timeline_query(
-            match_expr, entity_id, camera_id, zone_id, event_type, start_time, end_time, limit
+            match_expr, entity_id, camera_id, zone_id, event_type,
+            start_time, end_time, limit, severity=severity, offset=offset,
         )
         return self._fetch_hydrated_rows(sql, params, "metadata_json", "metadata")
+
+    def count_timeline_events(
+        self, query: str = "", entity_id: int | None = None, camera_id: str | None = None,
+        zone_id: str | None = None, event_type: str | None = None,
+        start_time: float | None = None, end_time: float | None = None,
+        severity: str | None = None, require_all: bool = False,
+    ) -> int:
+        """Count timeline events matching FTS5 query and structured filters."""
+        match_expr = _build_fts_match_expr(query, require_all=require_all)
+        from_sql, where_sql, params, _ = _build_timeline_where(
+            match_expr, entity_id, camera_id, zone_id, event_type, start_time, end_time, severity
+        )
+        sql = f"SELECT COUNT(*) {from_sql}{where_sql}"
+        with self._lock:
+            if self._conn is None:
+                return 0
+            cur = self._conn.cursor()
+            try:
+                row = cur.execute(sql, params).fetchone()
+                return int(row[0]) if row else 0
+            finally:
+                cur.close()

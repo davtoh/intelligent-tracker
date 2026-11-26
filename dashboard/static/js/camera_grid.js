@@ -47,6 +47,7 @@
     const grid = document.getElementById('multi-grid-container');
     const tiles = Array.from(grid?.querySelectorAll?.('.camera-grid-tile') || []);
     const tile = tiles.find((t) => t.getAttribute?.('data-id') === camId);
+    if (status !== 'online') window.GridTileOverlay?.clearTileOverlay?.(tile);
     const badge = tile?.querySelector?.('.tile-status-badge');
     if (badge) {
       const norm = normalizeTileStatus(status);
@@ -296,7 +297,10 @@
     const cameraSelectDropdown = document.getElementById('active-camera-select');
 
     if (cam) {
-      if (liveStreamImg) {
+      const st = normalizeTileStatus(cam.status);
+      if (st === 'offline' || st === 'error' || st === 'disabled') {
+        window.LivePlayer?.showOfflinePoster?.(liveStreamImg, st);
+      } else if (liveStreamImg) {
         const cleanBase = `/stream/${encodeURIComponent(cam.id)}`;
         if (liveStreamImg.dataset) liveStreamImg.dataset.activeStreamSrc = cleanBase;
         liveStreamImg.src = `${cleanBase}?annotated=false`;

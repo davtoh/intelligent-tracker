@@ -225,6 +225,7 @@ def remove_non_camera_node(
     node_id: str,
     now: float,
     transitions: dict[str, TransitionEdgeNode] | None = None,
+    edges: Any = None,
 ) -> tuple[bool, list[BaseEvent]]:
     """Remove a single zone, tripwire, entity, or transition edge under lock."""
     events: list[BaseEvent] = []
@@ -241,14 +242,15 @@ def remove_non_camera_node(
 
     if transitions is not None and node_id in transitions:
         edge = transitions.pop(node_id)
-        ev = NodeRemovedEvent(
+        return True, [NodeRemovedEvent(
             camera_id=edge.source_camera or "world", node_id=node_id,
             node_type="transition", parent_id=edge.source_camera or None,
-        )
-        return True, [ev]
+        )]
 
     if node_id in entities:
         entities.pop(node_id)
+        if edges is not None:
+            edges.prune_for_entity(node_id)
         for zone in zones.values():
             zone.active_entity_ids.discard(node_id)
         events.append(NodeRemovedEvent(camera_id="world", node_id=node_id, node_type="entity"))

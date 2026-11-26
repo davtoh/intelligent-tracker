@@ -35,6 +35,10 @@ description: Apply when editing dashboard/static/ (HTML, CSS, JS), multiview (/w
 - **Fetch Clone & HTML Asset Regex**: Shared `fetch` deduplication helpers MUST return `resp.clone()` before callers invoke `.json()` or `.text()`. Match real HTML asset tags with negative lookbehind `(?<!data-)src=` in static tests so lazy-loaded `data-src=` attributes do not trigger false failures.
 - **Node VM (`vm.runInNewContext`) Test Discipline**:
   - Keep every test method strictly `<= 40` lines (`diagnose.py audit`).
+  - Execute async test bodies inside `vm.runInContext(ctx)` rather than the outer Node realm so reassigned globals (`fetch`, `Image`) bind to the VM context.
   - When testing `studio.js` incremental/delta list rendering, stub DOM creation/diff hooks (`document.createElement` with `children: []` and `appendChild`, row stubs, `StudioOverlays.renderScenarioListUI`/`renderTopologyLinksUI`) in small (`<= 40L`) helpers, and measure BEV minimap timer activity via delta renders across `_tickIntervals()`.
   - When testing async `fetch().then(r => r.json())` flows in Node VM without timers, flush multiple microtask ticks (or await the returned init promise) before asserting DOM updates.
   - When extracting a new JS helper module (e.g., `multiview/grid_tile_overlay.js`, `camera_form_helpers.js`, `app_ui_helpers.js`, `video_jobs_ui.js`) or adding multi-sample HUD hysteresis (`LivePlayer.updateInferenceLagHud` 3-sample lag window), keep a standalone fallback in the parent module or load the extracted file in existing Node VM harnesses (`git grep -n "<parent>.js" tests/`).
+  - Keep `analytics.html` free of eager `src="/analytics/heatmap"` so cold-boot `#live` never fetches heatmaps early; attach on `#tab-analytics` entry or active init.
+  - When probing MJPEG `<img>` streams in headless Chrome, wait on `naturalWidth > 0` (never `img.complete`), and ensure `#studio-camera-select` `change` is dispatched after channel load.
+  - Always grep legacy Node VM contract tests before changing URL query-param formats or eager HTML `src` attributes.

@@ -139,21 +139,127 @@
     }
   }
 
+  let suggestTimer = null;
+  let suggestItems = [];
+  let activeSuggestIndex = -1;
+
+  function hideSuggestions() {
+    const list = document.getElementById('journey-suggest-list');
+    if (list) {
+      list.innerHTML = '';
+      list.classList.add('hidden');
+    }
+    suggestItems = [];
+    activeSuggestIndex = -1;
+  }
+
+  function renderSuggestions(items) {
+    const list = document.getElementById('journey-suggest-list');
+    if (!list) return;
+    suggestItems = Array.isArray(items) ? items : [];
+    activeSuggestIndex = -1;
+    if (suggestItems.length === 0) {
+      hideSuggestions();
+      return;
+    }
+    list.innerHTML = suggestItems.map((item, idx) => `
+      <li class="journey-suggest-item" role="option" data-index="${idx}" data-name="${escapeHtml(item.name || '')}">
+        <span class="suggest-name">${escapeHtml(item.name || '')}</span>
+        <span class="suggest-meta">#${escapeHtml(item.id)} · ${escapeHtml(item.category || 'person')}</span>
+      </li>
+    `).join('');
+    list.classList.remove('hidden');
+  }
+
+  function highlightSuggestion(nextIndex) {
+    const list = document.getElementById('journey-suggest-list');
+    if (!list || suggestItems.length === 0) return;
+    activeSuggestIndex = Math.max(-1, Math.min(nextIndex, suggestItems.length - 1));
+    Array.from(list.children).forEach((el, idx) => {
+      if (idx === activeSuggestIndex) el.classList.add('active');
+      else el.classList.remove('active');
+    });
+  }
+
+  async function fetchSuggestions(query) {
+    const trimmed = (query || '').trim();
+    if (!trimmed) {
+      hideSuggestions();
+      return;
+    }
+    try {
+      const res = await fetch(`/api/entities/suggest?q=${encodeURIComponent(trimmed)}&limit=8`);
+      if (!res.ok) return;
+      const data = await res.json();
+      renderSuggestions(data.items || []);
+    } catch (_err) {
+      hideSuggestions();
+    }
+  }
+
+  function selectSuggestion(index) {
+    const item = suggestItems[index];
+    if (!item) return;
+    const input = document.getElementById('journey-search-query');
+    if (input) input.value = item.name || String(item.id || '');
+    hideSuggestions();
+    searchJourney(input?.value || item.name);
+  }
+
   function bindJourneySearch() {
     const btnSearch = document.getElementById('btn-journey-search');
     const btnExport = document.getElementById('btn-journey-export');
+    const input = document.getElementById('journey-search-query');
+    const list = document.getElementById('journey-suggest-list');
 
     if (btnSearch) {
       btnSearch.addEventListener('click', () => {
-        const query = (document.getElementById('journey-search-query')?.value || '').trim();
+        hideSuggestions();
+        const query = (input?.value || '').trim();
         searchJourney(query);
       });
     }
 
     if (btnExport) {
       btnExport.addEventListener('click', () => {
-        const query = (document.getElementById('journey-search-query')?.value || '').trim();
+        hideSuggestions();
+        const query = (input?.value || '').trim();
         exportJourneyVideo(query);
+      });
+    }
+
+    if (input) {
+      input.addEventListener('input', () => {
+        if (suggestTimer) ((id) => clearTimeout(id))(suggestTimer);
+        suggestTimer = ((fn, ms) => setTimeout(fn, ms))(() => fetchSuggestions(input.value), 180);
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          highlightSuggestion(activeSuggestIndex + 1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          highlightSuggestion(activeSuggestIndex - 1);
+        } else if (e.key === 'Escape') {
+          hideSuggestions();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (activeSuggestIndex >= 0 && suggestItems[activeSuggestIndex]) {
+            selectSuggestion(activeSuggestIndex);
+          } else {
+            hideSuggestions();
+            searchJourney((input.value || '').trim());
+          }
+        }
+      });
+    }
+
+    if (list) {
+      list.addEventListener('click', (e) => {
+        const li = e.target?.closest ? e.target.closest('.journey-suggest-item') : null;
+        if (!li) return;
+        const idx = Number(li.dataset?.index ?? -1);
+        if (idx >= 0) selectSuggestion(idx);
       });
     }
   }
@@ -162,6 +268,8 @@
     bind: bindJourneySearch,
     search: searchJourney,
     exportVideo: exportJourneyVideo,
+    fetchSuggestions,
+    hideSuggestions,
   };
 })();
 

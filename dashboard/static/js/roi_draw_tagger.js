@@ -8,6 +8,7 @@
   const DRAG_THRESHOLD_PX = 6;
   const MIN_SOURCE_ROI_PX = 4;
   const attachments = new WeakMap();
+  const dragContexts = new WeakMap();
   let recognitionHandler = null;
 
   function resolveMediaDimensions(mediaEl, sourceWidth, sourceHeight) {
@@ -142,13 +143,14 @@
 
     const onPointerMove = (e) => {
       if (!state.active) return;
+      state.lastClient = { x: e.clientX, y: e.clientY };
       const dist = Math.hypot(e.clientX - state.startClient.x, e.clientY - state.startClient.y);
       if (!state.isDragging && dist >= threshold) {
         state.isDragging = true;
         pauseVideoOnDrag(config.mediaEl);
       }
       if (state.isDragging) {
-        renderDragState(config, state, { x: e.clientX, y: e.clientY });
+        renderDragState(config, state, state.lastClient);
       }
     };
 
@@ -157,6 +159,7 @@
       const wasDragging = state.isDragging;
       state.active = false;
       state.isDragging = false;
+      state.lastClient = null;
       if (e?.pointerId != null) config.canvas.releasePointerCapture?.(e.pointerId);
       if (wasDragging) renderDragState(config, state, null);
     };
@@ -191,7 +194,7 @@
     if (!config?.canvas) return () => {};
     const prevDetach = attachments.get(config.canvas);
     if (typeof prevDetach === 'function') prevDetach();
-    const state = { active: false, isDragging: false, pointerId: null, startClient: { x: 0, y: 0 } };
+    const state = { active: false, isDragging: false, pointerId: null, startClient: { x: 0, y: 0 }, lastClient: null };
     const handlers = buildPointerHandlers(config, state);
     config.canvas.addEventListener('pointerdown', handlers.onPointerDown);
     config.canvas.addEventListener('pointermove', handlers.onPointerMove);
@@ -203,9 +206,24 @@
       config.canvas.removeEventListener('pointerup', handlers.onPointerUp);
       config.canvas.removeEventListener('pointercancel', handlers.onPointerCancel);
       attachments.delete(config.canvas);
+      dragContexts.delete(config.canvas);
     };
     attachments.set(config.canvas, detach);
+    dragContexts.set(config.canvas, { config, state });
     return detach;
+  }
+
+  function isDragging(canvas) {
+    return Boolean(canvas && dragContexts.get(canvas)?.state?.isDragging);
+  }
+
+  function redrawDragOverlay(canvas) {
+    const entry = canvas ? dragContexts.get(canvas) : null;
+    if (!entry?.state?.isDragging || !entry.state.lastClient) return false;
+    const ctx = typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
+    if (!ctx) return false;
+    drawSelectionOverlay(ctx, toCanvasRect(canvas, entry.state.startClient, entry.state.lastClient));
+    return true;
   }
 
   function setRecognitionHandler(fn) {
@@ -226,6 +244,8 @@
     normalizeDragRect,
     hitTestTrackAtPoint,
     drawSelectionOverlay,
+    isDragging,
+    redrawDragOverlay,
     attach,
     setRecognitionHandler,
     openWithRecognition,

@@ -10,7 +10,8 @@ Video Studio playback.
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.params import Depends as DependsParam
 from pydantic import BaseModel, Field
 
 from dashboard.dependencies import (
@@ -21,6 +22,7 @@ from dashboard.dependencies import (
     get_db,
     reload_all_galleries,
 )
+from dashboard.services.negative_exemplar_service import NegativeExemplarService
 from dashboard.services.roi_recognition_service import (
     RoiNotFoundError,
     RoiRecognitionService,
@@ -28,6 +30,7 @@ from dashboard.services.roi_recognition_service import (
 )
 
 router = APIRouter(tags=["tagging"])
+_UNSET = object()
 
 
 class RoiRecognizeRequest(BaseModel):
@@ -56,20 +59,39 @@ class TagCommitRequest(BaseModel):
     track_id: int | None = None
 
 
-def _build_service(request: Request, camera_id: str | None) -> RoiRecognitionService:
-    """Construct RoiRecognitionService bound to request app state."""
-    db = get_db(conn=request)
-    if db is None:
+class TagDiscourageRequest(BaseModel):
+    """Request payload for recording a negative or false-positive exemplar."""
+
+    entity_id: int | None = None
+    label: str = Field("")
+    camera_id: str | None = None
+    video_filename: str | None = None
+    timestamp_sec: float | None = None
+    bbox: list[int] | None = None
+    crop_base64: str | None = None
+    notes: str = Field("")
+    track_id: int | None = None
+
+
+def _build_service(
+    request: Request,
+    camera_id: str | None,
+    db: object = _UNSET,
+    pool: object = _UNSET,
+) -> RoiRecognitionService:
+    """Construct RoiRecognitionService bound to request app state or injected DI."""
+    resolved_db = get_db(conn=request) if (db is _UNSET or isinstance(db, DependsParam)) else db
+    if resolved_db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    pool = get_camera_pool(conn=request)
+    resolved_pool = get_camera_pool(conn=request) if (pool is _UNSET or isinstance(pool, DependsParam)) else pool
     mgr = get_active_stream_manager(camera_id, conn=request) if camera_id else None
     app_state = getattr(getattr(request, "app", None), "state", None)
-    ce = getattr(mgr, "confidence_engine", None) or getattr(pool, "confidence_engine", None) or getattr(app_state, "confidence_engine", None)
-    fts = getattr(mgr, "event_fts_index", None) or getattr(pool, "event_fts_index", None) or getattr(app_state, "event_fts_index", None)
+    ce = getattr(mgr, "confidence_engine", None) or getattr(resolved_pool, "confidence_engine", None) or getattr(app_state, "confidence_engine", None)
+    fts = getattr(mgr, "event_fts_index", None) or getattr(resolved_pool, "event_fts_index", None) or getattr(app_state, "event_fts_index", None)
     return RoiRecognitionService(
-        db=db,
+        db=resolved_db,
         stream_manager=mgr,
-        camera_pool=pool,
+        camera_pool=resolved_pool,
         videos_dir=VIDEOS_DIR,
         crops_dir=CROPS_DIR,
         confidence_engine=ce,
@@ -78,9 +100,14 @@ def _build_service(request: Request, camera_id: str | None) -> RoiRecognitionSer
 
 
 @router.post("/api/tag/recognize-roi")
-async def recognize_roi_endpoint(req: RoiRecognizeRequest, request: Request):
+async def recognize_roi_endpoint(
+    req: RoiRecognizeRequest,
+    request: Request,
+    db=Depends(get_db),
+    pool=Depends(get_camera_pool),
+):
     """Classify an ROI crop and return top-K Re-ID gallery candidates."""
-    svc = _build_service(request, req.camera_id)
+    svc = _build_service(request, req.camera_id, db=db, pool=pool)
     try:
         data = await asyncio.to_thread(
             svc.recognize_roi,
@@ -101,9 +128,14 @@ async def recognize_roi_endpoint(req: RoiRecognizeRequest, request: Request):
 
 
 @router.post("/api/tag/commit")
-async def commit_roi_tag_endpoint(req: TagCommitRequest, request: Request):
+async def commit_roi_tag_endpoint(
+    req: TagCommitRequest,
+    request: Request,
+    db=Depends(get_db),
+    pool=Depends(get_camera_pool),
+):
     """Commit an ROI tag, persist crop/signature/sighting, and reload galleries."""
-    svc = _build_service(request, req.camera_id)
+    svc = _build_service(request, req.camera_id, db=db, pool=pool)
     try:
         data = await asyncio.to_thread(
             svc.commit_roi_tag,
@@ -126,3 +158,65 @@ async def commit_roi_tag_endpoint(req: TagCommitRequest, request: Request):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     await asyncio.to_thread(reload_all_galleries, conn=request)
     return {"status": "success", "data": data}
+
+
+def _build_negative_service(
+    request: Request, camera_id: str | None, db: object = _UNSET, pool: object = _UNSET
+) -> NegativeExemplarService:
+    """Construct NegativeExemplarService bound to request app state or DI."""
+    resolved_db = get_db(conn=request) if (db is _UNSET or isinstance(db, DependsParam)) else db
+    if resolved_db is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    resolved_pool = get_camera_pool(conn=request) if (pool is _UNSET or isinstance(pool, DependsParam)) else pool
+    mgr = get_active_stream_manager(camera_id, conn=request) if camera_id else None
+    app_state = getattr(getattr(request, "app", None), "state", None)
+    ce = getattr(mgr, "confidence_engine", None) or getattr(resolved_pool, "confidence_engine", None) or getattr(app_state, "confidence_engine", None)
+    return NegativeExemplarService(
+        db=resolved_db, stream_manager=mgr, camera_pool=resolved_pool,
+        videos_dir=VIDEOS_DIR, crops_dir=CROPS_DIR, confidence_engine=ce,
+    )
+
+
+@router.post("/api/tag/discourage")
+async def discourage_roi_endpoint(
+    req: TagDiscourageRequest, request: Request, db=Depends(get_db), pool=Depends(get_camera_pool)
+):
+    """Record a negative or false-positive exemplar and reload galleries."""
+    svc = _build_negative_service(request, req.camera_id, db=db, pool=pool)
+    try:
+        data = await asyncio.to_thread(
+            svc.discourage_roi, entity_id=req.entity_id, label=req.label, camera_id=req.camera_id,
+            video_filename=req.video_filename, timestamp_sec=req.timestamp_sec, bbox=req.bbox,
+            crop_base64=req.crop_base64, notes=req.notes, track_id=req.track_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RoiNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RoiUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await asyncio.to_thread(reload_all_galleries, conn=request)
+    return {"status": "success", "data": data}
+
+
+@router.get("/api/tag/negatives")
+async def list_negatives_endpoint(
+    request: Request, entity_id: int | None = None, db=Depends(get_db), pool=Depends(get_camera_pool)
+):
+    """List persisted negative exemplars."""
+    svc = _build_negative_service(request, None, db=db, pool=pool)
+    items = await asyncio.to_thread(svc.list_negatives, entity_id=entity_id)
+    return {"status": "success", "data": items}
+
+
+@router.delete("/api/tag/negatives/{exemplar_id}")
+async def delete_negative_endpoint(
+    exemplar_id: int, request: Request, db=Depends(get_db), pool=Depends(get_camera_pool)
+):
+    """Delete a persisted negative exemplar and reload galleries."""
+    svc = _build_negative_service(request, None, db=db, pool=pool)
+    deleted = await asyncio.to_thread(svc.delete_negative, exemplar_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Negative exemplar {exemplar_id} not found")
+    await asyncio.to_thread(reload_all_galleries, conn=request)
+    return {"status": "success", "deleted": True}

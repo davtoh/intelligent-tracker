@@ -8,23 +8,50 @@ Re-ID sightings search, EventBus notifications, click-to-tag enrollments, and cr
 """
 
 import asyncio
-from dataclasses import asdict
 import io
 import logging
 import os
-from typing import Any, Optional
+import time
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-import numpy as np
 
 from dashboard.dependencies import get_active_stream_manager, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
+from dashboard.services.alerts_query_service import query_merged_events
+from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
 from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.analytics")
 
 router = APIRouter(tags=["Analytics & Timeline"])
+
+
+@router.get("/analytics/flows")
+async def get_traffic_flows(
+    camera_id: Optional[str] = None,
+    range_sec: int = Query(3600, ge=60, le=30 * 86400),
+    end_time: Optional[float] = None,
+    bucket_sec: Optional[int] = Query(None, ge=1, le=86400),
+    db: TrackerDB = Depends(get_db),
+):
+    """Aggregate time-bucketed tripwire/zone traffic flows and sightings."""
+    is_live = end_time is None
+    resolved_end = float(end_time) if end_time is not None else time.time()
+    resolved_bucket = resolve_bucket_sec(range_sec, bucket_sec)
+    start_time = resolved_end - float(range_sec)
+    if db is None:
+        return {
+            "camera_id": camera_id or None, "start_time": start_time, "end_time": resolved_end,
+            "bucket_sec": resolved_bucket, "buckets": [],
+            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0}, "is_live": is_live,
+        }
+    res = await asyncio.to_thread(
+        db.get_traffic_flows, start_time, resolved_end, resolved_bucket, camera_id
+    )
+    res["is_live"] = is_live
+    return res
 
 
 @router.get("/analytics/heatmap")
@@ -39,13 +66,7 @@ async def get_heatmap(
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
     if format == "json":
-        if not mgr.analytics or not mgr.analytics.heatmap:
-            return {"density": []}
-        return {
-            "resolution": [mgr.analytics.heatmap.width, mgr.analytics.heatmap.height],
-            "max_value": float(np.max(mgr.analytics.heatmap.density)),
-            "mean_value": float(np.mean(mgr.analytics.heatmap.density)),
-        }
+        return build_heatmap_json(mgr, camera_id)
 
     jpeg_bytes = mgr.get_heatmap_jpeg()
     return StreamingResponse(io.BytesIO(jpeg_bytes), media_type="image/jpeg")
@@ -87,25 +108,15 @@ def _fetch_entities_summary(db, category: Optional[str]) -> list[dict]:
     return result
 
 
-def _resolve_analytics_db(request: Request, db: Optional[TrackerDB]) -> Optional[TrackerDB]:
-    """Prefer active stream DB (for test stubs), falling back to injected TrackerDB."""
-    mgr = get_active_stream_manager(conn=request)
-    if mgr is not None and getattr(mgr, "db", None) is not None:
-        return mgr.db
-    return db
-
-
 @router.get("/entities")
 async def list_entities(
-    request: Request,
     category: Optional[str] = None,
     db: TrackerDB = Depends(get_db),
 ):
     """List enrolled gallery identities with appearance counters and sample thumbnails."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         return []
-    return await asyncio.to_thread(_fetch_entities_summary, resolved_db, category)
+    return await asyncio.to_thread(_fetch_entities_summary, db, category)
 
 
 def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
@@ -122,15 +133,13 @@ def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
 
 @router.post("/entities")
 async def create_entity(
-    request: Request,
     req: EntityCreateRequest,
     db: TrackerDB = Depends(get_db),
 ):
     """Enroll a new identity into the persistent Re-ID gallery database."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_create_entity_sync, resolved_db, req)
+    return await asyncio.to_thread(_create_entity_sync, db, req)
 
 
 def _fetch_entity_details(db, entity_id: int) -> dict:
@@ -147,14 +156,12 @@ def _fetch_entity_details(db, entity_id: int) -> dict:
 @router.get("/entities/{entity_id}")
 async def get_entity_details(
     entity_id: int,
-    request: Request,
     db: TrackerDB = Depends(get_db),
 ):
     """Get single enrolled entity details with signatures and recent sightings."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_fetch_entity_details, resolved_db, entity_id)
+    return await asyncio.to_thread(_fetch_entity_details, db, entity_id)
 
 
 def _delete_entity_sync(db, mgr, entity_id: int) -> dict:
@@ -173,11 +180,10 @@ async def delete_entity(
     db: TrackerDB = Depends(get_db),
 ):
     """Remove entity and its signatures from the gallery."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
     mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_delete_entity_sync, resolved_db, mgr, entity_id)
+    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id)
 
 
 def _enrich_sighting(s: dict, db) -> dict:
@@ -225,7 +231,6 @@ def _fetch_sightings_sync(
 
 @router.get("/sightings")
 async def query_sightings(
-    request: Request,
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
     zone_id: Optional[str] = None,
@@ -235,12 +240,11 @@ async def query_sightings(
     db: TrackerDB = Depends(get_db),
 ):
     """Search historical sighting timeline records with entity, zone, and time filters."""
-    resolved_db = _resolve_analytics_db(request, db)
-    if resolved_db is None:
+    if db is None:
         return []
     return await asyncio.to_thread(
         _fetch_sightings_sync,
-        resolved_db,
+        db,
         entity_id,
         entity_name,
         zone_id,
@@ -250,36 +254,36 @@ async def query_sightings(
     )
 
 
-def _merge_recent_events(mgr, db: Optional[TrackerDB], limit: int) -> list[dict]:
-    """Merge live EventBus alerts with persisted timeline events ordered newest-first."""
-    out: list[dict] = []
-    seen: set[tuple[Any, Any, Any]] = set()
-    if mgr and getattr(mgr, "event_bus", None):
-        for ev in mgr.event_bus.get_recent_events(limit=limit):
-            item = ev.to_dict() if hasattr(ev, "to_dict") else (asdict(ev) if hasattr(ev, "__dataclass_fields__") else {"event_type": getattr(ev, "event_type", "event")})
-            key = (item.get("event_type"), item.get("camera_id"), round(float(item.get("timestamp") or 0.0), 3))
-            seen.add(key)
-            out.append(item)
-    if db is not None and hasattr(db, "search_timeline_events"):
-        for row in db.search_timeline_events(limit=limit):
-            key = (row.get("event_type"), row.get("camera_id"), round(float(row.get("timestamp") or 0.0), 3))
-            if key not in seen:
-                seen.add(key)
-                out.append(row)
-    out.sort(key=lambda e: float(e.get("timestamp") or 0.0), reverse=True)
-    return out[:max(1, int(limit))]
-
-
 @router.get("/events")
 async def list_recent_events(
     request: Request,
-    limit: int = 50,
+    camera_id: Optional[str] = None,
+    severity: Optional[str] = None,
+    event_type: Optional[str] = None,
+    zone_id: Optional[str] = None,
+    start_time: Optional[float] = None,
+    end_time: Optional[float] = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    paginated: bool = False,
     db: TrackerDB = Depends(get_db),
 ):
     """Get recent security and tracking alerts merged from EventBus and TrackerDB."""
-    mgr = get_active_stream_manager(conn=request)
-    resolved_db = _resolve_analytics_db(request, db)
-    return await asyncio.to_thread(_merge_recent_events, mgr, resolved_db, limit)
+    mgr = get_active_stream_manager(camera_id, conn=request) if camera_id else get_active_stream_manager(conn=request)
+    return await asyncio.to_thread(
+        query_merged_events,
+        mgr,
+        db,
+        camera_id=camera_id,
+        severity=severity,
+        event_type=event_type,
+        zone_id=zone_id,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+        offset=offset,
+        paginated=paginated,
+    )
 
 
 @router.post("/tag")

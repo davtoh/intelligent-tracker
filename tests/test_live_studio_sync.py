@@ -64,7 +64,7 @@ class TestLiveStudioSync(unittest.TestCase):
         self.addCleanup(worker.stop)
 
         frame = np.zeros((480, 640, 3), dtype=np.uint8)
-        worker.submit(frame, timestamp=100.0, frame_seq=7)
+        worker.submit(frame, timestamp=100.0, frame_seq=7, mono_timestamp=100.0)
         deadline = time.time() + 2.0
         while worker.get_latest_result() is None and time.time() < deadline:
             time.sleep(0.01)

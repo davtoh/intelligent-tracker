@@ -33,6 +33,7 @@ class WorldEntityBridge:
         *,
         sync_interval: float = 0.5,
         stale_ttl: float = 30.0,
+        coasting_grace_seconds: float = 2.0,
         coordinate_mapper: GlobalCoordinateMapper | None = None,
         handoff_coordinator: Any = None,
         confidence_engine: Any = None,
@@ -42,6 +43,7 @@ class WorldEntityBridge:
         self.db = db
         self.sync_interval = max(0.0, float(sync_interval))
         self.stale_ttl = max(0.0, float(stale_ttl))
+        self.coasting_grace_seconds = max(0.0, float(coasting_grace_seconds))
         self.coordinate_mapper = (
             coordinate_mapper
             if coordinate_mapper is not None
@@ -238,6 +240,8 @@ class WorldEntityBridge:
                 confidence=float(getattr(trk, "reid_score", 0.0) or 0.0),
                 zone_id=raw_zone, timestamp=now,
             )
+        if session_id is None:
+            return None
         return self.sync_session_track(
             camera_id, trk, session_id,
             label=getattr(trk, "identity_label", "") or "",
@@ -272,27 +276,46 @@ class WorldEntityBridge:
         )
         return True
 
+    def _is_track_stale(
+        self,
+        tid: int,
+        entity: WorldEntity,
+        active_track_ids: set[int] | None,
+        coasting_track_ids: set[int] | None,
+        max_age: float | None,
+        ttl: float,
+        grace: float,
+        now: float,
+    ) -> bool:
+        """Return True if a camera-track binding has expired beyond active/coasting grace."""
+        if coasting_track_ids is not None and tid in coasting_track_ids:
+            return (now - entity.last_seen) >= grace
+        if active_track_ids is not None:
+            return tid not in active_track_ids and (max_age is None or (now - entity.last_seen) >= ttl)
+        return (now - entity.last_seen) >= ttl
+
     def prune_stale_tracks(
         self,
         *,
         camera_id: str | None = None,
         active_track_ids: set[int] | None = None,
+        coasting_track_ids: set[int] | None = None,
         max_age: float | None = None,
+        coasting_grace_seconds: float | None = None,
         timestamp: float | None = None,
     ) -> list[str]:
         """Detach disappeared or expired track bindings and prune empty WorldEntity nodes."""
         now = float(timestamp) if timestamp is not None else time.time()
         ttl = self.stale_ttl if max_age is None else max(0.0, float(max_age))
+        grace = self.coasting_grace_seconds if coasting_grace_seconds is None else max(0.0, float(coasting_grace_seconds))
         pruned_ids: list[str] = []
 
         for entity in list_entities_snapshot(self.world_graph, camera_id=camera_id):
             stale_cams = [
                 cam for cam, tid in entity.camera_tracks.items()
                 if (camera_id is None or cam == camera_id)
-                and (
-                    (tid not in active_track_ids and (max_age is None or (now - entity.last_seen) >= ttl))
-                    if active_track_ids is not None
-                    else (now - entity.last_seen) >= ttl
+                and self._is_track_stale(
+                    tid, entity, active_track_ids, coasting_track_ids, max_age, ttl, grace, now
                 )
             ]
             if not stale_cams:

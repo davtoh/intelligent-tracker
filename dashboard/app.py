@@ -58,8 +58,10 @@ from dashboard.routers import (
     cameras_router,
     camera_diagnostics_router,
     camera_recording_router,
+    categories_and_collision_router,
     multiview_router,
     processing_mode_router,
+    review_router,
     rsac_router,
     scenarios_router,
     streaming_router,
@@ -150,11 +152,8 @@ def _init_runtime_services(application: FastAPI):
     scen_file = os.getenv("SCENARIOS_CONFIG_PATH") or "configs/scenarios.yaml"
     pool = CameraPool(config_file=cfg_file, db_path=db_file)
     primary_sm = pool.primary_stream
-    db = primary_sm.db if primary_sm else None
-    owned_db: Optional[TrackerDB] = None
-    if db is None:
-        owned_db = TrackerDB(db_file)
-        db = owned_db
+    db = TrackerDB(db_file)
+    owned_db: Optional[TrackerDB] = db
     scen_mgr = ScenarioManager(
         config_path=scen_file,
         db=db,
@@ -248,8 +247,9 @@ def create_app() -> FastAPI:
     # Mount domain APIRouters
     for router in (
         system_router, cameras_router, camera_diagnostics_router,
-        camera_recording_router, processing_mode_router, multiview_router,
-        streaming_router, scenarios_router, rsac_router, analytics_router,
+        camera_recording_router, categories_and_collision_router,
+        processing_mode_router, multiview_router,
+        streaming_router, scenarios_router, review_router, rsac_router, analytics_router,
         tagging_router, videos_router, topology_router, world_router,
     ):
         application.include_router(router)

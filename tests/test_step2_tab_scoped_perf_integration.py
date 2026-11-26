@@ -227,7 +227,8 @@ class TestStep2TabScopedPerfIntegration(unittest.TestCase):
         """
         out = _run_integration_vm(script)
         self.assertTrue(out["analyticsLive"].startswith("data:image/svg+xml"))
-        self.assertIn("/analytics/heatmap?t=", out["analyticsHeatmap"])
+        self.assertIn("/analytics/heatmap?", out["analyticsHeatmap"])
+        self.assertIn("t=", out["analyticsHeatmap"])
         self.assertEqual(out["loadPlayer"], ["clip1.mp4"])
         self.assertEqual(out["restoreReport"], ["clip1.mp4"])
         self.assertEqual(out["loadDetections"], ["clip1.mp4"])

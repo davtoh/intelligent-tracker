@@ -11,6 +11,9 @@
   border-radius: 9999px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  background: color-mix(in srgb, var(--badge-color, #94a3b8) 18%, transparent);
+  color: var(--badge-color, #cbd5e1);
+  border: 1px solid color-mix(in srgb, var(--badge-color, #94a3b8) 45%, transparent);
 }
 
 .badge-category.staff {

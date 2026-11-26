@@ -5,6 +5,7 @@ from typing import Dict, Tuple, Any, Optional
 import numpy as np
 
 from intelligent_tracker.matching.types import SessionEntity
+from intelligent_tracker.tracker.association import classes_compatible
 
 
 class SessionGalleryManager:
@@ -69,7 +70,9 @@ class SessionGalleryManager:
         best_fused_score = -1.0
 
         for ent in self.session_entities.values():
-            if ent.category.lower() != (track.label or "object").lower():
+            if not classes_compatible(
+                ent.category, 0, getattr(track, "label", "object"), getattr(track, "class_id", 0)
+            ):
                 continue
 
             # Don't steal identity from another track currently active in this frame

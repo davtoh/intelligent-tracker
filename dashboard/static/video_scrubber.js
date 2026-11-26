@@ -64,140 +64,95 @@
     );
   }
 
-  function updatePlayButtonAndLoop() {
-    if (btnPlayPause) btnPlayPause.textContent = videoPlayer.paused ? '▶ Play' : '⏸ Pause';
-    if (videoPlayer.paused) {
-      window.ScrubberOverlay?.stopLoop();
-    } else {
-      window.ScrubberOverlay?.startLoop();
-    }
-  }
-
-  function bindPlayerMediaEvents() {
-    if (!videoPlayer) return;
-    videoPlayer.addEventListener('timeupdate', () => {
-      if (pendingPlaybackRestore && (Number(videoPlayer.currentTime) || 0) === 0) return;
-      if (currentVideoMetadataLoaded || (Number(videoPlayer.currentTime) || 0) > 0) {
-        persistCurrentPlayback();
-      }
-      updateTimeline();
-      if (videoPlayer.paused) window.ScrubberOverlay?.render();
-    });
-    videoPlayer.addEventListener('seeked', () => {
-      if (!isTransitioningVideo && currentVideoMetadataLoaded) {
-        persistCurrentPlayback();
-      }
-      updateTimeline();
-      window.ScrubberOverlay?.render();
-    });
-    videoPlayer.addEventListener('loadedmetadata', onVideoLoaded);
-    videoPlayer.addEventListener('play', updatePlayButtonAndLoop);
-    videoPlayer.addEventListener('pause', () => {
-      updatePlayButtonAndLoop();
-      if (!isTransitioningVideo) persistCurrentPlayback(false);
-    });
-    videoPlayer.addEventListener('ended', updatePlayButtonAndLoop);
-    videoPlayer.addEventListener('error', handleVideoPlayerError);
-  }
+  let sliderCtrl = null;
 
   function bindPlaybackControls() {
-    bindPlayerMediaEvents();
-    if (btnPlayPause) btnPlayPause.addEventListener('click', togglePlayPause);
-    if (btnStepBack) btnStepBack.addEventListener('click', () => {
-      stepFrame(-1);
-      window.ScrubberOverlay?.render();
-    });
-    if (btnStepForward) btnStepForward.addEventListener('click', () => {
-      stepFrame(1);
-      window.ScrubberOverlay?.render();
-    });
+    if (window.ScrubberTimelineSlider) {
+      sliderCtrl = window.ScrubberTimelineSlider.create({
+        videoPlayer, slider: timelineSlider, timeDisplay: timelineTimeDisplay,
+        playBtn: btnPlayPause, prevBtn: btnStepBack, nextBtn: btnStepForward,
+        speedButtons: [
+          { btn: btnSpeed1x, rate: 1.0 }, { btn: btnSpeed2x, rate: 2.0 },
+          { btn: btnSpeed4x, rate: 4.0 }, { btn: btnSpeed8x, rate: 8.0 },
+        ],
+        onTimeUpdate: () => {
+          if (pendingPlaybackRestore && (Number(videoPlayer.currentTime) || 0) === 0) return;
+          if (currentVideoMetadataLoaded || (Number(videoPlayer.currentTime) || 0) > 0) persistCurrentPlayback();
+          if (videoPlayer.paused) window.ScrubberOverlay?.render();
+        },
+        onSeek: (_t, fromInput) => {
+          if (fromInput) persistCurrentPlayback(!videoPlayer.paused);
+          else if (!isTransitioningVideo && currentVideoMetadataLoaded) persistCurrentPlayback();
+          window.ScrubberOverlay?.render();
+        },
+        onStep: () => { persistCurrentPlayback(false); window.ScrubberOverlay?.render(); },
+        onPlayStateChange: (paused) => {
+          if (paused) {
+            window.ScrubberOverlay?.stopLoop();
+            if (!isTransitioningVideo) persistCurrentPlayback(false);
+          } else {
+            window.ScrubberOverlay?.startLoop();
+          }
+        },
+        onLoadedMetadata: onVideoLoaded,
+        onError: handleVideoPlayerError,
+      });
+      sliderCtrl.bind();
+      return;
+    }
+    if (videoPlayer) {
+      videoPlayer.addEventListener('timeupdate', () => {
+        if (!(pendingPlaybackRestore && (Number(videoPlayer.currentTime) || 0) === 0) && (currentVideoMetadataLoaded || (Number(videoPlayer.currentTime) || 0) > 0)) persistCurrentPlayback();
+        updateTimeline();
+      });
+      videoPlayer.addEventListener('seeked', () => { if (!isTransitioningVideo && currentVideoMetadataLoaded) persistCurrentPlayback(); updateTimeline(); });
+      videoPlayer.addEventListener('loadedmetadata', onVideoLoaded);
+      videoPlayer.addEventListener('error', handleVideoPlayerError);
+    }
     if (timelineSlider) {
       timelineSlider.addEventListener('input', (e) => {
         if (videoPlayer && videoPlayer.duration) {
           videoPlayer.currentTime = (e.target.value / 100) * videoPlayer.duration;
           persistCurrentPlayback(!videoPlayer.paused);
           updateTimeline();
-          window.ScrubberOverlay?.render();
         }
       });
     }
-    bindSpeedButtons();
   }
 
   function handleAnalyzeVideoClick() {
     if (!currentVideoFilename) return;
-    const triggerBatch = () => {
-      if (window.VideoBatch?.openBatchModal) {
-        window.VideoBatch.openBatchModal(currentVideoFilename);
-      } else {
-        window.VideoBatch?.runBatchAnalytics(currentVideoFilename);
-      }
-    };
+    const triggerBatch = () => (window.VideoBatch?.openBatchModal ? window.VideoBatch.openBatchModal(currentVideoFilename) : window.VideoBatch?.runBatchAnalytics(currentVideoFilename));
     const activeJob = window.VideoJobClient?.getActiveJob(currentVideoFilename);
-    if (activeJob) {
-      window.VideoJobClient.showConflictModal(activeJob, 'Batch Video Analytics', triggerBatch, () => {});
-      return;
-    }
+    if (activeJob) { window.VideoJobClient.showConflictModal(activeJob, 'Batch Video Analytics', triggerBatch, () => {}); return; }
     triggerBatch();
   }
 
   function bindEvents() {
     if (selectTabPolicy) {
       selectTabPolicy.value = tabPolicy;
-      selectTabPolicy.addEventListener('change', (e) => {
-        tabPolicy = e.target.value;
-        localStorage.setItem('intelligent_tracker_tab_policy', tabPolicy);
-      });
+      selectTabPolicy.addEventListener('change', (e) => { tabPolicy = e.target.value; localStorage.setItem('intelligent_tracker_tab_policy', tabPolicy); });
     }
-
     window.addEventListener('video-select-request', (e) => {
       const fn = e.detail?.filename;
-      if (!fn) return;
-      const card = document.querySelector(`.video-file-card[data-file="${CSS.escape(fn)}"]`);
-      card?.querySelector('.btn-select-video')?.click();
+      if (fn) document.querySelector(`.video-file-card[data-file="${CSS.escape(fn)}"]`)?.querySelector('.btn-select-video')?.click();
     });
     window.addEventListener('video-seek-request', (e) => window.ScrubberLibraryBridge?.handleSeekRequest?.(e, { getCurrentFilename: () => currentVideoFilename, videoPlayer, loadVideoIntoPlayer, updateTimeline }));
-
     if (btnUploadVideo && videoFileInput) {
       btnUploadVideo.addEventListener('click', () => videoFileInput.click());
       videoFileInput.addEventListener('change', (e) => {
-        window.VideoLibrary?.uploadSelectedVideo(e, (res) => {
-          loadVideosList();
-          loadVideoIntoPlayer(res.video_url, res.filename, true, 'h264');
-        });
+        window.VideoLibrary?.uploadSelectedVideo(e, (res) => { loadVideosList(); loadVideoIntoPlayer(res.video_url, res.filename, true, 'h264'); });
       });
     }
-
     bindPlaybackControls();
-
     if (btnAddAsCamera) {
       btnAddAsCamera.addEventListener('click', () => {
         if (!currentVideoFilename) return;
-        if (window.VideoLibrary?.openFeedPromotionModal) {
-          window.VideoLibrary.openFeedPromotionModal(currentVideoFilename, currentVideoUrl);
-        } else {
-          window.VideoLibrary?.addVideoToCameraPool(currentVideoFilename);
-        }
+        if (window.VideoLibrary?.openFeedPromotionModal) window.VideoLibrary.openFeedPromotionModal(currentVideoFilename, currentVideoUrl);
+        else window.VideoLibrary?.addVideoToCameraPool(currentVideoFilename);
       });
     }
     if (btnAnalyzeVideo) btnAnalyzeVideo.addEventListener('click', handleAnalyzeVideoClick);
-  }
-
-  function bindSpeedButtons() {
-    const speedButtons = [
-      { btn: btnSpeed1x, rate: 1.0 },
-      { btn: btnSpeed2x, rate: 2.0 },
-      { btn: btnSpeed4x, rate: 4.0 },
-      { btn: btnSpeed8x, rate: 8.0 },
-    ];
-    speedButtons.forEach(({ btn, rate }) => {
-      if (!btn) return;
-      btn.addEventListener('click', () => {
-        if (videoPlayer) videoPlayer.playbackRate = rate;
-        speedButtons.forEach(s => s.btn?.classList.remove('active'));
-        btn.classList.add('active');
-      });
-    });
   }
 
   function handleVideoPlayerError() {
@@ -258,19 +213,7 @@
   }
 
   async function togglePlayPause() {
-    if (!videoPlayer) return;
-    if (videoPlayer.paused) {
-      try {
-        await videoPlayer.play();
-        if (btnPlayPause) btnPlayPause.textContent = '⏸ Pause';
-      } catch (err) {
-        console.warn('Playback error or policy prevention:', err);
-        if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
-      }
-    } else {
-      videoPlayer.pause();
-      if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
-    }
+    if (sliderCtrl) return sliderCtrl.togglePlayPause();
   }
 
   function onTabLeave() {
@@ -321,14 +264,10 @@
   }
 
   function stepFrame(frameDelta) {
+    if (sliderCtrl) return sliderCtrl.stepFrame(frameDelta);
     if (!videoPlayer) return;
     videoPlayer.pause();
-    if (btnPlayPause) btnPlayPause.textContent = '▶ Play';
-    const frameDuration = 1.0 / 30.0;
-    videoPlayer.currentTime = Math.max(
-      0,
-      Math.min(videoPlayer.duration || 0, videoPlayer.currentTime + (frameDelta * frameDuration))
-    );
+    videoPlayer.currentTime = Math.max(0, Math.min(videoPlayer.duration || 0, videoPlayer.currentTime + (frameDelta / 30.0)));
     persistCurrentPlayback(false);
     updateTimeline();
   }

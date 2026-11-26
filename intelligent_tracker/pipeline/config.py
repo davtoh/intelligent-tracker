@@ -175,6 +175,8 @@ def _extract_runtime_kwargs(data: dict[str, Any], raw_source: Any, default_detec
         "max_disappeared": int(trk_cfg.get("max_disappeared", trk_cfg.get("max_age", 30))),
         "min_hits": int(trk_cfg.get("min_hits", 2)),
         "iou_threshold": float(trk_cfg.get("iou_threshold", 0.3 if tracker_type == "sort" else 0.2)),
+        "tracker_coast_seconds": float(trk_cfg.get("coast_seconds", 1.5)),
+        "tracker_coast_frames": int(trk_cfg.get("coast_frames", 15)),
         "enable_memory_indexing": bool(mem_cfg.get("indexing", enable_memory_indexing)),
         "heatmap_enabled": bool(hm_cfg.get("enabled", True)),
         "heatmap_decay": float(decay_val) if decay_val is not None else None,
@@ -230,8 +232,11 @@ class PipelineConfig:
     max_disappeared: int = 30
     min_hits: int = 2
     iou_threshold: float = 0.2
+    tracker_coast_seconds: float = 1.5
+    tracker_coast_frames: int = 15
     reid_model: str | None = "color"
     reid_threshold: float = 0.65
+    tracked_categories: list[str] | None = None
     db_path: str | None = None
     enable_governance: bool = False
     enable_event_bus_fallback: bool = False
@@ -258,13 +263,16 @@ class PipelineConfig:
         data = dict(cfg or {})
         raw_source = source_override if source_override is not None else data.get("video", {}).get("source", default_source)
         runtime_kwargs = _extract_runtime_kwargs(data, raw_source, default_detector, enable_memory_indexing, resolve_source)
-        reid_model, resolved_db = _resolve_reid_and_db(data.get("reid", {}), db_path, data.get("database", {}), probe_db_reid)
+        reid_cfg = data.get("reid", {})
+        reid_model, resolved_db = _resolve_reid_and_db(reid_cfg, db_path, data.get("database", {}), probe_db_reid)
+        raw_tracked_cats = reid_cfg.get("tracked_categories") if reid_cfg.get("tracked_categories") is not None else data.get("tracked_categories")
         return cls(
             camera_id=camera_id,
             camera_name=camera_name or data.get("name"),
             detector_fallback_mock=detector_fallback_mock,
             reid_model=reid_model,
-            reid_threshold=float(data.get("reid", {}).get("threshold", 0.65)),
+            reid_threshold=float(reid_cfg.get("threshold", 0.65)),
+            tracked_categories=parse_classes(raw_tracked_cats),
             db_path=resolved_db,
             enable_governance=enable_governance,
             enable_event_bus_fallback=enable_event_bus_fallback,

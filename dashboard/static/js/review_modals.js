@@ -28,6 +28,7 @@
     const modal = document.getElementById('modal-quick-enroll-entity');
     const inputId = document.getElementById('quick-enroll-item-id');
     const inputName = document.getElementById('quick-enroll-name-input');
+    window.CategoryBadgeManager?.syncSelect?.(document.getElementById('quick-enroll-category-select'));
     if (inputId) inputId.value = itemId;
     if (inputName) {
       inputName.value = '';
@@ -63,7 +64,7 @@
         }
 
         try {
-          const res = await fetch(`/api/active-learning/${itemId}/enroll-new`, {
+          const res = await fetch(`/api/review/${itemId}/enroll-new`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -77,7 +78,7 @@
           const data = await res.json();
           closeModal();
           showToast('Entity Enrolled', `Registered "${name}" (ID #${data.entity_id}) with initial signature locked!`, 'success');
-          if (onSuccess) onSuccess();
+          if (onSuccess) onSuccess(data);
         } catch (err) {
           showToast('Enrollment Error', err.message, 'error');
         }
@@ -132,7 +133,7 @@
         }
 
         try {
-          const res = await fetch(`/api/active-learning/${itemId}/reassign`, {
+          const res = await fetch(`/api/review/${itemId}/reassign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -141,9 +142,10 @@
             }),
           });
           if (!res.ok) throw new Error('Reassignment failed');
+          const data = await res.json().catch(() => ({}));
           closeModal();
           showToast('Reassignment Saved', 'Signature assigned as locked anchor to target entity.', 'success');
-          if (onSuccess) onSuccess();
+          if (onSuccess) onSuccess(data);
         } catch (err) {
           showToast('Reassignment Error', err.message, 'error');
         }

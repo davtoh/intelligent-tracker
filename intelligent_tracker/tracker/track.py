@@ -9,6 +9,17 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 
+CANONICAL_TRACK_STATES = frozenset({
+    "tentative",
+    "confirmed",
+    "coasting",
+    "occluded",
+    "deleted",
+    "predicting",
+    "dormant",
+})
+
+
 class Track:
     """Represents an individual tracked entity across multiple video frames."""
 
@@ -25,7 +36,7 @@ class Track:
         **kwargs: Any,
     ):
         self.track_id = int(track_id)
-        self.bbox = tuple(int(v) for v in bbox)
+        self.bbox: Tuple[int, int, int, int] = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
         self.class_id = int(class_id)
         self.label = str(label)
         self.confidence = float(confidence)
@@ -33,6 +44,7 @@ class Track:
         now = timestamp if timestamp is not None else time.time()
         self.start_time = now
         self.last_seen = now
+        self.last_detected_time = now
 
         cx = float(centroid[0]) if centroid else (self.bbox[0] + self.bbox[2] / 2.0)
         cy = float(centroid[1]) if centroid else (self.bbox[1] + self.bbox[3] / 2.0)
@@ -62,6 +74,7 @@ class Track:
         self.is_cluttered: bool = False
         self.clutter_partner_id: Optional[int] = None
         self.clutter_start_time: Optional[float] = None
+        self.last_embedding: Optional[Any] = None
 
     def update(
         self,
@@ -70,14 +83,16 @@ class Track:
         label: Optional[str] = None,
         class_id: Optional[int] = None,
         timestamp: Optional[float] = None,
+        min_hits: int = 2,
     ) -> None:
         """Update track with newly associated bounding box and detection metadata."""
         now = timestamp if timestamp is not None else time.time()
         dt = max(1e-4, now - self.last_seen)
         self.last_seen = now
+        self.last_detected_time = now
 
         prev_cx, prev_cy = self.centroid
-        new_bbox = tuple(int(v) for v in bbox)
+        new_bbox: Tuple[int, int, int, int] = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
         new_cx = new_bbox[0] + new_bbox[2] / 2.0
         new_cy = new_bbox[1] + new_bbox[3] / 2.0
 
@@ -95,7 +110,7 @@ class Track:
 
         self.hits += 1
         self.missed_frames = 0
-        self.state = "confirmed" if self.hits >= 2 else "tentative"
+        self.state = "confirmed" if self.hits >= max(1, int(min_hits)) else "tentative"
         self.history.append((new_cx, new_cy, now))
         self.bbox_history.append(new_bbox)
 
@@ -153,7 +168,9 @@ class Track:
             "hits": self.hits,
             "missed_frames": self.missed_frames,
             "state": self.state,
-            "is_predicting": self.state == "predicting",
+            "is_predicting": self.state in ("predicting", "coasting", "occluded"),
+            "is_cluttered": bool(self.is_cluttered),
+            "clutter_partner_id": self.clutter_partner_id,
             "identity_label": self.identity_label,
             "entity_id": getattr(self, "entity_id", None),
             "entity_name": self.entity_name,

@@ -94,9 +94,13 @@ class ActiveLearningTriage:
         now: float,
         video_filename: str = "",
         media_offset_sec: float = 0.0,
+        bbox: Any = None,
+        frame_width: int = 0,
+        frame_height: int = 0,
+        run_id: str = "",
     ) -> int | None:
         """Persist crop, insert review queue record, update debounce, and emit event."""
-        if not _is_valid_crop(crop):
+        if crop is None or not _is_valid_crop(crop):
             return None
         crop_path = self._save_crop(camera_id, track_id, crop, now)
         if crop_path is None:
@@ -107,6 +111,7 @@ class ActiveLearningTriage:
             suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
             suggested_category=suggested_category, similarity=score, status="pending",
             video_filename=video_filename, media_offset_sec=media_offset_sec,
+            bbox=bbox, frame_width=frame_width, frame_height=frame_height, run_id=run_id,
         )
         self._last_queued[(camera_id, track_id)] = now
         self._publish_queued_event(
@@ -128,13 +133,16 @@ class ActiveLearningTriage:
         timestamp: float | None = None,
         video_filename: str = "",
         media_offset_sec: float | None = None,
+        run_id: str = "",
     ) -> int | None:
         """Evaluate track detection; crop from frame and queue if ambiguous."""
         now = timestamp if timestamp is not None else time.time()
         tid = getattr(track, "track_id", 0)
         if not self._is_candidate_eligible(camera_id, tid, similarity, now):
             return None
-        crop = _extract_crop_from_frame(frame, getattr(track, "bbox", None))
+        bbox = getattr(track, "bbox", None)
+        crop = _extract_crop_from_frame(frame, bbox)
+        frame_h, frame_w = (int(frame.shape[0]), int(frame.shape[1])) if frame is not None and frame.ndim >= 2 else (0, 0)
         resolved_video = str(video_filename or self.video_filename or "").strip()
         stored_offset = getattr(self, "current_media_offset_sec", None)
         resolved_offset = (
@@ -151,6 +159,7 @@ class ActiveLearningTriage:
             suggested_entity_id=suggested_entity_id, suggested_name=suggested_name,
             suggested_category=suggested_category, now=now,
             video_filename=resolved_video, media_offset_sec=resolved_offset,
+            bbox=bbox, frame_width=frame_w, frame_height=frame_h, run_id=run_id,
         )
 
     def maybe_queue_candidate(
@@ -164,9 +173,13 @@ class ActiveLearningTriage:
         matched_category: str = "",
         bbox: tuple[int, int, int, int] | None = None,
         timestamp: float | None = None,
+        frame_width: int = 0,
+        frame_height: int = 0,
+        video_filename: str = "",
+        media_offset_sec: float = 0.0,
+        run_id: str = "",
     ) -> dict[str, Any] | None:
         """Evaluate pre-cropped candidate and return queued review item dict or None."""
-        del bbox  # Preserved in signature for caller parity
         now = timestamp if timestamp is not None else time.time()
         if not self._is_candidate_eligible(camera_id, track_id, similarity, now):
             return None
@@ -174,5 +187,7 @@ class ActiveLearningTriage:
             camera_id=camera_id, track_id=track_id, crop=crop, similarity=similarity,
             suggested_entity_id=matched_entity_id, suggested_name=matched_entity_name,
             suggested_category=matched_category, now=now,
+            video_filename=video_filename, media_offset_sec=media_offset_sec,
+            bbox=bbox, frame_width=frame_width, frame_height=frame_height, run_id=run_id,
         )
         return self.db.get_review_item(item_id) if item_id is not None else None

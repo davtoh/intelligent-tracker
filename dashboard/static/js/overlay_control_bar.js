@@ -99,8 +99,8 @@
 
   function renderScrubberBar(container, opts = {}) {
     if (!container) return;
-    const { descriptors = [], activeRunIds = new Set(), hasLiveJob = false, featureVisibility } = opts;
-    if (descriptors.length === 0 && !hasLiveJob) {
+    const { descriptors = [], activeRunIds = new Set(), hasLiveJob = false, showFeaturePills = false, featureVisibility } = opts;
+    if (descriptors.length === 0 && !hasLiveJob && !showFeaturePills) {
       container.innerHTML = '';
       container.hidden = true;
       return;

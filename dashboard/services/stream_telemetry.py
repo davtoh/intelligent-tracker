@@ -36,6 +36,8 @@ def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[di
             "category": getattr(trk, "category", "person"),
             "is_cluttered": bool(getattr(trk, "is_cluttered", False)),
             "clutter_partner_id": getattr(trk, "clutter_partner_id", None),
+            "carrying": list(getattr(trk, "carrying", []) or []),
+            "carried_by": getattr(trk, "carried_by", None),
             "state": trk.state,
         })
     return telemetry_tracks

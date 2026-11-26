@@ -7,7 +7,41 @@
   'use strict';
 
   function resolveStudioMediaElement() {
+    const vid = document.getElementById('studio-video-player');
+    if (vid && vid.style?.display !== 'none' && (vid.currentSrc || vid.src || vid.getAttribute?.('src'))) {
+      return vid;
+    }
     return document.getElementById('studio-live-img') || null;
+  }
+
+  function attachStudioMedia(targetId, isVideo, isActive = true) {
+    const img = document.getElementById('studio-live-img');
+    const vid = document.getElementById('studio-video-player');
+    if (isVideo) {
+      if (img) {
+        if (img.dataset) delete img.dataset.activeStreamSrc;
+        img.removeAttribute?.('src');
+        img.src = '';
+        if (img.style) img.style.display = 'none';
+      }
+      if (vid && targetId) {
+        if (vid.style) vid.style.display = 'block';
+        vid.src = `/videos/${encodeURIComponent(targetId)}`;
+        vid.load?.();
+      }
+      return;
+    }
+    if (vid) {
+      vid.pause?.();
+      vid.removeAttribute?.('src');
+      if (vid.style) vid.style.display = 'none';
+    }
+    if (img && targetId) {
+      if (img.style) img.style.display = 'block';
+      const streamBase = `/stream/${encodeURIComponent(targetId)}`;
+      if (img.dataset) img.dataset.activeStreamSrc = streamBase;
+      if (isActive) img.src = `${streamBase}?t=${Date.now()}`;
+    }
   }
 
   function syncCanvasBox(canvas, mediaEl) {
@@ -178,6 +212,8 @@
   }
 
   window.StudioCanvas = {
+    resolveStudioMediaElement: resolveStudioMediaElement,
+    attachStudioMedia: attachStudioMedia,
     syncCanvasBox: syncCanvasBox,
     getCanvasCoords: getCanvasCoords,
     drawOverlay: drawStudioOverlay,

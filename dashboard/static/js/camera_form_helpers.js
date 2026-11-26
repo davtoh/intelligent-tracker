@@ -30,6 +30,7 @@
       tracker: document.getElementById('cam-tracker-select')?.value || 'centroid',
       confidence: 0.40,
       classes: null,
+      tracked_categories: null,
       armed: false,
     };
     return {
@@ -41,9 +42,38 @@
       tracker: cfg.tracker || 'centroid',
       confidence: cfg.confidence !== undefined ? cfg.confidence : 0.40,
       classes: cfg.classes,
+      tracked_categories: cfg.tracked_categories ?? null,
       armed: Boolean(cfg.armed),
       enabled: editingCamera ? editingCamera.enabled !== false : true,
     };
+  }
+
+  function syncTrackedCategoriesUI(capabilities) {
+    const classesInput = document.getElementById('cam-classes-input');
+    const classesLabel = document.querySelector('label[for="cam-classes-input"]');
+    if (classesLabel) classesLabel.textContent = 'Detector Classes (COCO) (comma-separated, empty for all)';
+    if (!classesInput || document.getElementById('cam-tracked-categories-group')) return;
+    const parentGroup = classesInput.closest?.('.form-group') || classesInput.parentElement;
+    if (!parentGroup || !parentGroup.parentNode || typeof document.createElement !== 'function') return;
+    const wrap = document.createElement('div');
+    wrap.className = 'form-group';
+    wrap.id = 'cam-tracked-categories-group';
+    const cats = Array.isArray(capabilities?.tracked_categories) ? capabilities.tracked_categories : [];
+    const chips = cats.map(c => `<button type="button" class="btn-tag-preset btn-cat-chip" data-cat="${escapeHtml(c.id)}">${escapeHtml(c.name || c.id)}</button>`).join('');
+    wrap.innerHTML = '<label for="cam-tracked-categories-input">Tracked Gallery Categories (semantic Re-ID filter, empty for all)</label>'
+      + '<input type="text" id="cam-tracked-categories-input" class="form-input" placeholder="e.g. vip, staff, restricted" />'
+      + (chips ? `<div class="class-presets-bar">${chips}</div>` : '');
+    parentGroup.parentNode.insertBefore(wrap, parentGroup.nextSibling);
+    wrap.querySelectorAll?.('.btn-cat-chip')?.forEach(btn => btn.addEventListener('click', () => {
+      const inp = document.getElementById('cam-tracked-categories-input');
+      if (!inp) return;
+      const val = btn.getAttribute('data-cat');
+      const cur = inp.value.split(',').map(s => s.trim()).filter(Boolean);
+      const idx = cur.indexOf(val);
+      if (idx >= 0) cur.splice(idx, 1); else cur.push(val);
+      inp.value = cur.join(', ');
+      btn.classList.toggle('active', idx < 0);
+    }));
   }
 
   function applyDiscoverySelection({ id, name, source, type }, els) {
@@ -79,5 +109,6 @@
     buildCameraPayload,
     applyDiscoverySelection,
     resetCameraFormState,
+    syncTrackedCategoriesUI,
   };
 })();

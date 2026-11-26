@@ -69,7 +69,7 @@
     if (!container) return;
 
     try {
-      const res = await fetch(`/api/active-learning/queue?status=${encodeURIComponent(status)}&limit=50`);
+      const res = await fetch(`/api/review/queue?status=${encodeURIComponent(status)}&limit=50`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const items = data.items || [];
@@ -110,6 +110,25 @@
     return String(rawTs);
   }
 
+  function buildProvenanceHtml(item) {
+    const parts = [];
+    if (item.video_filename) {
+      const offset = Number(item.media_offset_sec || 0).toFixed(1);
+      parts.push(`<span class="review-source-pill">Video: ${escapeHtml(item.video_filename)} @ ${offset}s</span>`);
+    } else if (item.camera_id) {
+      parts.push(`<span class="review-source-pill">Live: ${escapeHtml(item.camera_id)}</span>`);
+    }
+    let bbox = item.bbox;
+    if (!bbox && item.bbox_json) {
+      try { bbox = JSON.parse(item.bbox_json); } catch (_) { bbox = null; }
+    }
+    if (Array.isArray(bbox) && bbox.length === 4) {
+      const dims = item.frame_width && item.frame_height ? ` (${item.frame_width}x${item.frame_height})` : '';
+      parts.push(`<span class="review-bbox-badge">bbox [${bbox.map(Number).join(', ')}]${dims}</span>`);
+    }
+    return parts.length ? `<div class="review-provenance-row">${parts.join('')}</div>` : '';
+  }
+
   function buildReviewCardHtml(item) {
     const sim = (item.similarity ?? item.similarity_score ?? 0) * 100;
     const simColor = sim >= 60 ? '#06b6d4' : '#f59e0b';
@@ -118,6 +137,7 @@
     const matchLabel = suggested ? `Matched: <strong>${escapeHtml(suggested)}</strong>` : 'Unidentified Borderline Track';
     const tsText = formatReviewTimestamp(item.timestamp ?? item.created_at);
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(item.video_filename, item.media_offset_sec) || '';
+    const provenanceHtml = buildProvenanceHtml(item);
     const actionsHtml = item.status === 'pending'
       ? `<div class="review-actions">
           <button class="btn btn-xs btn-confirm" data-id="${item.id}" data-name="${escapeHtml(suggested || '')}" title="Confirm as Ground Truth Locked Anchor">✓ Confirm (Locked Anchor)</button>
@@ -139,6 +159,7 @@
               <span style="font-weight: 600; color: ${simColor};">${sim.toFixed(1)}%</span>
             </div>
             <div class="review-timestamp">${escapeHtml(tsText)}</div>
+            ${provenanceHtml}
             ${seekBtn ? `<div class="review-seek-row">${seekBtn}</div>` : ''}
           </div>
         </div>
@@ -185,9 +206,22 @@
     });
   }
 
+  function notifyReviewResolved(data) {
+    const syncFn = data?.sync?.video_filename;
+    if (syncFn) {
+      window.VideoBatchReports?.invalidateCachedReports?.(syncFn);
+      if (window.VideoBatchReports?.getCurrentFilename?.() === syncFn) {
+        window.VideoBatchReports?.restoreReportForFile?.(syncFn);
+      }
+      window.OverlayLayers?.ensureLoaded?.(syncFn, { force: true });
+    }
+    window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
+    loadReviewQueue(state.currentReviewStatus);
+  }
+
   async function confirmReviewItem(itemId, name = '') {
     try {
-      const res = await fetch(`/api/active-learning/${itemId}/confirm`, {
+      const res = await fetch(`/api/review/${itemId}/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes: 'Operator verified ground-truth locked anchor' }),
@@ -195,7 +229,7 @@
       if (!res.ok) throw new Error('Confirm failed');
       const data = await res.json();
       showToast('Candidate Confirmed', `Locked as ground truth anchor for ${data.entity_name || name || 'entity'}.`, 'success');
-      loadReviewQueue(state.currentReviewStatus);
+      notifyReviewResolved(data);
     } catch (err) {
       showToast('Confirmation Error', err.message, 'error');
     }
@@ -203,14 +237,15 @@
 
   async function dismissReviewItem(itemId) {
     try {
-      const res = await fetch(`/api/active-learning/${itemId}/dismiss`, {
+      const res = await fetch(`/api/review/${itemId}/dismiss`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes: 'Operator dismissed borderline candidate' }),
       });
       if (!res.ok) throw new Error('Dismiss failed');
+      const data = await res.json().catch(() => ({}));
       showToast('Candidate Dismissed', 'Review item dismissed without modifying gallery.', 'info');
-      loadReviewQueue(state.currentReviewStatus);
+      notifyReviewResolved(data);
     } catch (err) {
       showToast('Dismissal Error', err.message, 'error');
     }
@@ -259,8 +294,8 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     window.UniversalEnrollment?.init();
-    window.ReviewModals?.initReassignModal(() => loadReviewQueue(state.currentReviewStatus));
-    window.ReviewModals?.initQuickEnrollModal(() => loadReviewQueue(state.currentReviewStatus));
+    window.ReviewModals?.initReassignModal((data) => notifyReviewResolved(data));
+    window.ReviewModals?.initQuickEnrollModal((data) => notifyReviewResolved(data));
     window.RSACVersions?.init();
 
     document.querySelectorAll('.review-filter-btn').forEach(btn => {

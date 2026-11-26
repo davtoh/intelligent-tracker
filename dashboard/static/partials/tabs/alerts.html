@@ -5,6 +5,21 @@
           <h3>Security & Alert Audit History</h3>
           <span class="panel-badge" id="total-alerts-count">0 events</span>
         </div>
+        <div class="alerts-filter-bar" id="alerts-filter-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+          <select id="alerts-filter-camera" class="form-input" aria-label="Filter by camera" style="max-width:160px;">
+            <option value="">All Cameras</option>
+          </select>
+          <select id="alerts-filter-severity" class="form-input" aria-label="Filter by severity" style="max-width:140px;">
+            <option value="">All Severities</option>
+            <option value="critical">Critical</option>
+            <option value="warning">Warning</option>
+            <option value="info">Info</option>
+          </select>
+          <input type="text" id="alerts-filter-type" class="form-input" placeholder="Event type..." aria-label="Filter by event type" style="max-width:150px;" />
+          <input type="text" id="alerts-filter-zone" class="form-input" placeholder="Zone ID..." aria-label="Filter by zone" style="max-width:140px;" />
+          <button type="button" class="btn btn-sm btn-primary" id="alerts-filter-apply">Apply</button>
+          <button type="button" class="btn btn-sm btn-outline" id="alerts-filter-reset">Reset</button>
+        </div>
         <div class="table-responsive">
           <table class="data-table" id="alerts-table">
             <thead>
@@ -24,6 +39,11 @@
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="alerts-pagination-bar" id="alerts-pagination-bar" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+          <button type="button" class="btn btn-sm btn-outline" id="alerts-prev-btn" disabled>Previous</button>
+          <span class="text-subtle" id="alerts-page-info">Page 1 of 1</span>
+          <button type="button" class="btn btn-sm btn-outline" id="alerts-next-btn" disabled>Next</button>
         </div>
       </div>
     </section>

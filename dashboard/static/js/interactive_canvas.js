@@ -109,6 +109,7 @@
         box.querySelectorAll('.candidate-chip').forEach((c) => c.classList.remove('active'));
         btn.classList.add('active');
       });
+      window.TagFeedbackActions?.attachCandidateDiscourage?.(btn, cand, box, activeCameraGetter);
       box.appendChild(btn);
     });
   }
@@ -148,6 +149,7 @@
     if (!options.fromRoi && Date.now() - lastRoiPointerMs < 250) return;
     const modalTag = el('modal-tag-entity');
     if (!modalTag) return;
+    window.CategoryBadgeManager?.syncSelect?.(el('tag-category-select'));
     categoryTouched = false;
     modalTag.style.display = 'flex';
     const bbox = options.bbox || track?.bbox || null;
@@ -180,18 +182,18 @@
     if (el('tag-identity-candidates')) el('tag-identity-candidates').innerHTML = '';
     el('tag-entity-form')?.reset();
   }
-
   async function submitTagForm(e) {
     e.preventDefault();
     const name = (el('tag-name-input')?.value || '').trim();
     if (!name) return;
     const category = el('tag-category-select')?.value || 'person', sourceType = el('tag-source-type')?.value || 'live', tsVal = el('tag-timestamp-sec')?.value;
+    const cropBase64 = el('tag-crop-base64')?.value || null;
     const payload = {
       entity_name: name, category,
       entity_id: el('tag-entity-id')?.value ? parseInt(el('tag-entity-id').value, 10) : null,
       track_id: el('tag-track-id')?.value ? parseInt(el('tag-track-id').value, 10) : null,
-      bbox: el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null,
-      crop_base64: el('tag-crop-base64')?.value || null, notes: (el('tag-notes-input')?.value || '').trim(),
+      bbox: cropBase64 ? null : (el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null),
+      crop_base64: cropBase64, notes: (el('tag-notes-input')?.value || '').trim(),
       camera_id: sourceType === 'video' ? null : (activeCameraGetter?.() || null),
       video_filename: sourceType === 'video' ? ((el('tag-video-filename')?.value || '').trim() || null) : null,
       timestamp_sec: sourceType === 'video' && tsVal !== '' ? parseFloat(tsVal) : null,
@@ -199,12 +201,13 @@
     try {
       const res = await fetch('/api/tag/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Tagging failed');
+      const data = await res.json().catch(() => ({}));
       closeTagModal();
       window.showToast?.('Entity Enrolled', `Successfully enrolled "${name}" as ${category.toUpperCase()}!`, 'success');
-      window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
+      if (window.TagFeedbackActions?.onTagCommitted) window.TagFeedbackActions.onTagCommitted(payload, data);
+      else window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
     } catch (err) { window.showToast?.('Enrollment Failed', err.message, 'error'); }
   }
-
   function initTagModal(getActiveCameraId) {
     activeCameraGetter = getActiveCameraId;
     window.RoiDrawTagger?.setRecognitionHandler?.(handleRoiRecognition);
@@ -222,6 +225,7 @@
     }
     el('modal-tag-close')?.addEventListener('click', closeTagModal);
     el('modal-tag-cancel')?.addEventListener('click', closeTagModal);
+    el('btn-tag-discourage')?.addEventListener('click', () => window.TagFeedbackActions?.discourageFromModal?.(activeCameraGetter));
     el('tag-name-input')?.addEventListener('input', () => { if (el('tag-entity-id')) el('tag-entity-id').value = ''; });
     el('tag-category-select')?.addEventListener('change', () => { categoryTouched = true; });
     el('tag-entity-form')?.addEventListener('submit', submitTagForm);

@@ -1,0 +1,58 @@
+/* ==========================================================================
+   Analytics Traffic Flows & Security Alerts Controls
+   ========================================================================== */
+
+.analytics-flow-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.analytics-flow-controls .form-control-sm {
+  width: auto;
+  min-width: 72px;
+  min-height: 32px;
+}
+
+.analytics-window-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.analytics-window-label {
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heatmap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.heatmap-legend-tick {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.heatmap-meta-summary {
+  margin-top: 8px;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

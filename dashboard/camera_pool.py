@@ -99,6 +99,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         tracker: str | None = None,
         confidence: float | None = None,
         classes: list[str] | None = None,
+        tracked_categories: list[str] | None = None,
         enabled: bool = True,
         autostart: bool = True,
         details: dict[str, Any] | None = None,
@@ -108,20 +109,12 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         """Hot-add a new camera feed dynamically without server restarts."""
         with self._lock:
             cam_entry = self._config_store.build_and_store_entry(
-                camera_id=camera_id,
-                name=name,
-                source=source,
-                cam_type=cam_type,
-                detector=detector,
-                tracker=tracker,
-                confidence=confidence,
-                classes=classes,
-                enabled=enabled,
-                details=details,
-                device_name=device_name,
-                armed=armed,
+                camera_id=camera_id, name=name, source=source, cam_type=cam_type,
+                detector=detector, tracker=tracker, confidence=confidence,
+                classes=classes, tracked_categories=tracked_categories,
+                enabled=enabled, details=details, device_name=device_name, armed=armed,
             )
-            self.save_cameras()
+        self.save_cameras()
         return self._coordinator.register_camera_stream(
             camera_id=camera_id,
             cam_entry=cam_entry,
@@ -140,6 +133,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         tracker: str | None = None,
         confidence: float | None = None,
         classes: list[str] | None = None,
+        tracked_categories: list[str] | None = None,
         device_name: str | None = None,
         details: dict[str, Any] | None = None,
         armed: bool | None = None,
@@ -149,11 +143,11 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             found, needs_restart, cfg = self._config_store.update_entry(
                 camera_id, name=name, source=source, cam_type=cam_type, enabled=enabled,
                 detector=detector, tracker=tracker, confidence=confidence, classes=classes,
-                device_name=device_name, details=details, armed=armed,
+                tracked_categories=tracked_categories, device_name=device_name, details=details, armed=armed,
             )
             if not found or cfg is None:
                 return False
-            self.save_cameras()
+        self.save_cameras()
 
         if armed is not None:
             with self._lock:
@@ -172,7 +166,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         """Stop and remove a camera stream dynamically from the pool."""
         with self._lock:
             removed_cfg = self._config_store.remove_entry(camera_id)
-            self.save_cameras()
+        self.save_cameras()
         self._coordinator.remove_stream(camera_id)
         logger.info("Removed camera [%s] from pool", camera_id)
         return removed_cfg is not None

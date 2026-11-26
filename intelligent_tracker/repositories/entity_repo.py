@@ -224,3 +224,44 @@ class EntityMixin:
         entity_data["crop_path"] = crop_path
         return entity_data
 
+    def suggest_entities(self, query: str = "", limit: int = 8) -> List[Dict[str, Any]]:
+        """Return prefix-first entity suggestions matching name or ID."""
+        capped_limit = max(1, min(int(limit), 50))
+        cleaned = (query or "").strip()
+        with self._lock:
+            if self._conn is None:
+                return []
+            cursor = self._conn.cursor()
+            try:
+                if not cleaned:
+                    cursor.execute(
+                        "SELECT id, name, category, status FROM entities "
+                        "ORDER BY name COLLATE NOCASE ASC LIMIT ?",
+                        (capped_limit,),
+                    )
+                    return [dict(row) for row in cursor.fetchall()]
+                escaped = cleaned.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                prefix_pat = f"{escaped}%"
+                sub_pat = f"%{escaped}%"
+                cursor.execute(
+                    """
+                    SELECT id, name, category, status
+                    FROM entities
+                    WHERE name LIKE ? ESCAPE '\\' COLLATE NOCASE
+                       OR CAST(id AS TEXT) LIKE ? ESCAPE '\\'
+                    ORDER BY
+                        CASE
+                            WHEN LOWER(name) = LOWER(?) THEN 0
+                            WHEN LOWER(name) LIKE LOWER(?) ESCAPE '\\' THEN 1
+                            WHEN CAST(id AS TEXT) = ? THEN 2
+                            ELSE 3
+                        END,
+                        name COLLATE NOCASE ASC
+                    LIMIT ?
+                    """,
+                    (sub_pat, prefix_pat, cleaned, prefix_pat, cleaned, capped_limit),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+            finally:
+                cursor.close()
+
