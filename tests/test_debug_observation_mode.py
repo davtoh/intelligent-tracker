@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Isolated unit and FastAPI tests for interactive Debug Observation Mode (Milestone 1)."""
 
+import contextlib
+import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -227,6 +230,87 @@ class TestDebugObservationHudFrontend(unittest.TestCase):
         self.assertEqual(payload["url"], "/#tab-studio")
         self.assertEqual(payload["viewport"], {"width": 1440, "height": 900})
         self.assertEqual(payload["breadcrumbs"][-1]["target"], "button#btn-test")
+
+
+PROBE_PATH = Path(__file__).resolve().parents[1] / ".diagnostics" / "probes" / "debug_session.py"
+
+
+def _load_debug_session_probe():
+    """Dynamically load .diagnostics/probes/debug_session.py without mutating sys.path."""
+    spec = importlib.util.spec_from_file_location("debug_session_probe", PROBE_PATH)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class TestDebugObservationCliAndProbe(unittest.TestCase):
+    """Verify scripts/debug_inspect.py --observations and .diagnostics/probes/debug_session.py."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.debug_dir = Path(self._tmp.name) / "debug_session"
+
+    def test_debug_inspect_observations_human_and_json(self) -> None:
+        from scripts import debug_inspect
+
+        try:
+            raise RuntimeError("Multiview websocket dropped")
+        except RuntimeError as exc:
+            fp = record_debug_event(exc, http_method="GET", http_path="/ws/multiview", debug_dir=self.debug_dir)
+
+        record_user_observation(
+            note="Tiles went blank after switching cameras",
+            tab="multiview",
+            url="/#multiview",
+            breadcrumbs=[
+                {"type": "click", "target": "button#tab-multiview"},
+                {"type": "fetch_error", "url": "/api/cameras", "status": 502},
+            ],
+            viewport={"width": 1280, "height": 720},
+            debug_dir=self.debug_dir,
+        )
+
+        buf_human = io.StringIO()
+        with contextlib.redirect_stdout(buf_human):
+            rc1 = debug_inspect.main(["--dir", str(self.debug_dir), "--observations"])
+        self.assertEqual(rc1, 0)
+        human_out = buf_human.getvalue()
+        self.assertIn("[OBS #1", human_out)
+        self.assertIn("Tiles went blank after switching cameras", human_out)
+        self.assertIn("fetch_error:/api/cameras (502)", human_out)
+        self.assertIn(f"fp={fp}", human_out)
+
+        buf_json = io.StringIO()
+        with contextlib.redirect_stdout(buf_json):
+            rc2 = debug_inspect.main(["--dir", str(self.debug_dir), "--observations", "--json"])
+        self.assertEqual(rc2, 0)
+        parsed = json.loads(buf_json.getvalue())
+        self.assertEqual(parsed["observations_count"], 1)
+        self.assertEqual(parsed["observations"][0]["correlated_issues"][0]["fingerprint"], fp)
+
+    def test_workspace_debug_session_probe_clean_and_correlated(self) -> None:
+        probe_mod = _load_debug_session_probe()
+        clean_res = probe_mod.run_probe(self.debug_dir)
+        self.assertEqual(clean_res["status"], "ok")
+        self.assertEqual(clean_res["details"]["observations_count"], 0)
+
+        try:
+            raise ValueError("Overlay canvas NaN height")
+        except ValueError as exc:
+            fp = record_debug_event(exc, http_method="GET", http_path="/api/studio", debug_dir=self.debug_dir)
+        record_user_observation(
+            note="Canvas collapsed on studio tab",
+            tab="studio",
+            url="/#studio",
+            debug_dir=self.debug_dir,
+        )
+
+        err_res = probe_mod.run_probe(self.debug_dir)
+        self.assertEqual(err_res["status"], "error")
+        self.assertEqual(err_res["details"]["observations_count"], 1)
+        self.assertEqual(err_res["details"]["observations"][0]["correlated_issues"][0]["fingerprint"], fp)
 
 
 if __name__ == "__main__":

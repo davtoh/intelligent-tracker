@@ -29,8 +29,8 @@
 - [x] **tests/test_debug_observation_mode.py**: Add Node.js `vm.runInNewContext` tests verifying ring-buffer cap, click/fetch breadcrumb capture, and `POST /api/system/debug/observation` payload.
 - [x] **Verification**: Run `python -m unittest tests/test_debug_observation_mode.py` and `diagnose.py surface --verify --strict`.
 
-## Milestone 3: CLI Inspector, Workspace Probe & Documentation *(Deferred to Next Turn / Milestone)*
+## Milestone 3: CLI Inspector, Workspace Probe & Documentation
 
-- [ ] **scripts/debug_inspect.py** & **.diagnostics/probes/debug_session.py**: Add `--observations` view in `debug_inspect.py` and register a reusable `.diagnostics/probes/debug_session.py` probe (`diagnose.py probe run debug_session`) for `/app-debugger` sessions.
-- [ ] **documentation/dashboard.rst**: Document interactive Debug Observation Mode workflow (`scripts/server_debug` -> click & log observation -> `scripts/debug_inspect.py` / `diagnose.py probe run debug_session`).
-- [ ] **Verification**: Run `python -m unittest tests/test_debug_session.py tests/test_debug_observation_mode.py`, `diagnose.py probe list`, and `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.
+- [x] **scripts/debug_inspect.py** & **.diagnostics/probes/debug_session.py**: Add `--observations` view in `debug_inspect.py` and register a reusable `.diagnostics/probes/debug_session.py` probe (`diagnose.py probe run debug_session`) for `/app-debugger` sessions.
+- [x] **documentation/dashboard.rst**: Document interactive Debug Observation Mode workflow (`scripts/server_debug` -> click & log observation -> `scripts/debug_inspect.py` / `diagnose.py probe run debug_session`).
+- [x] **Verification**: Run `python -m unittest tests/test_debug_session.py tests/test_debug_observation_mode.py`, `diagnose.py probe list`, and `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.

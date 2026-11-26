@@ -268,29 +268,38 @@ By default, ``reset_data.py``:
    # Reset only a custom test DB and crops without creating a backup
    TRACKER_DB_PATH=data/test_clean.db python scripts/reset_data.py --only db,crops --yes --no-backup
 
-Isolated Debug Mode & Error Inspector
--------------------------------------
+Isolated Debug Mode, Observations HUD & Error Inspector
+-------------------------------------------------------
 
 Launch ``scripts/run_dashboard.py`` with ``--debug`` (or ``--clean-debug`` to wipe the previous
-debug session before booting) to isolate all state under ``data/debug_session/``:
+debug session before booting) to isolate all state under ``data/debug_session/`` and set
+``IT_DEBUG_MODE=1``:
 
 - **Isolated state**: ``tracker.db``, ``cameras.json``, ``scenarios.yaml``, ``crops/``, and ``reports/`` are redirected into ``data/debug_session/``.
 - **Full diagnostics**: Enables ``DEBUG`` logging to rotating ``debug.log``, ``faulthandler.log`` for native C/C++ crashes, ``PYTHONASYNCIODEBUG=1``, ``FastAPI(debug=True)``, and ``events.jsonl`` structured ``WARNING+`` capture.
+- **Interactive Observations HUD**: When ``IT_DEBUG_MODE=1``, ``debug_observation_hud.js`` mounts a collapsible floating **Log Observation** pill (zero overhead when disabled). It maintains a bounded 30-entry client ring buffer of clicks, tab/hash navigation, ``window.onerror`` exceptions, and failed ``fetch()`` calls, and submits timestamped notes to ``POST /api/system/debug/observation`` (stored as ``level="OBSERVATION"`` in ``events.jsonl``).
 
-Use ``scripts/debug_inspect.py`` (or ``GET /api/system/debug/summary``) for a compact,
-deduplicated Jenkins/Sentry-style summary of errors and tracebacks:
+Use ``scripts/debug_inspect.py``, ``GET /api/system/debug/summary``, or the workspace
+``debug_session`` probe to correlate user observations with backend warnings, errors, and
+tracebacks within a +/-30 s window:
 
 .. code-block:: bash
 
-   # Boot a clean isolated debug session
+   # 1. Boot a clean isolated debug session (enables IT_DEBUG_MODE=1 and Observations HUD)
    python scripts/run_dashboard.py --local --clean-debug
 
-   # Inspect deduplicated warnings/errors/crashes
+   # 2. Navigate the UI and click "Log Observation" whenever you spot an anomaly
+
+   # 3. Inspect deduplicated warnings/errors/crashes
    python scripts/debug_inspect.py
 
-   # Drill into issue #1 with full traceback and surrounding debug.log lines
+   # 4. Inspect user observations with breadcrumbs and correlated backend issues
+   python scripts/debug_inspect.py --observations
+
+   # 5. Drill into issue #1 with full traceback and surrounding debug.log lines
    python scripts/debug_inspect.py --context 1
 
-   # Emit compact JSON for CI or automated agents
-   python scripts/debug_inspect.py --json
+   # 6. Emit compact JSON for CI or automated agents (or run the workspace diagnostic probe)
+   python scripts/debug_inspect.py --observations --json
+   python diagnose.py probe run debug_session
 

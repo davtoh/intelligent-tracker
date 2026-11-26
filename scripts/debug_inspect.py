@@ -27,6 +27,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     parser.add_argument("--min-level", choices=("WARNING", "ERROR", "CRITICAL"), default="WARNING")
     parser.add_argument("--limit", type=int, default=20, help="Max deduplicated issues to display.")
     parser.add_argument("--json", action="store_true", help="Emit compact JSON output for agents/CI.")
+    parser.add_argument(
+        "--observations",
+        action="store_true",
+        help="Display user-logged debug observations with breadcrumbs and correlated issues.",
+    )
     parser.add_argument("--context", default=None, help="Drill into one issue by #index or fingerprint prefix.")
     parser.add_argument("--lines", type=int, default=15, help="Context lines before/after in debug.log for --context.")
     return parser.parse_args(argv)
@@ -35,10 +40,11 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
 def _print_summary(summary: dict[str, Any]) -> None:
     """Print a compact Jenkins-style human & agent readable issue summary."""
     totals = summary["totals"]
+    obs_count = summary.get("observations_count", 0)
     print(
         f"[DEBUG SESSION] {summary['session_dir']} | "
         f"CRIT={totals['CRITICAL']} ERR={totals['ERROR']} WARN={totals['WARNING']} | "
-        f"unique={summary['unique_issues']}"
+        f"unique={summary['unique_issues']} obs={obs_count}"
     )
     if summary["native_crash_detected"]:
         print("[CRIT] NATIVE CRASH DETECTED in faulthandler.log:")
@@ -46,18 +52,59 @@ def _print_summary(summary: dict[str, Any]) -> None:
             print(f"  {line}")
     if not summary["issues"]:
         print("[OK] No issues matching filter.")
+    else:
+        for issue in summary["issues"]:
+            loc = f" @ {issue['top_frames'][-1]}" if issue["top_frames"] else ""
+            exc = f"{issue['exc_type']}: " if issue["exc_type"] else ""
+            paths = f" routes={','.join(issue['http_paths'])}" if issue["http_paths"] else ""
+            msg = " ".join(str(issue["message"]).splitlines())[:120]
+            print(
+                f"[#{issue['index']} {issue['tag']} x{issue['count']} fp={issue['fingerprint']}] "
+                f"{issue['logger']}{loc} -> {exc}{msg}{paths}"
+            )
+        print("Tip: run `python scripts/debug_inspect.py --context 1` to inspect full traceback + log context.")
+    if obs_count:
+        print("Tip: run `python scripts/debug_inspect.py --observations` to inspect user observations.")
+
+
+def _format_breadcrumb(crumb: dict[str, Any]) -> str:
+    """Render one client breadcrumb entry as a compact single-line token."""
+    kind = str(crumb.get("type") or "event")
+    target = str(crumb.get("target") or crumb.get("url") or crumb.get("message") or "").strip()
+    status = f" ({crumb['status']})" if crumb.get("status") else ""
+    return f"{kind}:{target}{status}" if target else kind
+
+
+def _print_observations(summary: dict[str, Any]) -> None:
+    """Print user-logged observations alongside recent breadcrumbs and correlated issues."""
+    obs_list = summary.get("observations") or []
+    print(
+        f"[DEBUG OBSERVATIONS] {summary['session_dir']} | "
+        f"count={summary.get('observations_count', len(obs_list))}"
+    )
+    if not obs_list:
+        print("[OK] No user observations recorded.")
         return
 
-    for issue in summary["issues"]:
-        loc = f" @ {issue['top_frames'][-1]}" if issue["top_frames"] else ""
-        exc = f"{issue['exc_type']}: " if issue["exc_type"] else ""
-        paths = f" routes={','.join(issue['http_paths'])}" if issue["http_paths"] else ""
-        msg = " ".join(str(issue["message"]).splitlines())[:120]
-        print(
-            f"[#{issue['index']} {issue['tag']} x{issue['count']} fp={issue['fingerprint']}] "
-            f"{issue['logger']}{loc} -> {exc}{msg}{paths}"
-        )
-    print("Tip: run `python scripts/debug_inspect.py --context 1` to inspect full traceback + log context.")
+    for obs in obs_list:
+        tab = obs.get("tab") or "-"
+        url = obs.get("url") or "-"
+        note = " ".join(str(obs.get("note") or "").splitlines())[:180]
+        print(f"[OBS #{obs['index']} @ {obs.get('ts', '')} tab={tab} url={url}] {note}")
+        crumbs = obs.get("breadcrumbs") or []
+        if crumbs:
+            tail = " -> ".join(_format_breadcrumb(c) for c in crumbs[-5:] if isinstance(c, dict))
+            print(f"  breadcrumbs({len(crumbs)}): {tail}")
+        correlated = obs.get("correlated_issues") or []
+        if correlated:
+            for item in correlated:
+                msg = " ".join(str(item.get("message") or "").splitlines())[:100]
+                print(
+                    f"  correlated: [{item['tag']} fp={item['fingerprint']} "
+                    f"dt={item['delta_sec']:+.1f}s x{item['count']}] {msg}"
+                )
+        else:
+            print("  correlated: none within +/-30s")
 
 
 def _print_context(ctx: dict[str, Any]) -> None:
@@ -77,6 +124,22 @@ def _print_context(ctx: dict[str, Any]) -> None:
             print(line)
 
 
+def _emit_observations(summary: dict[str, Any], as_json: bool) -> None:
+    """Emit user observations either as compact JSON or human-readable lines."""
+    if not as_json:
+        _print_observations(summary)
+        return
+    obs_payload = {
+        "session_dir": summary["session_dir"],
+        "exists": summary["exists"],
+        "totals": summary["totals"],
+        "observations_count": summary["observations_count"],
+        "observations": summary["observations"],
+        "native_crash_detected": summary["native_crash_detected"],
+    }
+    print(json.dumps(obs_payload, indent=2, ensure_ascii=False))
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """Entrypoint for scripts/debug_inspect.py."""
     args = parse_args(argv)
@@ -87,13 +150,19 @@ def main(argv: Optional[list[str]] = None) -> int:
         if ctx is None:
             print(f"[ERROR] Issue '{args.context}' not found in {target}", file=sys.stderr)
             return 1
-        if args.json:
-            print(json.dumps(ctx, indent=2, ensure_ascii=False))
-        else:
-            _print_context(ctx)
+        print(json.dumps(ctx, indent=2, ensure_ascii=False)) if args.json else _print_context(ctx)
         return 0
 
-    summary = summarize_debug_session(target, min_level=args.min_level, limit=args.limit)
+    summary = summarize_debug_session(
+        target,
+        min_level=args.min_level,
+        limit=args.limit,
+        observation_limit=args.limit,
+    )
+    if args.observations:
+        _emit_observations(summary, args.json)
+        return 0
+
     if args.json:
         compact = {
             **summary,
