@@ -91,6 +91,7 @@ def _confirm_gallery_match(
     matcher: Any, track: Track, query_vec: np.ndarray, similarities: np.ndarray,
     raw_similarities: Optional[np.ndarray], matched_priors: dict,
     best_idx: int, best_score: float, source: str, now: float, zone_id: str,
+    frame: Optional[np.ndarray] = None,
 ) -> Optional[EntityIdentifiedEvent]:
     """Apply confidence signals, consume topology prior, and emit identification event."""
     apply_track_confidence_signals(
@@ -100,7 +101,9 @@ def _confirm_gallery_match(
     )
     if matcher.topology is not None and best_idx in matched_priors:
         matcher.topology.consume_prior(matched_priors[best_idx].prior_id)
-    return process_confirmed_identification(matcher, track, best_idx, best_score, query_vec, source, now, zone_id)
+    return process_confirmed_identification(
+        matcher, track, best_idx, best_score, query_vec, source, now, zone_id, frame=frame,
+    )
 
 
 def match_persistent_gallery(
@@ -141,5 +144,5 @@ def match_persistent_gallery(
         return None
     return _confirm_gallery_match(
         matcher, track, query_vec, similarities, raw_similarities,
-        matched_priors, best_idx, best_score, source, now, zone_id,
+        matched_priors, best_idx, best_score, source, now, zone_id, frame=frame,
     )

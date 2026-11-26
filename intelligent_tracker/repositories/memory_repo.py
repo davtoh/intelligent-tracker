@@ -70,6 +70,8 @@ def _hydrate_row(row: sqlite3.Row, json_col: str, out_key: str) -> dict[str, Any
     """Convert a SQLite row into a dict and parse its JSON column."""
     data = dict(row)
     data[out_key] = _parse_json_dict(data.get(json_col))
+    if "is_read" in data:
+        data["is_read"] = bool(data["is_read"])
     return data
 
 

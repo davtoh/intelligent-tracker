@@ -31,7 +31,12 @@
       onTimeUpdate = null, onSeek = null, onStep = null,
       onPlayStateChange = null, onLoadedMetadata = null, onError = null,
     } = opts;
-    const frameDur = 1.0 / (Number(fps) || 30);
+    let frameDur = 1.0 / (Number(fps) || 30);
+
+    function setFps(nextFps) {
+      const parsed = Number(nextFps);
+      if (Number.isFinite(parsed) && parsed > 0) frameDur = 1.0 / parsed;
+    }
 
     function syncPlayBtn() {
       if (playBtn && videoPlayer) playBtn.textContent = videoPlayer.paused ? '▶ Play' : '⏸ Pause';
@@ -121,43 +126,51 @@
       });
     }
 
-    return { bind, togglePlayPause, stepFrame, updateTimeline, syncPlayBtn };
+    return { bind, togglePlayPause, stepFrame, updateTimeline, syncPlayBtn, setFps };
   }
 
-  function mountEnrollmentScrubber(videoUrl, canvas, placeholder, onFrameCaptured) {
+  let _enrollSliderCtrl = null;
+
+  function mountEnrollmentScrubber(videoUrl, canvas, placeholder, onFrameCaptured, opts = {}) {
     const box = document.getElementById('enroll-video-scrubber-box');
     const vid = document.getElementById('enroll-scrubber-video');
     if (!box || !vid) return null;
     box.style.display = 'block';
     if (placeholder) placeholder.style.display = 'none';
+    window.EnrollmentStageController?.syncVideoStageClasses?.(canvas, true);
+    const fps = Number(opts?.fps) || 30;
     const grab = () => {
       const dataUrl = captureFrameToCanvas(vid, canvas);
       if (dataUrl && typeof onFrameCaptured === 'function') onFrameCaptured(dataUrl);
     };
     if (!vid.dataset?.sliderBound) {
       if (vid.dataset) vid.dataset.sliderBound = '1';
-      create({
-        videoPlayer: vid, standaloneDisplay: true,
+      _enrollSliderCtrl = create({
+        videoPlayer: vid, standaloneDisplay: true, fps,
         slider: document.getElementById('enroll-scrubber-slider'),
         timeDisplay: document.getElementById('enroll-scrubber-time'),
         playBtn: document.getElementById('enroll-scrubber-play'),
         prevBtn: document.getElementById('enroll-scrubber-prev'),
         nextBtn: document.getElementById('enroll-scrubber-next'),
-        onLoadedMetadata: grab, onSeek: grab, onStep: grab,
-      }).bind();
+        onLoadedMetadata: grab, onSeek: grab, onStep: grab, onTimeUpdate: grab,
+      });
+      _enrollSliderCtrl.bind();
       document.getElementById('enroll-scrubber-grab')?.addEventListener('click', grab);
+    } else if (_enrollSliderCtrl && typeof _enrollSliderCtrl.setFps === 'function') {
+      _enrollSliderCtrl.setFps(fps);
     }
     vid.src = videoUrl;
     if (typeof vid.load === 'function') vid.load();
     return vid;
   }
 
-  function hideEnrollmentScrubber() {
+  function hideEnrollmentScrubber(canvas) {
     const box = document.getElementById('enroll-video-scrubber-box');
     const vid = document.getElementById('enroll-scrubber-video');
     if (vid && typeof vid.pause === 'function') {
       try { vid.pause(); } catch (err) { console.debug('[ScrubberTimelineSlider] pause ignored:', err); }
     }
+    window.EnrollmentStageController?.syncVideoStageClasses?.(canvas || document.getElementById('enroll-bbox-canvas'), false);
     if (box) box.style.display = 'none';
   }
 

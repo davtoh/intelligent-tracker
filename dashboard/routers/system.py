@@ -14,7 +14,7 @@ import tempfile
 import time
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from dashboard.services.camera_pool_queries import snapshot_pool_streams
 import psutil
@@ -22,6 +22,7 @@ import psutil
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import (
     get_camera_pool,
+    get_db,
     get_lifecycle_manager,
     get_rsac_mgr,
     get_stream_manager,
@@ -78,10 +79,27 @@ async def system_status(
     }
 
 
+def _build_backup_manager(request: Request, db: Any = None, pool: Optional[CameraPool] = None) -> BackupManager:
+    """Construct BackupManager wired to active DB, crops dir, and hot-reload callbacks."""
+    db_path = getattr(db, "db_path", None) or os.getenv("TRACKER_DB_PATH") or os.path.join("data", "tracker.db")
+    crops_dir = os.getenv("TRACKER_CROPS_DIR") or os.path.join("data", "crops")
+    callbacks: list[Any] = []
+    if pool is not None:
+        callbacks.append(pool.reload_all_galleries)
+    scen = getattr(getattr(getattr(request, "app", None), "state", None), "scenario_manager", None)
+    if scen is not None and hasattr(scen, "reload"):
+        callbacks.append(scen.reload)
+    return BackupManager(db_path=db_path, crops_dir=crops_dir, hot_reload_callbacks=callbacks or None)
+
+
 @router.get("/api/backup/export")
-async def export_system_backup():
+async def export_system_backup(
+    request: Request,
+    db: Any = Depends(get_db),
+    pool: Optional[CameraPool] = Depends(get_camera_pool),
+):
     """Package database records, crops, scenarios, and configs into a portable .zip archive."""
-    mgr = BackupManager()
+    mgr = _build_backup_manager(request, db=db, pool=pool)
     backup_file = mgr.create_backup()
     return FileResponse(
         backup_file,
@@ -92,7 +110,9 @@ async def export_system_backup():
 
 @router.post("/api/backup/import")
 async def import_system_backup(
+    request: Request,
     file: UploadFile = File(...),
+    db: Any = Depends(get_db),
     pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Import and restore full system configuration from uploaded .zip archive."""
@@ -109,7 +129,7 @@ async def import_system_backup(
             content = await file.read()
             buffer.write(content)
 
-        mgr = BackupManager()
+        mgr = _build_backup_manager(request, db=db, pool=pool)
         result = mgr.restore_backup(temp_zip)
 
         if pool:

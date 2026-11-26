@@ -2,26 +2,41 @@
  * Intelligent Tracker - World Tactical Minimap View
  * Renders calibrated multi-camera /api/topology/world-map telemetry
  * (metric grid, FOV cones, zones, transitions, trajectories, velocity vectors)
- * with BEVMinimap fallback and inline camera world-pose editor.
+ * with BEVMinimap fallback, drag-preview hooks, and inline world-pose editor.
  */
 (function () {
   let cachedWorldMap = null;
   let lastFetchMs = 0;
   let fetchInFlight = false;
   let lastEditorCamId = null;
+  let dragPreview = null;
+
+  function normalizeBounds(bounds) {
+    if (Array.isArray(bounds) && bounds.length >= 4) {
+      return [Number(bounds[0] ?? 0), Number(bounds[1] ?? 0), Number(bounds[2] ?? 20), Number(bounds[3] ?? 20)];
+    }
+    if (bounds && typeof bounds === 'object') {
+      return [Number(bounds.min_x ?? 0), Number(bounds.min_y ?? 0), Number(bounds.max_x ?? 20), Number(bounds.max_y ?? 20)];
+    }
+    return [0, 0, 20, 20];
+  }
 
   function toCanvasXY(wx, wy, bounds, width, height, pad) {
-    const minX = Number(bounds?.[0] ?? 0);
-    const minY = Number(bounds?.[1] ?? 0);
-    const maxX = Number(bounds?.[2] ?? 20);
-    const maxY = Number(bounds?.[3] ?? 20);
+    const [minX, minY, maxX, maxY] = normalizeBounds(bounds);
     const spanX = Math.max(1e-3, maxX - minX);
     const spanY = Math.max(1e-3, maxY - minY);
     const drawW = Math.max(1, width - pad * 2);
     const drawH = Math.max(1, height - pad * 2);
-    const cx = pad + ((wx - minX) / spanX) * drawW;
-    const cy = pad + ((wy - minY) / spanY) * drawH;
-    return [cx, cy];
+    return [pad + ((wx - minX) / spanX) * drawW, pad + ((wy - minY) / spanY) * drawH];
+  }
+
+  function toWorldXY(cx, cy, bounds, width, height, pad) {
+    const [minX, minY, maxX, maxY] = normalizeBounds(bounds);
+    const spanX = Math.max(1e-3, maxX - minX);
+    const spanY = Math.max(1e-3, maxY - minY);
+    const drawW = Math.max(1, width - pad * 2);
+    const drawH = Math.max(1, height - pad * 2);
+    return [minX + ((cx - pad) / drawW) * spanX, minY + ((cy - pad) / drawH) * spanY];
   }
 
   function drawMetricGrid(ctx, bounds, width, height, pad) {
@@ -33,18 +48,12 @@
     for (let i = 0; i <= steps; i += 1) {
       const gx = pad + (drawW * i) / steps;
       const gy = pad + (drawH * i) / steps;
-      ctx.beginPath();
-      ctx.moveTo(gx, pad);
-      ctx.lineTo(gx, height - pad);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(pad, gy);
-      ctx.lineTo(width - pad, gy);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(gx, pad); ctx.lineTo(gx, height - pad); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(width - pad, gy); ctx.stroke();
     }
     ctx.fillStyle = '#94a3b8';
     ctx.font = '10px sans-serif';
-    const b = bounds || [0, 0, 20, 20];
+    const b = normalizeBounds(bounds);
     ctx.fillText(`World ${(b[2] - b[0]).toFixed(0)}m × ${(b[3] - b[1]).toFixed(0)}m`, pad, 13);
   }
 
@@ -55,15 +64,12 @@
       ctx.beginPath();
       pts.forEach((pt, idx) => {
         const [cx, cy] = toCanvasXY(pt[0], pt[1], bounds, width, height, pad);
-        if (idx === 0) ctx.moveTo(cx, cy);
-        else ctx.lineTo(cx, cy);
+        if (idx === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
       });
       ctx.closePath();
       ctx.fillStyle = zone.restricted ? 'rgba(239, 68, 68, 0.16)' : 'rgba(6, 182, 212, 0.14)';
       ctx.strokeStyle = zone.restricted ? 'rgba(239, 68, 68, 0.7)' : 'rgba(6, 182, 212, 0.65)';
-      ctx.lineWidth = 1.25;
-      ctx.fill();
-      ctx.stroke();
+      ctx.lineWidth = 1.25; ctx.fill(); ctx.stroke();
     });
 
     (data.transitions || []).forEach((tr) => {
@@ -74,16 +80,14 @@
       ctx.setLineDash([4, 4]);
       ctx.strokeStyle = tr.active ? 'rgba(129, 140, 248, 0.8)' : 'rgba(148, 163, 184, 0.4)';
       ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(tx, ty);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty); ctx.stroke();
       ctx.restore();
     });
   }
 
   function drawCameraFovCones(ctx, cameras, bounds, width, height, pad, activeCameraId) {
-    const spanX = Math.max(1e-3, (bounds?.[2] ?? 20) - (bounds?.[0] ?? 0));
+    const b = normalizeBounds(bounds);
+    const spanX = Math.max(1e-3, b[2] - b[0]);
     const pxPerMeter = (width - pad * 2) / spanX;
     (cameras || []).forEach((cam) => {
       const pose = cam.world_pose || {};
@@ -92,20 +96,26 @@
       const yawRad = (Number(pose.yaw_deg ?? 0) * Math.PI) / 180;
       const halfFov = ((Number(pose.fov_deg ?? 75) * Math.PI) / 180) / 2;
       const rangePx = Math.max(12, Number(pose.range_m ?? 12) * pxPerMeter);
-      const [cx, cy] = toCanvasXY(ox, oy, bounds, width, height, pad);
+      const [cx, cy] = toCanvasXY(ox, oy, b, width, height, pad);
       const isActive = activeCameraId && cam.camera_id === activeCameraId;
 
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, rangePx, yawRad - halfFov, yawRad + halfFov);
       ctx.closePath();
-      ctx.fillStyle = isActive ? 'rgba(6, 182, 212, 0.18)' : 'rgba(148, 163, 184, 0.10)';
+      ctx.fillStyle = isActive ? 'rgba(6, 182, 212, 0.22)' : 'rgba(148, 163, 184, 0.10)';
       ctx.fill();
 
       ctx.beginPath();
-      ctx.arc(cx, cy, isActive ? 5 : 4, 0, Math.PI * 2);
+      ctx.arc(cx, cy, isActive ? 5.5 : 4, 0, Math.PI * 2);
       ctx.fillStyle = isActive ? '#06b6d4' : '#cbd5e1';
       ctx.fill();
+      if (isActive) {
+        const tx = cx + Math.cos(yawRad) * rangePx;
+        const ty = cy + Math.sin(yawRad) * rangePx;
+        ctx.beginPath(); ctx.arc(tx, ty, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b'; ctx.fill();
+      }
       ctx.fillStyle = '#e2e8f0';
       ctx.font = '10px sans-serif';
       ctx.fillText(cam.camera_id || 'cam', cx + 7, cy + 3);
@@ -113,41 +123,33 @@
   }
 
   function drawEntitiesAndVelocity(ctx, entities, bounds, width, height, pad) {
-    const spanX = Math.max(1e-3, (bounds?.[2] ?? 20) - (bounds?.[0] ?? 0));
+    const b = normalizeBounds(bounds);
+    const spanX = Math.max(1e-3, b[2] - b[0]);
     const pxPerMeter = (width - pad * 2) / spanX;
     (entities || []).forEach((ent) => {
       const traj = ent.global_trajectory || [];
       if (traj.length >= 2) {
         ctx.beginPath();
         traj.forEach((pt, idx) => {
-          const [tx, ty] = toCanvasXY(pt[0], pt[1], bounds, width, height, pad);
-          if (idx === 0) ctx.moveTo(tx, ty);
-          else ctx.lineTo(tx, ty);
+          const [tx, ty] = toCanvasXY(pt[0], pt[1], b, width, height, pad);
+          if (idx === 0) ctx.moveTo(tx, ty); else ctx.lineTo(tx, ty);
         });
         ctx.strokeStyle = ent.restricted ? 'rgba(239, 68, 68, 0.55)' : 'rgba(16, 185, 129, 0.55)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.lineWidth = 1.5; ctx.stroke();
       }
       if (!ent.global_xy) return;
-      const [ex, ey] = toCanvasXY(ent.global_xy[0], ent.global_xy[1], bounds, width, height, pad);
+      const [ex, ey] = toCanvasXY(ent.global_xy[0], ent.global_xy[1], b, width, height, pad);
       const vx = Number(ent.vx ?? 0);
       const vy = Number(ent.vy ?? 0);
       if (Math.hypot(vx, vy) > 0.05) {
-        ctx.beginPath();
-        ctx.moveTo(ex, ey);
+        ctx.beginPath(); ctx.moveTo(ex, ey);
         ctx.lineTo(ex + vx * pxPerMeter * 0.8, ey + vy * pxPerMeter * 0.8);
-        ctx.strokeStyle = '#f59e0b';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2; ctx.stroke();
       }
-      ctx.beginPath();
-      ctx.arc(ex, ey, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = ent.restricted ? '#ef4444' : '#10b981';
-      ctx.fill();
-      const label = ent.name || ent.world_entity_id || 'entity';
-      ctx.fillStyle = '#f8fafc';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(label, ex + 6, ey - 4);
+      ctx.beginPath(); ctx.arc(ex, ey, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = ent.restricted ? '#ef4444' : '#10b981'; ctx.fill();
+      ctx.fillStyle = '#f8fafc'; ctx.font = '10px sans-serif';
+      ctx.fillText(ent.name || ent.world_entity_id || 'entity', ex + 6, ey - 4);
     });
   }
 
@@ -158,12 +160,11 @@
     const w = canvas.width || 320;
     const h = canvas.height || 320;
     const pad = 20;
-    const bounds = worldMapData?.bounds || [0, 0, 20, 20];
+    const bounds = normalizeBounds(worldMapData?.bounds);
 
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, w, h);
-
     drawMetricGrid(ctx, bounds, w, h, pad);
     drawZonesAndTransitions(ctx, worldMapData, bounds, w, h, pad);
     drawCameraFovCones(ctx, worldMapData?.cameras, bounds, w, h, pad, activeCameraId);
@@ -178,22 +179,44 @@
     return true;
   }
 
-  function populatePoseEditor(worldMapData, cameraId) {
-    if (!cameraId || lastEditorCamId === cameraId) return;
-    const cam = (worldMapData?.cameras || []).find((c) => c.camera_id === cameraId);
-    if (!cam || !cam.world_pose) return;
-    lastEditorCamId = cameraId;
+  function syncPoseInputs(pose) {
+    if (!pose) return;
     const map = {
-      'world-pose-x': cam.world_pose.origin_x ?? 0,
-      'world-pose-y': cam.world_pose.origin_y ?? 0,
-      'world-pose-yaw': cam.world_pose.yaw_deg ?? 0,
-      'world-pose-fov': cam.world_pose.fov_deg ?? 75,
-      'world-pose-range': cam.world_pose.range_m ?? 12,
+      'world-pose-x': pose.origin_x ?? 0,
+      'world-pose-y': pose.origin_y ?? 0,
+      'world-pose-yaw': pose.yaw_deg ?? 0,
+      'world-pose-fov': pose.fov_deg ?? 75,
+      'world-pose-range': pose.range_m ?? 12,
     };
     Object.entries(map).forEach(([id, val]) => {
       const el = document.getElementById(id);
       if (el) el.value = String(val);
     });
+  }
+
+  function populatePoseEditor(worldMapData, cameraId) {
+    if (!cameraId || lastEditorCamId === cameraId) return;
+    const cam = (worldMapData?.cameras || []).find((c) => c.camera_id === cameraId);
+    if (!cam || !cam.world_pose) return;
+    lastEditorCamId = cameraId;
+    syncPoseInputs(cam.world_pose);
+  }
+
+  function getEffectiveWorldMap() {
+    if (!cachedWorldMap) return null;
+    if (!dragPreview) return cachedWorldMap;
+    return {
+      ...cachedWorldMap,
+      cameras: (cachedWorldMap.cameras || []).map((c) => (
+        c.camera_id === dragPreview.cameraId
+          ? { ...c, world_pose: { ...(c.world_pose || {}), ...dragPreview.pose } }
+          : c
+      )),
+    };
+  }
+
+  function setDragPreview(cameraId, pose) {
+    dragPreview = cameraId && pose ? { cameraId, pose: { ...pose } } : null;
   }
 
   function hasWorldContent(data) {
@@ -203,6 +226,10 @@
 
   async function fetchAndRender(canvas, activeCameraId, homography, zones) {
     if (!canvas) return;
+    if (dragPreview) {
+      renderWorldMap(canvas, getEffectiveWorldMap(), activeCameraId);
+      return;
+    }
     const now = Date.now();
     if (!fetchInFlight && (now - lastFetchMs > 750 || !cachedWorldMap)) {
       fetchInFlight = true;
@@ -247,22 +274,14 @@
     btn.addEventListener('click', async () => {
       const cameraId = typeof getCameraId === 'function' ? getCameraId() : '';
       if (!cameraId) return;
-      const num = (id, def) => {
-        const v = Number(document.getElementById(id)?.value);
-        return Number.isFinite(v) ? v : def;
-      };
+      const num = (id, def) => { const v = Number(document.getElementById(id)?.value); return Number.isFinite(v) ? v : def; };
       btn.disabled = true;
       try {
         await savePose(cameraId, {
-          origin_x: num('world-pose-x', 0),
-          origin_y: num('world-pose-y', 0),
-          yaw_deg: num('world-pose-yaw', 0),
-          fov_deg: Math.max(10, Math.min(180, num('world-pose-fov', 75))),
-          range_m: Math.max(1, num('world-pose-range', 12)),
-          scale: 1.0,
+          origin_x: num('world-pose-x', 0), origin_y: num('world-pose-y', 0), yaw_deg: num('world-pose-yaw', 0),
+          fov_deg: Math.max(10, Math.min(180, num('world-pose-fov', 75))), range_m: Math.max(1, num('world-pose-range', 12)), scale: 1.0,
         });
-        const canvas = document.getElementById('bev-minimap-canvas');
-        await fetchAndRender(canvas, cameraId, null, []);
+        await fetchAndRender(document.getElementById('bev-minimap-canvas'), cameraId, null, []);
         window.showToast?.('World Pose Saved', `Updated ${cameraId} pose`, 'success');
       } catch (err) {
         window.showToast?.('Pose Save Failed', err.message || 'Error', 'error');
@@ -274,9 +293,15 @@
 
   window.WorldTacticalMinimapView = {
     render: renderWorldMap,
+    renderPreview: (canvas, camId) => renderWorldMap(canvas, getEffectiveWorldMap(), camId),
     fetchAndRender,
     savePose,
     bindPoseEditor,
     toCanvasXY,
+    toWorldXY,
+    normalizeBounds,
+    getCachedWorldMap: getEffectiveWorldMap,
+    setDragPreview,
+    syncPoseInputs,
   };
 })();

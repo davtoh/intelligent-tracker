@@ -255,7 +255,7 @@
   }
 
   function renderArmButton(c) {
-    return `<button class="btn btn-xs ${c.armed ? 'btn-primary' : 'btn-outline'} btn-arm-cam" data-id="${c.id}" data-armed="${c.armed ? '1' : '0'}" title="Toggle AI Armed Mode">${c.armed ? '🛡️ Armed' : '🔓 Arm'}</button>`;
+    return `<button class="btn btn-xs btn-${c.armed ? 'primary' : 'outline'} btn-arm-cam" data-id="${c.id}" data-armed="${c.armed ? '1' : '0'}" title="Toggle AI Armed Mode">${c.armed ? '🛡️ Armed' : '🔓 Arm'}</button>`;
   }
 
   function bindArmButtons(root, onUpdated) {

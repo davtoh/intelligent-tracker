@@ -193,6 +193,47 @@ def _check_two_step_roi_commit(tmp: Path, vid: Path, failures: list[str], checks
         db.close()
 
 
+def _check_enroll_indexer_relabel_and_detections(tmp: Path, vid: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Verify /api/enroll -> create_video_indexer() -> relabel -> /detections parity."""
+    import base64
+    from unittest.mock import patch
+    from fastapi.testclient import TestClient
+    import dashboard.app as app_module
+    from dashboard.dependencies import get_camera_pool, get_db, get_enrollment_mgr
+    from dashboard.services.video_analytics_service import _teardown_indexer_bus, create_video_indexer
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+    from intelligent_tracker.database import TrackerDB
+    from intelligent_tracker.enrollment import UniversalEnrollmentManager
+
+    db = TrackerDB(str(tmp / "enroll_idx.db"))
+    orig_ov = dict(app_module.app.dependency_overrides)
+    try:
+        enr = UniversalEnrollmentManager(db=db, crops_dir=str(tmp / "enroll_crops"))
+        app_module.app.dependency_overrides.update({get_db: lambda: db, get_camera_pool: lambda: None, get_enrollment_mgr: lambda: enr})
+        client = TestClient(app_module.app)
+        _, buf = cv2.imencode(".jpg", np.full((64, 48, 3), 150, dtype=np.uint8))
+        er = client.post("/api/enroll", json={"name": "ProbeEnroll", "category": "person", "crop_base64": base64.b64encode(buf.tobytes()).decode("ascii")})
+        eid = int((er.json().get("data") or er.json()).get("entity_id", 0)) if er.status_code == 200 else 0
+        idx = create_video_indexer(db, {"detector": "mock", "sample_rate": 1, "confidence": 0.1, "classes": None}, safe_name=vid.name)
+        try:
+            summary = idx.process_video(str(vid), verbose=False)
+            run = db.save_video_run(vid.name, {"summary": "ok"}, {}, frame_detections=summary.get("frame_detections") or [{"frame": 0, "tracks": [{"track_id": 1, "bbox": [10, 10, 50, 90]}]}])
+            relabel_video_runs_on_entity_mutation(db, pool=None, updated_entity_id=eid, video_filename=vid.name, track_id=1)
+            with patch("dashboard.services.video_report_store._resolve_db", return_value=(db, False)):
+                dr = client.get(f"/api/videos/{vid.name}/detections", params={"run_id": run["run_id"]})
+            dets = dr.json().get("frame_detections", []) if dr.status_code == 200 else []
+            ok = er.status_code == 200 and eid > 0 and dr.status_code == 200 and bool(dets) and dets[0]["tracks"][0].get("entity_id") == eid
+            checks["enroll_indexer_relabel_detections"] = ok
+            if not ok:
+                failures.append(f"/api/enroll -> create_video_indexer -> relabel -> /detections failed (er={er.status_code}, dr={dr.status_code}, eid={eid})")
+        finally:
+            _teardown_indexer_bus(idx)
+            idx.close()
+    finally:
+        app_module.app.dependency_overrides = orig_ov
+        db.close()
+
+
 def _check_js_payload_parity(failures: list[str], checks: dict[str, Any]) -> None:
     """Verify frontend JS payload keys match backend contracts (review_queue, events, detections)."""
     bridge_js = (REPO_ROOT / "dashboard/static/js/scrubber_library_bridge.js").read_text(encoding="utf-8")
@@ -236,6 +277,7 @@ def run_probe() -> dict[str, Any]:
         _check_report_isolation(tmp, failures, checks)
         _check_roi_and_confidence(tmp, vid, failures, checks)
         _check_two_step_roi_commit(tmp, vid, failures, checks)
+        _check_enroll_indexer_relabel_and_detections(tmp, vid, failures, checks)
         _check_entity_tagger_sync(tmp, failures, checks)
         _check_js_payload_parity(failures, checks)
 

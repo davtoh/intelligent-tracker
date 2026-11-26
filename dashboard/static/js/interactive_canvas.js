@@ -84,7 +84,7 @@
     if (['car', 'truck', 'bus', 'motorcycle', 'vehicle'].includes(norm)) return 'vehicle';
     const opts = Array.from(el('tag-category-select')?.options || []).map((o) => o.value);
     if (opts.includes(norm)) return norm;
-    return opts.find((v) => ['object', 'other', 'custom'].includes(v)) || opts[0] || 'object';
+    return opts.find((v) => ['asset', 'bag_parcel', 'object', 'other', 'custom'].includes(v)) || opts[0] || 'asset';
   }
   function renderCandidateChips(candidates) {
     const box = el('tag-identity-candidates');
@@ -108,6 +108,7 @@
         if (el('tag-category-select') && btn.dataset.category) el('tag-category-select').value = btn.dataset.category;
         box.querySelectorAll('.candidate-chip').forEach((c) => c.classList.remove('active'));
         btn.classList.add('active');
+        window.TagModalState?.syncFromDom?.();
       });
       window.TagFeedbackActions?.attachCandidateDiscourage?.(btn, cand, box, activeCameraGetter);
       box.appendChild(btn);
@@ -118,7 +119,7 @@
     const panel = el('tag-roi-preview-panel'), badge = el('tag-ai-class-badge'), cropImg = el('tag-roi-crop-img');
     if (panel) panel.style.display = 'flex';
     if (badge) badge.textContent = 'AI: Analyzing...';
-    if (cropImg) cropImg.src = payload?.cropBase64 || '';
+    if (cropImg) { if (window.MediaEmptyState) window.MediaEmptyState.setSource(cropImg, payload?.cropBase64, { compact: true }); else if (payload?.cropBase64) cropImg.src = payload.cropBase64; else cropImg.removeAttribute?.('src'); }
     if (el('tag-identity-candidates')) el('tag-identity-candidates').innerHTML = '';
     const seq = ++recognitionSeq;
     try {
@@ -154,15 +155,11 @@
     modalTag.style.display = 'flex';
     const bbox = options.bbox || track?.bbox || null;
     const trackId = track?.id ?? track?.track_id ?? '';
-    const fields = {
-      'tag-entity-id': '', 'tag-source-type': options.sourceType || 'live', 'tag-video-filename': options.videoFilename || '',
-      'tag-timestamp-sec': options.timestampSec != null ? String(options.timestampSec) : '', 'tag-crop-base64': options.cropBase64 || '',
-      'tag-track-id': trackId, 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '',
-      'tag-name-input': track?.entity_name || '', 'tag-category-select': track?.category || 'person',
-    };
+    const fields = { 'tag-entity-id': track?.entity_id != null ? String(track.entity_id) : '', 'tag-source-type': options.sourceType || 'live', 'tag-video-filename': options.videoFilename || '', 'tag-timestamp-sec': options.timestampSec != null ? String(options.timestampSec) : '', 'tag-crop-base64': options.cropBase64 || '', 'tag-track-id': trackId, 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '', 'tag-name-input': track?.entity_name || '', 'tag-category-select': track?.category || 'person' };
     Object.entries(fields).forEach(([id, val]) => { if (el(id)) el(id).value = val; });
     if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${trackId}` : '🏷️ Enroll New Identity');
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
+    window.TagModalState?.syncFromDom?.();
     if (!options.skipRecognition && bbox) runRoiRecognition({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, track, bbox });
     el('tag-name-input')?.focus();
   }
@@ -226,7 +223,7 @@
     el('modal-tag-close')?.addEventListener('click', closeTagModal);
     el('modal-tag-cancel')?.addEventListener('click', closeTagModal);
     el('btn-tag-discourage')?.addEventListener('click', () => window.TagFeedbackActions?.discourageFromModal?.(activeCameraGetter));
-    el('tag-name-input')?.addEventListener('input', () => { if (el('tag-entity-id')) el('tag-entity-id').value = ''; });
+    el('tag-name-input')?.addEventListener('input', () => { if (el('tag-entity-id')) el('tag-entity-id').value = ''; window.TagModalState?.syncFromDom?.(); });
     el('tag-category-select')?.addEventListener('change', () => { categoryTouched = true; });
     el('tag-entity-form')?.addEventListener('submit', submitTagForm);
   }

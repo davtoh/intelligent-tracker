@@ -13,14 +13,8 @@
     tripwires: [],
     homography: null,
     topologyLinks: [],
-    overlays: {
-      bboxes: true, track_ids: true, dwell_timers: true, velocity: false,
-      zones: true, tripwires: true, heatmap: false, bev_minimap: false,
-      hud_bar: true, clutter: false,
-    },
-    canvas: null,
-    ctx: null,
-    bevCanvas: null,
+    overlays: { bboxes: true, track_ids: true, dwell_timers: true, velocity: false, zones: true, tripwires: true, heatmap: false, bev_minimap: false, hud_bar: true, clutter: false },
+    canvas: null, ctx: null, bevCanvas: null,
   };
 
   function showToast(title, body, type = 'info') {
@@ -59,7 +53,7 @@
 
   function clearStudioLiveImage() {
     const img = document.getElementById('studio-live-img');
-    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; img.removeAttribute?.('src'); img.src = ''; }
+    if (img) { if (img.dataset) delete img.dataset.activeStreamSrc; if (window.MediaEmptyState) window.MediaEmptyState.showEmpty(img, 'No Active Camera Feed', 'Select a camera or recorded video.'); else { img.removeAttribute?.('src'); if (img.style) img.style.display = 'none'; } }
   }
   function drawOverlay(cursorPt) {
     window.StudioCanvas?.drawOverlay(
@@ -84,8 +78,10 @@
     studioState.bevCanvas = document.getElementById('bev-minimap-canvas');
 
     window.StudioOverlays?.init(() => studioState);
+    window.StudioShapeEditor?.init(() => studioState, { drawOverlay, updateStatus: updateStudioStatus, showToast });
     bindStudioUI();
     window.WorldTacticalMinimapView?.bindPoseEditor?.(() => studioState.activeCamera);
+    window.WorldMinimapInteractions?.bind?.(() => studioState.activeCamera);
     window.StudioOverlays?.bindOverlayToolbar();
     window.JourneySearch?.bind();
 
@@ -94,7 +90,7 @@
         const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
         loadCameraScenario(studioState.activeCamera);
         applyStudioChannel(studioState.activeCamera, isVideo);
-      }
+      } else { clearStudioLiveImage(); }
     });
     loadTopologyLinks();
     syncStudioTabState(isStudioTabActive());
@@ -124,7 +120,9 @@
   function setupCanvasListeners() {
     window.StudioCanvas?.setupListeners(studioState.canvas, {
       onClick: (pt) => handleCanvasClick(pt),
-      onMouseMove: (pt) => drawOverlay(pt),
+      onMouseDown: (pt) => studioState.mode === 'idle' && window.StudioShapeEditor?.onMouseDown?.(pt),
+      onMouseMove: (pt) => (studioState.mode === 'idle' && window.StudioShapeEditor?.onMouseMove?.(pt)) || drawOverlay(pt),
+      onMouseUp: (pt) => studioState.mode === 'idle' && window.StudioShapeEditor?.onMouseUp?.(pt),
       onDblClick: () => handleCanvasDblClick(),
     });
   }

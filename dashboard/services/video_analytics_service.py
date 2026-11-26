@@ -147,19 +147,50 @@ def _teardown_indexer_bus(indexer: VideoIndexer | None) -> None:
         bus.stop(timeout=2.0)
 
 
-def create_video_indexer(db: TrackerDB, opts: dict[str, Any], safe_name: str = "") -> VideoIndexer:
+def _resolve_shared_singletons(
+    opts: dict[str, Any], confidence_engine: Any, world_graph: Any
+) -> tuple[Any, Any]:
+    """Resolve pool/app-shared ConfidenceEngine and WorldGraph for offline VideoIndexer."""
+    ce = confidence_engine or opts.get("confidence_engine")
+    wg = world_graph or opts.get("world_graph")
+    if ce is None or wg is None:
+        try:
+            import dashboard.dependencies as deps
+
+            pool = deps.get_camera_pool()
+            if ce is None:
+                ce = getattr(pool, "confidence_engine", None) if pool else None
+                ce = ce or getattr(deps, "_confidence_engine", None)
+            if wg is None:
+                wg = getattr(pool, "world_graph", None) if pool else None
+                wg = wg or getattr(deps, "_world_graph", None)
+        except Exception:
+            pass
+    return ce, wg
+
+
+def create_video_indexer(
+    db: TrackerDB,
+    opts: dict[str, Any],
+    safe_name: str = "",
+    *,
+    confidence_engine: Any = None,
+    world_graph: Any = None,
+) -> VideoIndexer:
     """Instantiate VideoIndexer with spatial scenario, RSAC, ActiveLearning, and EventBus wiring."""
     analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state = _build_offline_analytics_and_bus(
         db, opts.get("scenario_camera_id"), safe_name
     )
+    resolved_ce, resolved_wg = _resolve_shared_singletons(opts, confidence_engine, world_graph)
     al_mgr = ActiveLearningManager(db=db, event_bus=event_bus)
     det = opts["detector"]
     kwargs: dict[str, Any] = {
-        "db": db, "sample_rate": opts["sample_rate"], "conf_threshold": opts["confidence"],
+        "db": db, "reid_name": opts.get("reid_model") or "dual",
+        "sample_rate": opts["sample_rate"], "conf_threshold": opts["confidence"],
         "classes": opts["classes"], "tracked_categories": opts.get("tracked_categories"),
         "analytics": analytics, "rsac_manager": rsac_mgr,
         "active_learning": al_mgr, "event_bus": event_bus, "video_filename": safe_name,
-        "fts_index": fts_index,
+        "fts_index": fts_index, "confidence_engine": resolved_ce, "world_graph": resolved_wg,
     }
     try:
         indexer = VideoIndexer(detector_name=det, **kwargs)

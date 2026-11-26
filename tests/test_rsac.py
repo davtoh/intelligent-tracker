@@ -39,8 +39,8 @@ class TestRSAC(unittest.TestCase):
         """Verify seeded custom categories and colors."""
         cats = self.rsac.list_categories()
         cat_ids = {c["id"] for c in cats}
-        expected = {"person", "family_car", "delivery_truck", "cleaning_crew", "guard_dog", "pet", "vip", "restricted"}
-        self.assertTrue(expected.issubset(cat_ids))
+        expected = {"person", "staff", "visitor", "vip", "restricted", "vehicle", "pet", "bag_parcel", "asset"}
+        self.assertEqual(cat_ids, expected)
 
         # Check color formatting
         person_cat = self.rsac.get_category("person")

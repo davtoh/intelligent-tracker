@@ -1,7 +1,42 @@
 """Stream telemetry serialization helpers for StreamWorker and StreamManager."""
 
 from dataclasses import asdict
+import threading
+import time
 from typing import Any
+
+_UNREAD_COUNT_TTL_SEC = 1.0
+_UNREAD_CACHE: dict[tuple[int, str], tuple[float, int]] = {}
+_UNREAD_CACHE_LOCK = threading.Lock()
+
+
+def invalidate_unread_alert_cache() -> None:
+    """Clear the short-lived monotonic unread alert count cache."""
+    with _UNREAD_CACHE_LOCK:
+        _UNREAD_CACHE.clear()
+
+
+def _resolve_unread_alert_count(manager: Any) -> int:
+    """Return cached SQLite unread alert count using monotonic TTL, or 0 on fallback."""
+    db = getattr(manager, "db", None)
+    if db is None:
+        bundle = getattr(manager, "_pipeline_bundle", None)
+        db = getattr(bundle, "db", None) if bundle is not None else None
+    if db is None or getattr(db, "_closed", False) or not hasattr(db, "count_unread_timeline_events"):
+        return 0
+    cache_key = (id(db), str(getattr(db, "db_path", "")))
+    now_m = time.monotonic()
+    with _UNREAD_CACHE_LOCK:
+        cached = _UNREAD_CACHE.get(cache_key)
+        if cached is not None and (now_m - cached[0]) < _UNREAD_COUNT_TTL_SEC:
+            return cached[1]
+    try:
+        count = int(db.count_unread_timeline_events())
+    except Exception:
+        return 0
+    with _UNREAD_CACHE_LOCK:
+        _UNREAD_CACHE[cache_key] = (now_m, count)
+    return count
 
 
 def _extract_recent_alerts(event_bus: Any) -> list[dict[str, Any]]:
@@ -127,7 +162,7 @@ def build_stream_telemetry(
         "zones": _build_zones_data(manager.analytics),
         "tripwires": _build_tripwires_data(manager.analytics),
         "recent_alerts": _extract_recent_alerts(manager.event_bus),
-        "recording": rec_status,
+        "unread_alert_count": _resolve_unread_alert_count(manager), "recording": rec_status,
         "priority_tier": getattr(step_res, "priority_tier", cam_sched.get("priority_tier", "P2")),
         "target_fps": getattr(step_res, "target_fps", cam_sched.get("target_fps", 0.0)),
         "motion_active": bool(getattr(step_res, "motion_active", cam_sched.get("motion_active", False))),

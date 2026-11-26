@@ -114,10 +114,12 @@ def _probe_db_reid_model(db_path: str | None) -> str | None:
         sigs = db.get_signatures()
         if sigs and hasattr(sigs[0].get("embedding"), "shape"):
             dim = int(sigs[0]["embedding"].shape[0])
-            if dim == 2560:
+            if dim in (608, 1024, 2560):
                 return "dual"
             if dim == 512:
                 return "onnx"
+            if dim == 96:
+                return "color"
     except Exception:
         return None
     finally:
@@ -137,7 +139,8 @@ def _normalize_reid_name(raw_name: Any) -> str | None:
 
 
 def _resolve_reid_and_db(
-    reid_cfg: dict[str, Any], db_path: str | None, db_cfg: dict[str, Any], probe_db_reid: bool,
+    reid_cfg: dict[str, Any], db_path: str | None, db_cfg: dict[str, Any],
+    probe_db_reid: bool, default_reid_model: str = "color",
 ) -> tuple[str | None, str | None]:
     """Resolve normalized Re-ID model and database path from config blocks."""
     resolved_db = db_path if db_path is not None else db_cfg.get("path")
@@ -145,7 +148,7 @@ def _resolve_reid_and_db(
     if reid_raw is None and probe_db_reid:
         reid_raw = _probe_db_reid_model(resolved_db or "data/tracker.db")
     if reid_raw is None and (resolved_db is not None or "model" not in reid_cfg):
-        reid_raw = "color"
+        reid_raw = default_reid_model
     reid_model = _normalize_reid_name(reid_raw)
     if resolved_db is None and reid_model is not None:
         resolved_db = "data/tracker.db"
@@ -257,6 +260,7 @@ class PipelineConfig:
         enable_governance: bool = True, enable_event_bus_fallback: bool = True,
         enable_memory_indexing: bool = True, default_source: str = "synthetic",
         default_detector: str = "mock", probe_db_reid: bool = False,
+        default_reid_model: str = "color",
         config_path: str | None = None, resolve_source: bool = True,
     ) -> "PipelineConfig":
         """Build a normalized PipelineConfig from a nested config dictionary."""
@@ -264,7 +268,9 @@ class PipelineConfig:
         raw_source = source_override if source_override is not None else data.get("video", {}).get("source", default_source)
         runtime_kwargs = _extract_runtime_kwargs(data, raw_source, default_detector, enable_memory_indexing, resolve_source)
         reid_cfg = data.get("reid", {})
-        reid_model, resolved_db = _resolve_reid_and_db(reid_cfg, db_path, data.get("database", {}), probe_db_reid)
+        reid_model, resolved_db = _resolve_reid_and_db(
+            reid_cfg, db_path, data.get("database", {}), probe_db_reid, default_reid_model=default_reid_model
+        )
         raw_tracked_cats = reid_cfg.get("tracked_categories") if reid_cfg.get("tracked_categories") is not None else data.get("tracked_categories")
         return cls(
             camera_id=camera_id,

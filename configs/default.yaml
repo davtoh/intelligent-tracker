@@ -1,0 +1,39 @@
+# Intelligent Tracker - Default Clean Base Configuration
+# Clean non-demo runtime defaults without pre-seeded demo zones, tripwires, or alerting rules.
+
+video:
+  source: synthetic
+  resolution: [640, 480]
+  framerate: 30
+  buffer_size: 1
+  auto_reconnect: true
+
+detector:
+  model: mock
+  confidence: 0.25
+  classes: ["person"]
+
+tracker:
+  type: centroid
+  max_disappeared: 30
+  min_hits: 2
+  iou_threshold: 0.2
+  max_distance: 120.0
+
+database:
+  path: "data/tracker.db"
+
+reid:
+  model: "color"
+  threshold: 0.65
+
+analytics:
+  heatmap:
+    enabled: true
+    decay: 0.998
+
+visualization:
+  draw_zones: true
+  draw_tripwires: true
+  draw_tracks: true
+  draw_hud: true

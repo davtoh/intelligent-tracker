@@ -103,7 +103,7 @@ class TestStep3TagModalIntegration(unittest.TestCase):
             'id="tag-roi-preview-panel"', 'id="tag-roi-crop-img"', 'id="tag-ai-class-badge"',
             'id="tag-identity-candidates"', 'id="tag-entity-id"', 'id="tag-source-type"',
             'id="tag-video-filename"', 'id="tag-timestamp-sec"', 'id="tag-crop-base64"',
-            'value="vehicle"',
+            'data-category-select', 'value="person"',
         ):
             self.assertIn(marker, html)
 

@@ -40,7 +40,15 @@
 }
 
 .modal-card.modal-lg {
-  max-width: 960px;
+  width: min(94dvw, 1240px);
+  max-width: 1280px;
+  min-width: min(94dvw, 640px);
+  min-height: 420px;
+  resize: both;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  container-type: inline-size;
+  container-name: modal-lg;
 }
 
 .modal-header {
@@ -158,6 +166,13 @@
   }
 }
 
+@container (inline-size < 900px) {
+  .modal-body-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
 .section-subhead {
   display: flex;
   justify-content: space-between;
@@ -264,4 +279,3 @@
   margin-bottom: 16px;
   flex: 1;
 }
-

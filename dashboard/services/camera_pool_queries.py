@@ -172,10 +172,11 @@ class CameraPoolQueryMixin:
     def list_cameras(self) -> list[dict[str, Any]]:
         """Return real-time status and telemetry for all configured cameras."""
         with self._lock:
-            return [
-                build_camera_status_row(cam_id, cfg, self.streams.get(cam_id))
+            snapshot = [
+                (cam_id, dict(cfg), self.streams.get(cam_id))
                 for cam_id, cfg in self.camera_configs.items()
             ]
+        return [build_camera_status_row(cam_id, cfg, mgr) for cam_id, cfg, mgr in snapshot]
 
     def get_active_usb_indices(self) -> set[int]:
         """Return hardware USB indices currently owned by running streams."""

@@ -97,8 +97,8 @@
     const testImg = document.getElementById('test-preview-img');
     const testMeta = document.getElementById('test-preview-meta');
     if (testImg) {
-      testImg.src = '';
-      testImg.style.display = 'none';
+      if (window.MediaEmptyState) window.MediaEmptyState.showEmpty(testImg, 'No Test Snapshot', 'Click Test Connection to preview.', true);
+      else { testImg.removeAttribute?.('src'); testImg.style.display = 'none'; }
     }
     if (testMeta) testMeta.textContent = 'Click "Test Connection" to verify source.';
   }

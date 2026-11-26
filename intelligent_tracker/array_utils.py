@@ -131,7 +131,7 @@ def draw_contour_groups(contour_groups, shape=None, binary=False):
         if binary:
             vis += over
         else:
-            vis = overlay(vis, over, 0.3)
+            vis = cv2.addWeighted(vis, 0.7, over, 0.3, 0.0)
         #vis = cv2.addWeighted(vis, 0.5, over, 0.5, 0.0)
     return vis
 

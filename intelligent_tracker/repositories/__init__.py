@@ -16,11 +16,13 @@ from intelligent_tracker.repositories.signature_repo import SignatureMixin
 from intelligent_tracker.repositories.descriptor_repo import DescriptorMixin
 from intelligent_tracker.repositories.analytics_repo import AnalyticsMixin
 from intelligent_tracker.repositories.spatial_repo import SpatialMixin
+from intelligent_tracker.repositories.category_repo import CategoryRepoMixin
 from intelligent_tracker.repositories.learning_repo import LearningMixin
 from intelligent_tracker.repositories.rsac_repo import RsacMixin
 from intelligent_tracker.repositories.whitelist_repo import WhitelistMixin
 from intelligent_tracker.repositories.telemetry_repo import TelemetryMixin
 from intelligent_tracker.repositories.memory_repo import MemoryMixin
+from intelligent_tracker.repositories.events_admin_repo import EventsAdminMixin
 from intelligent_tracker.repositories.video_run_repo import VideoRunRepositoryMixin
 from intelligent_tracker.repositories.negative_exemplar_repo import NegativeExemplarMixin
 from intelligent_tracker.repositories.world_pose_repo import WorldPoseMixin
@@ -34,11 +36,13 @@ __all__ = [
     "DescriptorMixin",
     "AnalyticsMixin",
     "SpatialMixin",
+    "CategoryRepoMixin",
     "LearningMixin",
     "RsacMixin",
     "WhitelistMixin",
     "TelemetryMixin",
     "MemoryMixin",
+    "EventsAdminMixin",
     "VideoRunRepositoryMixin",
     "NegativeExemplarMixin",
     "WorldPoseMixin",

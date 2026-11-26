@@ -118,4 +118,17 @@ def query_merged_events(
     if not paginated and safe_offset == 0:
         return page_items
     total = max(len(merged), db_total + len(bus_keys))
-    return {"items": page_items, "total": total, "offset": safe_offset, "limit": safe_limit, "has_more": (safe_offset + len(page_items)) < total}
+    unread_count = 0
+    if db is not None and not getattr(db, "_closed", False) and hasattr(db, "count_unread_timeline_events"):
+        try:
+            unread_count = int(db.count_unread_timeline_events())
+        except Exception:
+            unread_count = 0
+    return {
+        "items": page_items,
+        "total": total,
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "has_more": (safe_offset + len(page_items)) < total,
+        "unread_alert_count": unread_count,
+    }

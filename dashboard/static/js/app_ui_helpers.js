@@ -51,10 +51,13 @@
   }
 
   function syncAlertBadges(count) {
-    const text = String(count ?? 0);
+    const n = Math.max(0, Number(count ?? 0) || 0);
+    const text = String(n);
     ['header-alert-badge', 'drawer-alert-badge', 'drawer-alert-count'].forEach((id) => {
       const el = document.getElementById(id);
-      if (el) el.textContent = text;
+      if (!el) return;
+      el.textContent = text;
+      el.classList?.toggle?.('has-unread', n > 0);
     });
   }
 
@@ -64,8 +67,16 @@
       const modal = document.getElementById(modalId);
       if (modal) modal.style.display = 'flex';
     };
-    document.getElementById('drawer-btn-enroll')?.addEventListener('click', () => openModal('modal-universal-enrollment'));
-    document.getElementById('drawer-btn-cameras')?.addEventListener('click', () => openModal('modal-camera-manager'));
+    document.getElementById('drawer-btn-enroll')?.addEventListener('click', () => {
+      closeDrawer();
+      if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal();
+      else openModal('modal-universal-enrollment');
+    });
+    document.getElementById('drawer-btn-cameras')?.addEventListener('click', () => {
+      closeDrawer();
+      if (window.CameraManager?.openModal) window.CameraManager.openModal();
+      else openModal('modal-camera-manager');
+    });
     document.getElementById('drawer-btn-backup')?.addEventListener('click', () => openModal('modal-backup-manager'));
   }
 

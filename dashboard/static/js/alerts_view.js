@@ -48,6 +48,8 @@
     if (filters.severity) params.set('severity', filters.severity);
     if (filters.event_type) params.set('event_type', filters.event_type);
     if (filters.zone_id) params.set('zone_id', filters.zone_id);
+    if (filters.start_time !== undefined && filters.start_time !== '') params.set('start_time', String(filters.start_time));
+    if (filters.end_time !== undefined && filters.end_time !== '') params.set('end_time', String(filters.end_time));
     return `/events?${params.toString()}`;
   }
 
@@ -80,13 +82,17 @@
     const vFile = ev.video_filename || ev.metadata?.video_filename || '';
     const vOffset = ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0;
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(vFile, vOffset) || '';
+    const rowClass = ev.is_read ? 'alert-row-read' : 'alert-row-unread';
+    const sourceCell = window.AlertsAdmin?.buildSourceLinkHtml?.(ev) || escapeHtml(ev.zone_id || ev.camera_id || 'System');
+    const actionCell = window.AlertsAdmin?.buildActionButtonsHtml?.(ev) || '<span class="text-subtle">--</span>';
     return `
-      <tr>
+      <tr class="${rowClass}" data-event-id="${escapeHtml(ev.id ?? '')}" data-is-read="${ev.is_read ? '1' : '0'}">
         <td>${escapeHtml(timeStr)}</td><td><strong>${escapeHtml(type)}</strong></td>
         <td><span class="${severityClass}">${escapeHtml(severityText)}</span></td>
-        <td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td>
+        <td>${sourceCell}</td>
         <td>${escapeHtml(entityLabel)}</td><td>${escapeHtml(detailText)}</td>
         <td>${snapshotBtn}${seekBtn}</td>
+        <td>${actionCell}</td>
       </tr>`;
   }
 
@@ -143,6 +149,7 @@
     const src = resolveSnapshotSrc(ev);
     if (!src) return;
     state.activePreviewEvent = ev;
+    window.AlertsAdmin?.syncSnapshotDownloadButton?.(src, ev);
     const modal = document.getElementById('modal-snapshot-view');
     const img = document.getElementById('snapshot-modal-img');
     const metaEl = document.getElementById('snapshot-modal-meta');
@@ -177,24 +184,46 @@
     const tbody = document.getElementById('alerts-table-body');
     if (!tbody) return [];
     try {
+      await window.AlertsAdmin?.loadFacets?.();
       const res = await fetch(buildEventsUrl(opts.filters || readFiltersFromDom()));
       const payload = await res.json();
       const items = Array.isArray(payload) ? payload : (Array.isArray(payload?.items) ? payload.items : []);
       state.eventsByIndex = items;
       state.total = Array.isArray(payload) ? items.length : Number(payload?.total ?? items.length);
       state.hasMore = Array.isArray(payload) ? false : Boolean(payload?.has_more);
+      if (typeof payload?.unread_alert_count === 'number') {
+        window.AppUIHelpers?.syncAlertBadges?.(payload.unread_alert_count);
+      }
       tbody.innerHTML = items.length
         ? items.map(buildAlertRowHtml).join('')
-        : '<tr><td colspan="7" class="text-center">No alerts match the current filters.</td></tr>';
+        : '<tr><td colspan="8" class="text-center">No alerts match the current filters.</td></tr>';
       syncPaginationControls(items.length);
       return items;
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
       return [];
     }
   }
 
+  function applyFilter(filters = {}) {
+    const map = {
+      camera_id: 'alerts-filter-camera',
+      severity: 'alerts-filter-severity',
+      event_type: 'alerts-filter-type',
+      zone_id: 'alerts-filter-zone',
+    };
+    Object.entries(map).forEach(([key, id]) => {
+      if (filters[key] !== undefined) {
+        const el = document.getElementById(id);
+        if (el) el.value = String(filters[key] || '');
+      }
+    });
+    state.offset = typeof filters.offset === 'number' ? Math.max(0, filters.offset) : 0;
+    return loadAlerts({ offset: state.offset, filters: { ...readFiltersFromDom(), ...filters } });
+  }
+
   function bindControls() {
+    window.AlertsAdmin?.bindAdminControls?.(readFiltersFromDom);
     const applyBtn = document.getElementById('alerts-filter-apply');
     const resetBtn = document.getElementById('alerts-filter-reset');
     const prevBtn = document.getElementById('alerts-prev-btn');
@@ -235,6 +264,7 @@
     state,
     buildEventsUrl,
     loadAlerts,
+    applyFilter,
     openAlertSnapshot,
     renderSnapshotOverlay,
     bindControls,

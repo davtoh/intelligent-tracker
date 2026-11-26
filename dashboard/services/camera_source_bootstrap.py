@@ -184,7 +184,7 @@ def retry_camera_connection(pool: Any, camera_id: str) -> dict[str, Any]:
     cfg["enabled"] = True
     with pool._lock:
         pool.camera_configs[camera_id]["enabled"] = True
-        pool.save_cameras()
+    pool.save_cameras()
 
     pool._coordinator.restart_stream(camera_id, cfg)
     mgr = pool.get_stream(camera_id)

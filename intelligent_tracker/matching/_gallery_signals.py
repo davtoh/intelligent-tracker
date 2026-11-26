@@ -153,6 +153,36 @@ def _index_periodic_sighting_fts(
         logger.debug("Periodic sighting FTS indexing skipped: %s", exc)
 
 
+def _save_sighting_crop(
+    matcher: Any, frame: Optional[np.ndarray], bbox: tuple[int, int, int, int],
+    entity_id: int, track_id: int, timestamp: float,
+) -> str:
+    """Save a bounded JPEG sighting crop outside locks; return path or empty string."""
+    if frame is None or getattr(frame, "size", 0) == 0:
+        return ""
+    try:
+        import os
+        import cv2
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = [int(v) for v in bbox]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 <= x1 or y2 <= y1:
+            return ""
+        crop = frame[y1:y2, x1:x2]
+        if crop.size == 0:
+            return ""
+        crops_dir = getattr(matcher, "crops_dir", None) or os.path.join("data", "crops")
+        os.makedirs(crops_dir, exist_ok=True)
+        fname = f"sighting_{entity_id}_{track_id}_{int(timestamp * 1000)}.jpg"
+        out_path = os.path.join(crops_dir, fname)
+        if cv2.imwrite(out_path, crop):
+            return out_path
+    except Exception as exc:
+        logger.debug("Sighting crop save skipped: %s", exc)
+    return ""
+
+
 def emit_periodic_sighting(
     matcher: Any,
     *,
@@ -166,6 +196,7 @@ def emit_periodic_sighting(
     timestamp: float,
     video_filename: str = "",
     media_offset_sec: float | None = None,
+    frame: Optional[np.ndarray] = None,
 ) -> bool:
     """Log debounced sightings to TrackerDB and index them into EventFTSIndex when wired."""
     if matcher.db is None:
@@ -175,9 +206,11 @@ def emit_periodic_sighting(
     if last_log is not None and (timestamp - last_log < matcher.sighting_interval) and (timestamp >= last_log):
         return False
     resolved_video, resolved_offset = _resolve_media_fields(matcher, video_filename, media_offset_sec, timestamp)
+    snapshot_path = _save_sighting_crop(matcher, frame, track.bbox, entity_id, tid, timestamp)
     matcher.db.add_sighting(
         entity_id=entity_id, track_id=tid, source=source,
         timestamp=timestamp, zone_id=zone_id, bbox=track.bbox, confidence=confidence,
+        snapshot_path=snapshot_path,
         video_filename=resolved_video, media_offset_sec=resolved_offset,
     )
     matcher._last_sighting_time[tid] = timestamp
@@ -239,6 +272,8 @@ def process_confirmed_identification(
     source: str,
     now: float,
     zone_id: str,
+    *,
+    frame: Optional[np.ndarray] = None,
 ) -> Optional[EntityIdentifiedEvent]:
     """Update track metadata, debounce sightings in DB, and execute continuous EMA adaptation."""
     tid = track.track_id
@@ -264,5 +299,6 @@ def process_confirmed_identification(
     emit_periodic_sighting(
         matcher, entity_id=entity_id, name=name, category=category,
         track=track, confidence=best_score, source=source, zone_id=zone_id, timestamp=now,
+        frame=frame,
     )
     return event

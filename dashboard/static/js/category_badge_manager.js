@@ -36,6 +36,11 @@
     return `<span class="badge-category ${escapeHtml(meta.id)}"${style}>${icon}${escapeHtml(meta.name || meta.id)}</span>`;
   }
 
+  function dispatchChanged() {
+    if (typeof document.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+    document.dispatchEvent(new CustomEvent('categories:changed', { detail: { categories: cachedCategories.slice() } }));
+  }
+
   async function fetchCategories(forceRefresh = false) {
     if (!forceRefresh && cachedCategories.length > 0) return cachedCategories;
     try {
@@ -91,11 +96,24 @@
   }
 
   function syncAllTargets() {
-    syncSelect(document.getElementById('enroll-category-select'));
-    syncSelect(document.getElementById('tag-category-select'));
-    syncSelect(document.getElementById('quick-enroll-category-select'));
-    syncSelect(document.getElementById('modal-zone-category-select'), { includeAll: true });
+    const seen = new Set();
+    const targets = [
+      ['enroll-category-select', false],
+      ['tag-category-select', false],
+      ['quick-enroll-category-select', false],
+      ['modal-zone-category-select', true],
+    ];
+    targets.forEach(([id, includeAll]) => {
+      const el = document.getElementById(id);
+      if (el) { seen.add(el); syncSelect(el, { includeAll }); }
+    });
+    document.querySelectorAll?.('[data-category-select]')?.forEach((el) => {
+      if (seen.has(el)) return;
+      const includeAll = el.dataset?.includeAll === 'true' || el.id === 'modal-zone-category-select';
+      syncSelect(el, { includeAll });
+    });
     syncGalleryFilterPills(document.getElementById('gallery-category-filters'));
+    window.CategoryChipPicker?.syncAll?.(cachedCategories);
     renderCrudPanel();
   }
 
@@ -110,15 +128,47 @@
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Category save failed');
     await fetchCategories(true);
     syncAllTargets();
+    dispatchChanged();
     showToast('Category Saved', `Badge "${payload.name}" updated.`, 'success');
   }
 
   async function deleteCategory(catId) {
     const res = await fetch(`/api/rsac/categories/${encodeURIComponent(catId)}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Delete category failed');
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Delete category failed');
     await fetchCategories(true);
     syncAllTargets();
+    dispatchChanged();
     showToast('Category Removed', `Badge "${catId}" deleted.`, 'info');
+  }
+
+  async function exportCategories() {
+    const res = await fetch('/api/rsac/categories/export');
+    if (!res.ok) throw new Error('Category export failed');
+    const data = await res.json();
+    if (typeof Blob === 'function' && typeof URL?.createObjectURL === 'function' && typeof document.createElement === 'function') {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'categories_preset.json';
+      a.click?.();
+    }
+    return data;
+  }
+
+  async function importCategories(payload, mode = 'merge') {
+    const categories = Array.isArray(payload) ? payload : (payload?.categories || []);
+    const res = await fetch('/api/rsac/categories/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories, mode: mode || 'merge' }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Category import failed');
+    const summary = await res.json();
+    await fetchCategories(true);
+    syncAllTargets();
+    dispatchChanged();
+    showToast('Categories Imported', `Imported ${summary.imported ?? 0} categories (${mode}).`, 'success');
+    return summary;
   }
 
   function buildCrudRowHtml(c) {
@@ -137,9 +187,15 @@
     const panel = document.getElementById('gallery-category-crud-panel');
     if (!panel) return;
     panel.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap;">
         <strong>Semantic Category Badges</strong>
-        <button type="button" class="btn btn-xs btn-outline" id="btn-close-cat-crud">Close</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button type="button" class="btn btn-xs btn-outline" id="btn-cat-export">⬇ Export Preset</button>
+          <select id="cat-import-mode" class="form-input" style="width:auto;font-size:11px;padding:2px 6px;"><option value="merge">Merge</option><option value="replace">Replace</option></select>
+          <button type="button" class="btn btn-xs btn-outline" id="btn-cat-import">⬆ Import Preset</button>
+          <input type="file" id="cat-import-file" accept=".json,application/json" style="display:none;" />
+          <button type="button" class="btn btn-xs btn-outline" id="btn-close-cat-crud">Close</button>
+        </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
         <input type="text" id="cat-new-id" class="form-input" placeholder="slug (e.g. contractor)" style="width:130px;font-size:12px;" />
@@ -152,6 +208,28 @@
         ${cachedCategories.map(buildCrudRowHtml).join('')}
       </div>`;
     bindCrudPanelEvents(panel);
+    bindPresetEvents(panel);
+  }
+
+  function bindPresetEvents(panel) {
+    panel.querySelector('#btn-cat-export')?.addEventListener('click', async () => {
+      try { await exportCategories(); } catch (e) { showToast('Export Error', e.message, 'error'); }
+    });
+    const fileInput = panel.querySelector('#cat-import-file');
+    panel.querySelector('#btn-cat-import')?.addEventListener('click', () => fileInput?.click?.());
+    fileInput?.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      try {
+        const parsed = JSON.parse(await file.text());
+        const mode = panel.querySelector('#cat-import-mode')?.value || 'merge';
+        await importCategories(parsed, mode);
+      } catch (e) {
+        showToast('Import Error', e.message, 'error');
+      } finally {
+        fileInput.value = '';
+      }
+    });
   }
 
   function bindCrudPanelEvents(panel) {
@@ -205,5 +283,8 @@
     syncAllTargets,
     saveCategory,
     deleteCategory,
+    exportCategories,
+    importCategories,
+    dispatchChanged,
   };
 })();

@@ -17,6 +17,12 @@
               </select>
             </div>
             <div class="filter-item">
+              <label for="timeline-source-select">Source:</label>
+              <select id="timeline-source-select">
+                <option value="">All Sources</option>
+              </select>
+            </div>
+            <div class="filter-item">
               <label for="timeline-limit-select">Limit:</label>
               <select id="timeline-limit-select">
                 <option value="25">25 records</option>
@@ -34,6 +40,11 @@
         <div class="timeline-stream-container">
           <div class="timeline-stream" id="sightings-timeline-list">
             <div class="empty-state">Select filters to search sighting audit trail.</div>
+          </div>
+          <div class="timeline-pagination-bar" id="timeline-pagination-bar" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+            <button type="button" class="btn btn-sm btn-outline" id="timeline-prev-btn" disabled>Previous</button>
+            <span class="text-subtle" id="timeline-page-info">Page 1 of 1</span>
+            <button type="button" class="btn btn-sm btn-outline" id="timeline-next-btn" disabled>Next</button>
           </div>
         </div>
       </div>

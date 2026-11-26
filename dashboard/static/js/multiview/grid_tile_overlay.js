@@ -170,9 +170,12 @@
       const res = await fetch('/events?limit=10');
       if (!res.ok) return;
       const data = await res.json();
-      const alerts = Array.isArray(data) ? data : (data?.events || data?.alerts || []);
+      const alerts = Array.isArray(data) ? data : (data?.items || data?.events || data?.alerts || []);
+      const unreadCount = typeof data?.unread_alert_count === 'number'
+        ? data.unread_alert_count
+        : alerts.filter((a) => !a?.is_read).length;
       window.TelemetryGateway?.renderMiniAlerts?.(alerts);
-      window.AppUIHelpers?.syncAlertBadges?.(alerts.length);
+      window.AppUIHelpers?.syncAlertBadges?.(unreadCount);
     } catch (err) {
       console.debug('[GridTileOverlay] Pool alerts poll skipped:', err);
     } finally {

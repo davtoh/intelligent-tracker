@@ -217,16 +217,22 @@
     const fallbackSrc = studioImg.dataset?.activeStreamSrc || studioImg.dataset?.src || studioImg.getAttribute?.('data-src') || '';
     const baseSrc = cameraId ? `/stream/${encodeURIComponent(cameraId)}` : fallbackSrc;
     const cleanBase = baseSrc.split('?')[0];
-    if (!cleanBase) return;
+    if (!cleanBase) {
+      window.MediaEmptyState?.showEmpty?.(studioImg, 'No Active Camera Feed', 'Select an online camera or recorded video.');
+      return;
+    }
     if (studioImg.dataset) studioImg.dataset.activeStreamSrc = cleanBase;
-    studioImg.src = `${cleanBase}?t=${Date.now()}`;
+    if (window.MediaEmptyState) window.MediaEmptyState.setSource(studioImg, `${cleanBase}?t=${Date.now()}`);
+    else studioImg.src = `${cleanBase}?t=${Date.now()}`;
   }
 
   function attachHeatmapImage(heatmapImg) {
     if (!heatmapImg) return;
     const baseSrc = (heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap').split('?')[0];
     const camId = window.App?.getActiveCameraId?.() || '';
-    heatmapImg.src = camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`;
+    const url = camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`;
+    if (window.MediaEmptyState) window.MediaEmptyState.setSource(heatmapImg, url);
+    else heatmapImg.src = url;
     const badge = document.getElementById('heatmap-camera-badge');
     if (badge) badge.textContent = camId ? `Camera: ${camId}` : 'All Cameras';
   }
@@ -247,6 +253,7 @@
       const camId = window.App?.getActiveCameraId?.() || null;
       attachLiveStream(liveImg, camId, false);
     } else if (targetTabId === 'tab-studio') {
+      if (window.StudioCanvas?.attachStudioMedia) return;
       const sel = document.getElementById('studio-camera-select');
       const isRecordedVideo = sel?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
       if (isRecordedVideo) {
@@ -257,6 +264,7 @@
           || window.App?.getActiveCameraId?.()
           || null;
         if (studioCam) attachStudioStream(studioImg, studioCam);
+        else window.MediaEmptyState?.showEmpty?.(studioImg, 'No Active Camera Feed', 'Select an online camera or recorded video.');
       }
     } else if (targetTabId === 'tab-analytics') {
       attachHeatmapImage(heatmapImg);

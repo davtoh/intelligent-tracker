@@ -146,8 +146,9 @@ Execute the dedicated Milestone 5 test suite (18 unit tests, local HTTP echo ser
 Live Alerting Demonstration
 ---------------------------
 
-Run tracking with full alerting pipeline in headless mode:
+By default, the dashboard boots with the clean ``configs/default.yaml`` configuration (without pre-seeded demo zones, tripwires, or alerting rules). To opt in to the ``restricted_vault`` demo scenarios in ``configs/alert_demo.yaml``, launch the dashboard with ``--demo`` or set ``IT_LOAD_DEMO_SCENARIOS=1``, or run tracking with the full alerting pipeline in headless mode:
 
 .. code-block:: powershell
 
+   .\.venv\Scripts\python.exe -m dashboard.server --demo
    .\.venv\Scripts\python.exe main.py --config configs/alert_demo.yaml --headless --frames 30

@@ -86,28 +86,29 @@ class CameraConfigStore:
         self.camera_configs: dict[str, dict[str, Any]] = {}
 
     def load_cameras(self) -> tuple[dict[str, dict[str, Any]], bool]:
-        """Load camera configs from JSON; returns ``(configs, seeded_default)``."""
+        """Load camera configs from JSON outside lock; returns ``(configs, seeded_default)``."""
+        loaded: dict[str, dict[str, Any]] = {}
+        configs_loaded = False
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    loaded, configs_loaded = _normalize_camera_payload(json.load(f))
+            except Exception as exc:
+                logger.warning("Failed to load %s: %s", self.config_file, exc)
+
+        seeded = False
+        if not configs_loaded:
+            loaded = {"cam_01": _seed_default_camera()}
+            seeded = True
+
+        healed = heal_non_synthetic_mock_cameras(loaded)
         with self._lock:
-            loaded: dict[str, dict[str, Any]] = {}
-            configs_loaded = False
-            if os.path.exists(self.config_file):
-                try:
-                    with open(self.config_file, "r", encoding="utf-8") as f:
-                        loaded, configs_loaded = _normalize_camera_payload(json.load(f))
-                except Exception as exc:
-                    logger.warning("Failed to load %s: %s", self.config_file, exc)
-
-            seeded = False
-            if not configs_loaded:
-                loaded = {"cam_01": _seed_default_camera()}
-                seeded = True
-
-            healed = heal_non_synthetic_mock_cameras(loaded)
             self.camera_configs.clear()
             self.camera_configs.update(loaded)
-            if healed and configs_loaded:
-                self.save_cameras()
-            return self.camera_configs, seeded
+            result = self.camera_configs
+        if healed and configs_loaded:
+            self.save_cameras()
+        return result, seeded
 
     def save_cameras(self) -> None:
         """Persist current camera configurations atomically to JSON."""

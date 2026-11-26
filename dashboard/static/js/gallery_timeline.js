@@ -7,6 +7,10 @@
   'use strict';
 
   let allGalleryEntities = [];
+  let timelineOffset = 0;
+  let timelineTotal = 0;
+  let timelineHasMore = false;
+  let timelineVideoFilename = '';
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -125,21 +129,45 @@
   async function loadTimelineFilters() {
     const timelineSelectEntity = document.getElementById('timeline-entity-select');
     const timelineSelectZone = document.getElementById('timeline-zone-select');
+    const timelineSelectSource = document.getElementById('timeline-source-select');
     if (!timelineSelectEntity || !timelineSelectZone) return;
 
     try {
-      const [entRes, zoneRes] = await Promise.all([fetch('/entities'), fetch('/zones')]);
+      const [entRes, zoneRes, srcRes] = await Promise.all([
+        fetch('/entities'),
+        fetch('/zones'),
+        fetch('/sightings/sources').catch(() => null),
+      ]);
       const entities = await entRes.json();
       const zones = await zoneRes.json();
+      const sources = srcRes && typeof srcRes.json === 'function' ? await srcRes.json().catch(() => []) : [];
 
       timelineSelectEntity.innerHTML = '<option value="">All Entities</option>' +
-        entities.map(e => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.category)})</option>`).join('');
+        (Array.isArray(entities) ? entities : []).map(e => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.category)})</option>`).join('');
 
       timelineSelectZone.innerHTML = '<option value="">All Zones</option>' +
-        zones.map(z => `<option value="${escapeHtml(z.name)}">${escapeHtml(z.name)}</option>`).join('');
+        (Array.isArray(zones) ? zones : []).map(z => `<option value="${escapeHtml(z.name)}">${escapeHtml(z.name)}</option>`).join('');
+
+      if (timelineSelectSource) {
+        const prevSrc = timelineSelectSource.value;
+        timelineSelectSource.innerHTML = '<option value="">All Sources</option>' +
+          (Array.isArray(sources) ? sources : []).map(s => {
+            const srcName = typeof s === 'string' ? s : s.source;
+            const cnt = typeof s === 'object' && s.count != null ? ` (${s.count})` : '';
+            return `<option value="${escapeHtml(srcName)}">${escapeHtml(srcName)}${cnt}</option>`;
+          }).join('');
+        if (prevSrc) timelineSelectSource.value = prevSrc;
+      }
     } catch (err) {
       console.error('Filter load error:', err);
     }
+  }
+
+  function jumpToLiveSource(source) {
+    if (!source) return false;
+    window.switchTab?.('tab-live');
+    window.App?.switchCamera?.(source);
+    return true;
   }
 
   function buildSightingCardHtml(s) {
@@ -148,7 +176,11 @@
     const name = s.entity_name || 'Unidentified Track';
     const cat = s.entity_category || 'person';
     const confPct = s.confidence ? (s.confidence * 100).toFixed(0) : '100';
+    const sourceLabel = s.source || s.video_filename || 'Unknown';
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(s.video_filename, s.media_offset_sec) || '';
+    const liveBtn = (!s.video_filename && s.source)
+      ? `<button type="button" class="btn btn-xs btn-outline btn-jump-live" data-source="${escapeHtml(s.source)}" onclick="window.TimelineView?.jumpToLiveSource?.(this.getAttribute('data-source'))" title="Open ${escapeHtml(s.source)} in Live Monitor">📡 Live Monitor</button>`
+      : '';
     return `
       <div class="timeline-node">
         <div class="timeline-dot"></div>
@@ -158,42 +190,99 @@
             <div class="timeline-title">
               <span>${escapeHtml(name)}</span>
               <span class="badge-category ${cat}">${escapeHtml(cat)}</span>
+              <span class="panel-badge timeline-source-badge">📷 ${escapeHtml(sourceLabel)}</span>
               <span class="panel-badge">Zone: ${escapeHtml(s.zone_id || 'Free space')}</span>
             </div>
             <div class="timeline-meta">
               <span>🕒 ${escapeHtml(timeStr)}</span> &bull;
               <span>Track #${s.track_id}</span> &bull;
               <span>Match Confidence: ${confPct}%</span>
-              ${seekBtn}
+              ${seekBtn}${liveBtn}
             </div>
           </div>
         </div>
       </div>`;
   }
 
-  async function loadSightings() {
+  function updateTimelinePaginationBar(limit) {
+    const prevBtn = document.getElementById('timeline-prev-btn');
+    const nextBtn = document.getElementById('timeline-next-btn');
+    const pageInfo = document.getElementById('timeline-page-info');
+    if (prevBtn) prevBtn.disabled = timelineOffset <= 0;
+    if (nextBtn) nextBtn.disabled = !timelineHasMore;
+    if (pageInfo) {
+      const safeLimit = Math.max(1, Number(limit) || 50);
+      const pageNum = Math.floor(timelineOffset / safeLimit) + 1;
+      const totalPages = Math.max(1, Math.ceil(timelineTotal / safeLimit));
+      pageInfo.textContent = timelineTotal > 0
+        ? `Page ${pageNum} of ${totalPages} (${timelineTotal} total)`
+        : 'Page 1 of 1';
+    }
+  }
+
+  async function loadSightings(options = {}) {
     const timelineList = document.getElementById('sightings-timeline-list');
     if (!timelineList) return;
+    if (options && (options.resetOffset === true || typeof options.preventDefault === 'function')) {
+      timelineOffset = 0;
+    }
     const entId = document.getElementById('timeline-entity-select')?.value;
     const zoneId = document.getElementById('timeline-zone-select')?.value;
-    const limit = document.getElementById('timeline-limit-select')?.value || 50;
-    let url = `/sightings?limit=${limit}`;
+    const sourceVal = document.getElementById('timeline-source-select')?.value;
+    const limit = Number(document.getElementById('timeline-limit-select')?.value || 50);
+    let url = `/sightings?paginated=true&limit=${limit}&offset=${timelineOffset}`;
     if (entId) url += `&entity_id=${entId}`;
     if (zoneId) url += `&zone_id=${encodeURIComponent(zoneId)}`;
+    if (sourceVal) url += `&source=${encodeURIComponent(sourceVal)}`;
+    if (timelineVideoFilename) url += `&video_filename=${encodeURIComponent(timelineVideoFilename)}`;
     timelineList.innerHTML = '<div class="empty-state">Loading sightings...</div>';
     try {
       const res = await fetch(url);
-      const sightings = await res.json();
+      const payload = await res.json();
+      const sightings = Array.isArray(payload) ? payload : (payload.items || []);
+      timelineTotal = Array.isArray(payload) ? sightings.length : Number(payload.total || 0);
+      timelineHasMore = Array.isArray(payload) ? false : Boolean(payload.has_more);
       timelineList.innerHTML = sightings.length
         ? sightings.map(buildSightingCardHtml).join('')
         : '<div class="empty-state">No matching sightings found for selected parameters.</div>';
+      updateTimelinePaginationBar(limit);
     } catch (err) {
       timelineList.innerHTML = `<div class="empty-state">Error querying sightings: ${escapeHtml(err.message)}</div>`;
     }
   }
 
+  async function applyTimelineFilter(opts = {}) {
+    const entSel = document.getElementById('timeline-entity-select');
+    const zoneSel = document.getElementById('timeline-zone-select');
+    const srcSel = document.getElementById('timeline-source-select');
+    const limSel = document.getElementById('timeline-limit-select');
+    if (opts.entityId !== undefined && entSel) entSel.value = opts.entityId || '';
+    if (opts.zoneId !== undefined && zoneSel) zoneSel.value = opts.zoneId || '';
+    if (opts.source !== undefined && srcSel) srcSel.value = opts.source || '';
+    if (opts.limit !== undefined && limSel) limSel.value = String(opts.limit);
+    timelineVideoFilename = opts.videoFilename || '';
+    timelineOffset = Math.max(0, Number(opts.offset || 0));
+    await loadSightings();
+  }
+
   function bindTimelineEvents() {
-    document.getElementById('btn-filter-sightings')?.addEventListener('click', loadSightings);
+    const resetAndLoad = () => loadSightings({ resetOffset: true });
+    document.getElementById('btn-filter-sightings')?.addEventListener('click', resetAndLoad);
+    document.getElementById('timeline-entity-select')?.addEventListener('change', resetAndLoad);
+    document.getElementById('timeline-zone-select')?.addEventListener('change', resetAndLoad);
+    document.getElementById('timeline-source-select')?.addEventListener('change', resetAndLoad);
+    document.getElementById('timeline-limit-select')?.addEventListener('change', resetAndLoad);
+    document.getElementById('timeline-prev-btn')?.addEventListener('click', () => {
+      const limit = Number(document.getElementById('timeline-limit-select')?.value || 50);
+      timelineOffset = Math.max(0, timelineOffset - limit);
+      loadSightings();
+    });
+    document.getElementById('timeline-next-btn')?.addEventListener('click', () => {
+      if (!timelineHasMore) return;
+      const limit = Number(document.getElementById('timeline-limit-select')?.value || 50);
+      timelineOffset += limit;
+      loadSightings();
+    });
   }
 
   function showSnapshotModal(imgUrl, title) {
@@ -242,6 +331,13 @@
     bindTimelineEvents: bindTimelineEvents,
     showSnapshotModal: showSnapshotModal,
     initSnapshotModal: initSnapshotModal,
+  };
+
+  window.TimelineView = {
+    applyFilter: applyTimelineFilter,
+    loadSightings: loadSightings,
+    loadTimelineFilters: loadTimelineFilters,
+    jumpToLiveSource: jumpToLiveSource,
   };
 })();
 

@@ -23,6 +23,7 @@ from dashboard.schemas import (
     ReviewEnrollNewRequest,
     ReviewReassignRequest,
 )
+from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from dashboard.services.review_sync_service import sync_review_resolution_to_video_runs
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
@@ -122,12 +123,15 @@ async def enroll_new_review_item(
     db: TrackerDB = Depends(get_db),
 ) -> dict[str, Any]:
     """Enroll a review item as a new entity and sync matching ``video_runs``."""
+    cat = await asyncio.to_thread(
+        lambda: ensure_known_category(resolve_rsac_for_request(request, db=db), req.category)
+    )
     item = await asyncio.to_thread(db.get_review_item, item_id)
     res = await asyncio.to_thread(
         al_mgr.enroll_as_new,
         item_id=item_id,
         name=req.name,
-        category=req.category or "person",
+        category=cat,
         security_role=req.security_role or "",
         notes=req.notes or "",
     )
@@ -140,7 +144,7 @@ async def enroll_new_review_item(
         action="enroll_new",
         entity_id=res.get("entity_id"),
         entity_name=req.name,
-        category=req.category or "person",
+        category=cat,
     )
     return {**res, "sync": sync_meta}
 

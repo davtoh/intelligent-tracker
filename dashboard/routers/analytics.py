@@ -17,10 +17,16 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from dashboard.dependencies import get_active_stream_manager, get_db
+from dashboard.dependencies import get_active_stream_manager, get_camera_pool, get_db
 from dashboard.schemas import EntityCreateRequest, TagRequest
 from dashboard.services.alerts_query_service import query_merged_events
-from dashboard.services.analytics_query_service import build_heatmap_json, resolve_bucket_sec
+from dashboard.services.analytics_query_service import (
+    build_heatmap_json,
+    enrich_sighting,
+    query_sightings_page,
+    resolve_bucket_sec,
+)
+from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.analytics")
@@ -45,7 +51,12 @@ async def get_traffic_flows(
         return {
             "camera_id": camera_id or None, "start_time": start_time, "end_time": resolved_end,
             "bucket_sec": resolved_bucket, "buckets": [],
-            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0}, "is_live": is_live,
+            "totals": {"inflow": 0, "outflow": 0, "total": 0, "sightings": 0},
+            "axes": {
+                "x": {"label": "Time", "unit": "epoch_s", "bucket_sec": resolved_bucket},
+                "y": {"label": "Crossings / Events", "unit": "count"},
+            },
+            "is_live": is_live,
         }
     res = await asyncio.to_thread(
         db.get_traffic_flows, start_time, resolved_end, resolved_bucket, camera_id
@@ -119,27 +130,30 @@ async def list_entities(
     return await asyncio.to_thread(_fetch_entities_summary, db, category)
 
 
-def _create_entity_sync(db, req: EntityCreateRequest) -> dict:
-    """Create a new entity if not already enrolled."""
+def _create_entity_sync(db, req: EntityCreateRequest, request: Request) -> dict:
+    """Create a new entity after validating its category against custom_categories."""
+    rsac = resolve_rsac_for_request(request, db=db)
+    cat = ensure_known_category(rsac, req.category)
     existing = db.get_entity_by_name(req.name)
     if existing:
         raise HTTPException(
             status_code=409,
             detail=f"Entity with name '{req.name}' already exists (ID #{existing['id']})",
         )
-    entity_id = db.add_entity(name=req.name, category=req.category, notes=req.notes)
-    return {"id": entity_id, "name": req.name, "category": req.category, "status": "active"}
+    entity_id = db.add_entity(name=req.name, category=cat, notes=req.notes)
+    return {"id": entity_id, "name": req.name, "category": cat, "status": "active"}
 
 
 @router.post("/entities")
 async def create_entity(
     req: EntityCreateRequest,
+    request: Request,
     db: TrackerDB = Depends(get_db),
 ):
     """Enroll a new identity into the persistent Re-ID gallery database."""
     if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
-    return await asyncio.to_thread(_create_entity_sync, db, req)
+    return await asyncio.to_thread(_create_entity_sync, db, req, request)
 
 
 def _fetch_entity_details(db, entity_id: int) -> dict:
@@ -164,11 +178,16 @@ async def get_entity_details(
     return await asyncio.to_thread(_fetch_entity_details, db, entity_id)
 
 
-def _delete_entity_sync(db, mgr, entity_id: int) -> dict:
-    """Delete entity from SQLite and refresh in-memory gallery matcher."""
+def _delete_entity_sync(db, mgr, entity_id: int, pool=None) -> dict:
+    """Delete entity from SQLite, scrub video_runs, and reload all pool galleries."""
     if not db.delete_entity(entity_id):
         raise HTTPException(status_code=404, detail="Entity not found")
-    if mgr and mgr.gallery_matcher:
+    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+
+    relabel_video_runs_on_entity_mutation(db, pool=pool, deleted_entity_id=entity_id)
+    if pool is not None:
+        pool.reload_all_galleries()
+    elif mgr and mgr.gallery_matcher:
         mgr.gallery_matcher.refresh_gallery()
     return {"deleted": True, "entity_id": entity_id}
 
@@ -183,75 +202,54 @@ async def delete_entity(
     if db is None:
         raise HTTPException(status_code=503, detail="Database unavailable")
     mgr = get_active_stream_manager(conn=request)
-    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id)
+    pool = get_camera_pool(conn=request)
+    return await asyncio.to_thread(_delete_entity_sync, db, mgr, entity_id, pool)
 
 
-def _enrich_sighting(s: dict, db) -> dict:
-    """Enrich sighting with entity details and thumbnail URL."""
-    s_dict = dict(s)
-    if s_dict.get("entity_id"):
-        ent = db.get_entity(s_dict["entity_id"])
-        s_dict["entity_name"] = ent["name"] if ent else "Unknown"
-        s_dict["entity_category"] = ent["category"] if ent else "unknown"
-    else:
-        s_dict["entity_name"] = f"Track #{s_dict.get('track_id', 0)}"
-        s_dict["entity_category"] = "unidentified"
-
-    if s_dict.get("snapshot_path"):
-        s_dict["snapshot_url"] = (
-            f"/crops/{os.path.basename(s_dict['snapshot_path'])}"
-        )
-    return s_dict
-
-
-def _fetch_sightings_sync(
-    db,
-    entity_id: Optional[int],
-    entity_name: Optional[str],
-    zone_id: Optional[str],
-    start_time: Optional[str],
-    end_time: Optional[str],
-    limit: int,
-) -> list[dict]:
-    """Resolve optional entity name filter and enrich matching sightings."""
-    if entity_name and not entity_id:
-        ent = db.get_entity_by_name(entity_name)
-        if not ent:
-            return []
-        entity_id = ent["id"]
-    sightings = db.query_sightings(
-        entity_id=entity_id,
-        zone_id=zone_id,
-        start_time=start_time,
-        end_time=end_time,
-        limit=limit,
-    )
-    return [_enrich_sighting(s, db) for s in sightings]
+_enrich_sighting = enrich_sighting
 
 
 @router.get("/sightings")
 async def query_sightings(
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
+    source: Optional[str] = None,
     zone_id: Optional[str] = None,
+    video_filename: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    paginated: bool = False,
     db: TrackerDB = Depends(get_db),
 ):
-    """Search historical sighting timeline records with entity, zone, and time filters."""
+    """Search historical sighting timeline records with entity, source, zone, and pagination filters."""
     if db is None:
+        if paginated or offset > 0:
+            return {"items": [], "total": 0, "offset": offset, "limit": limit, "has_more": False}
         return []
     return await asyncio.to_thread(
-        _fetch_sightings_sync,
+        query_sightings_page,
         db,
-        entity_id,
-        entity_name,
-        zone_id,
-        start_time,
-        end_time,
-        limit,
+        entity_id=entity_id,
+        entity_name=entity_name,
+        source=source,
+        zone_id=zone_id,
+        video_filename=video_filename,
+        start_time=start_time,
+        end_time=end_time,
+        limit=limit,
+        offset=offset,
+        paginated=paginated,
     )
+
+
+@router.get("/sightings/sources")
+async def list_sighting_sources(db: TrackerDB = Depends(get_db)):
+    """List distinct sighting sources with counts for timeline filter dropdowns."""
+    if db is None:
+        return []
+    return await asyncio.to_thread(db.list_sighting_sources)
 
 
 @router.get("/events")
@@ -297,11 +295,14 @@ async def tag_bounding_box(req: TagRequest, request: Request):
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
 
+    cat = await asyncio.to_thread(
+        lambda: ensure_known_category(resolve_rsac_for_request(request, camera_id=req.camera_id), req.category)
+    )
     try:
         result = await asyncio.to_thread(
             mgr.tag_entity,
             entity_name=req.entity_name,
-            category=req.category,
+            category=cat,
             track_id=req.track_id,
             bbox=req.bbox,
             notes=req.notes or "",

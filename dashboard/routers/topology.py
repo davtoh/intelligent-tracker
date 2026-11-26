@@ -18,13 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from dashboard.camera_pool import CameraPool
 from dashboard.dependencies import VIDEOS_DIR, get_camera_pool, get_db, get_scenario_mgr
 from dashboard.schemas import JourneyExportRequest, SpatialTransitionRequest, WorldPoseRequest
+from dashboard.services.world_map_service import apply_pose_to_world, build_filtered_world_map
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.journey import JourneyVideoExporter, TrajectoryJourneySearcher
 from intelligent_tracker.scenarios import ScenarioManager
 from intelligent_tracker.topology import SpatialTransitionLink
-from intelligent_tracker.world import WorldGraph, WorldTacticalMinimap
-from intelligent_tracker.world.coordinates import CameraWorldPose
-from intelligent_tracker.world.nodes import CameraNode
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.topology")
 
@@ -115,37 +113,6 @@ async def list_active_priors(
     return out
 
 
-def _apply_pose_to_world(
-    pose: dict,
-    world_graph: WorldGraph,
-    sm: ScenarioManager,
-) -> None:
-    """Hydrate a persisted world pose into WorldGraph and GlobalCoordinateMapper."""
-    cid = str(pose.get("camera_id", ""))
-    if not cid:
-        return
-    ox = float(pose.get("origin_x", 0.0))
-    oy = float(pose.get("origin_y", 0.0))
-    yaw = float(pose.get("yaw_deg", 0.0))
-    scale = float(pose.get("scale", 1.0))
-    extra = {"fov_deg": float(pose.get("fov_deg", 75.0)), "range_m": float(pose.get("range_m", 12.0))}
-    existing = world_graph.snapshot().get("cameras", {}).get(cid) or {}
-    merged_extra = {**(existing.get("extra") or {}), **extra}
-    cam_node = CameraNode(
-        camera_id=cid,
-        name=existing.get("name") or cid,
-        enabled=bool(existing.get("enabled", True)),
-        homography=existing.get("homography"),
-        world_pose=(ox, oy, yaw),
-        extra=merged_extra,
-    )
-    world_graph.register_camera(cam_node, preserve_defaults=False)
-    if getattr(sm, "coordinate_mapper", None) is not None:
-        sm.coordinate_mapper.set_pose(
-            CameraWorldPose(camera_id=cid, origin_x=ox, origin_y=oy, yaw_deg=yaw, scale=scale)
-        )
-
-
 @router.get("/api/topology/world-pose")
 async def list_world_poses(db: TrackerDB = Depends(get_db)):
     """List persisted camera world-coordinate poses."""
@@ -175,7 +142,7 @@ async def upsert_world_pose(
     pose = await asyncio.to_thread(db.get_world_pose, camera_id)
     world_graph = sm.world_graph or (getattr(pool, "world_graph", None) if pool else None)
     if world_graph is not None and pose is not None:
-        _apply_pose_to_world(pose, world_graph, sm)
+        apply_pose_to_world(pose, world_graph, sm)
     return {"status": "ok", "pose": pose}
 
 
@@ -186,12 +153,7 @@ async def get_topology_world_map(
     db: TrackerDB = Depends(get_db),
 ):
     """Return unified global world minimap telemetry across cameras, zones, edges, and entities."""
-    world_graph = sm.world_graph or (getattr(pool, "world_graph", None) if pool else None) or WorldGraph()
-    poses = await asyncio.to_thread(db.list_world_poses)
-    for pose in poses:
-        _apply_pose_to_world(pose, world_graph, sm)
-    minimap = WorldTacticalMinimap(world_graph, coordinate_mapper=sm.coordinate_mapper)
-    return minimap.build_world_minimap_telemetry()
+    return await asyncio.to_thread(build_filtered_world_map, sm, pool, db)
 
 
 @router.get("/api/entities/suggest")

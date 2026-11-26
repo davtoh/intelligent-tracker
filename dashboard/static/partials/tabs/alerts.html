@@ -15,10 +15,18 @@
             <option value="warning">Warning</option>
             <option value="info">Info</option>
           </select>
-          <input type="text" id="alerts-filter-type" class="form-input" placeholder="Event type..." aria-label="Filter by event type" style="max-width:150px;" />
-          <input type="text" id="alerts-filter-zone" class="form-input" placeholder="Zone ID..." aria-label="Filter by zone" style="max-width:140px;" />
+          <input type="text" id="alerts-filter-type" class="form-input" list="alerts-type-options" placeholder="Event type..." aria-label="Filter by event type" style="max-width:150px;" />
+          <datalist id="alerts-type-options"></datalist>
+          <input type="text" id="alerts-filter-zone" class="form-input" list="alerts-zone-options" placeholder="Zone ID..." aria-label="Filter by zone" style="max-width:140px;" />
+          <datalist id="alerts-zone-options"></datalist>
           <button type="button" class="btn btn-sm btn-primary" id="alerts-filter-apply">Apply</button>
           <button type="button" class="btn btn-sm btn-outline" id="alerts-filter-reset">Reset</button>
+          <div class="alerts-admin-toolbar" id="alerts-admin-toolbar">
+            <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-mark-all-read">✓ Mark All Seen</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-bulk-clear">🗑 Clear Matching</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-export-csv">⬇ Export CSV</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-export-json">⬇ Export JSON</button>
+          </div>
         </div>
         <div class="table-responsive">
           <table class="data-table" id="alerts-table">
@@ -31,11 +39,12 @@
                 <th>Entity / Track</th>
                 <th>Details</th>
                 <th>Snapshot</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="alerts-table-body">
               <tr>
-                <td colspan="7" class="text-center">No alerts recorded in current session.</td>
+                <td colspan="8" class="text-center">No alerts recorded in current session.</td>
               </tr>
             </tbody>
           </table>

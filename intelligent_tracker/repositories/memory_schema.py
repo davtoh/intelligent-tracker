@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS world_timeline_events (
     summary TEXT NOT NULL DEFAULT '',
     tags TEXT DEFAULT '',
     metadata_json TEXT DEFAULT '{}',
+    is_read INTEGER NOT NULL DEFAULT 0,
+    acknowledged_at REAL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
 );
@@ -118,20 +120,41 @@ _MEMORY_INDEXES_SQL = (
 )
 
 
+def _ensure_timeline_unread_columns(cursor: sqlite3.Cursor) -> None:
+    """Idempotently add unread/acknowledgement columns and index without bumping user_version."""
+    cols = {
+        str(r[1])
+        for r in cursor.execute("PRAGMA table_info(world_timeline_events);").fetchall()
+    }
+    if "is_read" not in cols:
+        cursor.execute(
+            "ALTER TABLE world_timeline_events ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0;"
+        )
+    if "acknowledged_at" not in cols:
+        cursor.execute(
+            "ALTER TABLE world_timeline_events ADD COLUMN acknowledged_at REAL DEFAULT NULL;"
+        )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_world_timeline_unread "
+        "ON world_timeline_events(is_read, timestamp);"
+    )
+
+
 def apply_memory_schema_migrations(cursor: sqlite3.Cursor) -> int:
     """Idempotently migrate SQLite schema to ``MEMORY_SCHEMA_VERSION`` (1)."""
     row = cursor.execute("PRAGMA user_version;").fetchone()
     current_version = int(row[0]) if row else 0
-    if current_version >= MEMORY_SCHEMA_VERSION:
-        return current_version
+    if current_version < MEMORY_SCHEMA_VERSION:
+        cursor.execute(_CONFIDENCE_TABLE_SQL)
+        cursor.execute(_TIMELINE_TABLE_SQL)
+        cursor.execute(_TIMELINE_FTS_SQL)
+        for trigger_sql in _TIMELINE_TRIGGERS_SQL:
+            cursor.execute(trigger_sql)
+        for index_sql in _MEMORY_INDEXES_SQL:
+            cursor.execute(index_sql)
+        cursor.execute(f"PRAGMA user_version = {MEMORY_SCHEMA_VERSION};")
+        current_version = MEMORY_SCHEMA_VERSION
 
-    cursor.execute(_CONFIDENCE_TABLE_SQL)
-    cursor.execute(_TIMELINE_TABLE_SQL)
-    cursor.execute(_TIMELINE_FTS_SQL)
-    for trigger_sql in _TIMELINE_TRIGGERS_SQL:
-        cursor.execute(trigger_sql)
-    for index_sql in _MEMORY_INDEXES_SQL:
-        cursor.execute(index_sql)
-    cursor.execute(f"PRAGMA user_version = {MEMORY_SCHEMA_VERSION};")
-    return MEMORY_SCHEMA_VERSION
+    _ensure_timeline_unread_columns(cursor)
+    return current_version
 

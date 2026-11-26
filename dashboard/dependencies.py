@@ -183,7 +183,10 @@ def get_scenario_mgr(conn: HTTPConnection = None) -> ScenarioManager:  # type: i
     global _scenario_manager
     mgr = get_scenario_manager(conn)
     if mgr is None:
-        mgr = ScenarioManager()
+        db = get_db(conn)
+        pool = get_camera_pool(conn)
+        wg = _from_app_state(conn, "world_graph", None) or (getattr(pool, "world_graph", None) if pool else None)
+        mgr = ScenarioManager(db=db, db_path=getattr(db, "db_path", "data/tracker.db") if db else "data/tracker.db", world_graph=wg)
         _scenario_manager = mgr
         if conn is not None:
             conn.app.state.scenario_manager = mgr
