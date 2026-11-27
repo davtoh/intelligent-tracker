@@ -114,6 +114,47 @@ class TestDebugSessionAndInspector(unittest.TestCase):
         self.assertEqual(rc3, 0)
         self.assertIn("Stream decode stalled", buf_ctx.getvalue())
 
+    def test_debug_session_probe_surfaces_open_observations_and_warning_status(self) -> None:
+        import importlib.util
+
+        probe_path = Path(__file__).resolve().parents[1] / ".diagnostics" / "probes" / "debug_session.py"
+        spec = importlib.util.spec_from_file_location("debug_session_probe", probe_path)
+        assert spec is not None and spec.loader is not None
+        probe_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(probe_mod)
+
+        catalog_file = Path(self._tmp.name) / "observation_catalog.json"
+
+        # 1. Clean state: missing dir + missing catalog -> ok, 0 open observations
+        clean = probe_mod.run_probe(self.debug_dir, catalog_path=catalog_file)
+        self.assertEqual(clean["status"], "ok")
+        self.assertEqual(clean["details"]["open_observations_count"], 0)
+
+        # 2. Active observations in catalog (open + triaged; resolved/dismissed ignored) -> warning
+        catalog_payload = {
+            "schema_version": "1.0",
+            "observations": [
+                {"id": "OBS-001", "status": "open", "kind": "note", "message": "Stalled playback"},
+                {"id": "OBS-002", "status": "triaged", "kind": "element", "message": "Misaligned badge"},
+                {"id": "OBS-003", "status": "resolved", "kind": "note", "message": "Already fixed"},
+                {"id": "OBS-004", "status": "dismissed", "kind": "idea", "message": "Won't do"},
+            ],
+        }
+        catalog_file.write_text(json.dumps(catalog_payload), encoding="utf-8")
+        warn_res = probe_mod.run_probe(self.debug_dir, catalog_path=catalog_file)
+        self.assertEqual(warn_res["status"], "warning")
+        self.assertEqual(warn_res["details"]["open_observations_count"], 2)
+        self.assertIn("2 active observation", warn_res["summary"])
+
+        # 3. Backend error takes precedence over warning while still surfacing open_observations_count
+        install_debug_runtime(self.debug_dir)
+        logging.getLogger("dashboard.test_probe_err").error("Synthetic probe failure")
+        uninstall_debug_runtime()
+        err_res = probe_mod.run_probe(self.debug_dir, catalog_path=catalog_file)
+        self.assertEqual(err_res["status"], "error")
+        self.assertEqual(err_res["details"]["open_observations_count"], 2)
+        self.assertIn("open_obs=2", err_res["summary"])
+
 
 if __name__ == "__main__":
     unittest.main()

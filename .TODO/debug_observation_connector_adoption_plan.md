@@ -100,13 +100,13 @@ The HUD bundle is served by `dashboard/services/diagnostic_bridge.py` (`/api/dia
 **Verifier**: `python -m unittest tests/test_trace_recording_id.py tests/test_debug_session.py`
 **Exit criteria:** correlated traces appear in `observations show`, and existing observations are migrated idempotently.
 
-## Milestone 4: Developer workflow, probe upgrade and audit hand-off *(Deferred to Next Turn / Milestone)*
+## Milestone 4: Developer workflow, probe upgrade and audit hand-off
 
-- [ ] **.diagnostics/probes/debug_session.py**: surface `open_observations_count` from `.diagnostics/observation_catalog.json` and return non-silent attention status (`warn`) when active user observations exist.
-- [ ] **docs/architecture/CURRENT_ARCHITECTURE.md** & **documentation/dashboard.rst**: add a short "Debug observation connector" section (routes, `FRONTIER_DEBUG_OBSERVATIONS=1` flag, Tier A Adapted, limits including WebSocket, HUD workflow, and `OBS-XXX` triage commands).
-- [ ] **.agents/rules/debug-observations.md** (and one pointer line in `AGENTS.md`, keeping `AGENTS.md` under 10 KB): how to enable the flag, how to run `observations list`, `pull` and `brief`, and the privacy rule that observations never leave the machine.
-- [ ] **.TODO/Prompts** (`FOR AUDITS` workflow): apply the edits in the next section.
-- [ ] **PR notes**: record Tier A (Adapted), the Milestone 1 and 2 results, and the output of `verify-connector`.
+- [x] **.diagnostics/probes/debug_session.py**: surface `open_observations_count` from `.diagnostics/observation_catalog.json` and return non-silent attention status (`warn`) when active user observations exist.
+- [x] **docs/architecture/CURRENT_ARCHITECTURE.md** & **documentation/dashboard.rst**: add a short "Debug observation connector" section (routes, `FRONTIER_DEBUG_OBSERVATIONS=1` flag, Tier A Adapted, limits including WebSocket, HUD workflow, and `OBS-XXX` triage commands).
+- [x] **.agents/rules/debug-observations.md** (and one pointer line in `AGENTS.md`, keeping `AGENTS.md` under 10 KB): how to enable the flag, how to run `observations list`, `pull` and `brief`, and the privacy rule that observations never leave the machine.
+- [x] **.TODO/Prompts** (`FOR AUDITS` workflow): apply the edits in the next section.
+- [x] **PR notes**: record Tier A (Adapted), the Milestone 1 and 2 results, and the output of `verify-connector`.
 
 **Verifier**: `python -m unittest discover -s tests -p "test_*.py"` and `python "<skill_dir>/scripts/diagnose.py" observations verify-connector --url http://127.0.0.1:<port>` (all `PASS`; the loopback rule shows `SKIP`).
 **Exit criteria:** an agent that has never seen this repo can enable the flag, list pending observations and run the audit using only the docs.

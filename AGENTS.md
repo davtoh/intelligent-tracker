@@ -4,6 +4,7 @@ This file defines repository-wide architecture invariants and execution standard
 - **Backend, Pipeline, Scheduler & DB**: `.agents/rules/pipeline_and_db_invariants.md` (`trigger: model_decision`)
 - **Frontend, Multiview & Node VM Tests**: `.agents/rules/frontend_and_multiview_invariants.md` (`trigger: model_decision`)
 - **Cross-Project Ecosystem (`enterprise-website`)**: `.agents/rules/cross_project_ecosystem.md` (`trigger: model_decision`)
+- **Debug Observations & Audit HUD**: `.agents/rules/debug-observations.md` (`trigger: model_decision`)
 
 ---
 

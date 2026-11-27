@@ -303,3 +303,28 @@ tracebacks within a +/-30 s window:
    python scripts/debug_inspect.py --observations --json
    python diagnose.py probe run debug_session
 
+Debug Observation Connector (Contract v1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For structured visual audits, the dashboard also implements the **Tier A (Adapted)** Debug Observation Connector
+in ``dashboard/services/diagnostic_bridge.py`` and ``dashboard/app.py``:
+
+- **Activation & Security Gate**: Set ``FRONTIER_DEBUG_OBSERVATIONS=1`` in local development only. When unset, no
+  ``/api/diagnostics/*`` routes are mounted (all return ``404``) and no HUD script is injected. Requests from
+  non-loopback hosts return ``403``. Observations are stored locally in ``.diagnostics/`` (gitignored) and never
+  leave the machine; ``value``, ``password``, ``authorization``, and ``cookie`` fields are redacted server-side.
+- **Endpoints**: ``GET /api/diagnostics/health``, ``POST /api/diagnostics/observation`` (supports ``?dry_run=1``),
+  ``GET /api/diagnostics/observations``, ``GET /api/diagnostics/observations/{id_or_fingerprint}``, and
+  ``GET /api/diagnostics/hud.js``. Every response includes ``X-Diagnostics-Contract: 1``.
+- **HUD Workflow & Trace Correlation**: Open the dashboard with ``FRONTIER_DEBUG_OBSERVATIONS=1``, use the
+  dev-only HUD overlay to **Pick Element**, **Record**, reproduce the issue, **Stop**, and **Log Observation**.
+  While recording, the HUD sends ``X-Debug-Recording-Id`` on ``fetch``/XHR calls; ``DiagnosticTraceMiddleware``
+  stamps validated IDs onto server exception traces as ``recording_id``.
+- **Known Limits**: Contract v1 captures clicks, navigation, console/JS errors, and ``fetch``/XHR calls; WebSocket
+  frames and WebSocket-handler exceptions (``dashboard/routers/multiview.py``) are not captured or stamped in v1.
+- **Triage & Audit Workflow**: Migrate legacy debug-session notes with ``python scripts/debug_inspect.py --migrate-observations``
+  and run ``diagnose.py`` observation commands (``observations list``, ``observations pull``, ``observations show``,
+  ``observations triage``, ``observations resolve``, ``observations verify-connector``, and ``brief --run-probes --pull``)
+  to correlate ``OBS-XXX`` items with backend traces and workspace probes.
+
+

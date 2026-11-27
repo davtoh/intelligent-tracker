@@ -292,9 +292,11 @@ class TestDebugObservationCliAndProbe(unittest.TestCase):
 
     def test_workspace_debug_session_probe_clean_and_correlated(self) -> None:
         probe_mod = _load_debug_session_probe()
-        clean_res = probe_mod.run_probe(self.debug_dir)
+        isolated_catalog = Path(self._tmp.name) / "observation_catalog.json"
+        clean_res = probe_mod.run_probe(self.debug_dir, catalog_path=isolated_catalog)
         self.assertEqual(clean_res["status"], "ok")
         self.assertEqual(clean_res["details"]["observations_count"], 0)
+        self.assertEqual(clean_res["details"]["open_observations_count"], 0)
 
         try:
             raise ValueError("Overlay canvas NaN height")
@@ -307,7 +309,7 @@ class TestDebugObservationCliAndProbe(unittest.TestCase):
             debug_dir=self.debug_dir,
         )
 
-        err_res = probe_mod.run_probe(self.debug_dir)
+        err_res = probe_mod.run_probe(self.debug_dir, catalog_path=isolated_catalog)
         self.assertEqual(err_res["status"], "error")
         self.assertEqual(err_res["details"]["observations_count"], 1)
         self.assertEqual(err_res["details"]["observations"][0]["correlated_issues"][0]["fingerprint"], fp)

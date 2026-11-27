@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-26] feat: Debug Observation Connector Adoption (Tier A Adapted, M1-M4)
+- **Type**: feat
+- **Summary**: Completed Wire Contract v1 loopback-gated routes, dev-only HUD injection, X-Debug-Recording-Id trace stamping, debug_session probe open_observations_count warning status, architecture/Sphinx docs, .agents/rules/debug-observations.md, and FOR AUDITS prompt hand-off.
+- **Files** (8):
+  - `.TODO/debug_observation_connector_adoption_plan.md`
+  - `.diagnostics/probes/debug_session.py`
+  - `AGENTS.md`
+  - `docs/architecture/CURRENT_ARCHITECTURE.md`
+  - `documentation/dashboard.rst`
+  - `tests/test_debug_observation_mode.py`
+  - `tests/test_debug_session.py`
+  - `.agents/rules/debug-observations.md`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover -s tests -p 'test_*.py' (1197 passed); verify-connector CONFORMANT; sphinx -W clean
+
 ## [2026-11-26] test: CI Parity & Batch Contract Hardening (M2)
 - **Type**: test
 - **Summary**: Added POSIX/Windows avatar URL & ROI propagation tests, bounded 1.0s multiview websocket close timeout test, and isolated TestVideoJobAPI DB state.
@@ -125,18 +139,3 @@
   - `dashboard/static/js/interactive_canvas.js`
   - ... (+12 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-23] feat: Step 3 Milestone 3: Target Class Filter Split, Enrollment Scrubber & Sign-Off
-- **Type**: feat
-- **Summary**: Split COCO detector_classes vs gallery tracked_categories across API/pipeline/UI and extracted ScrubberTimelineSlider for video_scrubber and Universal Enrollment.
-- **Files** (26):
-  - `dashboard/camera_pool.py`
-  - `dashboard/routers/cameras.py`
-  - `dashboard/routers/system.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/routers/videos.py`
-  - `dashboard/schemas.py`
-  - `dashboard/services/camera_config_store.py`
-  - `dashboard/services/stream_pool_coordinator.py`
-  - ... (+18 more)
-- **Verification**: python -m unittest discover tests
