@@ -81,6 +81,25 @@
     }
   }
 
+  async function loadBatchGalleryHint() {
+    const box = document.getElementById('batch-gallery-entities-hint');
+    if (!box) return;
+    try {
+      const resp = await fetch('/entities');
+      const entities = resp?.ok ? await resp.json() : [];
+      if (window.CameraFormHelpers?.renderGalleryEntitiesHint) {
+        window.CameraFormHelpers.renderGalleryEntitiesHint('batch-gallery-entities-hint', 'batch-tracked-categories-input', entities);
+        return;
+      }
+      const list = Array.isArray(entities) ? entities : [];
+      box.textContent = list.length
+        ? `Enrolled #gallery: ${list.slice(0, 8).map(e => `${e.name} (${e.category || 'person'})`).join(', ')}`
+        : 'No gallery entities enrolled yet — enroll in #gallery to match specific identities.';
+    } catch (err) {
+      console.warn('Failed to load gallery entities hint:', err);
+    }
+  }
+
   function openBatchModal(filename) {
     if (!filename) return;
     setCurrentBatchFilename(filename);
@@ -105,6 +124,8 @@
     document.querySelectorAll('.btn-tag-preset[data-target="batch"]').forEach(btn => {
       btn.classList.remove('active');
     });
+    window.CategoryChipPicker?.syncAll?.();
+    loadBatchGalleryHint();
     modal.style.display = 'flex';
   }
 

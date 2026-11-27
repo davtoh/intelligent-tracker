@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-27] feat: Step 2: Synthetic Re-ID Parity, Live ROI-Draw Enrollment & Camera/Batch Config
+- **Type**: feat
+- **Summary**: Aligned MockDetector with SyntheticFrameGenerator P1/P2, added debounced ROI collision and recognize-roi suggestions, auto-reset #gallery filters on enrollment, preserved tracked_categories and agnostic_nms across camera edit, preserved tracked_categories in batch config_meta, and added gallery entity pickers and COCO vs RSAC helper copy.
+- **Files** (16):
+  - `intelligent_tracker/detectors/mock_detector.py`
+  - `dashboard/schemas.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/services/camera_pool_queries.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/static/js/universal_enrollment.js`
+  - ... (+8 more)
+- **Verification**: tests/test_step2_synthetic_reid_and_config.py + 9 related suites (73 passed), replay_pipeline_probe PASS, video_studio_contract_probe PASS, surface --verify (0 mismatches), scan --strict (0 tactical defects)
+
 ## [2026-11-26] feat: Debug Observation Connector Adoption (Tier A Adapted, M1-M4)
 - **Type**: feat
 - **Summary**: Completed Wire Contract v1 loopback-gated routes, dev-only HUD injection, X-Debug-Recording-Id trace stamping, debug_session probe open_observations_count warning status, architecture/Sphinx docs, .agents/rules/debug-observations.md, and FOR AUDITS prompt hand-off.
@@ -124,18 +139,3 @@
   - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
   - `.diagnostics/probes/spa_nine_tab_sweep.js`
   - `.diagnostics/probes/video_studio_contract_probe.py`
-
-## [2026-11-23] feat: Step 4 M4: Bidirectional #review <-> Video Studio Sync & Full Sign-Off
-- **Type**: feat
-- **Summary**: Migrated review_queue with bbox/frame/run_id provenance, added ReviewSyncService + /api/review/* router, wired frontend VideoBatchReports/Gallery/Review sync, and verified 1008 tests + 4 probes.
-- **Files** (20):
-  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
-  - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/routers/topology.py`
-  - `dashboard/services/negative_exemplar_service.py`
-  - `dashboard/services/roi_recognition_service.py`
-  - `dashboard/static/css/review.css`
-  - `dashboard/static/js/interactive_canvas.js`
-  - ... (+12 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

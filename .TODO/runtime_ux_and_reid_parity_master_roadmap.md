@@ -23,13 +23,13 @@
 
 ---
 
-## Step 2: Synthetic Re-ID Parity, Live ROI-Draw Enrollment & Camera/Batch Config *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Align `MockDetector` (`intelligent_tracker/detectors/mock_detector.py`) with `SyntheticFrameGenerator` `P1`/`P2` pixel regions so enrolled `P1` matches in `#live` (`synthetic_01`) and `#videos` batch runs (`OBS-005`, `OBS-006`, `OBS-007`), refresh `#gallery` cleanly after enrollment even with active category/search filters (`OBS-004`), trigger debounced `/api/enroll/check-collision` + object suggestions on ROI `mouseup` (`OBS-010`), preserve `tracked_categories` & `agnostic_nms` across `GET /api/cameras` -> Edit (`OBS-018`), preserve `tracked_categories` in `video_analytics_service.py` `config_meta`, and expose `#gallery`/learned-class pickers + clear COCO vs. RSAC helper copy in Batch & Camera modals (`OBS-006`, `OBS-018`).
-- [ ] **Target Scope**:
-  - [ ] `intelligent_tracker/detectors/mock_detector.py`, `dashboard/services/video_analytics_service.py`, `dashboard/services/camera_pool_queries.py`, `dashboard/routers/system.py`.
-  - [ ] `dashboard/static/js/universal_enrollment.js` (staying `<= 349L`), `dashboard/static/js/gallery_timeline.js`, `dashboard/static/js/video_batch.js`, `dashboard/static/partials/modals/video_modals.html`, `dashboard/static/js/camera_ai_config.js`, `dashboard/static/partials/modals/detector_config_panel.html`.
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step2_synthetic_reid_and_config.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run video_studio_contract_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify`.
-- [ ] **Review Gate**: Fresh reviewer verifies synthetic `P1` Re-ID E2E match, camera edit round-trip, modularity budgets, and probe passes before resolving `OBS-004`–`OBS-007`, `OBS-010`, `OBS-018` and advancing to Step 3.
+## Step 2: Synthetic Re-ID Parity, Live ROI-Draw Enrollment & Camera/Batch Config
+- [x] **Goal**: Align `MockDetector` (`intelligent_tracker/detectors/mock_detector.py`) with `SyntheticFrameGenerator` `P1`/`P2` pixel regions so enrolled `P1` matches in `#live` (`synthetic_01`) and `#videos` batch runs (`OBS-005`, `OBS-006`, `OBS-007`), refresh `#gallery` cleanly after enrollment even with active category/search filters (`OBS-004`), trigger debounced `/api/enroll/check-collision` + object suggestions on ROI `mouseup` (`OBS-010`), preserve `tracked_categories` & `agnostic_nms` across `GET /api/cameras` -> Edit (`OBS-018`), preserve `tracked_categories` in `video_analytics_service.py` `config_meta`, and expose `#gallery`/learned-class pickers + clear COCO vs. RSAC helper copy in Batch & Camera modals (`OBS-006`, `OBS-018`).
+- [x] **Target Scope**:
+  - [x] `intelligent_tracker/detectors/mock_detector.py`, `dashboard/services/video_analytics_service.py`, `dashboard/services/camera_pool_queries.py`, `dashboard/routers/system.py`.
+  - [x] `dashboard/static/js/universal_enrollment.js` (staying `<= 349L`), `dashboard/static/js/gallery_timeline.js`, `dashboard/static/js/video_batch.js`, `dashboard/static/partials/modals/video_modals.html`, `dashboard/static/js/camera_ai_config.js`, `dashboard/static/partials/modals/detector_config_panel.html`.
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step2_synthetic_reid_and_config.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run video_studio_contract_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify`.
+- [x] **Review Gate**: Fresh reviewer verifies synthetic `P1` Re-ID E2E match, camera edit round-trip, modularity budgets, and probe passes before resolving `OBS-004`–`OBS-007`, `OBS-010`, `OBS-018` and advancing to Step 3.
 
 ---
 

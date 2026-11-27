@@ -58,6 +58,7 @@ class CameraAddRequest(BaseModel):
     tracked_categories: Optional[Union[List[str], str]] = Field(None, description="Allowed gallery semantic categories filter")
     enabled: Optional[bool] = True
     armed: Optional[bool] = False
+    agnostic_nms: Optional[bool] = Field(True, description="Apply class-agnostic NMS")
     details: Optional[Dict[str, Any]] = None
 
     @field_validator("classes", "tracked_categories", mode="before")
@@ -72,6 +73,7 @@ class CameraUpdateRequest(BaseModel):
     type: Optional[str] = None
     enabled: Optional[bool] = None
     armed: Optional[bool] = None
+    agnostic_nms: Optional[bool] = Field(None, description="Updated class-agnostic NMS flag")
     detector: Optional[str] = None
     tracker: Optional[str] = None
     confidence: Optional[float] = Field(None, ge=0.01, le=1.0, description="Updated confidence threshold")

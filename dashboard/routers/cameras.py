@@ -92,9 +92,10 @@ async def add_camera(
     pool.add_camera(
         camera_id=req.id, name=req.name, source=req.source, cam_type=req.type or "rtsp",
         detector=req.detector, tracker=req.tracker, confidence=req.confidence,
-        classes=req.classes, tracked_categories=req.tracked_categories,
+        classes=req.classes if not isinstance(req.classes, str) else [c.strip() for c in req.classes.split(",") if c.strip()],
+        tracked_categories=req.tracked_categories if not isinstance(req.tracked_categories, str) else [c.strip() for c in req.tracked_categories.split(",") if c.strip()],
         enabled=req.enabled if req.enabled is not None else True, autostart=True,
-        details=req.details, armed=bool(req.armed),
+        details=req.details, armed=bool(req.armed), agnostic_nms=req.agnostic_nms,
     )
     return {"status": "success", "camera": pool.camera_configs.get(req.id)}
 
@@ -229,9 +230,10 @@ async def update_camera(
         detector=req.detector,
         tracker=req.tracker,
         confidence=req.confidence,
-        classes=req.classes,
-        tracked_categories=req.tracked_categories,
+        classes=req.classes if not isinstance(req.classes, str) else [c.strip() for c in req.classes.split(",") if c.strip()],
+        tracked_categories=req.tracked_categories if not isinstance(req.tracked_categories, str) else [c.strip() for c in req.tracked_categories.split(",") if c.strip()],
         armed=req.armed,
+        agnostic_nms=req.agnostic_nms,
     )
     return {
         "status": "success" if success else "failed",

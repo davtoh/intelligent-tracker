@@ -66,6 +66,8 @@ def build_camera_status_row(
         "tracker": cfg.get("tracker", "centroid"),
         "confidence": cfg.get("confidence", 0.40),
         "classes": cfg.get("classes"),
+        "tracked_categories": cfg.get("tracked_categories"),
+        "agnostic_nms": bool(cfg.get("agnostic_nms", True)),
         "enabled": cfg.get("enabled", True),
         "status": health_status,
         "is_hibernating": is_hib,
@@ -85,6 +87,9 @@ def build_camera_status_row(
 
 class CameraPoolStateMixin:
     """Property facade exposing live ``camera_configs`` and ``streams`` mappings."""
+
+    _config_store: Any
+    _coordinator: Any
 
     @property
     def camera_configs(self) -> dict[str, dict[str, Any]]:
@@ -109,6 +114,11 @@ class CameraPoolStateMixin:
 
 class CameraPoolQueryMixin:
     """Read-only properties, stream lookup, and gallery reload helpers for CameraPool."""
+
+    _coordinator: Any
+    _lock: Any
+    streams: dict[str, Any]
+    camera_configs: dict[str, dict[str, Any]]
 
     @property
     def primary_stream(self) -> StreamManager | None:

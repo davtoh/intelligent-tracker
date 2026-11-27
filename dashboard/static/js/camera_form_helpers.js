@@ -44,15 +44,46 @@
       classes: cfg.classes,
       tracked_categories: cfg.tracked_categories ?? null,
       armed: Boolean(cfg.armed),
+      agnostic_nms: cfg.agnostic_nms !== undefined ? Boolean(cfg.agnostic_nms) : true,
       enabled: editingCamera ? editingCamera.enabled !== false : true,
     };
+  }
+
+  function renderGalleryEntitiesHint(containerId, inputId, entities) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    const list = Array.isArray(entities) ? entities : [];
+    if (!list.length) {
+      box.textContent = 'No gallery entities enrolled yet — enroll in #gallery to match specific identities.';
+      return;
+    }
+    const chips = list.slice(0, 12).map((e) => {
+      const cat = String(e.category || 'person').trim() || 'person';
+      return `<button type="button" class="btn-tag-preset btn-gallery-ent-chip" data-cat="${escapeHtml(cat)}">${escapeHtml(e.name)} (${escapeHtml(cat)})</button>`;
+    }).join('');
+    box.innerHTML = `<span style="margin-right:6px;">Gallery Entities:</span><div class="class-presets-bar">${chips}</div>`;
+    box.querySelectorAll?.('.btn-gallery-ent-chip')?.forEach((btn) => btn.addEventListener('click', () => {
+      const inp = document.getElementById(inputId);
+      if (!inp) return;
+      const cat = btn.getAttribute('data-cat');
+      const cur = inp.value.split(',').map((s) => s.trim()).filter(Boolean);
+      const idx = cur.indexOf(cat);
+      if (idx >= 0) cur.splice(idx, 1); else cur.push(cat);
+      inp.value = cur.join(', ');
+      btn.classList?.toggle?.('active', idx < 0);
+      if (typeof inp.dispatchEvent === 'function' && typeof Event === 'function') inp.dispatchEvent(new Event('change', { bubbles: true }));
+    }));
   }
 
   function syncTrackedCategoriesUI(capabilities) {
     const classesInput = document.getElementById('cam-classes-input');
     const classesLabel = document.querySelector('label[for="cam-classes-input"]');
     if (classesLabel) classesLabel.textContent = 'Detector Classes (COCO) (comma-separated, empty for all)';
-    if (!classesInput || document.getElementById('cam-tracked-categories-group')) return;
+    if (!classesInput) return;
+    if (document.getElementById('cam-tracked-categories-group')) {
+      renderGalleryEntitiesHint('cam-gallery-entities-hint', 'cam-tracked-categories-input', capabilities?.enrolled_entities);
+      return;
+    }
     const parentGroup = classesInput.closest?.('.form-group') || classesInput.parentElement;
     if (!parentGroup || !parentGroup.parentNode || typeof document.createElement !== 'function') return;
     const wrap = document.createElement('div');
@@ -62,7 +93,9 @@
     const chips = cats.map(c => `<button type="button" class="btn-tag-preset btn-cat-chip" data-cat="${escapeHtml(c.id)}">${escapeHtml(c.name || c.id)}</button>`).join('');
     wrap.innerHTML = '<label for="cam-tracked-categories-input">Tracked Gallery Categories (semantic Re-ID filter, empty for all)</label>'
       + '<input type="text" id="cam-tracked-categories-input" class="form-input" placeholder="e.g. vip, staff, restricted" />'
-      + (chips ? `<div class="class-presets-bar">${chips}</div>` : '');
+      + '<small class="form-hint" style="display:block;color:#94a3b8;font-size:11px;margin-top:4px;">Semantic Re-ID filter over enrolled #gallery entities (leave empty to match all).</small>'
+      + `<div class="class-presets-bar category-chip-picker-bar" data-chip-target="cam-tracked-categories-input">${chips}</div>`
+      + '<div id="cam-gallery-entities-hint" class="form-hint" style="font-size:11px;color:#94a3b8;margin-top:6px;"></div>';
     parentGroup.parentNode.insertBefore(wrap, parentGroup.nextSibling);
     wrap.querySelectorAll?.('.btn-cat-chip')?.forEach(btn => btn.addEventListener('click', () => {
       const inp = document.getElementById('cam-tracked-categories-input');
@@ -74,6 +107,7 @@
       inp.value = cur.join(', ');
       btn.classList.toggle('active', idx < 0);
     }));
+    renderGalleryEntitiesHint('cam-gallery-entities-hint', 'cam-tracked-categories-input', capabilities?.enrolled_entities);
   }
 
   function applyDiscoverySelection({ id, name, source, type }, els) {
@@ -110,5 +144,6 @@
     applyDiscoverySelection,
     resetCameraFormState,
     syncTrackedCategoriesUI,
+    renderGalleryEntitiesHint,
   };
 })();

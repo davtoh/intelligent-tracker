@@ -309,7 +309,7 @@ def submit_async_analytics_job(
     config_meta = {
         "detector": opts["detector"], "sample_rate": opts["sample_rate"],
         "confidence": opts["confidence"], "classes": opts["classes"],
-        "scenario_camera_id": opts.get("scenario_camera_id"),
+        "tracked_categories": opts.get("tracked_categories"), "scenario_camera_id": opts.get("scenario_camera_id"),
     }
 
     def _runner(job, stop_event, progress_cb):
@@ -336,7 +336,7 @@ def run_sync_analytics(safe_name: str, path: str, opts: dict[str, Any]) -> dict[
     config_meta = {
         "detector": opts["detector"], "sample_rate": opts["sample_rate"],
         "confidence": opts["confidence"], "classes": opts["classes"],
-        "scenario_camera_id": opts.get("scenario_camera_id"),
+        "tracked_categories": opts.get("tracked_categories"), "scenario_camera_id": opts.get("scenario_camera_id"),
     }
     run_id = f"run_{uuid.uuid4().hex[:8]}"
     indexer = create_video_indexer(db, opts, safe_name=safe_name, run_id=run_id)

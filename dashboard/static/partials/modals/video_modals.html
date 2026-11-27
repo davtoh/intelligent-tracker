@@ -116,6 +116,7 @@
           <div class="form-group">
             <label for="batch-classes-input">Detector Classes (COCO) (comma-separated, empty for all)</label>
             <input type="text" id="batch-classes-input" class="form-input" placeholder="e.g. person, car" />
+            <small class="form-hint" style="display: block; color: #94a3b8; font-size: 11px; margin-top: 4px;">Raw object detector classes (COCO) — leave empty to detect all classes.</small>
             <div class="class-presets-bar">
               <button type="button" class="btn-tag-preset" data-target="batch" data-classes="person">👤 Person</button>
               <button type="button" class="btn-tag-preset" data-target="batch" data-classes="car, motorcycle, bus, truck, bicycle">🚗 Vehicles</button>
@@ -127,6 +128,8 @@
           <div class="form-group">
             <label for="batch-tracked-categories-input">Tracked Gallery Categories (semantic Re-ID filter, empty for all)</label>
             <input type="text" id="batch-tracked-categories-input" class="form-input" placeholder="e.g. vip, staff, restricted" />
+            <small class="form-hint" style="display: block; color: #94a3b8; font-size: 11px; margin-top: 4px;">Semantic Re-ID filter for enrolled #gallery identities — leave empty to match all enrolled entities.</small>
+            <div id="batch-gallery-entities-hint" class="form-hint" style="font-size: 11px; color: #94a3b8; margin-top: 6px;"></div>
           </div>
         </div>
 
