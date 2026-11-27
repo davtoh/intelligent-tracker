@@ -127,7 +127,7 @@ async def test_camera_route(
     pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Test video source connectivity and return live preview snapshot."""
-    return probe_camera_test_request(req, pool=pool)
+    return probe_camera_test_request(req, pool=pool, device_name=req.device_name)
 
 
 @router.post("/api/cameras/release")
@@ -319,9 +319,14 @@ async def get_freeze_frame(
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
     raw = None
-    with mgr._lock:
-        if mgr._latest_raw_frame is not None:
-            raw = mgr._latest_raw_frame.copy()
+    mgr_lock = getattr(mgr, "_lock", None)
+    if mgr_lock is not None:
+        with mgr_lock:
+            latest_raw = getattr(mgr, "_latest_raw_frame", None)
+            raw = latest_raw.copy() if latest_raw is not None else None
+    else:
+        latest_raw = getattr(mgr, "_latest_raw_frame", None)
+        raw = latest_raw.copy() if latest_raw is not None else None
 
     if raw is None:
         raise HTTPException(

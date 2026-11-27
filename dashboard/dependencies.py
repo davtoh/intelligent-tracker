@@ -18,12 +18,13 @@ from fastapi import FastAPI
 from fastapi.requests import HTTPConnection
 
 from dashboard.camera_pool import CameraPool
+from dashboard.services.app_state_helpers import _build_fallback_enrollment_mgr, _build_world_query_engine
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.active_learning import ActiveLearningManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.enrollment import UniversalEnrollmentManager
 from intelligent_tracker.lifecycle import StreamLifecycleManager
-from intelligent_tracker.memory import ConfidenceEngine, GeminiSemanticProvider, WorldQueryEngine
+from intelligent_tracker.memory import ConfidenceEngine, WorldQueryEngine
 from intelligent_tracker.rsac import RSACManager
 from intelligent_tracker.scenarios import ScenarioManager
 
@@ -305,10 +306,7 @@ def get_enrollment_mgr(conn: HTTPConnection = None) -> UniversalEnrollmentManage
     mgr = get_active_stream_manager(conn=conn)
     if mgr and mgr.enrollment_manager:
         return mgr.enrollment_manager
-    from intelligent_tracker.reid.factory import ReIDExtractorFactory
-    from intelligent_tracker.reid.profile import resolve_reid_profile
-    ext = ReIDExtractorFactory.create(resolve_reid_profile(getattr(mgr, "cfg", None)).model_name or "dual")
-    return UniversalEnrollmentManager(db=get_db(conn), extractor=ext)
+    return _build_fallback_enrollment_mgr(get_db(conn), mgr=mgr)
 
 
 def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:  # type: ignore[assignment]
@@ -316,17 +314,13 @@ def get_world_query_engine(conn: HTTPConnection = None) -> WorldQueryEngine:  # 
     state_engine = _from_app_state(conn, "world_query_engine", _world_query_engine)
     if state_engine is not None:
         return state_engine
-    db = get_db(conn)
-    pool, mgr, scen_mgr = get_camera_pool(conn), get_active_stream_manager(conn=conn), get_scenario_manager(conn)
-    conf_engine = (
-        _from_app_state(conn, "confidence_engine", _confidence_engine)
-        or getattr(pool, "confidence_engine", None)
-        or getattr(mgr, "confidence_engine", None)
-        or ConfidenceEngine(db=db)
+    return _build_world_query_engine(
+        get_db(conn),
+        state_confidence_engine=_from_app_state(conn, "confidence_engine", _confidence_engine),
+        pool=get_camera_pool(conn),
+        mgr=get_active_stream_manager(conn=conn),
+        scen_mgr=get_scenario_manager(conn),
     )
-    world_graph = getattr(pool, "world_graph", None) or getattr(scen_mgr, "world_graph", None) or getattr(mgr, "world_graph", None)
-    provider = GeminiSemanticProvider() if os.getenv("WORLD_QUERY_PROVIDER", "").strip().lower() == "gemini" else None
-    return WorldQueryEngine(db=db, confidence_engine=conf_engine, world_graph=world_graph, provider=provider)
 
 
 def reload_all_galleries(conn: HTTPConnection = None) -> None:  # type: ignore[assignment]

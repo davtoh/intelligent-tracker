@@ -118,6 +118,7 @@ class VideoAddAsCameraRequest(BaseModel):
 
 class CameraTestRequest(BaseModel):
     source: Optional[Any] = None
+    device_name: Optional[str] = None
     preset: Optional[str] = None
     ip: Optional[str] = None
     port: Optional[int] = 554

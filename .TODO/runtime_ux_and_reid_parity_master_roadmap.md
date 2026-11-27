@@ -33,14 +33,14 @@
 
 ---
 
-## Step 3: Tripwire `IN`/`OUT` Handle, Camera Discovery Parity, Batch Provenance & Arch Hygiene *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Render `IN`/`OUT` normal vectors and side labels in `UnifiedCanvasOverlay.drawTripwires()` (`OBS-009`) plus a Studio direction-flip handle swapping `pt1 <-> pt2` and persisting via `PUT` (`OBS-008`), fix Windows device-index / `hikvision` active-index exclusion & `/api/cameras/test` device-name parity (`OBS-017`), attribute non-scenario batch review items to `video:<filename>` instead of `"offline_video"` (`OBS-016`), wire `WorldPolicy` (`intelligent_tracker/world/nodes.py`) or explicitly clean up modularity overruns (`dashboard/dependencies.py` `351L`, `dashboard/routers/rsac.py` `353L`, unused imports in `routers/rsac.py` & `_capture_guard_worker.py`).
-- [ ] **Target Scope**:
-  - [ ] `dashboard/static/js/unified_canvas_overlay.js`, `dashboard/static/js/studio_shape_editor.js`, `dashboard/static/js/studio_overlays.js`.
-  - [ ] `intelligent_tracker/camera_device.py`, `intelligent_tracker/camera_device_enum.py`, `dashboard/services/camera_pool_queries.py`, `dashboard/services/camera_diagnostics.py`.
-  - [ ] `dashboard/services/video_analytics_service.py`, `intelligent_tracker/pipeline/post_detection_governance.py`, `dashboard/dependencies.py`, `dashboard/routers/rsac.py`, `intelligent_tracker/video/_capture_guard_worker.py`.
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_tripwire_discovery_provenance.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run studio_drag_put_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run video_studio_contract_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" arch-map --path .`.
-- [ ] **Review Gate**: Fresh reviewer verifies tripwire flip persistence, camera test parity, `video:<filename>` provenance, and `< 350L` budgets before resolving `OBS-008`, `OBS-009`, `OBS-016`, `OBS-017` and advancing to Step 4.
+## Step 3: Tripwire `IN`/`OUT` Handle, Camera Discovery Parity, Batch Provenance & Arch Hygiene
+- [x] **Goal**: Render `IN`/`OUT` normal vectors and side labels in `UnifiedCanvasOverlay.drawTripwires()` (`OBS-009`) plus a Studio direction-flip handle swapping `pt1 <-> pt2` and persisting via `PUT` (`OBS-008`), fix Windows device-index / `hikvision` active-index exclusion & `/api/cameras/test` device-name parity (`OBS-017`), attribute non-scenario batch review items to `video:<filename>` instead of `"offline_video"` (`OBS-016`), wire `WorldPolicy` (`intelligent_tracker/world/nodes.py`) or explicitly clean up modularity overruns (`dashboard/dependencies.py` `351L`, `dashboard/routers/rsac.py` `353L`, unused imports in `routers/rsac.py` & `_capture_guard_worker.py`).
+- [x] **Target Scope**:
+  - [x] `dashboard/static/js/unified_canvas_overlay.js`, `dashboard/static/js/studio_shape_editor.js`, `dashboard/static/js/studio_overlays.js`.
+  - [x] `intelligent_tracker/camera_device.py`, `intelligent_tracker/camera_device_enum.py`, `dashboard/services/camera_pool_queries.py`, `dashboard/services/camera_diagnostics.py`.
+  - [x] `dashboard/services/video_analytics_service.py`, `intelligent_tracker/pipeline/post_detection_governance.py`, `dashboard/dependencies.py`, `dashboard/routers/rsac.py`, `intelligent_tracker/video/_capture_guard_worker.py`.
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_tripwire_discovery_provenance.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run studio_drag_put_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run video_studio_contract_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" arch-map --path .`.
+- [x] **Review Gate**: Fresh reviewer verifies tripwire flip persistence, camera test parity, `video:<filename>` provenance, and `< 350L` budgets before resolving `OBS-008`, `OBS-009`, `OBS-016`, `OBS-017` and advancing to Step 4.
 
 ---
 

@@ -51,40 +51,50 @@
     else item.line_segment = clonePts(pts);
   }
 
+  function getFlipHandle(seg) {
+    if (!Array.isArray(seg) || seg.length < 2) return null;
+    if (window.UnifiedCanvasOverlay?.computeTripwireFlipHandle) {
+      return window.UnifiedCanvasOverlay.computeTripwireFlipHandle(seg[0], seg[1], 26);
+    }
+    const dx = seg[1][0] - seg[0][0], dy = seg[1][1] - seg[0][1], len = Math.hypot(dx, dy);
+    if (len < 1e-3) return null;
+    return { x: (seg[0][0] + seg[1][0]) / 2 + (-dy / len) * 26, y: (seg[0][1] + seg[1][1]) / 2 + (dx / len) * 26 };
+  }
+
+  function hitTestVertices(pt, items, type, key) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const pts = items[i][key] || [];
+      for (let v = 0; v < pts.length; v++) {
+        if (Math.hypot(pt.x - pts[v][0], pt.y - pts[v][1]) <= HIT_RADIUS) {
+          return { type, name: items[i].name, kind: 'vertex', vertexIndex: v, origPoints: clonePts(pts) };
+        }
+      }
+    }
+    return null;
+  }
+
   function hitTest(pt) {
     const state = _getState();
     const zones = Array.isArray(state.zones) ? state.zones : [];
     const tripwires = Array.isArray(state.tripwires) ? state.tripwires : [];
-
+    for (let i = tripwires.length - 1; i >= 0; i--) {
+      const seg = tripwires[i].line_segment || tripwires[i].line || [];
+      const h = getFlipHandle(seg);
+      if (h && Math.hypot(pt.x - h.x, pt.y - h.y) <= HIT_RADIUS + 2) {
+        return { type: 'tripwire', name: tripwires[i].name, kind: 'flip', origPoints: clonePts(seg) };
+      }
+    }
+    const vHit = hitTestVertices(pt, zones, 'zone', 'polygon') || hitTestVertices(pt, tripwires, 'tripwire', 'line_segment');
+    if (vHit) return vHit;
     for (let i = zones.length - 1; i >= 0; i--) {
-      const z = zones[i];
-      const poly = z.polygon || [];
-      for (let v = 0; v < poly.length; v++) {
-        if (Math.hypot(pt.x - poly[v][0], pt.y - poly[v][1]) <= HIT_RADIUS) {
-          return { type: 'zone', name: z.name, kind: 'vertex', vertexIndex: v, origPoints: clonePts(poly) };
-        }
+      if (pointInPolygon(pt, zones[i].polygon)) {
+        return { type: 'zone', name: zones[i].name, kind: 'shape', origPoints: clonePts(zones[i].polygon) };
       }
     }
     for (let i = tripwires.length - 1; i >= 0; i--) {
-      const tw = tripwires[i];
-      const seg = tw.line_segment || [];
-      for (let v = 0; v < seg.length; v++) {
-        if (Math.hypot(pt.x - seg[v][0], pt.y - seg[v][1]) <= HIT_RADIUS) {
-          return { type: 'tripwire', name: tw.name, kind: 'vertex', vertexIndex: v, origPoints: clonePts(seg) };
-        }
-      }
-    }
-    for (let i = zones.length - 1; i >= 0; i--) {
-      const z = zones[i];
-      if (pointInPolygon(pt, z.polygon)) {
-        return { type: 'zone', name: z.name, kind: 'shape', origPoints: clonePts(z.polygon) };
-      }
-    }
-    for (let i = tripwires.length - 1; i >= 0; i--) {
-      const tw = tripwires[i];
-      const seg = tw.line_segment || [];
+      const seg = tripwires[i].line_segment || tripwires[i].line || [];
       if (seg.length >= 2 && distToSegment(pt, seg[0], seg[1]) <= HIT_RADIUS) {
-        return { type: 'tripwire', name: tw.name, kind: 'shape', origPoints: clonePts(seg) };
+        return { type: 'tripwire', name: tripwires[i].name, kind: 'shape', origPoints: clonePts(seg) };
       }
     }
     return null;
@@ -94,21 +104,15 @@
     if (_drag) {
       applyShapePoints(_drag.type, _drag.name, _drag.origPoints);
       _drag = null;
-      _callbacks.drawOverlay?.();
-      _callbacks.updateStatus?.('Shape edit cancelled.');
+      _callbacks.drawOverlay?.(); _callbacks.updateStatus?.('Shape edit cancelled.');
       return true;
     }
-    if (_selected) {
-      _selected = null;
-      _callbacks.drawOverlay?.();
-      return true;
-    }
+    if (_selected) { _selected = null; _callbacks.drawOverlay?.(); return true; }
     return false;
   }
 
   function init(getState, callbacks = {}) {
-    _getState = getState;
-    _callbacks = callbacks;
+    _getState = getState; _callbacks = callbacks;
     if (!_escapeBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       _escapeBound = true;
       window.addEventListener('keydown', (evt) => {
@@ -121,30 +125,23 @@
     if (_getState().mode !== 'idle' || !pt) return false;
     const hit = hitTest(pt);
     if (!hit) {
-      if (_selected) {
-        _selected = null;
-        _callbacks.drawOverlay?.();
-      }
+      if (_selected) { _selected = null; _callbacks.drawOverlay?.(); }
       _drag = null;
       return false;
     }
     _selected = { type: hit.type, name: hit.name };
-    _drag = {
-      ...hit,
-      startPt: { x: pt.x, y: pt.y },
-      currentPoints: clonePts(hit.origPoints),
-    };
+    _drag = { ...hit, startPt: { x: pt.x, y: pt.y }, currentPoints: clonePts(hit.origPoints) };
     _callbacks.drawOverlay?.();
     return true;
   }
 
   function onMouseMove(pt) {
     if (!_drag || !pt) return false;
+    if (_drag.kind === 'flip') return true;
     if (_drag.kind === 'vertex') {
       _drag.currentPoints[_drag.vertexIndex] = [Math.round(pt.x), Math.round(pt.y)];
     } else {
-      const dx = Math.round(pt.x - _drag.startPt.x);
-      const dy = Math.round(pt.y - _drag.startPt.y);
+      const dx = Math.round(pt.x - _drag.startPt.x), dy = Math.round(pt.y - _drag.startPt.y);
       _drag.currentPoints = _drag.origPoints.map((p) => [p[0] + dx, p[1] + dy]);
     }
     applyShapePoints(_drag.type, _drag.name, _drag.currentPoints);
@@ -165,11 +162,7 @@
       : `/api/scenarios/tripwires/${encodeURIComponent(cameraId)}/${encodeURIComponent(snapshot.name)}`;
     const body = isZone ? { polygon: snapshot.currentPoints } : { line_segment: snapshot.currentPoints };
     try {
-      const res = await fetch(endpoint, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || res.statusText || `HTTP ${res.status}`);
@@ -192,11 +185,28 @@
     if (!_drag) return false;
     const snapshot = _drag;
     _drag = null;
+    if (snapshot.kind === 'flip' && snapshot.origPoints.length >= 2) {
+      snapshot.currentPoints = [snapshot.origPoints[1], snapshot.origPoints[0]];
+      applyShapePoints('tripwire', snapshot.name, snapshot.currentPoints);
+      _callbacks.drawOverlay?.();
+      return persistGeometryEdit(snapshot);
+    }
     if (!pointsChanged(snapshot.origPoints, snapshot.currentPoints)) {
       _callbacks.drawOverlay?.();
       return true;
     }
     return persistGeometryEdit(snapshot);
+  }
+
+  function flipTripwire(name) {
+    const tw = findShape('tripwire', name);
+    const seg = tw?.line_segment || tw?.line;
+    if (!Array.isArray(seg) || seg.length < 2) return Promise.resolve(false);
+    const origPoints = clonePts(seg);
+    const currentPoints = [origPoints[1], origPoints[0]];
+    applyShapePoints('tripwire', name, currentPoints);
+    _callbacks.drawOverlay?.();
+    return persistGeometryEdit({ type: 'tripwire', name, kind: 'flip', origPoints, currentPoints });
   }
 
   async function renameShape(type, cameraId, oldName, providedName) {
@@ -206,25 +216,18 @@
       : (typeof prompt === 'function' ? prompt(`Rename ${type} '${oldName}':`, oldName) : null);
     const nextName = raw ? String(raw).trim() : '';
     if (!nextName || nextName === oldName) return false;
-
     const endpoint = type === 'zone'
       ? `/api/scenarios/zones/${encodeURIComponent(cameraId)}/${encodeURIComponent(oldName)}`
       : `/api/scenarios/tripwires/${encodeURIComponent(cameraId)}/${encodeURIComponent(oldName)}`;
     try {
-      const res = await fetch(endpoint, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nextName }),
-      });
+      const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nextName }) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || res.statusText || `HTTP ${res.status}`);
       }
       const item = findShape(type, oldName);
       if (item) item.name = nextName;
-      if (_selected && _selected.type === type && _selected.name === oldName) {
-        _selected.name = nextName;
-      }
+      if (_selected && _selected.type === type && _selected.name === oldName) _selected.name = nextName;
       window.StudioOverlays?.renderScenarioListUI?.();
       _callbacks.drawOverlay?.();
       _callbacks.updateStatus?.(`Renamed ${type} '${oldName}' to '${nextName}'.`);
@@ -239,26 +242,34 @@
   function drawHandles(ctx, pts, isSelected) {
     if (!Array.isArray(pts)) return;
     for (let i = 0; i < pts.length; i++) {
-      ctx.beginPath();
-      ctx.arc(pts[i][0], pts[i][1], isSelected ? 6 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? '#38bdf8' : '#ffffff';
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = isSelected ? '#ffffff' : '#0f172a';
-      ctx.stroke();
+      ctx.beginPath(); ctx.arc(pts[i][0], pts[i][1], isSelected ? 6 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? '#38bdf8' : '#ffffff'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = isSelected ? '#ffffff' : '#0f172a'; ctx.stroke();
+    }
+  }
+
+  function drawFlipHandle(ctx, seg, isSelected) {
+    const h = getFlipHandle(seg);
+    if (!h) return;
+    ctx.beginPath(); ctx.arc(h.x, h.y, isSelected ? 9 : 8, 0, Math.PI * 2);
+    ctx.fillStyle = isSelected ? '#0284c7' : '#0f172a'; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#38bdf8'; ctx.stroke();
+    if (typeof ctx.fillText === 'function') {
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('⇄', h.x, h.y);
     }
   }
 
   function drawSelection(ctx, _canvas, saved) {
     if (!ctx || !saved) return;
     ctx.save();
-    (saved.zones || []).forEach((z) => {
-      const isSel = _selected?.type === 'zone' && _selected?.name === z.name;
-      drawHandles(ctx, z.polygon, isSel);
-    });
+    (saved.zones || []).forEach((z) => drawHandles(ctx, z.polygon, _selected?.type === 'zone' && _selected?.name === z.name));
     (saved.tripwires || []).forEach((tw) => {
+      const seg = tw.line_segment || tw.line;
       const isSel = _selected?.type === 'tripwire' && _selected?.name === tw.name;
-      drawHandles(ctx, tw.line_segment || tw.line, isSel);
+      drawHandles(ctx, seg, isSel);
+      drawFlipHandle(ctx, seg, isSel);
     });
     ctx.restore();
   }
@@ -272,15 +283,7 @@
   }
 
   window.StudioShapeEditor = {
-    init,
-    hitTest,
-    onMouseDown,
-    onMouseMove,
-    onMouseUp,
-    cancelDrag,
-    renameShape,
-    drawSelection,
-    selectShape,
-    getSelected: () => _selected,
+    init, hitTest, onMouseDown, onMouseMove, onMouseUp, cancelDrag,
+    renameShape, flipTripwire, drawSelection, selectShape, getSelected: () => _selected,
   };
 })();

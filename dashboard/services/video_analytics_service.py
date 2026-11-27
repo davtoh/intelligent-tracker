@@ -137,7 +137,8 @@ def _build_offline_analytics_and_bus(
     event_bus.subscribe(_tag_and_collect)
     fts_index = EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
     analytics = AnalyticsEngine(
-        camera_id=scenario_camera_id or "offline_video", event_bus=event_bus, rsac_manager=rsac_mgr,
+        camera_id=scenario_camera_id or (f"video:{safe_name}" if safe_name else "offline_video"),
+        event_bus=event_bus, rsac_manager=rsac_mgr,
     )
     _apply_scenario_to_analytics(analytics, scenario_camera_id)
     return analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state

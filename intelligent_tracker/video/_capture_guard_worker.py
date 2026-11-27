@@ -5,7 +5,7 @@ import sys
 import threading
 import time
 from enum import Enum
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional
 import numpy as np
 
 logger = logging.getLogger(__name__)

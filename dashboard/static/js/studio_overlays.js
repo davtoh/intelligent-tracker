@@ -124,6 +124,7 @@
       else if (action === 'rename-zone') window.StudioShapeEditor?.renameShape?.('zone', cameraId, name);
       else if (action === 'delete-tripwire') window.Studio?.deleteTripwire(cameraId, name);
       else if (action === 'rename-tripwire') window.StudioShapeEditor?.renameShape?.('tripwire', cameraId, name);
+      else if (action === 'flip-tripwire') window.StudioShapeEditor?.flipTripwire?.(name);
       else if (action === 'delete-topology-link') window.Studio?.deleteTopologyLink(linkId);
     };
     ['studio-zones-list', 'studio-tripwires-list', 'topology-links-list'].forEach((id) => {
@@ -167,6 +168,7 @@
             </div>
             <div class="item-sub">(${tw.line_segment[0][0]}, ${tw.line_segment[0][1]}) -> (${tw.line_segment[1][0]}, ${tw.line_segment[1][1]})</div>
             <div class="item-actions">
+              <button class="btn btn-xs btn-outline" data-action="flip-tripwire" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(tw.name)}" title="Flip IN/OUT direction">⇄</button>
               <button class="btn btn-xs btn-outline" data-action="rename-tripwire" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(tw.name)}" title="Rename tripwire">✏️</button>
               <button class="btn btn-xs btn-outline-danger" data-action="delete-tripwire" data-camera-id="${escapeHtml(state.activeCamera)}" data-name="${escapeHtml(tw.name)}">🗑️</button>
             </div>

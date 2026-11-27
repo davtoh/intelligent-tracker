@@ -19,7 +19,12 @@ _RESTRICTED_CATEGORIES = frozenset({"restricted", "banned", "blacklisted"})
 
 def resolve_camera_id(bundle: PipelineBundle) -> str:
     """Resolve active camera identifier from analytics or config."""
-    return getattr(bundle.analytics, "camera_id", None) or getattr(bundle.config, "camera_id", None) or "default"
+    cam_id = getattr(bundle.analytics, "camera_id", None) or getattr(bundle.config, "camera_id", None) or "default"
+    if cam_id == "offline_video":
+        vf = getattr(getattr(bundle, "gallery_matcher", None), "video_filename", None)
+        if vf:
+            return f"video:{vf}"
+    return str(cam_id)
 
 
 def build_zone_lookup(bundle: PipelineBundle, tracks: dict[int, Any]) -> dict[int, str]:

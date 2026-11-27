@@ -184,29 +184,55 @@ class CameraHealthManager:
             return {"status": "skipped", "message": f"Source '{source}' is not a local DirectShow index."}
 
 
-def _find_active_pool_snapshot(pool: Any, target_source: Union[str, int]) -> Optional[Dict[str, Any]]:
-    """Reuse snapshot and telemetry from a running pool stream matching ``target_source``."""
+def _pool_stream_matches(
+    cfg: Dict[str, Any], stream_mgr: Any, target_str: str, req_str: str, device_name: Optional[str]
+) -> bool:
+    """Return True if a running pool stream matches source, resolved source, or device_name."""
+    cfg_src = str(cfg.get("source", "")).strip()
+    if cfg_src and cfg_src in (target_str, req_str):
+        return True
+    res_src = getattr(stream_mgr, "_resolved_source", None)
+    if res_src is not None and str(res_src).strip() in (target_str, req_str):
+        return True
+    if device_name:
+        cfg_dev = str(cfg.get("device_name") or (cfg.get("details") or {}).get("device_name") or "").strip().lower()
+        if cfg_dev and cfg_dev == device_name.strip().lower():
+            return True
+    return False
+
+
+def _find_active_pool_snapshot(
+    pool: Any,
+    target_source: Union[str, int],
+    *,
+    requested_source: Optional[Union[str, int]] = None,
+    device_name: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Reuse snapshot and telemetry from a running pool stream matching source or device_name."""
     import base64
     from dashboard.services.camera_pool_queries import snapshot_pool_streams
 
     streams = snapshot_pool_streams(pool)
     if not streams:
         return None
+    target_str = str(target_source).strip()
+    req_str = str(requested_source).strip() if requested_source is not None else target_str
     for cam_id, stream_mgr in streams.items():
         if not stream_mgr or not stream_mgr.is_running:
             continue
         cfg = pool.camera_configs.get(cam_id, {})
-        if str(cfg.get("source")).strip() != str(target_source).strip():
+        if not _pool_stream_matches(cfg, stream_mgr, target_str, req_str, device_name):
             continue
         jpeg_bytes = stream_mgr.get_latest_frame_jpeg()
         if not jpeg_bytes:
             continue
         telemetry = stream_mgr.get_latest_telemetry()
         w, h = telemetry.get("width") or 640, telemetry.get("height") or 480
+        resolved_dev = device_name or cfg.get("device_name") or (cfg.get("details") or {}).get("device_name")
         return {
             "success": True, "source": str(target_source), "resolution": f"{w}x{h}",
             "width": w, "height": h, "fps": round(float(telemetry.get("fps") or 30.0), 1),
-            "backend": "Active StreamManager",
+            "backend": "Active StreamManager", "device_name": resolved_dev,
             "snapshot_base64": base64.b64encode(jpeg_bytes).decode("ascii"),
             "resolved_source": str(target_source), "active_stream_id": cam_id,
             "note": f"Camera is already streaming live in channel '{cam_id}'",
@@ -214,10 +240,14 @@ def _find_active_pool_snapshot(pool: Any, target_source: Union[str, int]) -> Opt
     return None
 
 
-def probe_camera_test_request(req: Any, pool: Any = None) -> Dict[str, Any]:
+def probe_camera_test_request(
+    req: Any, pool: Any = None, device_name: Optional[str] = None
+) -> Dict[str, Any]:
     """Probe a candidate camera source or reuse an active pool stream snapshot."""
+    from intelligent_tracker.camera_resolver import CameraPathResolver
     from intelligent_tracker.discovery import build_preset_rtsp_url, test_camera_connection
 
+    req_device = device_name if device_name is not None else getattr(req, "device_name", None)
     target_source = req.source
     if req.preset and req.ip:
         target_source = build_preset_rtsp_url(
@@ -225,38 +255,69 @@ def probe_camera_test_request(req: Any, pool: Any = None) -> Dict[str, Any]:
             username=req.username or "", password=req.password or "",
             channel=req.channel or 1, stream=req.stream or "main",
         )
-    if not target_source:
+    if target_source is None or target_source == "":
         target_source = "synthetic"
+    requested_source = target_source
+    resolved_device_name = req_device
     if isinstance(target_source, str) and target_source.isdigit():
         target_source = int(target_source)
+    if req_device and not (isinstance(target_source, str) and target_source.lower().startswith(("rtsp://", "rtsps://", "http://", "https://"))):
+        resolved_src, meta = CameraPathResolver.resolve_camera_source(target_source, device_name=req_device)
+        if meta.get("status") != "error":
+            target_source = resolved_src
+            resolved_device_name = meta.get("device_name") or req_device
 
-    active = _find_active_pool_snapshot(pool, target_source)
+    active = _find_active_pool_snapshot(
+        pool, target_source, requested_source=requested_source, device_name=resolved_device_name
+    )
     if active is not None:
         return active
     res = test_camera_connection(target_source)
     res["resolved_source"] = str(target_source)
+    if resolved_device_name:
+        res["device_name"] = resolved_device_name
     return res
+
+
+def _match_active_index(row: dict[str, Any], mgr: Any, active_indices: set[int]) -> Optional[int]:
+    """Return the first active USB index matching a camera row or resolved stream source."""
+    vs = getattr(mgr, "video_source", None) if mgr is not None else None
+    for cand in (row.get("source"), getattr(mgr, "_resolved_source", None) if mgr else None, getattr(vs, "source", None) if vs else None):
+        if isinstance(cand, int) and not isinstance(cand, bool) and cand in active_indices:
+            return cand
+        if isinstance(cand, str) and cand.strip().isdigit() and int(cand.strip()) in active_indices:
+            return int(cand.strip())
+    return None
 
 
 def collect_active_usb_metadata(pool: Any, active_indices: set[int]) -> dict[int, dict[str, Any]]:
     """Build USB discovery metadata from active pool streams without probing hardware."""
+    from dashboard.services.camera_pool_queries import snapshot_pool_streams
+    from intelligent_tracker.camera_device import CameraDeviceHandler
+
     meta: dict[int, dict[str, Any]] = {}
+    streams = snapshot_pool_streams(pool)
     for row in pool.list_cameras():
-        src = str(row.get("source", "")).strip()
-        if not src.isdigit():
+        mgr = streams.get(row.get("id"))
+        matched_idx = _match_active_index(row, mgr, active_indices)
+        if matched_idx is None:
             continue
-        idx = int(src)
-        if idx in active_indices:
-            res = row.get("resolution", "640x480")
-            w, _, h = str(res).partition("x")
-            meta[idx] = {
-                "index": idx,
-                "name": row.get("device_name") or row.get("name") or f"USB Camera {idx}",
-                "resolution": res,
-                "width": int(w) if w.isdigit() else 640,
-                "height": int(h) if h.isdigit() else 480,
-                "fps": float(row.get("fps") or 30.0),
-                "in_use": True,
-            }
+        res = row.get("resolution", "640x480")
+        w, _, h = str(res).partition("x")
+        dev_name = row.get("device_name") or row.get("name") or f"USB Camera {matched_idx}"
+        backend = (
+            getattr(mgr, "_backend", None)
+            or getattr(getattr(mgr, "video_source", None), "backend_name", None)
+            or row.get("backend")
+        )
+        entry: dict[str, Any] = {
+            "index": matched_idx, "name": dev_name, "device_name": dev_name,
+            "resolution": res, "width": int(w) if w.isdigit() else 640,
+            "height": int(h) if h.isdigit() else 480, "fps": float(row.get("fps") or 30.0),
+            "is_virtual": CameraDeviceHandler.is_virtual_device(dev_name), "in_use": True,
+        }
+        if backend:
+            entry["backend"] = backend
+        meta[matched_idx] = entry
     return meta
 
