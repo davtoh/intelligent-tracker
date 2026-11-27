@@ -1,0 +1,57 @@
+# Step 1: P0 Runtime Crashes, Tracking Stability, Clean Studio Overlays & Timeline Filter Reset
+
+> **Parent Master Roadmap**: `.TODO/tracking_studio_alerts_and_recording_parity_master_roadmap.md` (`--parent tracking_studio_alerts_and_recording_parity_master_roadmap --milestone 1`)
+> **Architecture Blueprint**: `docs/architecture/IDEAL_WORLD_ARCHITECTURE.md` (`ADRs 05, 10, 13, 15, 17, 20, 22, 23`), `docs/architecture/CURRENT_ARCHITECTURE.md` (`DBG-01`, `DBG-02`, `OBS-028`, `OBS-029`, `OBS-035`, `OBS-036`, `OBS-040`, `OBS-047`)
+> **Goal**: Eliminate all P0 runtime crashes and core tracking/studio/timeline seam failures: `MultiCameraHandoffCoordinator.record_zone_exit()` `TypeError` (`DBG-01`, `OBS-036`), `CANONICAL_REID_DIM = 608` vs `2560` boot re-embed failure (`DBG-02`), `SortTracker` trailing coasting ghost boxes at `8 FPS` (`OBS-047`, `OBS-036`), duplicate same-entity labels in one frame (`OBS-040`), Camera Edit chip selector bleed (`OBS-036`), `#studio` burned-in legacy boxes and frozen/missing client overlays (`OBS-028`, `OBS-029`), and `#timeline` float-epoch SQL mismatch + missing Reset filter control (`OBS-035`).
+
+---
+
+## Public Surface, Modularity Budgets & Contracts
+
+### 1. Modularity Budget Guardrails (Verified Pre-Flight via `diagnose.py audit`)
+- Global soft ceiling `<= 350L`/file (hard `< 500L`), `<= 12` methods/class, `<= 40L`/function, zero CSS `!important`.
+- **Tight-Cap Files (Verified Live Counts)**:
+  - `dashboard/static/js/gallery_timeline.js`: **`348L`** — MUST stay `<= 350L` (extract `#timeline` active-range chip & Reset helper into a small helper or compact existing code).
+  - `dashboard/static/js/active_source_context.js`: **`345L`** — 1-line `?annotated=false` edit only (`<= 346L`).
+  - `dashboard/static/studio.js`: **`337L`** — keep `<= 345L` (place live-telemetry redraw subscription in `dashboard/static/js/studio_media.js`, currently `138L`).
+  - `dashboard/static/js/scrubber_overlay.js`: **`334L`** — export `getCurrentTracks` cleanly (`<= 338L`).
+  - `intelligent_tracker/matching/gallery.py`: **`325L`** — extract 1-to-1 per-frame entity uniqueness helper into `intelligent_tracker/matching/_gallery_matching.py` or a new small helper module so `gallery.py` stays `<= 340L`.
+  - `dashboard/static/js/camera_ai_config.js`: **`278L`** (strict cap `< 280L`) — tighten `.btn-tag-preset` selector in place without net line growth.
+
+### 2. Scenario Combinations Matrix
+| Scenario | Input / Trigger | Expected Outcome | Verification |
+| :--- | :--- | :--- | :--- |
+| **Zone Exit with Real `MultiCameraHandoffCoordinator`** | Track exits zone with `handoff=MultiCameraHandoffCoordinator(...)` | `record_zone_exit(..., track_id=tid)` succeeds with `0` `TypeError`; `FrameProcessor.step()` completes | `replay_pipeline_probe.py` + unit test |
+| **Boot `reembed_mismatched_signatures()`** | `TrackerDB` contains `2560D` `DualModel` signatures | `resolve_reid_profile()` returns `2560D`; `reembed_mismatched_signatures()` reports `mismatched=0, failed=0` | `effective_config_probe.py` + unit test |
+| **8 FPS Synthetic `P1` Tracking** | Step `SyntheticFrameGenerator` + `MockDetector` + `SortTracker` at `dt=0.125s` | Centroid fallback keeps single stable `track_id`, `<= 1` visible box per target (`0` coasting trails), reaches `K=3` Re-ID | `tracking_coasting_and_uniqueness_probe.py` |
+| **Two Concurrent Boxes Matching Same Entity** | Feed 2 overlapping/adjacent `person` crops both scoring `>= 0.65` for `"Samir"` on `usb_0` | Higher-scoring track binds `"Samir"`; second track remains unlabeled/next-best (`<= 1` track per `entity_id` per frame) | `tracking_coasting_and_uniqueness_probe.py` |
+| **Camera Edit Empty `classes` Chip Isolation** | Open Camera Edit with `classes=""` and `tracked_categories=["bag_parcel"]` | Only `bag_parcel` category chip is `.active`; `.btn-gallery-ent-chip` and other `.btn-cat-chip` stay unhighlighted | Node VM test in `test_step1_p0_runtime_tracking_and_studio_overlays.py` |
+| **`#studio` Clean Stream & Live Track Redraw** | Open `#studio` on live camera & recorded video; toggle BBoxes pill off/on | `#studio-live-img.src` contains `annotated=false`; live WS updates redraw `#studio-drawing-canvas`; `ScrubberOverlay.getCurrentTracks()` returns active video tracks | `deep_link_navigation_probe.py` + Node VM test |
+| **`#analytics` Peak -> `#timeline` & Reset** | Query `/sightings?start_time=1795810960.12&end_time=1795811020.12`; click Reset in `#timeline` | Float epoch converts to UTC `"YYYY-MM-DD HH:MM:SS"` matching DB rows; Reset clears hidden `from`/`to`/`videoFilename` and re-queries | `sightings_provenance_probe.py` + Node VM test |
+
+---
+
+## Milestone 1: P0 Runtime Crashes, Tracking Stability, Clean Studio Overlays & Timeline Reset *(Active)*
+
+- [ ] **intelligent_tracker/world/handoff.py**: Add optional `track_id: int | None = None` parameter to `MultiCameraHandoffCoordinator.record_zone_exit()` (storing `track_id` in exit metadata when provided) and guard `self.transition_registry is not None` at line `212` so `post_detection_governance.py:69` never raises `TypeError` on zone exit (`DBG-01`, `OBS-036`).
+- [ ] **intelligent_tracker/reid/profile.py**: Replace hardcoded `CANONICAL_REID_DIM = 608` (`lines 10, 39`) with canonical `DualModelFeatureExtractor` output dimension (`2560`, dynamically verified when an extractor is available) and align `intelligent_tracker/reid/gallery_reembed.py` (`line 61`) so valid `2560D` signatures pass with `mismatched=0, failed=0` (`DBG-02`).
+- [ ] **intelligent_tracker/tracker/sort.py**: Add a bounded Stage-2 centroid-distance fallback (matching unmatched detections to unmatched tracks within `max(64px, 1.5 * box_diag)` when IoU `< iou_threshold`) so fast-moving targets under `8 FPS` load-shedding keep a single stable `track_id` instead of spawning trailing boxes (`OBS-047`, `OBS-036`).
+- [ ] **dashboard/services/stream_telemetry.py**: Filter stale `state="coasting"` tracks beyond a short visual grace window (e.g., `time_since_update > 1` or `state == "coasting"` when a confirmed track is active) and suppress unconfirmed single-hit tentative noise where appropriate so `#live` overlays never render trailing ghost boxes along a target's path (`OBS-047`).
+- [ ] **intelligent_tracker/matching/gallery.py**: Enforce per-frame 1-to-1 entity uniqueness in `GalleryMatcher.match_tracks()` (via a small extracted helper in `intelligent_tracker/matching/_gallery_matching.py` and track-ownership check in `intelligent_tracker/matching/identity_hysteresis.py`) so two concurrent tracks on the same camera cannot simultaneously bind the same `entity_id`, clearing losing duplicate bindings cleanly (`OBS-040`).
+- [ ] **dashboard/static/js/camera_ai_config.js**: Exclude `.btn-cat-chip` and `.btn-gallery-ent-chip` from `getPresetButtons()` (`#modal-camera-manager .btn-tag-preset:not([data-target]):not(.btn-cat-chip):not(.btn-gallery-ent-chip)`) so empty `classes` never highlights unrelated category/gallery chips (`OBS-036`, keeping `< 280L`).
+- [ ] **dashboard/static/js/studio_media.js**: Append `annotated=false` to `#studio-live-img` URLs in `studio_media.js:117-125` and `dashboard/static/js/active_source_context.js:279-280`, and wire a lightweight `#studio` telemetry redraw listener in `studio_media.js` (plus `Studio.drawOverlay()` hook when `#tab-studio` is active) so client-side boxes render cleanly without burned-in server boxes and stay live (`OBS-028`, `OBS-029`).
+- [ ] **dashboard/static/js/scrubber_overlay.js**: Export `getCurrentTracks()` on `window.ScrubberOverlay` delegating to `getTracksAtCurrentTime()` so `dashboard/static/studio.js:61` renders recorded-video tracks cleanly in `#studio` (`OBS-029`).
+- [ ] **intelligent_tracker/repositories/sightings_query_helpers.py**: Normalize numeric / float-string Unix epoch `start_time` and `end_time` inputs to UTC `"YYYY-MM-DD HH:MM:SS"` strings before SQLite `s.timestamp >= ?` / `<= ?` comparison so `#analytics` peak drill-downs return matching sightings (`OBS-035`).
+- [ ] **dashboard/static/partials/tabs/timeline.html**: Add a compact active-window indicator chip (`#timeline-active-window-chip`) and `"Reset"` button (`#btn-reset-timeline-filters`) alongside `#btn-filter-sightings`, wired via a small helper module (`dashboard/static/js/timeline_filter_helpers.js`, keeping `dashboard/static/js/gallery_timeline.js <= 350L`) that clears `timelineStartTime`, `timelineEndTime`, `timelineVideoFilename`, and URL hash params (`OBS-035`).
+- [ ] **tests/test_step1_p0_runtime_tracking_and_studio_overlays.py**: Add isolated backend + Node VM unit tests (`< 340L`) covering `record_zone_exit(track_id=...)`, `2560D` `reembed_mismatched_signatures`, `SortTracker` `8 FPS` centroid fallback & telemetry ghost filtering, 1-to-1 per-frame entity uniqueness, `CameraAIConfig` chip isolation, `#studio` `?annotated=false` + `ScrubberOverlay.getCurrentTracks()`, and `#timeline` float-epoch SQL + Reset button.
+- [ ] **.diagnostics/probes/tracking_coasting_and_uniqueness_probe.py**: Add workspace probe verifying `8 FPS` synthetic `P1` tracking (`1` visible box + `K=3` identity lock) and 2-box `"Samir"` 1-to-1 exclusion; extend `.diagnostics/probes/effective_config_probe.py` (`reembed` `failed == 0`), `.diagnostics/probes/replay_pipeline_probe.py` (real `MultiCameraHandoffCoordinator` zone exit), `.diagnostics/probes/deep_link_navigation_probe.py` (`#studio-live-img` `annotated=false`), and `.diagnostics/probes/sightings_provenance_probe.py` (float epoch range).
+- [ ] **CHANGELOG.md**: Record milestone completion via `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" changelog add`.
+- [ ] **Verifier (Step 1)**:
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path intelligent_tracker/world/handoff.py intelligent_tracker/pipeline/post_detection_governance.py intelligent_tracker/reid/profile.py intelligent_tracker/reid/gallery_reembed.py intelligent_tracker/tracker/sort.py intelligent_tracker/pipeline/frame_processor.py intelligent_tracker/matching/gallery.py intelligent_tracker/matching/identity_hysteresis.py intelligent_tracker/repositories/sightings_query_helpers.py dashboard/services/stream_telemetry.py dashboard/static/js/camera_ai_config.js dashboard/static/studio.js dashboard/static/js/studio_media.js dashboard/static/js/active_source_context.js dashboard/static/js/scrubber_overlay.js dashboard/static/js/gallery_timeline.js dashboard/static/partials/tabs/timeline.html tests/test_step1_p0_runtime_tracking_and_studio_overlays.py --max-lines 350 --max-fn-lines 40`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_p0_runtime_tracking_and_studio_overlays.py tests/test_pipeline_parity.py tests/test_live_studio_sync.py`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run tracking_coasting_and_uniqueness_probe`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run effective_config_probe`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run sightings_provenance_probe`
+  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`
