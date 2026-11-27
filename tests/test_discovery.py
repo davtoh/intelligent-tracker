@@ -1,25 +1,18 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 Unit tests for Dual Camera Auto-Discovery, RTSP Presets & Diagnostics (Milestone 7).
 """
 
-import os
-import sys
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from intelligent_tracker.discovery import (
-    DiscoveredCamera,
-    find_physical_cameras,
-    probe_onvif_devices,
-    discover_rtsp_devices,
-    discover_all_cameras,
-    test_camera_connection,
-    build_preset_rtsp_url,
-    check_port_open,
-    get_local_subnet_ips,
     CAMERA_PRESETS,
+    DiscoveredCamera,
+    build_preset_rtsp_url,
+    discover_all_cameras,
+    get_local_subnet_ips,
+    test_camera_connection,
 )
 
 
@@ -162,12 +155,16 @@ class TestCameraDiscovery(unittest.TestCase):
 
     def test_11_discover_all_cameras_mock_fallback(self):
         """Verify discovery returns synthetic test feed when no physical devices are found."""
-        results = discover_all_cameras(
-            include_usb=False,
-            include_onvif=False,
-            include_lan_rtsp=False,
-            mock_fallback=True,
-        )
+        with patch(
+            "intelligent_tracker.discovery.scanner.CameraDeviceHandler.is_container_environment",
+            return_value=False,
+        ):
+            results = discover_all_cameras(
+                include_usb=False,
+                include_onvif=False,
+                include_lan_rtsp=False,
+                mock_fallback=True,
+            )
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].type, "synthetic")
         self.assertEqual(results[0].id, "synthetic_01")

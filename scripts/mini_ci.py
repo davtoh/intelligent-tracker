@@ -155,6 +155,12 @@ def build_wsl_script(
         f'REQ_HASH="{req_hash}"',
         f"cd {shlex.quote(wsl_repo_path)}",
         'if [ ! -x "$VENV/bin/python" ] || [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$REQ_HASH" ]; then',
+        '  if ! python3 -c "import ensurepip" >/dev/null 2>&1; then',
+        '    echo "[mini_ci --linux/wsl] Missing python3-venv in WSL. Install with:" >&2',
+        '    echo "  sudo apt-get update && sudo apt-get install -y python3-venv libgl1 libglib2.0-0 ffmpeg nodejs" >&2',
+        '    echo "Or run with Docker instead: python scripts/mini_ci.py --linux --backend docker" >&2',
+        "    exit 2",
+        "  fi",
         '  mkdir -p "$(dirname "$VENV")"',
         '  python3 -m venv "$VENV"',
         '  "$VENV/bin/python" -m pip install --upgrade pip setuptools wheel',
@@ -170,9 +176,9 @@ def build_wsl_script(
     ])
 
 
-def build_wsl_command(distro: str, script: str) -> list[str]:
-    """Build the wsl.exe invocation for executing a bash script."""
-    return ["wsl", "-d", distro, "--", "bash", "-lc", script]
+def build_wsl_command(distro: str, _script: Optional[str] = None) -> list[str]:
+    """Build the wsl.exe invocation that reads the bash script from stdin."""
+    return ["wsl", "-d", distro, "--", "bash", "-s"]
 
 
 def docker_image_tag(req_hash: str) -> str:
@@ -184,7 +190,7 @@ def build_dockerfile() -> str:
     """Return Dockerfile text mirroring .github/workflows/ci.yml on python:3.12-slim."""
     return "\n".join([
         f"FROM {DOCKER_BASE_IMAGE}",
-        "RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 ffmpeg && rm -rf /var/lib/apt/lists/*",
+        "RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 ffmpeg nodejs && rm -rf /var/lib/apt/lists/*",
         "COPY requirements.txt /tmp/requirements.txt",
         "RUN python -m pip install --upgrade pip setuptools wheel && "
         "pip install --no-cache-dir -r /tmp/requirements.txt ruff sphinx sphinx-rtd-theme",
@@ -255,7 +261,11 @@ def _run_linux(args: argparse.Namespace, work_dir: Path) -> int:
         if args.dry_run:
             print(script)
             return 0
-        return subprocess.run(build_wsl_command(args.wsl_distro, script), check=False).returncode
+        return subprocess.run(
+            build_wsl_command(args.wsl_distro),
+            input=(script + "\n").encode("utf-8"),
+            check=False,
+        ).returncode
 
     tag = docker_image_tag(req_hash)
     rc = _ensure_docker_image(tag, REPO_ROOT, args.dry_run)

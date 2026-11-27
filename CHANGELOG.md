@@ -1,5 +1,15 @@
 # Changelog
 
+## [2026-11-27] feat: Local Mini-CI Linux Parity Verification (Milestone 2)
+- **Type**: feat
+- **Summary**: Verified scripts/mini_ci.py --linux end-to-end via Docker (1,217 tests OK), hardened Windows-to-WSL pure-LF stdin delivery, added nodejs to Docker CI image, patched test_discovery container check, and documented WSL/Docker setup in SETUP_GUIDE.md
+- **Files** (4):
+  - `scripts/mini_ci.py`
+  - `tests/test_mini_ci.py`
+  - `tests/test_discovery.py`
+  - `SETUP_GUIDE.md`
+- **Verification**: scripts/mini_ci.py --linux --backend docker --skip-docs (1217 OK); scripts/mini_ci.py --fast --tests tests/test_mini_ci.py tests/test_discovery.py tests/test_diagnostics_contract.py
+
 ## [2026-11-26] feat: Debug Observation Connector Adoption (Tier A Adapted, M1-M4)
 - **Type**: feat
 - **Summary**: Completed Wire Contract v1 loopback-gated routes, dev-only HUD injection, X-Debug-Recording-Id trace stamping, debug_session probe open_observations_count warning status, architecture/Sphinx docs, .agents/rules/debug-observations.md, and FOR AUDITS prompt hand-off.

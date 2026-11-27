@@ -166,11 +166,13 @@ class TestMiniCiCommandConstruction(unittest.TestCase):
         self.assertIn('export HOME="$CLEAN_HOME"', script)
         self.assertIn('export IT_DISABLE_EXTERNAL_SKILLS="1"', script)
         self.assertIn('export MPLBACKEND="Agg"', script)
+        self.assertIn("import ensurepip", script)
         self.assertIn("unittest -v tests/test_mini_ci.py", script)
         self.assertNotIn("-m sphinx", script)
 
-        cmd = mini_ci.build_wsl_command("Ubuntu-24.04", script)
-        self.assertEqual(cmd[:5], ["wsl", "-d", "Ubuntu-24.04", "--", "bash"])
+        cmd = mini_ci.build_wsl_command("Ubuntu-24.04")
+        self.assertEqual(cmd, ["wsl", "-d", "Ubuntu-24.04", "--", "bash", "-s"])
+        self.assertNotIn("\r", script)
 
     def test_docker_run_command_uses_hashed_image_and_isolated_home(self) -> None:
         tag = mini_ci.docker_image_tag("deadbeef1234")
@@ -188,6 +190,7 @@ class TestMiniCiCommandConstruction(unittest.TestCase):
         self.assertIn(tag, cmd)
         self.assertIn("unittest -v tests/test_mini_ci.py", cmd[-1])
         self.assertNotIn("ruff", cmd[-1])
+        self.assertIn("nodejs", mini_ci.build_dockerfile())
 
     def test_select_linux_backend_auto(self) -> None:
         with patch("scripts.mini_ci.shutil.which", side_effect=lambda name: "/bin/wsl" if name == "wsl" else None):
