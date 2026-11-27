@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 
 from dashboard import server
 from dashboard.app import create_app
+from dashboard.services import diagnostic_bridge
 from dashboard.services.debug_session import prepare_debug_session_env
+
+_HAS_OBS_ENGINE = diagnostic_bridge._obs is not None
+_SKIP_NO_OBS = "system-diagnostics observation_routes engine not installed"
 
 
 class TestDashboardDebugHud(unittest.TestCase):
@@ -32,6 +36,22 @@ class TestDashboardDebugHud(unittest.TestCase):
                 self.assertNotIn("/api/diagnostics/hud.js", html)
                 self.assertNotIn("/static/js/debug_observation_hud.js", html)
 
+    def test_index_renders_hud_tags_when_observations_enabled_is_true(self) -> None:
+        with patch("dashboard.app.observations_enabled", return_value=True):
+            app = create_app()
+            client = TestClient(app, client=("127.0.0.1", 50000))
+            resp = client.get("/")
+            self.assertEqual(resp.status_code, 200)
+            html = resp.text
+            self.assertIn("<script>window.__FRONTIER_DEBUG__ = true;</script>", html)
+            self.assertIn('<script src="/api/diagnostics/hud.js"></script>', html)
+            self.assertNotIn("/static/js/debug_observation_hud.js", html)
+            self.assertLess(
+                html.index("window.__FRONTIER_DEBUG__ = true;"),
+                html.index('/api/diagnostics/hud.js'),
+            )
+
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_index_injects_both_hud_scripts_when_flag_enabled(self) -> None:
         with patch.dict(os.environ, {"FRONTIER_DEBUG_OBSERVATIONS": "1"}, clear=False):
             app = create_app()
