@@ -9,9 +9,37 @@ Starts the Uvicorn ASGI server with defensive reload configurations:
 
 import argparse
 import os
+from pathlib import Path
+from typing import Any
 import uvicorn
 
 from dashboard.services import process_supervisor
+from dashboard.services.debug_session import prepare_debug_session_env
+
+
+def _add_debug_args(parser: argparse.ArgumentParser) -> None:
+    """Register isolated debug session CLI flags."""
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Run in isolated debug mode (data/debug_session/, DEBUG logs, faulthandler, structured error events).",
+    )
+    parser.add_argument(
+        "--clean-debug",
+        action="store_true",
+        help="Wipe existing debug session directory before booting in --debug mode.",
+    )
+    parser.add_argument(
+        "--debug-dir",
+        type=str,
+        default=None,
+        help="Custom debug session directory (default: TRACKER_DEBUG_DIR or data/debug_session).",
+    )
+    parser.add_argument(
+        "--debug-observations",
+        action="store_true",
+        help="Enable local-only Frontier debug observation connector & HUD (FRONTIER_DEBUG_OBSERVATIONS=1).",
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -19,41 +47,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the Intelligent Tracker Dashboard ASGI Server."
     )
-    parser.add_argument(
-        "--host",
-        type=str,
-        default=None,
-        help="Bind interface host (default: from HOST env var, or 0.0.0.0).",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=None,
-        help="Bind port (default: from PORT env var, or 8000).",
-    )
+    parser.add_argument("--host", type=str, default=None, help="Bind interface host (default: HOST env or 0.0.0.0).")
+    parser.add_argument("--port", type=int, default=None, help="Bind port (default: PORT env or 8000).")
     parser.add_argument(
         "--local",
         action="store_true",
         help="Bind exclusively to localhost (127.0.0.1) to avoid kernel spinlock deadlocks on secondary NICs.",
     )
-    parser.add_argument(
-        "--reload",
-        dest="reload",
-        action="store_true",
-        default=None,
-        help="Enable auto-reload on source code changes.",
-    )
-    parser.add_argument(
-        "--no-reload",
-        dest="reload",
-        action="store_false",
-        help="Disable auto-reload.",
-    )
-    parser.add_argument(
-        "--demo",
-        action="store_true",
-        help="Enable opt-in demo scenarios (loads configs/alert_demo.yaml).",
-    )
+    parser.add_argument("--reload", dest="reload", action="store_true", default=None, help="Enable auto-reload.")
+    parser.add_argument("--no-reload", dest="reload", action="store_false", help="Disable auto-reload.")
+    parser.add_argument("--demo", action="store_true", help="Enable opt-in demo scenarios (configs/alert_demo.yaml).")
+    _add_debug_args(parser)
     return parser.parse_args(argv)
 
 
@@ -96,25 +100,44 @@ def preflight_port_check(port: int, host: str = "0.0.0.0") -> bool:
     return False
 
 
+def _configure_debug_env(args: argparse.Namespace) -> tuple[bool, dict[str, str]]:
+    """Apply CLI debug/observation flags to environment and return (debug_active, debug_env)."""
+    if args.debug_observations:
+        os.environ["FRONTIER_DEBUG_OBSERVATIONS"] = "1"
+    debug_active = bool(args.debug or args.clean_debug)
+    debug_env: dict[str, str] = {}
+    if debug_active:
+        debug_dir = Path(args.debug_dir) if args.debug_dir else None
+        debug_env = prepare_debug_session_env(debug_dir, clean=bool(args.clean_debug))
+    return debug_active, debug_env
+
+
 def main(argv: list[str] | None = None) -> None:
     """CLI entrypoint for intelligent-tracker-server."""
     args = parse_args(argv)
     if args.demo:
         os.environ["IT_LOAD_DEMO_SCENARIOS"] = "1"
+    debug_active, debug_env = _configure_debug_env(args)
     host, port, reload = resolve_config(args)
 
     print("=== Starting Intelligent Tracker Dashboard ===")
     print(f"  Target: http://{host}:{port}")
     print(f"  Reload: {reload} (directories: dashboard/, intelligent_tracker/)")
+    if debug_active:
+        print(f"  [DEBUG] Session dir : {debug_env.get('TRACKER_DEBUG_DIR')}")
+        print(f"  [DEBUG] Clean start : {bool(args.clean_debug)}")
+        print("  [DEBUG] Inspector   : python scripts/debug_inspect.py")
+    if os.getenv("FRONTIER_DEBUG_OBSERVATIONS") == "1":
+        print("  [DEBUG] Observations: enabled (/api/diagnostics/*, loopback only)")
 
     process_supervisor.assign_to_job_object()
     preflight_port_check(port, host=host)
 
-    uvicorn_kwargs: dict[str, object] = {
+    uvicorn_kwargs: dict[str, Any] = {
         "host": host,
         "port": port,
         "reload": reload,
-        "log_level": "info",
+        "log_level": "debug" if debug_active else "info",
         "proxy_headers": True,
     }
     forwarded_allow_ips = os.getenv("FORWARDED_ALLOW_IPS", "").strip()

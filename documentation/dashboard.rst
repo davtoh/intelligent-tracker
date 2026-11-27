@@ -239,3 +239,92 @@ Alternatively, launch directly via Uvicorn:
    python -m uvicorn dashboard.app:app --host 0.0.0.0 --port 8000 --reload
 
 Open your browser at ``http://127.0.0.1:8000``.
+
+Data Reset & Clean Start (``scripts/reset_data.py``)
+----------------------------------------------------
+
+To wipe dashboard state cleanly before testing new features, use ``scripts/reset_data.py``.
+It resolves paths in order of **CLI flag > environment variable > repository default**
+(``TRACKER_DB_PATH`` / ``TRACKER_DB``, ``CAMERAS_CONFIG_PATH``, ``SCENARIOS_CONFIG_PATH``,
+``TRACKER_CROPS_DIR``, ``TRACKER_REPORTS_DIR``, ``TRACKER_VIDEOS_DIR``, ``TRACKER_DEBUG_DIR``).
+
+By default, ``reset_data.py``:
+
+- Exports a pre-reset backup archive to ``data/backups/pre_reset_<timestamp>.zip`` via ``BackupManager`` (pass ``--no-backup`` to skip).
+- Prompts per category: ``[Y/n]`` for ``db``, ``crops``, ``reports``, ``debug_session``, and ``docker_volumes``; ``[y/N]`` for ``videos`` and ``configs``.
+- Refuses non-TTY/headless stdin unless ``--yes``, ``--prompt``, or ``--dry-run`` is passed, and aborts if port ``8000`` is active unless ``--force`` is set.
+
+.. code-block:: bash
+
+   # Preview what would be deleted without modifying files
+   python scripts/reset_data.py --dry-run
+
+   # Interactive per-category reset (works in headless shells with --prompt)
+   python scripts/reset_data.py --prompt
+
+   # Non-interactive local + Docker volume reset (docker compose down -v)
+   python scripts/reset_data.py --target all --yes
+
+   # Reset only a custom test DB and crops without creating a backup
+   TRACKER_DB_PATH=data/test_clean.db python scripts/reset_data.py --only db,crops --yes --no-backup
+
+Isolated Debug Mode, Observations HUD & Error Inspector
+-------------------------------------------------------
+
+Launch ``scripts/run_dashboard.py`` with ``--debug`` (or ``--clean-debug`` to wipe the previous
+debug session before booting) to isolate all state under ``data/debug_session/`` and set
+``IT_DEBUG_MODE=1``:
+
+- **Isolated state**: ``tracker.db``, ``cameras.json``, ``scenarios.yaml``, ``crops/``, and ``reports/`` are redirected into ``data/debug_session/``.
+- **Full diagnostics**: Enables ``DEBUG`` logging to rotating ``debug.log``, ``faulthandler.log`` for native C/C++ crashes, ``PYTHONASYNCIODEBUG=1``, ``FastAPI(debug=True)``, and ``events.jsonl`` structured ``WARNING+`` capture.
+- **Interactive Observations HUD**: When ``IT_DEBUG_MODE=1``, ``debug_observation_hud.js`` mounts a collapsible floating **Log Observation** pill (zero overhead when disabled). It maintains a bounded 30-entry client ring buffer of clicks, tab/hash navigation, ``window.onerror`` exceptions, and failed ``fetch()`` calls, and submits timestamped notes to ``POST /api/system/debug/observation`` (stored as ``level="OBSERVATION"`` in ``events.jsonl``).
+
+Use ``scripts/debug_inspect.py``, ``GET /api/system/debug/summary``, or the workspace
+``debug_session`` probe to correlate user observations with backend warnings, errors, and
+tracebacks within a +/-30 s window:
+
+.. code-block:: bash
+
+   # 1. Boot a clean isolated debug session (enables IT_DEBUG_MODE=1 and Observations HUD)
+   python scripts/run_dashboard.py --local --clean-debug
+
+   # 2. Navigate the UI and click "Log Observation" whenever you spot an anomaly
+
+   # 3. Inspect deduplicated warnings/errors/crashes
+   python scripts/debug_inspect.py
+
+   # 4. Inspect user observations with breadcrumbs and correlated backend issues
+   python scripts/debug_inspect.py --observations
+
+   # 5. Drill into issue #1 with full traceback and surrounding debug.log lines
+   python scripts/debug_inspect.py --context 1
+
+   # 6. Emit compact JSON for CI or automated agents (or run the workspace diagnostic probe)
+   python scripts/debug_inspect.py --observations --json
+   python diagnose.py probe run debug_session
+
+Debug Observation Connector (Contract v1)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For structured visual audits, the dashboard also implements the **Tier A (Adapted)** Debug Observation Connector
+in ``dashboard/services/diagnostic_bridge.py`` and ``dashboard/app.py``:
+
+- **Activation & Security Gate**: Set ``FRONTIER_DEBUG_OBSERVATIONS=1`` in local development only. When unset, no
+  ``/api/diagnostics/*`` routes are mounted (all return ``404``) and no HUD script is injected. Requests from
+  non-loopback hosts return ``403``. Observations are stored locally in ``.diagnostics/`` (gitignored) and never
+  leave the machine; ``value``, ``password``, ``authorization``, and ``cookie`` fields are redacted server-side.
+- **Endpoints**: ``GET /api/diagnostics/health``, ``POST /api/diagnostics/observation`` (supports ``?dry_run=1``),
+  ``GET /api/diagnostics/observations``, ``GET /api/diagnostics/observations/{id_or_fingerprint}``, and
+  ``GET /api/diagnostics/hud.js``. Every response includes ``X-Diagnostics-Contract: 1``.
+- **HUD Workflow & Trace Correlation**: Open the dashboard with ``FRONTIER_DEBUG_OBSERVATIONS=1``, use the
+  dev-only HUD overlay to **Pick Element**, **Record**, reproduce the issue, **Stop**, and **Log Observation**.
+  While recording, the HUD sends ``X-Debug-Recording-Id`` on ``fetch``/XHR calls; ``DiagnosticTraceMiddleware``
+  stamps validated IDs onto server exception traces as ``recording_id``.
+- **Known Limits**: Contract v1 captures clicks, navigation, console/JS errors, and ``fetch``/XHR calls; WebSocket
+  frames and WebSocket-handler exceptions (``dashboard/routers/multiview.py``) are not captured or stamped in v1.
+- **Triage & Audit Workflow**: Migrate legacy debug-session notes with ``python scripts/debug_inspect.py --migrate-observations``
+  and run ``diagnose.py`` observation commands (``observations list``, ``observations pull``, ``observations show``,
+  ``observations triage``, ``observations resolve``, ``observations verify-connector``, and ``brief --run-probes --pull``)
+  to correlate ``OBS-XXX`` items with backend traces and workspace probes.
+
+

@@ -1,5 +1,39 @@
 # Changelog
 
+## [2026-11-27] feat: Local Mini-CI Linux Parity Verification (Milestone 2)
+- **Type**: feat
+- **Summary**: Verified scripts/mini_ci.py --linux end-to-end via Docker (1,217 tests OK), hardened Windows-to-WSL pure-LF stdin delivery, added nodejs to Docker CI image, patched test_discovery container check, and documented WSL/Docker setup in SETUP_GUIDE.md
+- **Files** (4):
+  - `scripts/mini_ci.py`
+  - `tests/test_mini_ci.py`
+  - `tests/test_discovery.py`
+  - `SETUP_GUIDE.md`
+- **Verification**: scripts/mini_ci.py --linux --backend docker --skip-docs (1217 OK); scripts/mini_ci.py --fast --tests tests/test_mini_ci.py tests/test_discovery.py tests/test_diagnostics_contract.py
+
+## [2026-11-26] feat: Debug Observation Connector Adoption (Tier A Adapted, M1-M4)
+- **Type**: feat
+- **Summary**: Completed Wire Contract v1 loopback-gated routes, dev-only HUD injection, X-Debug-Recording-Id trace stamping, debug_session probe open_observations_count warning status, architecture/Sphinx docs, .agents/rules/debug-observations.md, and FOR AUDITS prompt hand-off.
+- **Files** (8):
+  - `.TODO/debug_observation_connector_adoption_plan.md`
+  - `.diagnostics/probes/debug_session.py`
+  - `AGENTS.md`
+  - `docs/architecture/CURRENT_ARCHITECTURE.md`
+  - `documentation/dashboard.rst`
+  - `tests/test_debug_observation_mode.py`
+  - `tests/test_debug_session.py`
+  - `.agents/rules/debug-observations.md`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover -s tests -p 'test_*.py' (1197 passed); verify-connector CONFORMANT; sphinx -W clean
+
+## [2026-11-26] test: CI Parity & Batch Contract Hardening (M2)
+- **Type**: test
+- **Summary**: Added POSIX/Windows avatar URL & ROI propagation tests, bounded 1.0s multiview websocket close timeout test, and isolated TestVideoJobAPI DB state.
+- **Files** (4):
+  - `.TODO/ci_parity_and_batch_contract_hardening.md`
+  - `tests/test_ci_parity_and_batch_contract.py`
+  - `tests/test_multiview_session.py`
+  - `tests/test_video_jobs.py`
+- **Verification**: MPLBACKEND=Agg python -m unittest discover tests
+
 ## [2026-11-25] feat: Step 4: Reversible Review Audit & Studio / Analytics / Alerts UX
 - **Type**: feat
 - **Summary**: Complete Step 4 (review_decisions v5 audit/undo, recurring unknown queueing, Studio minimap zoom/BEV quad, Journey/Analytics/Snapshot overlay isolation) and close integration_seams_entity_persistence_master_roadmap
@@ -115,33 +149,3 @@
   - `dashboard/static/js/interactive_canvas.js`
   - ... (+12 more)
 - **Verification**: MPLBACKEND=Agg python -m unittest discover tests
-
-## [2026-11-23] feat: Step 3 Milestone 3: Target Class Filter Split, Enrollment Scrubber & Sign-Off
-- **Type**: feat
-- **Summary**: Split COCO detector_classes vs gallery tracked_categories across API/pipeline/UI and extracted ScrubberTimelineSlider for video_scrubber and Universal Enrollment.
-- **Files** (26):
-  - `dashboard/camera_pool.py`
-  - `dashboard/routers/cameras.py`
-  - `dashboard/routers/system.py`
-  - `dashboard/routers/video_jobs.py`
-  - `dashboard/routers/videos.py`
-  - `dashboard/schemas.py`
-  - `dashboard/services/camera_config_store.py`
-  - `dashboard/services/stream_pool_coordinator.py`
-  - ... (+18 more)
-- **Verification**: python -m unittest discover tests
-
-## [2026-11-23] feat: Step 2 Milestone 3: Person+Bag WorldGraph Ownership and Unattended-Item Alerts
-- **Type**: feat
-- **Summary**: Added WorldEdge/WorldEdgeRegistry, OwnershipAssociationEngine, UnattendedItemAlert with EventFTSIndex formatting, and live governance/telemetry wiring.
-- **Files** (13):
-  - `dashboard/services/stream_telemetry.py`
-  - `intelligent_tracker/events/__init__.py`
-  - `intelligent_tracker/events/types.py`
-  - `intelligent_tracker/memory/_event_formatters.py`
-  - `intelligent_tracker/pipeline/bundle.py`
-  - `intelligent_tracker/pipeline/post_detection_governance.py`
-  - `intelligent_tracker/world/__init__.py`
-  - `intelligent_tracker/world/_lifecycle.py`
-  - ... (+5 more)
-- **Verification**: .venv/Scripts/python.exe -m unittest discover tests

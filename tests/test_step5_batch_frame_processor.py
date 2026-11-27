@@ -75,7 +75,8 @@ class TestStep5BatchFrameProcessor(unittest.TestCase):
         from intelligent_tracker.pipeline.frame_processor import FrameProcessor
 
         indexer = VideoIndexer(
-            db=self.db, detector_name="mock", reid_name="color", reid_threshold=0.3, sample_rate=2,
+            db=self.db, detector_name="mock", reid_name="color",
+            reid_threshold=0.3, sample_rate=2, conf_threshold=0.95,
         )
         eid = self._enroll_green_target(extractor=indexer.extractor)
         indexer.matcher.refresh_gallery()
