@@ -143,6 +143,44 @@ class TestTraceRecordingIdAndMigration(unittest.TestCase):
             self.assertEqual(obs["kind"], "note")
             self.assertEqual(obs["attrs"]["migrated_from"], "debug_session/events.jsonl")
 
+    def test_debug_inspect_observations_shows_connector_and_legacy(self) -> None:
+        store = debug_inspect._load_observation_store()
+        self.assertIsNotNone(store)
+        store.add_observation(
+            self.workspace,
+            {
+                "kind": "element",
+                "page_path": "/#studio",
+                "selector": "#studio-drawing-canvas",
+                "message": "Drawn lines should have an IN/OUT handle",
+                "recording_id": "rec-abc123",
+                "timeline": [{"t": 1, "type": "click", "target": "#studio-drawing-canvas"}],
+            },
+        )
+        record_user_observation(
+            note="Legacy note",
+            tab="tab-live",
+            url="/#live",
+            breadcrumbs=[],
+            viewport={"width": 1280, "height": 720},
+            debug_dir=self.debug_dir,
+        )
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = debug_inspect.main([
+                "--dir", str(self.debug_dir),
+                "--workspace", str(self.workspace),
+                "--observations",
+            ])
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        self.assertIn("[CONNECTOR OBSERVATIONS]", out)
+        self.assertIn("OBS-001", out)
+        self.assertIn("#studio-drawing-canvas", out)
+        self.assertIn("Drawn lines should have an IN/OUT handle", out)
+        self.assertIn("[DEBUG OBSERVATIONS]", out)
+        self.assertIn("Legacy note", out)
+
 
 if __name__ == "__main__":
     unittest.main()

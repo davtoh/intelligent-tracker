@@ -195,6 +195,43 @@ class TestDiagnosticsContract(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.json()["fingerprint"], expected_fp)
 
+    def test_patch_and_delete_observations(self) -> None:
+        client, _ = self._build_client()
+        created = client.post(
+            "/api/diagnostics/observation",
+            json={"schema": 1, "kind": "note", "page_path": "/#studio", "message": "initial"},
+        )
+        self.assertEqual(created.status_code, 201)
+        obs_id = created.json()["id"]
+
+        patched = client.patch(
+            f"/api/diagnostics/observations/{obs_id}",
+            json={
+                "kind": "element",
+                "message": "updated direction handle note",
+                "selector": "#studio-drawing-canvas",
+                "recording_id": "rec-123456",
+                "attrs": {"tag": "canvas", "password": "secret"},
+            },
+        )
+        self.assertEqual(patched.status_code, 200)
+        body = patched.json()
+        self.assertEqual(body["kind"], "element")
+        self.assertEqual(body["message"], "updated direction handle note")
+        self.assertEqual(body["selector"], "#studio-drawing-canvas")
+        self.assertEqual(body["recording_id"], "rec-123456")
+        self.assertNotIn("password", body["attrs"])
+
+        self.assertEqual(client.patch("/api/diagnostics/observations/OBS-999", json={"message": "x"}).status_code, 404)
+        deleted = client.delete(f"/api/diagnostics/observations/{obs_id}")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertTrue(deleted.json()["deleted"])
+        self.assertEqual(client.get(f"/api/diagnostics/observations/{obs_id}").status_code, 404)
+
+        remote, _ = self._build_client(client_host="203.0.113.10")
+        self.assertEqual(remote.patch(f"/api/diagnostics/observations/{obs_id}", json={"message": "x"}).status_code, 403)
+        self.assertEqual(remote.delete(f"/api/diagnostics/observations/{obs_id}").status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

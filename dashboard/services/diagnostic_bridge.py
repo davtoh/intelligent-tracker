@@ -167,7 +167,7 @@ def register_observation_routes(app: Any, workspace_root: Optional[Path] = None)
     if not observations_enabled():
         return False
 
-    @app.api_route(DIAGNOSTICS_BASE_PATH + "/{rest:path}", methods=["GET", "POST"], include_in_schema=False)
+    @app.api_route(DIAGNOSTICS_BASE_PATH + "/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE"], include_in_schema=False)
     async def _frontier_diagnostics(rest: str, request: Request) -> Response:
         host = request.client.host if request.client else ""
         body = b""

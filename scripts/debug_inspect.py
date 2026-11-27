@@ -85,15 +85,29 @@ def _format_breadcrumb(crumb: dict[str, Any]) -> str:
     return f"{kind}:{target}{status}" if target else kind
 
 
-def _print_observations(summary: dict[str, Any]) -> None:
-    """Print user-logged observations alongside recent breadcrumbs and correlated issues."""
+def _print_connector_observations(connector_obs: list[dict[str, Any]]) -> None:
+    """Print Wire Contract v1 observations from .diagnostics/observation_catalog.json."""
+    print(f"[CONNECTOR OBSERVATIONS] .diagnostics/observation_catalog.json | count={len(connector_obs)}")
+    if not connector_obs:
+        print("[OK] No active connector observations recorded.")
+        return
+    for item in connector_obs:
+        sel = f" target={item['selector']}" if item.get("selector") else ""
+        rec = f" rec={item['recording_id']}({len(item.get('timeline') or [])})" if item.get("recording_id") else ""
+        msg = " ".join(str(item.get("message") or "").splitlines())[:180]
+        print(f"[{item.get('id', '?')} {item.get('status', 'open')} {item.get('kind', 'note')} path={item.get('page_path') or '/'}{sel}{rec}] {msg}")
+
+
+def _print_observations(summary: dict[str, Any], connector_obs: Optional[list[dict[str, Any]]] = None) -> None:
+    """Print connector observations and legacy user-logged observations with breadcrumbs."""
+    _print_connector_observations(connector_obs or [])
     obs_list = summary.get("observations") or []
     print(
         f"[DEBUG OBSERVATIONS] {summary['session_dir']} | "
         f"count={summary.get('observations_count', len(obs_list))}"
     )
     if not obs_list:
-        print("[OK] No user observations recorded.")
+        print("[OK] No legacy debug-session observations recorded.")
         return
 
     for obs in obs_list:
@@ -134,10 +148,22 @@ def _print_context(ctx: dict[str, Any]) -> None:
             print(line)
 
 
-def _emit_observations(summary: dict[str, Any], as_json: bool) -> None:
-    """Emit user observations either as compact JSON or human-readable lines."""
+def _load_connector_observations(workspace: Path, limit: int = 20) -> list[dict[str, Any]]:
+    """Read active Wire Contract v1 observations from .diagnostics/observation_catalog.json."""
+    store = _load_observation_store()
+    if store is None:
+        return []
+    try:
+        return list(store.list_observations(workspace, status="active", limit=limit))
+    except OSError:
+        return []
+
+
+def _emit_observations(summary: dict[str, Any], as_json: bool, connector_obs: Optional[list[dict[str, Any]]] = None) -> None:
+    """Emit connector and legacy user observations either as JSON or human-readable lines."""
+    items = connector_obs if connector_obs is not None else []
     if not as_json:
-        _print_observations(summary)
+        _print_observations(summary, connector_obs=items)
         return
     obs_payload = {
         "session_dir": summary["session_dir"],
@@ -145,6 +171,8 @@ def _emit_observations(summary: dict[str, Any], as_json: bool) -> None:
         "totals": summary["totals"],
         "observations_count": summary["observations_count"],
         "observations": summary["observations"],
+        "connector_observations_count": len(items),
+        "connector_observations": items,
         "native_crash_detected": summary["native_crash_detected"],
     }
     print(json.dumps(obs_payload, indent=2, ensure_ascii=False))
@@ -159,7 +187,7 @@ def _load_observation_store() -> Any:
             sys.path.insert(0, str(cand))
             break
     try:
-        import observation_store  # type: ignore
+        import observation_store
 
         return observation_store
     except ImportError:
@@ -289,7 +317,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         observation_limit=args.limit,
     )
     if args.observations:
-        _emit_observations(summary, args.json)
+        workspace = Path(args.workspace) if args.workspace else REPO_ROOT
+        connector_obs = _load_connector_observations(workspace, limit=args.limit)
+        _emit_observations(summary, args.json, connector_obs=connector_obs)
         return 0
 
     if args.json:
