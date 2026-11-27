@@ -76,13 +76,19 @@
 
   function setGridMode(mode, activeCameras, focusedCameraId, onFocus) {
     currentGridMode = mode;
-    window.GridPagination?.setLayout?.(getEffectiveLayout(), (activeCameras || []).length);
+    const cameras = (activeCameras || []).map((c) => (
+      mode !== '1x1' && c?.status === 'hibernating' ? { ...c, status: 'online' } : c
+    ));
+    window.GridPagination?.setLayout?.(getEffectiveLayout(), cameras.length);
 
     document.querySelectorAll('.grid-switch-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-grid') === mode);
     });
 
-    renderGrid(activeCameras, focusedCameraId, onFocus);
+    renderGrid(cameras, focusedCameraId, onFocus);
+    if (mode !== '1x1' && (activeCameras || []).some((c) => c?.status === 'hibernating')) {
+      window.CameraManager?.refreshCameras?.();
+    }
   }
 
   function buildGridTileHtml(cam, focusedCameraId, index, useWs) {
@@ -258,7 +264,15 @@
       const liveTab = document.getElementById('tab-live');
       const isLiveActive = !liveTab || Boolean(liveTab.classList?.contains('active'));
       if (useWs) mountCanvasSurfaces(multiGridContainer, pageInfo.items);
-      else if (isLiveActive) multiGridContainer.querySelectorAll('img').forEach(img => window.MjpegReconnect?.attach?.(img));
+      else if (isLiveActive) {
+        multiGridContainer.querySelectorAll('img').forEach((img) => {
+          img.addEventListener?.('load', () => {
+            const badge = img.closest?.('.camera-grid-tile')?.querySelector?.('.tile-status-badge');
+            if (badge) { badge.className = 'tile-status-badge online'; badge.textContent = 'ONLINE'; }
+          });
+          window.MjpegReconnect?.attach?.(img);
+        });
+      }
       renderedTransport = desiredTransport;
     }
     const liveTab = document.getElementById('tab-live');

@@ -57,7 +57,18 @@
     }
   }
 
+  const PERSIST_DEBOUNCE_MS = 500;
+  let persistTimer = null;
+  let persistDirty = false;
+  const scheduleTimer = (fn, ms) => (typeof setTimeout === 'function' ? setTimeout(fn, ms) : null);
+  const cancelTimer = (id) => { if (id != null && typeof clearTimeout === 'function') clearTimeout(id); };
+
   function persistMapToStorage() {
+    persistDirty = false;
+    if (persistTimer !== null) {
+      cancelTimer(persistTimer);
+      persistTimer = null;
+    }
     const out = {};
     const entries = Array.from(savedPlaybackByStem.entries());
     const startIdx = Math.max(0, entries.length - MAX_STORED_RECORDINGS);
@@ -66,6 +77,25 @@
       out[stem] = { time: state.time, duration: state.duration, pct: state.pct };
     }
     writeStorageMap(out);
+  }
+
+  function schedulePersist() {
+    persistDirty = true;
+    if (persistTimer !== null) cancelTimer(persistTimer);
+    persistTimer = scheduleTimer(() => {
+      persistTimer = null;
+      if (persistDirty) persistMapToStorage();
+    }, PERSIST_DEBOUNCE_MS);
+    if (persistTimer === null) persistMapToStorage();
+  }
+
+  function flushPendingPersist() {
+    if (persistDirty || persistTimer !== null) persistMapToStorage();
+  }
+
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('beforeunload', flushPendingPersist);
+    window.addEventListener('pagehide', flushPendingPersist);
   }
 
   function saveState(filename, state, options = {}) {
@@ -89,11 +119,14 @@
     while (savedPlaybackByStem.size > MAX_STORED_RECORDINGS) {
       savedPlaybackByStem.delete(savedPlaybackByStem.keys().next().value);
     }
-    if (options.persist !== false) persistMapToStorage();
+    if (options.persist !== false) {
+      if (options.immediate) persistMapToStorage();
+      else schedulePersist();
+    }
     return { ...normalized };
   }
 
-  function saveFromPlayer(videoPlayer, filename, metadataLoaded, wasPlayingOverride = null) {
+  function saveFromPlayer(videoPlayer, filename, metadataLoaded, wasPlayingOverride = null, options = {}) {
     if (!videoPlayer || !filename) return null;
     const curTime = Number(videoPlayer.currentTime) || 0;
     const dur = Number(videoPlayer.duration) || 0;
@@ -105,7 +138,7 @@
       duration: dur,
       pct: dur > 0 ? (curTime / dur) * 100 : 0,
       wasPlaying,
-    });
+    }, options);
   }
 
   function getState(filename) {
@@ -212,9 +245,11 @@
 
   window.ScrubberPlaybackState = {
     STORAGE_KEY,
+    PERSIST_DEBOUNCE_MS,
     getBaseStem,
     saveState,
     saveFromPlayer,
+    flushPendingPersist,
     getState,
     clearState,
     formatTime,

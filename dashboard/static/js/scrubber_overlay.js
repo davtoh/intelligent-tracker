@@ -56,7 +56,8 @@
     const renderer = getRenderer(), t = videoPlayer.currentTime || 0, out = [];
     for (const layer of activeLayers.values()) {
       const rec = renderer?.findClosestDetections(layer.frameDetections, t);
-      if (Array.isArray(rec?.tracks)) rec.tracks.forEach((trk) => out.push({ ...trk, _layerId: layer.runId }));
+      const srcRes = rec?.source_resolution || layer.sourceResolution || null;
+      if (Array.isArray(rec?.tracks)) rec.tracks.forEach((trk) => out.push({ ...trk, _layerId: layer.runId, _sourceRes: srcRes }));
     }
     return out;
   }
@@ -68,17 +69,22 @@
     window.RoiDrawTagger.attach({
       canvas: overlayCanvas, mediaEl: videoPlayer, containerEl: overlayCanvas.parentElement,
       getTracks: getTracksAtCurrentTime,
-      getSourceContext: () => ({
-        sourceType: 'video', videoFilename: currentFilename || '',
-        timestampSec: videoPlayer?.currentTime || 0,
-        sourceWidth: videoPlayer?.videoWidth || 0, sourceHeight: videoPlayer?.videoHeight || 0,
-      }),
-      onRenderOverlay: render,
+      getSourceContext: () => {
+        const res = getPrimaryLayer()?.sourceResolution || null;
+        return {
+          sourceType: 'video', videoFilename: currentFilename || '',
+          timestampSec: videoPlayer?.currentTime || 0,
+          sourceWidth: (Array.isArray(res) && res[0] > 0) ? res[0] : (videoPlayer?.videoWidth || 0),
+          sourceHeight: (Array.isArray(res) && res[1] > 0) ? res[1] : (videoPlayer?.videoHeight || 0),
+        };
+      },
+      onRenderOverlay: () => render(true),
       onTrackClick: ({ track, overlappingTracks, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, overlappingTracks, bbox: track.bbox }),
       onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),
     });
   }
 
+  let lastRenderKey = '';
   function init() {
     videoPlayer = document.getElementById('scrubber-video-player');
     overlayCanvas = document.getElementById('scrubber-overlay-canvas');
@@ -86,8 +92,11 @@
     bindRoiTagger();
     if (!eventsBound) {
       eventsBound = true;
-      window.addEventListener('resize', () => render());
+      window.addEventListener('resize', () => render(true));
       window.addEventListener('video-job-event', handleVideoJobEvent);
+      if (window.ResizeObserver && overlayCanvas?.parentElement) {
+        new ResizeObserver(() => render(true)).observe(overlayCanvas.parentElement);
+      }
     }
   }
 
@@ -250,63 +259,51 @@
   function syncViewportCanvas(vpRect) {
     const u = window.UnifiedCanvasOverlay;
     if (u?.syncCanvasDpr) {
-      u.syncCanvasDpr(overlayCanvas, overlayCtx, vpRect.width, vpRect.height);
+      u.syncCanvasDpr(overlayCanvas, overlayCtx, vpRect.width, vpRect.height, undefined, { responsive: true });
       overlayCtx.clearRect(0, 0, vpRect.width, vpRect.height);
       return;
     }
     const dpr = window.devicePixelRatio || 1;
-    const targetW = Math.round(vpRect.width * dpr);
-    const targetH = Math.round(vpRect.height * dpr);
-    if (overlayCanvas.width !== targetW || overlayCanvas.height !== targetH) {
-      overlayCanvas.width = targetW;
-      overlayCanvas.height = targetH;
-    }
+    const targetW = Math.round(vpRect.width * dpr), targetH = Math.round(vpRect.height * dpr);
+    if (overlayCanvas.width !== targetW || overlayCanvas.height !== targetH) { overlayCanvas.width = targetW; overlayCanvas.height = targetH; }
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     overlayCtx.scale(dpr, dpr);
   }
 
-  function render() {
+  function render(force = false) {
     const renderer = getRenderer();
     if (!renderer || !overlayCanvas || !overlayCtx || !videoPlayer) return;
     const viewport = overlayCanvas.parentElement;
     if (!viewport) return;
-
     const vpRect = viewport.getBoundingClientRect();
     const vRect = videoPlayer.getBoundingClientRect();
     if (vpRect.width === 0 || vpRect.height === 0) return;
-
+    const currentTime = videoPlayer.currentTime || 0;
+    const renderKey = `${activeLayers.size}|${currentTime}|${Math.round(vpRect.width)}x${Math.round(vpRect.height)}`;
+    if (!force && activeLayers.size === 0 && renderKey === lastRenderKey) return;
+    lastRenderKey = renderKey;
     overlayCtx.save();
     syncViewportCanvas(vpRect);
-
     if (!videoPlayer.videoWidth || !videoPlayer.videoHeight || vRect.width === 0 || vRect.height === 0 || activeLayers.size === 0) {
       overlayCtx.restore();
       return;
     }
-
-    const { offsetX, offsetY, renderW, renderH } = renderer.computeVideoRenderBox(
-      vRect, vpRect, videoPlayer.videoWidth, videoPlayer.videoHeight
-    );
+    const { offsetX, offsetY, renderW, renderH } = renderer.computeVideoRenderBox(vRect, vpRect, videoPlayer.videoWidth, videoPlayer.videoHeight);
     const multiLayer = activeLayers.size > 1;
-    const currentTime = videoPlayer.currentTime;
-
     for (const layer of activeLayers.values()) {
       const record = renderer.findClosestDetections(layer.frameDetections, currentTime);
       if (!record || ((!record.tracks || record.tracks.length === 0) && !record.zones && !record.tripwires && !record.heatmap)) continue;
-
-      const { scaleX, scaleY } = renderer.resolveScaleFactors(
-        renderW, renderH, record, videoPlayer.videoWidth, videoPlayer.videoHeight, layer.sourceResolution || null
-      );
+      const { scaleX, scaleY } = renderer.resolveScaleFactors(renderW, renderH, record, videoPlayer.videoWidth, videoPlayer.videoHeight, layer.sourceResolution || null);
       const prefix = multiLayer && layer.shortLabel ? `${layer.shortLabel} · ` : '';
       renderer.renderLayerRecord(overlayCtx, record, { offsetX, offsetY, scaleX, scaleY, renderW, renderH }, layer.color, prefix, featureVisibility);
     }
-
     overlayCtx.restore();
   }
 
   function startLoop() {
     if (animFrameId) return;
     function loop() {
-      render();
+      if (activeLayers.size > 0 || lastRenderKey === '') render();
       animFrameId = (videoPlayer && !videoPlayer.paused) ? requestAnimationFrame(loop) : null;
     }
     animFrameId = requestAnimationFrame(loop);
@@ -314,7 +311,7 @@
 
   function stopLoop() {
     if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-    render();
+    render(true);
   }
 
   window.ScrubberOverlay = {

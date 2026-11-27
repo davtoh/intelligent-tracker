@@ -285,6 +285,7 @@
     mountStudioOverlayBar();
     document.getElementById('studio-live-img')?.addEventListener?.('load', () => drawOverlay());
     document.getElementById('studio-video-player')?.addEventListener?.('loadedmetadata', () => drawOverlay());
+    document.getElementById('studio-video-player')?.addEventListener?.('loadeddata', () => drawOverlay());
     document.getElementById('studio-video-player')?.addEventListener?.('seeked', () => drawOverlay());
     document.getElementById('studio-camera-select')?.addEventListener('change', (e) => {
       const rawVal = e.target.value;
@@ -318,6 +319,7 @@
       if (studioState.activeCamera) {
         const isVideo = document.getElementById('studio-camera-select')?.selectedOptions?.[0]?.parentElement?.label === 'Recorded Videos';
         (window.StudioMedia || window.StudioCanvas)?.attachStudioMedia?.(studioState.activeCamera, isVideo, true);
+        drawOverlay();
       }
       renderBEVMinimap(); startMinimapLoop();
     } else { stopMinimapLoop(); }

@@ -83,7 +83,11 @@
       const key = trackKey(trk, idx);
       if (seen.has(key)) return;
       seen.add(key);
-      deduped.push({ key, track: trk, done: false });
+      deduped.push({
+        key, track: trk, done: false,
+        frozenCropBase64: null, suppressedEntityIds: [],
+        cachedCandidates: null, selectedEntityId: null, notes: '',
+      });
     });
     queueItems = deduped;
     baseContext = { ...(options.context || {}) };
@@ -103,24 +107,73 @@
     return getState();
   }
 
+  function getActiveItem() {
+    return activeIndex >= 0 && activeIndex < queueItems.length ? queueItems[activeIndex] : null;
+  }
+
+  function captureActiveFormState() {
+    const item = getActiveItem();
+    if (!item || typeof document === 'undefined') return;
+    const cropVal = el('tag-crop-base64')?.value || '';
+    if (cropVal && !item.frozenCropBase64) item.frozenCropBase64 = cropVal;
+    const entVal = el('tag-entity-id')?.value || '';
+    item.selectedEntityId = entVal !== '' ? entVal : null;
+    item.notes = el('tag-notes-input')?.value || '';
+  }
+
+  function updateActiveItem(patch = {}) {
+    const item = getActiveItem();
+    if (!item || !patch || typeof patch !== 'object') return null;
+    if (patch.frozenCropBase64) item.frozenCropBase64 = patch.frozenCropBase64;
+    if (Array.isArray(patch.cachedCandidates)) item.cachedCandidates = patch.cachedCandidates.slice();
+    if (patch.selectedEntityId !== undefined) item.selectedEntityId = patch.selectedEntityId;
+    if (patch.notes !== undefined) item.notes = String(patch.notes || '');
+    return item;
+  }
+
+  function recordSuppressedEntity(entityId) {
+    const item = getActiveItem();
+    if (!item || entityId == null || entityId === '') return;
+    const key = String(entityId);
+    if (!item.suppressedEntityIds.includes(key)) item.suppressedEntityIds.push(key);
+    if (Array.isArray(item.cachedCandidates)) {
+      item.cachedCandidates = item.cachedCandidates.filter((c) => String(c?.entity_id ?? '') !== key);
+    }
+    if (String(item.selectedEntityId ?? '') === key) item.selectedEntityId = null;
+  }
+
+  function filterCandidates(candidates) {
+    const item = getActiveItem();
+    const list = Array.isArray(candidates) ? candidates : [];
+    if (!item || !item.suppressedEntityIds.length) return list;
+    return list.filter((c) => !item.suppressedEntityIds.includes(String(c?.entity_id ?? '')));
+  }
+
   function select(index) {
     if (!Number.isInteger(index) || index < 0 || index >= queueItems.length) return null;
+    if (index !== activeIndex) captureActiveFormState();
     activeIndex = index;
     renderStrip();
     const item = queueItems[activeIndex];
     if (item && typeof onSelectHandler === 'function') {
-      onSelectHandler(item.track, { ...baseContext });
+      onSelectHandler(item.track, {
+        ...baseContext,
+        cropBase64: item.frozenCropBase64 || baseContext.cropBase64 || null,
+        queueItemState: {
+          frozenCropBase64: item.frozenCropBase64,
+          suppressedEntityIds: item.suppressedEntityIds.slice(),
+          cachedCandidates: item.cachedCandidates ? item.cachedCandidates.slice() : null,
+          selectedEntityId: item.selectedEntityId,
+          notes: item.notes,
+        },
+      });
     }
     return item ? item.track : null;
   }
 
   function findNextUntaggedIndex(startAfter) {
-    for (let i = startAfter + 1; i < queueItems.length; i += 1) {
-      if (!queueItems[i].done) return i;
-    }
-    for (let i = 0; i < startAfter; i += 1) {
-      if (!queueItems[i].done) return i;
-    }
+    for (let i = startAfter + 1; i < queueItems.length; i += 1) { if (!queueItems[i].done) return i; }
+    for (let i = 0; i < startAfter; i += 1) { if (!queueItems[i].done) return i; }
     return -1;
   }
 
@@ -131,42 +184,31 @@
     }
     queueItems[activeIndex].done = true;
     const nextIdx = findNextUntaggedIndex(activeIndex);
-    if (nextIdx === -1) {
-      clear();
-      return { advanced: false, remaining: 0, track: null };
-    }
-    const nextTrack = select(nextIdx);
-    return { advanced: true, remaining: getRemainingCount(), track: nextTrack };
+    if (nextIdx === -1) { clear(); return { advanced: false, remaining: 0, track: null }; }
+    return { advanced: true, remaining: getRemainingCount(), track: select(nextIdx) };
   }
 
   function clear() {
-    queueItems = [];
-    activeIndex = -1;
-    baseContext = {};
-    onSelectHandler = null;
+    queueItems = []; activeIndex = -1; baseContext = {}; onSelectHandler = null;
     const strip = el('tag-track-picker-strip');
-    if (strip) {
-      strip.style.display = 'none';
-      strip.innerHTML = '';
-    }
+    if (strip) { strip.style.display = 'none'; strip.innerHTML = ''; }
   }
 
   function getState() {
     return {
-      total: queueItems.length,
-      activeIndex,
-      remaining: getRemainingCount(),
-      activeTrack: activeIndex >= 0 && activeIndex < queueItems.length ? queueItems[activeIndex].track : null,
-      items: queueItems.map((it) => ({ key: it.key, done: it.done, track: it.track })),
+      total: queueItems.length, activeIndex, remaining: getRemainingCount(),
+      activeTrack: getActiveItem()?.track || null,
+      items: queueItems.map((it) => ({
+        key: it.key, done: it.done, track: it.track,
+        frozenCropBase64: it.frozenCropBase64, suppressedEntityIds: it.suppressedEntityIds.slice(),
+        selectedEntityId: it.selectedEntityId, notes: it.notes,
+      })),
     };
   }
 
   window.TagTrackQueue = {
-    init,
-    select,
-    markCurrentDoneAndAdvance,
-    clear,
-    getState,
+    init, select, markCurrentDoneAndAdvance, clear, getState,
+    getActiveItem, updateActiveItem, recordSuppressedEntity, filterCandidates,
     hasActiveQueue: () => queueItems.length > 1,
   };
 })();

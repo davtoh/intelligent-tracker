@@ -262,7 +262,7 @@ def build_live_step_result(
 ) -> FrameStepResult:
     """Submit frame to async AI (or replay provider) when scheduled and stamp provenance."""
     mono_ts = time.monotonic() if now is None else float(now)
-    wall_ts = float(wall_now) if wall_now is not None else (_wall_now() if now is None else float(now))
+    wall_ts = float(wall_now) if wall_now is not None else _wall_now()
     if not run_vision:
         _clear_worker_cache(async_worker)
         decision = _schedule_step(scheduler, camera_id, frame, mono_ts, mode, is_focused, is_recording, is_armed, active_tab)

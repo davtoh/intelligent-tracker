@@ -228,12 +228,9 @@ async def lifespan(application: FastAPI):
 
 def _attach_static_no_cache(application: FastAPI) -> None:
     """Ensure /static/* assets always revalidate with ETag so JS/CSS edits take effect on reload."""
-    @application.middleware("http")
-    async def _static_no_cache(request, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/static/"):
-            response.headers.setdefault("Cache-Control", "no-cache")
-        return response
+    from dashboard.services.diagnostic_bridge import StaticNoCacheMiddleware
+
+    application.add_middleware(StaticNoCacheMiddleware)
 
 
 def create_app() -> FastAPI:

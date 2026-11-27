@@ -11,15 +11,15 @@
 ---
 
 ## Step 1: Studio Tab Lifecycle, Multiview Wake, 4x/8x Playback, Tag Queue State & Clock Hygiene *(Active)*
-- [ ] **Child Plan**: `.TODO/step_1_studio_multiview_playback_and_tag_queue.md` (`--parent runtime_ux_and_reid_parity_master_roadmap --milestone 1`).
-- [ ] **Goal**: Eliminate `OBS-014` (`#studio` black canvas when clicked after reloading another tab), `OBS-002` (`2x2`/`3x3`/`4x4` tiles stuck `HIBERNATING` until mode toggle), `OBS-001` (`#videos` `4x`/`8x` playback stall from rAF reflow + `localStorage` thrash + range buffering), `OBS-019` (`TagTrackQueue` misplaced ROI & lost candidate deletions across Next/Prev), and the residual wall-clock leak in `dashboard/services/async_inference_worker.py:264-265`, while bringing `dashboard/static/app.js` (`353L`) back `< 350L` and adding `multiview_grid_wake_probe.py` + `.nav-tab` click coverage in `deep_link_navigation_probe.py`.
-- [ ] **Verifier**:
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path dashboard/static/app.js dashboard/static/js/nav_tabs_manager.js dashboard/static/studio.js dashboard/static/js/studio_media.js dashboard/stream_manager.py dashboard/static/js/camera_grid.js dashboard/static/js/multiview/frame_surface.js dashboard/static/js/multiview/grid_tile_overlay.js dashboard/static/js/scrubber_overlay.js dashboard/static/js/scrubber_timeline_slider.js dashboard/static/js/scrubber_playback_state.js dashboard/static/js/interactive_canvas.js dashboard/static/js/tag_track_queue.js dashboard/static/js/tag_feedback_actions.js dashboard/services/async_inference_worker.py --max-lines 350 --max-fn-lines 40`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_studio_multiview_playback_and_tag_queue.py`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run multiview_grid_wake_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify`
-- [ ] **Review Gate**: Fresh reviewer inspects diff, modularity audit (`app.js < 350L`), and probe/test output before resolving `OBS-001`, `OBS-002`, `OBS-014`, `OBS-019` and advancing to Step 2.
+- [x] **Child Plan**: `.TODO/step_1_studio_multiview_playback_and_tag_queue.md` (`--parent runtime_ux_and_reid_parity_master_roadmap --milestone 1`).
+- [x] **Goal**: Eliminate `OBS-014` (`#studio` black canvas when clicked after reloading another tab), `OBS-002` (`2x2`/`3x3`/`4x4` tiles stuck `HIBERNATING` until mode toggle), `OBS-001` (`#videos` `4x`/`8x` playback stall from rAF reflow + `localStorage` thrash + range buffering), `OBS-019` (`TagTrackQueue` misplaced ROI & lost candidate deletions across Next/Prev), and the residual wall-clock leak in `dashboard/services/async_inference_worker.py:264-265`, while bringing `dashboard/static/app.js` (`353L`) back `< 350L` and adding `multiview_grid_wake_probe.py` + `.nav-tab` click coverage in `deep_link_navigation_probe.py`.
+- [x] **Verifier**:
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path dashboard/static/app.js dashboard/static/js/nav_tabs_manager.js dashboard/static/studio.js dashboard/static/js/studio_media.js dashboard/stream_manager.py dashboard/static/js/camera_grid.js dashboard/static/js/multiview/frame_surface.js dashboard/static/js/multiview/grid_tile_overlay.js dashboard/static/js/scrubber_overlay.js dashboard/static/js/scrubber_timeline_slider.js dashboard/static/js/scrubber_playback_state.js dashboard/static/js/interactive_canvas.js dashboard/static/js/tag_track_queue.js dashboard/static/js/tag_feedback_actions.js dashboard/services/async_inference_worker.py --max-lines 350 --max-fn-lines 40`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_studio_multiview_playback_and_tag_queue.py`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run multiview_grid_wake_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify`
+- [x] **Review Gate**: Fresh reviewer inspects diff, modularity audit (`app.js < 350L`), and probe/test output before resolving `OBS-001`, `OBS-002`, `OBS-014`, `OBS-019` and advancing to Step 2.
 
 ---
 

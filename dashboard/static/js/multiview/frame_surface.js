@@ -94,6 +94,11 @@
         this.hasFrame = true;
         this.status = 'online';
         this.statusReason = '';
+        const badge = this.canvas?.closest?.('.camera-grid-tile')?.querySelector?.('.tile-status-badge');
+        if (badge) {
+          badge.className = 'tile-status-badge online';
+          badge.textContent = 'ONLINE';
+        }
         if (this.canvas?.dataset) {
           this.canvas.dataset.frameSeq = String(seq ?? '');
           this.canvas.dataset.captureTsMs = String(captureTsMs ?? 0);

@@ -72,10 +72,10 @@
   function wrapGlobalSwitchTab(manager) {
     if (typeof window.switchTab !== 'function' || window.switchTab.__navTabsWrapped) return;
     const origSwitchTab = window.switchTab;
-    const wrapped = function (tabId, updateHash = true) {
+    const wrapped = function (tabId, updateHash = true, opts) {
       const prevTab = manager.activeTabId;
       manager.activeTabId = tabId;
-      const result = origSwitchTab.call(this, tabId, updateHash);
+      const result = origSwitchTab.call(this, tabId, updateHash, opts);
       if (!manager._inSwitchTab) {
         emitTabLifecycle(prevTab, tabId);
       }
