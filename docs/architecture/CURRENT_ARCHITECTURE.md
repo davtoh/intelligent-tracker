@@ -1,15 +1,14 @@
 # Intelligent Tracker — Current Architecture & Alignment Audit
 
-> **Snapshot Basis**: Branch `feature/reid-and-traceability-unification` at commit `49e508b` (post-Steps 1–4 of `.TODO/reid_unification_traceability_and_studio_ux_master_roadmap.md`).
+> **Snapshot Basis**: Branch `feature/ci-and-debug-session-hardening` (post-`reid_unification` & `integration_seams` audits, `OBS-001`–`OBS-022`).
 > **Measured Static & Test Baseline**:
-> - `MPLBACKEND=Agg .venv/bin/python -m unittest discover tests` = `1,077` total (`1,075` passed, `1` failure: `test_video_jobs.TestVideoJobAPI.test_07_analytics_detections_count_and_persistence`, `1` error: `test_ctl_record.TestCtlRecordParity.test_ctl_record_start_status_and_stop`).
-> - `diagnose.py arch-map` = `392` source files, `72,175` lines, `138` API routes across 19 routers + `dashboard/app.py`; `0` upward imports from `intelligent_tracker/` to `dashboard/` or `scripts/`; `0` CSS `!important`; `1` unused route import (`dashboard/routers/rsac.py` -> `dashboard.routers.categories.create_custom_category`) + `1` unused import (`intelligent_tracker/video/_capture_guard_worker.py` -> `typing.Tuple`); `1` hard overrun (`high_objects.py` `523L`), `6` WARN files (`video_library.js` `471L`, `interactive.py` `451L`, `scripts/cdp_inspect.py` `436L`, `intelligent_tracker/rsac.py` `402L`, `dashboard/routers/rsac.py` `360L`, `dashboard/services/roi_recognition_service.py` `354L`), `52` functions `> 40L`.
-> - `diagnose.py surface --verify` = `0` mismatches (`417` IDs, `28` selects, `743` globals, `138` routes).
-> - `diagnose.py scan` = `0` active defects (`65` resolved).
-> - `diagnose.py audit` = `mypy`: `171` (`intelligent_tracker`) + `172` (`dashboard`) + `1` (`scripts`); `ruff`: `59` + `4` + `2`.
-> - Workspace probes: `3/4` passing (`cold_boot_world_probe`, `replay_pipeline_probe`, `video_studio_contract_probe`), while `spa_nine_tab_cdp_probe` exited `cdp_exit_code: 1` with an empty `sweep: {}` (`0` tabs), emitting 16 cascading failures — rendering the prior "4/4 probes passing" sign-off untrustworthy (`INFRA_UNAVAILABLE` blind spot).
-> - Runtime traces (`diagnose.py traces`): `TRC-015` / `TRC-017` code-guarded but still marked `active`; `TRC-018` Windows temp-file lock (`[WinError 32]`).
-> **Reference Target**: [Ideal World Architecture & Target Blueprint](IDEAL_WORLD_ARCHITECTURE.md) (`ADRs 01–20`, Layers 1–5).
+> - `diagnose.py arch-map` = `431` source files, `80,085` lines, `154` API routes across 20 routers + `dashboard/app.py`; `0` upward imports from `intelligent_tracker/` to `dashboard/` or `scripts/`; `0` CSS `!important`; `2` unused imports (`dashboard/routers/rsac.py` -> `dashboard.routers.categories.create_custom_category`, `intelligent_tracker/video/_capture_guard_worker.py` -> `typing.Tuple`); `1` hard overrun (`high_objects.py` `523L`), `7` WARN files (`video_library.js` `471L`, `interactive.py` `451L`, `scripts/cdp_inspect.py` `436L`, `intelligent_tracker/rsac.py` `402L`, `dashboard/routers/rsac.py` `353L`, `dashboard/static/app.js` `353L`, `dashboard/dependencies.py` `351L`), `55` functions `> 40L`.
+> - `diagnose.py surface --verify` = `0` mismatches (`441` IDs, `32` selects, `891` globals, `154` routes).
+> - `diagnose.py scan` = `0` active defects (`118` resolved).
+> - `diagnose.py audit` = `mypy`: `163` (`intelligent_tracker`) + `149` (`dashboard`) + `1` (`scripts`); `ruff`: `59` + `6` + `2`.
+> - Workspace probes: `11/12` passing (including `spa_nine_tab_cdp_probe`, `deep_link_navigation_probe`, `effective_config_probe`, `reversible_review_and_minimap_probe`), while `debug_session` is `error` due to `21` open observations (`OBS-001`–`OBS-022`) + `1` logged error (`CRIT=0 ERR=1 WARN=121`).
+> - Full `unittest` suite was not re-run during read-only audit discovery (prior baseline: `1,077` total).
+> **Reference Target**: [Ideal World Architecture & Target Blueprint](IDEAL_WORLD_ARCHITECTURE.md) (`ADRs 01–21`, Layers 1–5).
 
 ### Pre-Run Verification One-Liners
 
@@ -110,7 +109,7 @@ flowchart TD
 ### Remaining Modularity Budget Overruns
 
 - **Hard Ceiling (`>= 500L`) — 1 legacy file**: `intelligent_tracker/high_objects.py` (`523` lines; `Scene` `25` methods).
-- **Soft Warning (`350–499L`) — 6 files**: `dashboard/static/js/video_library.js` (`471`), `intelligent_tracker/interactive.py` (`451`), `scripts/cdp_inspect.py` (`436`), `intelligent_tracker/rsac.py` (`402`), `dashboard/routers/rsac.py` (`360`), `dashboard/services/roi_recognition_service.py` (`354`).
+- **Soft Warning (`350–499L`) — 7 files**: `dashboard/static/js/video_library.js` (`471`), `intelligent_tracker/interactive.py` (`451`), `scripts/cdp_inspect.py` (`436`), `intelligent_tracker/rsac.py` (`402`), `dashboard/routers/rsac.py` (`353`), `dashboard/static/app.js` (`353`), `dashboard/dependencies.py` (`351`).
 - **Near-Ceiling Targets (`<= 350L` / strict caps — DO NOT EXPAND)**: `dashboard/dependencies.py` (`348L`), `dashboard/static/studio.js` (`347L`), `dashboard/static/js/live_player.js` (`347L`), `dashboard/static/js/universal_enrollment.js` (`347L`), `dashboard/static/js/gallery_timeline.js` (`343L`), `intelligent_tracker/detectors/onnx_detector.py` (`342L`), `dashboard/static/js/camera_ai_config.js` (`279L` vs `< 280L`), `dashboard/static/partials/modals/camera_modals.html` (`238L` vs `< 240L`), `intelligent_tracker/scenario_storage.py` (`236L` vs `< 240L`), `dashboard/static/js/interactive_canvas.js` (`236L` vs `< 240L`), `dashboard/static/partials/modals/entity_modals.html` (`219L` vs `< 240L`), `dashboard/static/index.html` (`171L` vs `< 180L`).
 - **Heavy Classes (`>= 11` methods or `> 300L`) — 8 flagged**: `Scene` (`25`m, `269L`, `high_objects.py`), `TailItem` (`20`m, `172L`, `core/tails.py`), `Group` (`19`m, `149L`, `core/groups.py`), `EventFigure` (`19`m, `164L`, `forms.py`), `GroupMutationMixin` (`15`m, `164L`, `core/group_mutations.py`), `RSACManager` (`14`m, `211L`, `rsac.py`), `SpatialMixin` (`12`m, `302L`, `repositories/spatial_repo.py`), `WorldEntityBridge` (`11`m, `322L`, `world/entity_bridge.py`). *(Also at 12-method ceiling: `VideoIndexer`, `RoiRecognitionService`, `StreamManager`.)*
 - **Functions `> 40L` — 52 flagged**: Top offenders include `run_interactive_app` (`151L`, `interactive.py:274`), `apply_windows_iocp_patch` (`129L`, `dashboard/services/windows_resilience.py:31`), `main_async` (`111L`, `scripts/cdp_inspect.py:302`), `setup_event_pipeline` (`109L`, `intelligent_tracker/events/pipeline.py:12`), `build_generic_audit_js` (`100L`, `scripts/cdp_inspect.py:143`), `cnt_intersection` (`91L`, `intelligent_tracker/geometry/intersections.py:171`), `transcode_to_h264_async` (`84L`, `dashboard/services/video_transcoder.py:258`), `generate_poly_indexes` (`83L`, `intelligent_tracker/geometry/indexing.py:12`), `object_hook_DEVJSONDecoder` (`81L`, `intelligent_tracker/persistence.py:130`), and `evaluate` (`80L`, `intelligent_tracker/events/rules.py:142`), plus `42` more.
@@ -217,3 +216,30 @@ The dashboard implements the app side of the `system-diagnostics` **Debug Observ
   - `diagnose.py observations resolve --id <OBS-ID> --resolution "..." --commit <sha>`
   - `diagnose.py observations verify-connector --url http://127.0.0.1:<port>`
   - `diagnose.py brief --run-probes --pull http://127.0.0.1:<port>`
+
+
+---
+
+## 9. Observation-Driven Runtime & UX Audit (`OBS-001`–`OBS-022`)
+
+> **Audit Basis**: `21` active Debug HUD observations triaged into `.TODO/runtime_ux_and_reid_parity_master_roadmap.md` (`ADR-21`, Steps 1–4) and standalone `.TODO/debug_hud_trace_chips_export_and_dirty_state_plan.md` (`system-diagnostics` HUD).
+
+### Verified `P0`–`P2` Findings (`OBS-001`–`OBS-022`)
+| Sev | ID(s) | Area & Verified Root Cause | Remediation Plan |
+| :--- | :--- | :--- | :--- |
+| **P0** | `OBS-014` | `dashboard/static/app.js:293` binds `.nav-tab` clicks to private `switchTab` bypassing `nav_tabs_manager.js:72-86` (`window.switchTab`), so `'tab-changed'` never fires and `studio_media.js:112-118` stays unattached on `#studio`. | Step 1 |
+| **P0** | `OBS-002` | `dashboard/stream_manager.py:187-200` (`_resume_video_source`) never clears `_is_hibernating`; `camera_grid.js:63-86` reuses stale `activeCameras`; `frame_surface.js:95` & `grid_tile_overlay.js:122-142` never update `.tile-status-badge`. | Step 1 |
+| **P0** | `OBS-001` | `scrubber_overlay.js:250-313` calls `syncCanvasDpr` without `{responsive: true}` in rAF; `scrubber_timeline_slider.js:90-93` writes `localStorage` synchronously every `timeupdate`; `BaseHTTPMiddleware` wraps range chunks with no stall recovery. | Step 1 |
+| **P0** | `OBS-019` | `interactive_canvas.js:219` passes `naturalWidth/Height` instead of `sourceRes` to `RoiDrawTagger`; `tag_track_queue.js:106-115` lacks per-item frozen `cropBase64` & suppressed IDs and re-crops old `bbox` against advancing `_latest_raw_frame`. | Step 1 |
+| **P0** | `OBS-005`–`007` | `MockDetector` (`mock_detector.py:36-61`) ignores `SyntheticFrameGenerator` `P1`/`P2` (`synthetic.py:44-59`); `yolov8` detects `0` COCO objects on solid rectangles; `video_analytics_service.py:309-313` omits `tracked_categories` from `config_meta`. | Step 2 |
+| **P1** | `OBS-004`, `010`, `018` | `universal_enrollment.js:274` lacks `GalleryTimeline` fallback/`await`/filter reset; ROI `mouseup` skips `/api/enroll/check-collision`; `camera_pool_queries.py:60-83` omits `tracked_categories`/`agnostic_nms` from `GET /api/cameras`. | Step 2 |
+| **P1** | `OBS-008`, `009`, `016`, `017` | `UnifiedCanvasOverlay.drawTripwires` & `StudioShapeEditor` lack `IN`/`OUT` labels and `pt1<->pt2` flip handle; batch runs without a scenario write `camera_id="offline_video"` (`video_analytics_service.py:140`); Windows device-index / `hikvision` exclusion & `/api/cameras/test` source short-circuit drift (`camera_diagnostics.py:187-214`). | Step 3 |
+| **P1** | `OBS-011`–`013`, `015` | `app.js:240-243` & `telemetry.js:179-193` leave stale `.truncate-trigger` / `data-full-text` on `#connection-status-text`; flex/select overflow regressions on `.upload-status-hint`, `#analytics-source-select`, and `.review-card` (`.review-meta` missing `min-width: 0`). | Step 4 |
+| **P2** | `OBS-020`–`022` | `system-diagnostics` Debug HUD: `LIST_FIELDS` omits trace fields (`observation_routes.py:36-51`), `openInComposer` clears `H.finished`, no drawer export/import, and collapsed cards omit unsaved `dirty` badge. | HUD Plan |
+| **P2** | Arch Hygiene | `async_inference_worker.py:264-265` residual monotonic->`wall_ts` fallback when `wall_now is None`; `WorldPolicy` (`world/nodes.py:181-198`) unwired; `app.js` (`353L`), `routers/rsac.py` (`353L`), `dependencies.py` (`351L`). | Steps 1 & 3 |
+
+### Tooling Blind-Spot Matrix
+- **Tab-click lifecycle vs. hash-boot (`OBS-014`)**: Upgrade `deep_link_navigation_probe` to reload `#live`, click `.nav-tab` for `#studio`, and assert attached media; add JS AST check flagging local `switchTab(` calls when `window.switchTab` is wrapped.
+- **Multiview grid wake (`OBS-002`)**: Add `multiview_grid_wake_probe` booting `focus_only` -> subscribing `2x2` -> asserting `_is_hibernating is False` and `source_status == "online"`.
+- **Synthetic Re-ID & batch provenance (`OBS-005`–`007`, `016`)**: Extend `replay_pipeline_probe` (enrolled `P1` matches synthetic live track) and `video_studio_contract_probe` (`video:<filename>` review provenance, `config_meta.tracked_categories`).
+- **Stateful UI & long-fixture CDP (`OBS-001`, `004`, `010`–`015`, `019`)**: Add Node VM tests for `TagTrackQueue` Next/Prev retention and `TextTruncationManager.clear()`, JS AST rules for `syncCanvasDpr` in rAF and `localStorage` in `timeupdate`, and `60+` char filename fixtures in `spa_nine_tab_cdp_probe`.
