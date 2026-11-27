@@ -108,11 +108,15 @@
     const sel = document.getElementById('analytics-source-select');
     if (!sel || !window.ActiveSourceContext?.populateSelect) return null;
     const catalog = await window.ActiveSourceContext.populateSelect(sel, { includeAll: true, allLabel: 'All Sources' });
+    const syncSelectTitle = () => {
+      sel.title = sel.options?.[sel.selectedIndex]?.text || sel.value || 'All Sources';
+    };
     if (!sel.dataset.sourceBound) {
       sel.dataset.sourceBound = '1';
       sel.addEventListener('change', () => {
         sel.dataset.userSelected = '1';
         bucketPage = 1;
+        syncSelectTitle();
         const ref = window.ActiveSourceContext?.fromSelectValue?.(sel.value, sel) || null;
         if (ref) window.ActiveSourceContext?.set?.(ref);
         loadTrafficFlows();
@@ -120,6 +124,7 @@
         window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
       });
     }
+    syncSelectTitle();
     const src = resolveAnalyticsSource();
     syncHeatmapBadgeAndLink(src);
     if (src.ref) {

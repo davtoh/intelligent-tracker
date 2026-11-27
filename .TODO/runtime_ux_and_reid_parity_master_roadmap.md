@@ -44,13 +44,13 @@
 
 ---
 
-## Step 4: Layout Overflow Containment, Status Popover Cleanup & Long-Fixture Tooling Guards *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Fix flex/select overflow regressions on `#videos .upload-status-hint` (`OBS-011`), `#analytics #analytics-source-select` (`OBS-013`), and `#review .review-card` (`OBS-015`), clear `.truncate-trigger` / `data-full-text` in `#connection-status-text` on camera/mode changes (`OBS-012`), and add long-filename CDP fixtures + JS AST scan guards so this class of regression is caught automatically.
-- [ ] **Target Scope**:
-  - [ ] `dashboard/static/css/scrubber.css`, `dashboard/static/css/sidebar.css`, `dashboard/static/css/analytics_alerts.css`, `dashboard/static/css/review.css`, `dashboard/static/app.js`, `dashboard/static/js/telemetry.js`.
-  - [ ] `.diagnostics/probes/spa_nine_tab_cdp_probe.py` (long-filename fixtures + child-outside-parent checks) and `system-diagnostics` JS AST rules (`syncCanvasDpr` in rAF, `localStorage` in `timeupdate`, private `switchTab` vs `window.switchTab`).
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" scan --strict; MPLBACKEND=Agg python -m unittest discover tests; python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.
-- [ ] **Review Gate**: Fresh reviewer validates non-mocked branch sign-off, all workspace probes non-INFRA green, full `unittest`, Sphinx `-W`, and `diagnose.py scan --strict`, and closes resolved `OBS-*` entries via `diagnose.py observations resolve`.
+## Step 4: Layout Overflow Containment, Status Popover Cleanup & Long-Fixture Tooling Guards
+- [x] **Goal**: Fix flex/select overflow regressions on `#videos .upload-status-hint` (`OBS-011`), `#analytics #analytics-source-select` (`OBS-013`), and `#review .review-card` (`OBS-015`), clear `.truncate-trigger` / `data-full-text` in `#connection-status-text` on camera/mode changes (`OBS-012`), and add long-filename CDP fixtures + JS AST scan guards so this class of regression is caught automatically.
+- [x] **Target Scope**:
+  - [x] `dashboard/static/css/scrubber.css`, `dashboard/static/css/sidebar.css`, `dashboard/static/css/analytics_alerts.css`, `dashboard/static/css/review.css`, `dashboard/static/app.js`, `dashboard/static/js/telemetry.js`.
+  - [x] `.diagnostics/probes/spa_nine_tab_cdp_probe.py` (long-filename fixtures + child-outside-parent checks) and `system-diagnostics` JS AST rules (`syncCanvasDpr` in rAF, `localStorage` in `timeupdate`, private `switchTab` vs `window.switchTab`).
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" scan --strict; MPLBACKEND=Agg python -m unittest discover tests; python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.
+- [x] **Review Gate**: Fresh reviewer validates non-mocked branch sign-off, all workspace probes non-INFRA green, full `unittest`, Sphinx `-W`, and `diagnose.py scan --strict`, and closes resolved `OBS-*` entries via `diagnose.py observations resolve`.
 
 ---
 

@@ -26,10 +26,8 @@
 
   function create(opts = {}) {
     const {
-      videoPlayer, slider, timeDisplay, playBtn, prevBtn, nextBtn,
-      speedButtons = [], fps = 30,
-      onTimeUpdate = null, onSeek = null, onStep = null,
-      onPlayStateChange = null, onLoadedMetadata = null, onError = null,
+      videoPlayer, slider, timeDisplay, playBtn, prevBtn, nextBtn, speedButtons = [], fps = 30,
+      onTimeUpdate = null, onSeek = null, onStep = null, onPlayStateChange = null, onLoadedMetadata = null, onError = null,
     } = opts;
     let frameDur = 1.0 / (Number(fps) || 30);
 
@@ -100,33 +98,9 @@
           if (typeof onLoadedMetadata === 'function') onLoadedMetadata(videoPlayer.duration);
         });
         videoPlayer.addEventListener('play', syncPlayBtn);
-        videoPlayer.addEventListener('pause', () => {
-          syncPlayBtn();
-          window.ScrubberPlaybackState?.flushPendingPersist?.();
-        });
-        videoPlayer.addEventListener('ended', () => {
-          syncPlayBtn();
-          window.ScrubberPlaybackState?.flushPendingPersist?.();
-        });
-        let stallTimer = null;
-        const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
-        const scheduleStallRecovery = () => {
-          clearStall();
-          if (videoPlayer.paused || videoPlayer.ended) return;
-          stallTimer = setTimeout(() => {
-            stallTimer = null;
-            if (videoPlayer.paused || videoPlayer.ended || videoPlayer.readyState >= 3) return;
-            const dur = Number(videoPlayer.duration) || 0;
-            const cur = Number(videoPlayer.currentTime) || 0;
-            if (dur > 0 && cur + 0.05 < dur) {
-              try { videoPlayer.currentTime = Math.min(dur - 0.01, cur + 0.04); } catch (_) { /* ignore */ }
-            }
-          }, 600);
-        };
-        videoPlayer.addEventListener('waiting', scheduleStallRecovery);
-        videoPlayer.addEventListener('stalled', scheduleStallRecovery);
-        videoPlayer.addEventListener('playing', clearStall);
-        videoPlayer.addEventListener('canplay', clearStall);
+        videoPlayer.addEventListener('pause', () => { syncPlayBtn(); window.ScrubberPlaybackState?.flushPendingPersist?.(); });
+        videoPlayer.addEventListener('ended', () => { syncPlayBtn(); window.ScrubberPlaybackState?.flushPendingPersist?.(); });
+        window.ScrubberPlaybackState?.bindStallRecovery?.(videoPlayer);
         if (typeof onError === 'function') videoPlayer.addEventListener('error', onError);
       }
       if (playBtn) playBtn.addEventListener('click', togglePlayPause);

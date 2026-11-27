@@ -243,6 +243,27 @@
     }
   }
 
+  function bindStallRecovery(videoPlayer) {
+    if (!videoPlayer || typeof videoPlayer.addEventListener !== 'function') return;
+    let stallTimer = null;
+    const clearStall = () => { if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } };
+    const scheduleStallRecovery = () => {
+      clearStall();
+      if (videoPlayer.paused || videoPlayer.ended) return;
+      stallTimer = setTimeout(() => {
+        stallTimer = null;
+        if (videoPlayer.paused || videoPlayer.ended || videoPlayer.readyState >= 3) return;
+        const dur = Number(videoPlayer.duration) || 0;
+        const cur = Number(videoPlayer.currentTime) || 0;
+        if (dur > 0 && cur + 0.05 < dur) {
+          try { videoPlayer.currentTime = Math.min(dur - 0.01, cur + 0.04); } catch (_) { /* ignore */ }
+        }
+      }, 600);
+    };
+    ['waiting', 'stalled'].forEach((ev) => videoPlayer.addEventListener(ev, scheduleStallRecovery));
+    ['playing', 'canplay'].forEach((ev) => videoPlayer.addEventListener(ev, clearStall));
+  }
+
   window.ScrubberPlaybackState = {
     STORAGE_KEY,
     PERSIST_DEBOUNCE_MS,
@@ -257,6 +278,7 @@
     resolveLoadRestore,
     resumeVideoPlayback,
     applyMetadataRestore,
+    bindStallRecovery,
     getSavedMap: () => savedPlaybackByStem,
   };
 })();

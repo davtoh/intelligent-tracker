@@ -32,7 +32,6 @@
   flex: 1 1 auto;
 }
 
-
 .scrubber-viewport {
   position: relative;
   width: 100%;
@@ -144,10 +143,7 @@
   margin-right: 4px;
 }
 
-.speed-btn {
-  padding: 2px 6px;
-  font-size: 0.7rem;
-}
+.speed-btn { padding: 2px 6px; font-size: 0.7rem; }
 
 .speed-btn.active {
   background: var(--cyan);
@@ -158,6 +154,8 @@
 .video-upload-panel {
   padding: 16px;
   margin-bottom: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .upload-status-hint {
@@ -165,6 +163,10 @@
   color: var(--text-subtle);
   margin-top: 8px;
   text-align: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .video-library-panel {
@@ -214,9 +216,7 @@
   z-index: 25;
 }
 
-.video-file-icon {
-  font-size: 1.4rem;
-}
+.video-file-icon { font-size: 1.4rem; }
 
 .video-file-meta {
   flex: 1 1 140px;

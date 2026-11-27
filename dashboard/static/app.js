@@ -158,6 +158,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function switchCamera(camId) {
     if (!camId || camId === activeCameraId) return;
     activeCameraId = camId;
+    if (window.AppUIHelpers?.clearTruncationState) window.AppUIHelpers.clearTruncationState(connStatusText);
+    else window.TextTruncationManager?.clear?.(connStatusText);
     if (window.ActiveSourceContext) window.ActiveSourceContext.set({ kind: 'camera', cameraId: camId }, { silent: true }); else try { window.localStorage?.setItem('it_focused_camera_id', camId); } catch (err) { console.debug('localStorage focused camera write failed:', err); }
     const camSel = document.getElementById('active-camera-select');
     if (camSel && camSel.value !== camId) camSel.value = camId;

@@ -5,6 +5,11 @@
     while (Date.now() < end) { const v = fn(); if (v) return v; await sleep(50); }
     return fn();
   };
+  const isContained = (child, parent) => {
+    if (!child || !parent) return false;
+    const cr = child.getBoundingClientRect(), pr = parent.getBoundingClientRect();
+    return cr.right <= pr.right + 2 && cr.left >= pr.left - 2;
+  };
   const tabs = ['tab-live', 'tab-videos', 'tab-gallery', 'tab-timeline', 'tab-analytics', 'tab-alerts', 'tab-studio', 'tab-journey', 'tab-review'];
   const tabResults = {};
   for (const id of tabs) {
@@ -46,9 +51,20 @@
       titleRects.push(titleEl ? titleEl.getBoundingClientRect().height : 0);
     }
   }
+  document.querySelector('.nav-tab[data-tab="tab-videos"]')?.click();
+  await sleep(150);
+  const vPanel = document.querySelector('#tab-videos .video-upload-panel');
+  const vStatus = document.getElementById('video-upload-status');
+  if (vStatus) vStatus.innerHTML = '<span style="color:#10b981;">\u2713 Uploaded \'warehouse_north_entrance_security_recording_2026_11_27_long_clip_01.mp4\'</span>';
+  const vSpan = vStatus?.querySelector('span');
+  const uploadHintContained = Boolean(isContained(vStatus, vPanel) && (!vSpan || isContained(vSpan, vPanel)));
   document.querySelector('.nav-tab[data-tab="tab-analytics"]')?.click();
   const hm = document.getElementById('static-heatmap-img');
   const heatmapLoaded = Boolean(await waitFor(() => hm && hm.complete && hm.naturalWidth > 0));
+  const aSel = document.getElementById('analytics-source-select');
+  await waitFor(() => aSel && aSel.options.length > 1, 2000);
+  const aCard = document.querySelector('#tab-analytics .chart-card');
+  const analyticsSelectContained = Boolean(isContained(aSel, aCard));
   document.querySelector('.nav-tab[data-tab="tab-alerts"]')?.click();
   const alertsReady = Boolean(await waitFor(() => document.getElementById('tab-alerts')?.classList.contains('active')));
   document.querySelector('.nav-tab[data-tab="tab-journey"]')?.click();
@@ -58,6 +74,21 @@
     const card = document.querySelector('#review-queue-container .review-card');
     return card && card.querySelector('.review-bbox-badge') && card.querySelector('.review-source-pill');
   }));
+  const reviewCards = Array.from(document.querySelectorAll('#review-queue-container .review-card'));
+  const reviewCardContained = Boolean(reviewCards.length) && reviewCards.every((c) => {
+    const targets = [c.querySelector('.review-card-top'), c.querySelector('.review-meta'), c.querySelector('.review-title'), c.querySelector('.review-source-pill')].filter(Boolean);
+    return targets.every((el) => isContained(el, c));
+  });
+  let connStatusPopoverCleared = false;
+  const connPill = document.getElementById('connection-status-pill');
+  const connTxt = document.getElementById('connection-status-text');
+  if (connTxt && window.AppUIHelpers?.updateWsStatus) {
+    window.AppUIHelpers.updateWsStatus(true, 'warehouse_north_entrance_camera_long_id_01', connPill, connTxt);
+    const hadTrigger = connTxt.classList.contains('truncate-trigger') && connTxt.hasAttribute('data-full-text');
+    window.AppUIHelpers.updateWsStatus(true, 'cam_short', connPill, connTxt);
+    window.TelemetryGateway?.updateConnectionStatus?.({ status: 'simulation', camera_id: 'cam_short' }, 'cam_short');
+    connStatusPopoverCleared = hadTrigger && !connTxt.classList.contains('truncate-trigger') && !connTxt.hasAttribute('data-full-text');
+  }
   document.querySelector('.nav-tab[data-tab="tab-studio"]')?.click();
   const stImg = document.getElementById('studio-live-img'), stSel = document.getElementById('studio-camera-select');
   if (await waitFor(() => stSel && Array.from(stSel.options).some((o) => o.value === 'cam_short'))) {
@@ -126,5 +157,5 @@
     candidateXNonClosing = getComputedStyle(tagModal).display !== 'none';
     tagModal.style.display = 'none';
   }
-  return { tabs: tabResults, grid2x2Active: Boolean(gridParity['2x2']?.active), gridParity, heatmapLoaded, alertsReady, journeyReady, reviewCardReady, studioLiveLoaded, studioOfflineEmptyOk, recordedSelected, enrollChanged, camTableErgonomic, candidateXNonClosing, sourceRefRoundTripOk, sourceJumpButtonsOk, freezeButtonsOk, titleHeights: titleRects, modals: modalOk };
+  return { tabs: tabResults, grid2x2Active: Boolean(gridParity['2x2']?.active), gridParity, heatmapLoaded, alertsReady, journeyReady, reviewCardReady, studioLiveLoaded, studioOfflineEmptyOk, recordedSelected, enrollChanged, camTableErgonomic, candidateXNonClosing, uploadHintContained, analyticsSelectContained, reviewCardContained, connStatusPopoverCleared, sourceRefRoundTripOk, sourceJumpButtonsOk, freezeButtonsOk, titleHeights: titleRects, modals: modalOk };
 })()

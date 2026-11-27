@@ -174,18 +174,13 @@
 
   function computeTripwireFlipHandle(p1, p2, offset = 26) {
     if (!Array.isArray(p1) || !Array.isArray(p2) || p1.length < 2 || p2.length < 2) return null;
-    const dx = Number(p2[0]) - Number(p1[0]);
-    const dy = Number(p2[1]) - Number(p1[1]);
+    const dx = Number(p2[0]) - Number(p1[0]), dy = Number(p2[1]) - Number(p1[1]);
     const len = Math.hypot(dx, dy);
     if (len < 1e-3) return null;
-    const midX = (Number(p1[0]) + Number(p2[0])) / 2;
-    const midY = (Number(p1[1]) + Number(p2[1])) / 2;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const midX = (Number(p1[0]) + Number(p2[0])) / 2, midY = (Number(p1[1]) + Number(p2[1])) / 2;
+    const nx = -dy / len, ny = dx / len;
     return {
-      x: midX + nx * offset,
-      y: midY + ny * offset,
-      midX, midY, nx, ny, len,
+      x: midX + nx * offset, y: midY + ny * offset, midX, midY, nx, ny, len,
       inTip: [midX + nx * offset, midY + ny * offset],
       outTip: [midX - nx * offset, midY - ny * offset],
     };
@@ -195,8 +190,7 @@
     const angle = Math.atan2(ty - my, tx - mx);
     ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(tx, ty); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(tx, ty);
+    ctx.beginPath(); ctx.moveTo(tx, ty);
     ctx.lineTo(tx - 6 * Math.cos(angle - 0.55), ty - 6 * Math.sin(angle - 0.55));
     ctx.lineTo(tx - 6 * Math.cos(angle + 0.55), ty - 6 * Math.sin(angle + 0.55));
     ctx.closePath(); ctx.fill();
@@ -268,10 +262,7 @@
         const tid = track.id ?? track.track_id;
         const isHovered = hoveredId != null && tid === hoveredId;
         if (vis.bboxes || vis.track_ids || vis.dwell_timers) {
-          drawTrackBox(ctx, track, transform, {
-            visibility: vis, palette: scene.palette || PALETTES[0],
-            labelPrefix: scene.labelPrefix || '', isHovered,
-          });
+          drawTrackBox(ctx, track, transform, { visibility: vis, palette: scene.palette || PALETTES[0], labelPrefix: scene.labelPrefix || '', isHovered });
         }
         if (vis.velocity) drawVelocityVector(ctx, track, transform, scene.palette || PALETTES[0]);
       });

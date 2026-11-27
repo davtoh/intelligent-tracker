@@ -91,7 +91,7 @@
     const resolvedDeviceName = (
       typeof deviceName === 'string' && deviceName.trim()
         ? deviceName.trim()
-        : (sourceInput?.dataset?.deviceName || document.getElementById('cam-device-name-input')?.value || '').trim()
+        : (sourceInput?.dataset?.deviceName || '').trim()
     );
     const payload = resolvedDeviceName ? { source, device_name: resolvedDeviceName } : { source };
     if (btnTest) { btnTest.disabled = true; btnTest.textContent = '⏳ Testing...'; }

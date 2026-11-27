@@ -107,6 +107,15 @@
     window.BackupManager?.bind(showToast);
   }
 
+  function clearTruncationState(el) {
+    if (!el) return;
+    window.TextTruncationManager?.clear?.(el);
+    el.classList?.remove?.('truncate-trigger');
+    ['data-full-text', 'data-truncate-label', 'aria-describedby', 'aria-expanded'].forEach((attr) => {
+      el.removeAttribute?.(attr);
+    });
+  }
+
   function updateWsStatus(isOnline, activeCameraId, connStatusPill, connStatusText) {
     if (connStatusPill) connStatusPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
     const drawerPill = document.getElementById('drawer-connection-status-pill');
@@ -122,6 +131,7 @@
           fullText, mode: 'middle', maxLength: 24, preserveExt: false, label: 'Active Stream',
         });
       } else {
+        clearTruncationState(connStatusText);
         connStatusText.textContent = fullText;
         connStatusText.title = fullText;
       }
@@ -133,6 +143,7 @@
     escapeHtml,
     showToast,
     syncAlertBadges,
+    clearTruncationState,
     bindDrawerActionButtons,
     bindDrawerAndBackup,
     updateWsStatus,
