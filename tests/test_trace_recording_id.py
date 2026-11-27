@@ -13,6 +13,7 @@ from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from dashboard.services import diagnostic_bridge
 from dashboard.services.debug_session import (
     get_debug_recordings_dir,
     prepare_debug_session_env,
@@ -20,6 +21,11 @@ from dashboard.services.debug_session import (
 )
 from dashboard.services.diagnostic_bridge import DiagnosticTraceMiddleware
 from scripts import debug_inspect
+
+_HAS_TRACE_RECORDER = diagnostic_bridge._recorder_mod is not None
+_HAS_OBS_STORE = debug_inspect._load_observation_store() is not None
+_SKIP_NO_RECORDER = "system-diagnostics trace_recorder engine not installed"
+_SKIP_NO_OBS_STORE = "system-diagnostics observation_store engine not installed"
 
 
 class TestTraceRecordingIdAndMigration(unittest.TestCase):
@@ -54,6 +60,27 @@ class TestTraceRecordingIdAndMigration(unittest.TestCase):
                     events.append(json.loads(line))
         return events
 
+    def test_middleware_stamps_recording_id_in_captured_context(self) -> None:
+        client = self._build_boom_client()
+        captured: list[dict] = []
+
+        def _fake_capture(exc, context=None, workspace_root=None):
+            captured.append(dict(context or {}))
+            return None
+
+        with patch.dict(os.environ, {"IT_DEBUG_MODE": "0"}, clear=False):
+            with patch("dashboard.services.diagnostic_bridge.capture_runtime_exception", side_effect=_fake_capture):
+                self.assertEqual(client.get("/boom", headers={"X-Debug-Recording-Id": "rec-20261126-abc123"}).status_code, 500)
+                self.assertEqual(client.get("/boom").status_code, 500)
+                self.assertEqual(client.get("/boom", headers={"X-Debug-Recording-Id": "bad id; drop table"}).status_code, 500)
+
+        self.assertEqual(len(captured), 3)
+        self.assertEqual(captured[0].get("recording_id"), "rec-20261126-abc123")
+        self.assertEqual(captured[0].get("http_path"), "/boom")
+        self.assertNotIn("recording_id", captured[1])
+        self.assertNotIn("recording_id", captured[2])
+
+    @unittest.skipUnless(_HAS_TRACE_RECORDER, _SKIP_NO_RECORDER)
     def test_request_with_recording_id_header_stamps_trace_context(self) -> None:
         client = self._build_boom_client()
         env = {"DIAGNOSTICS_TRACE_IN_TESTS": "1", "IT_DEBUG_MODE": "0"}
@@ -66,6 +93,7 @@ class TestTraceRecordingIdAndMigration(unittest.TestCase):
         self.assertEqual(events[0]["context"].get("recording_id"), "rec-20261126-abc123")
         self.assertEqual(events[0]["context"].get("http_path"), "/boom")
 
+    @unittest.skipUnless(_HAS_TRACE_RECORDER, _SKIP_NO_RECORDER)
     def test_request_without_header_or_invalid_header_has_no_recording_id(self) -> None:
         client = self._build_boom_client()
         env = {"DIAGNOSTICS_TRACE_IN_TESTS": "1", "IT_DEBUG_MODE": "0"}
@@ -109,6 +137,19 @@ class TestTraceRecordingIdAndMigration(unittest.TestCase):
         self.assertEqual(rc, 0)
         return json.loads(buf.getvalue())
 
+    def test_migrate_observations_fails_cleanly_when_store_unavailable(self) -> None:
+        err_buf = io.StringIO()
+        with patch.object(debug_inspect, "_load_observation_store", return_value=None):
+            with contextlib.redirect_stderr(err_buf):
+                rc = debug_inspect.main([
+                    "--dir", str(self.debug_dir),
+                    "--workspace", str(self.workspace),
+                    "--migrate-observations",
+                ])
+        self.assertEqual(rc, 1)
+        self.assertIn("observation_store is unavailable", err_buf.getvalue())
+
+    @unittest.skipUnless(_HAS_OBS_STORE, _SKIP_NO_OBS_STORE)
     def test_migrate_observations_is_idempotent(self) -> None:
         record_user_observation(
             note="Video stalled at 8x playback",
@@ -143,6 +184,7 @@ class TestTraceRecordingIdAndMigration(unittest.TestCase):
             self.assertEqual(obs["kind"], "note")
             self.assertEqual(obs["attrs"]["migrated_from"], "debug_session/events.jsonl")
 
+    @unittest.skipUnless(_HAS_OBS_STORE, _SKIP_NO_OBS_STORE)
     def test_debug_inspect_observations_shows_connector_and_legacy(self) -> None:
         store = debug_inspect._load_observation_store()
         self.assertIsNotNone(store)

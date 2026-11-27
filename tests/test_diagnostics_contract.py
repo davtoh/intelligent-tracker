@@ -11,7 +11,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from dashboard.app import create_app
+from dashboard.services import diagnostic_bridge
 from dashboard.services.diagnostic_bridge import register_observation_routes
+
+_HAS_OBS_ENGINE = diagnostic_bridge._obs is not None
+_SKIP_NO_OBS = "system-diagnostics observation_routes engine not installed"
 
 
 class TestDiagnosticsContract(unittest.TestCase):
@@ -55,6 +59,20 @@ class TestDiagnosticsContract(unittest.TestCase):
                     resp = client.request(method, path)
                     self.assertEqual(resp.status_code, 404, f"{method} {path} should be 404 when disabled")
 
+    def test_missing_engine_degrades_gracefully_even_when_flag_enabled(self) -> None:
+        with patch.dict(os.environ, {"FRONTIER_DEBUG_OBSERVATIONS": "1"}, clear=False):
+            with patch.object(diagnostic_bridge, "_obs", None):
+                self.assertFalse(diagnostic_bridge.observations_enabled())
+                app = FastAPI()
+                self.assertFalse(register_observation_routes(app, workspace_root=self.workspace))
+                status, headers, payload = diagnostic_bridge.handle_diagnostics_request(
+                    "GET", "/health", "", {}, "127.0.0.1", b"", self.workspace
+                )
+                self.assertEqual(status, 404)
+                self.assertEqual(headers.get("X-Diagnostics-Contract"), "1")
+                self.assertIn(b"engine unavailable", payload)
+
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_create_app_mounts_diagnostics_when_flag_enabled(self) -> None:
         with patch.dict(os.environ, {"FRONTIER_DEBUG_OBSERVATIONS": "1"}, clear=False):
             app = create_app()
@@ -67,6 +85,7 @@ class TestDiagnosticsContract(unittest.TestCase):
                 {"schema": 1, "enabled": True, "contract_version": 1, "store": "ok"},
             )
 
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_non_loopback_client_receives_403_with_contract_header(self) -> None:
         client, _ = self._build_client(client_host="203.0.113.10")
         for method, path in (
@@ -81,6 +100,7 @@ class TestDiagnosticsContract(unittest.TestCase):
             self.assertEqual(resp.headers.get("X-Diagnostics-Contract"), "1")
             self.assertEqual(resp.json().get("error"), "forbidden")
 
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_post_error_codes_and_dry_run(self) -> None:
         client, _ = self._build_client()
 
@@ -117,6 +137,7 @@ class TestDiagnosticsContract(unittest.TestCase):
         self.assertTrue(r_dry.json()["dry_run"])
         self.assertEqual(client.get("/api/diagnostics/observations").json()["count"], 0)
 
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_create_dedup_and_redaction(self) -> None:
         client, _ = self._build_client()
         payload = {
@@ -152,6 +173,7 @@ class TestDiagnosticsContract(unittest.TestCase):
         self.assertNotIn("cookie", entry["attrs"])
         self.assertEqual(entry["attrs"]["id"], "save")
 
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_list_get_not_found_and_hud(self) -> None:
         client, _ = self._build_client()
         created = client.post(
@@ -174,6 +196,7 @@ class TestDiagnosticsContract(unittest.TestCase):
         self.assertEqual(r_hud.headers.get("X-Diagnostics-Contract"), "1")
         self.assertGreater(len(r_hud.text.strip()), 20)
 
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_fingerprint_test_vectors(self) -> None:
         client, _ = self._build_client()
         vectors = [
@@ -195,6 +218,7 @@ class TestDiagnosticsContract(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.json()["fingerprint"], expected_fp)
 
+    @unittest.skipUnless(_HAS_OBS_ENGINE, _SKIP_NO_OBS)
     def test_patch_and_delete_observations(self) -> None:
         client, _ = self._build_client()
         created = client.post(

@@ -25,6 +25,8 @@ _SKILL = "system-diagnostics"
 
 def _engine_candidates() -> list[Path]:
     """Return Runtime Parity candidate paths for the system-diagnostics engine."""
+    if os.environ.get("IT_DISABLE_EXTERNAL_SKILLS", "").strip().lower() in {"1", "true", "yes"}:
+        return []
     here = Path(__file__).resolve()
     roots = list(here.parents)[:4]
     home = Path.home()
