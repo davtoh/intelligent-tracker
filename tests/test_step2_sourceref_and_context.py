@@ -189,7 +189,7 @@ class TestStep2Milestone3Frontend(unittest.TestCase):
         self.assertEqual(out["frozenState"]["src"], "data:image/jpeg;base64,FREEZE")
         self.assertIn("Resume", out["frozenState"]["text"])
         self.assertFalse(out["resumedState"]["frozen"])
-        self.assertIn("/stream/cam_01?t=", out["resumedState"]["src"])
+        self.assertIn("/stream/cam_01?annotated=false&t=", out["resumedState"]["src"])
         self.assertTrue(out["found"])
         self.assertEqual(out["selected"], {"type": "zone", "name": "vault"})
         self.assertEqual(out["mode"], "idle")

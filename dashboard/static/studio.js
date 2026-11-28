@@ -49,14 +49,16 @@
       if (btn.dataset) btn.dataset.quadMode = mode;
       btn.setAttribute?.('aria-pressed', mode !== 'off' ? 'true' : 'false');
     }
+    window.WorldTacticalMinimapView?.setBevQuadMode?.(mode);
     drawOverlay();
+    if (studioState.bevCanvas) renderBEVMinimap();
     return mode;
   }
 
   function resolveStudioTracks() {
     const tel = window.latestTelemetry;
     if (Array.isArray(tel?.active_tracks) && (!tel.camera_id || tel.camera_id === studioState.activeCamera)) {
-      return { tracks: tel.active_tracks, sourceResolution: tel.frame_size || null };
+      return { tracks: tel.active_tracks, sourceResolution: tel.source_resolution || tel.frame_size || null };
     }
     const vidTracks = window.ScrubberOverlay?.getCurrentTracks?.();
     return { tracks: Array.isArray(vidTracks) ? vidTracks : [], sourceResolution: null };
@@ -184,9 +186,10 @@
     } catch (err) { console.warn('Failed to load scenario:', err); }
   }
 
-  function renderBEVMinimap() {
-    if (window.WorldTacticalMinimapView) return window.WorldTacticalMinimapView.fetchAndRender(studioState.bevCanvas, studioState.activeCamera, studioState.homography, studioState.zones);
-    window.BEVMinimap?.render(studioState.bevCanvas, studioState.homography, studioState.zones, studioState.activeCamera);
+  function renderBEVMinimap(force = false) {
+    const canvas = studioState.bevCanvas || document.getElementById('bev-minimap-canvas');
+    if (window.WorldTacticalMinimapView) return window.WorldTacticalMinimapView.fetchAndRender(canvas, studioState.activeCamera, studioState.homography, studioState.zones, force);
+    window.BEVMinimap?.render(canvas, studioState.homography, studioState.zones, studioState.activeCamera);
   }
 
   function requireActiveCamera() {
@@ -240,7 +243,7 @@
       studioState.homography = result.homography || data;
       studioState.points = []; studioState.mode = 'idle';
       updateStudioStatus(`Homography calibrated for ${data.camera_id} (${data.metric_width}m x ${data.metric_height}m).`);
-      drawOverlay(); renderBEVMinimap();
+      drawOverlay(); renderBEVMinimap(true);
     });
   }
 
@@ -310,7 +313,10 @@
   const isStudioTabActive = () => Boolean(document.getElementById('tab-studio')?.classList?.contains('active'));
   function startMinimapLoop() {
     if (minimapTimer !== null) return;
-    minimapTimer = setInterval(() => { if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap(); }, 250);
+    minimapTimer = setInterval(() => {
+      if (isStudioTabActive()) drawOverlay();
+      if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap();
+    }, 250);
   }
   function stopMinimapLoop() { if (minimapTimer !== null) { clearInterval(minimapTimer); minimapTimer = null; } }
   function syncStudioTabState(isActive) {

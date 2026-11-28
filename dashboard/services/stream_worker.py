@@ -16,6 +16,7 @@ from dashboard.services.async_inference_worker import AsyncInferenceWorker
 from dashboard.services.cached_replay_provider import CachedReplayProvider
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.services.multiview.thumbnail_cache import maybe_update_manager_thumbnail
+from dashboard.services.recording_transcode_helper import get_active_recording_provenance
 from dashboard.services.stream_telemetry import (
     _build_tripwires_data, _build_zones_data, _extract_recent_alerts,
     _extract_track_telemetry, _resolve_detector_telemetry, build_stream_telemetry,
@@ -221,7 +222,11 @@ class StreamWorker:
 
     def _process_vision_pipeline(self, frame: np.ndarray, curr_t: float) -> dict[int, Any]:
         """Delegate single-frame CV stepping to canonical FrameProcessor."""
-        return self._get_processor().step(frame, timestamp=curr_t, max_dim=1280).tracks
+        proc = self._get_processor()
+        if hasattr(proc, "set_recording_provenance"):
+            rec_fn, rec_start = get_active_recording_provenance(getattr(self.manager, "_recording_controller", None))
+            proc.set_recording_provenance(rec_fn, rec_start)
+        return proc.step(frame, timestamp=curr_t, max_dim=1280).tracks
 
     def _encode_raw_frame(self, frame: np.ndarray) -> None:
         """Compress clean un-annotated frame to JPEG for client-side canvas viewports."""

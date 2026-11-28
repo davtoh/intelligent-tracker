@@ -10,7 +10,7 @@
   let lastEditorCamId = null;
   let dragPreview = null;
   let lastRenderCtx = { canvas: null, activeCameraId: null, homography: null, zones: [] };
-  const viewport = { zoom: 1, panX: 0, panY: 0, viewMode: 'world' };
+  const viewport = { zoom: 1, panX: 0, panY: 0, viewMode: 'world', bevQuadMode: 'all' };
 
   function normalizeBounds(bounds) {
     if (Array.isArray(bounds) && bounds.length >= 4) {
@@ -54,9 +54,7 @@
   }
 
   function fitToBounds() {
-    viewport.zoom = 1;
-    viewport.panX = 0;
-    viewport.panY = 0;
+    viewport.zoom = 1; viewport.panX = 0; viewport.panY = 0;
     return { ...viewport };
   }
 
@@ -67,11 +65,8 @@
       const [wx0, wy0] = toWorldXY(anchorCanvasPt[0], anchorCanvasPt[1], b, width, height, pad);
       viewport.zoom = clamped;
       const [wx1, wy1] = toWorldXY(anchorCanvasPt[0], anchorCanvasPt[1], b, width, height, pad);
-      viewport.panX += wx0 - wx1;
-      viewport.panY += wy0 - wy1;
-    } else {
-      viewport.zoom = clamped;
-    }
+      viewport.panX += wx0 - wx1; viewport.panY += wy0 - wy1;
+    } else { viewport.zoom = clamped; }
     return { ...viewport };
   }
 
@@ -139,7 +134,18 @@
     });
   }
 
+  function setBevQuadMode(mode) {
+    viewport.bevQuadMode = (mode === 'selected' || mode === 'off') ? mode : 'all';
+    return viewport.bevQuadMode;
+  }
+
   function drawCameraFovCones(ctx, cameras, bounds, width, height, pad, activeCameraId) {
+    if (window.WorldMinimapFovHelper?.drawCameraFovCones) {
+      window.WorldMinimapFovHelper.drawCameraFovCones(
+        ctx, cameras, bounds, width, height, pad, activeCameraId, toCanvasXY, effectiveBounds, viewport.bevQuadMode
+      );
+      return;
+    }
     const [, , spanX] = effectiveBounds(bounds);
     const pxPerMeter = (width - pad * 2) / spanX;
     (cameras || []).forEach((cam) => {
@@ -149,22 +155,13 @@
       const rangePx = Math.max(12, Number(pose.range_m ?? 12) * pxPerMeter);
       const [cx, cy] = toCanvasXY(Number(pose.origin_x ?? 0), Number(pose.origin_y ?? 0), bounds, width, height, pad);
       const isActive = activeCameraId && cam.camera_id === activeCameraId;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, rangePx, yawRad - halfFov, yawRad + halfFov);
-      ctx.closePath();
-      ctx.fillStyle = isActive ? 'rgba(6, 182, 212, 0.22)' : 'rgba(148, 163, 184, 0.10)';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cx, cy, isActive ? 5.5 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = isActive ? '#06b6d4' : '#cbd5e1';
-      ctx.fill();
-      if (isActive) {
-        const tx = cx + Math.cos(yawRad) * rangePx;
-        const ty = cy + Math.sin(yawRad) * rangePx;
-        ctx.beginPath(); ctx.arc(tx, ty, 4.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#f59e0b'; ctx.fill();
+      if (viewport.bevQuadMode !== 'off' && (viewport.bevQuadMode !== 'selected' || isActive)) {
+        ctx.beginPath(); ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, rangePx, yawRad - halfFov, yawRad + halfFov); ctx.closePath();
+        ctx.fillStyle = isActive ? 'rgba(6, 182, 212, 0.22)' : 'rgba(148, 163, 184, 0.10)'; ctx.fill();
       }
+      ctx.beginPath(); ctx.arc(cx, cy, isActive ? 5.5 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = isActive ? '#06b6d4' : '#cbd5e1'; ctx.fill();
       ctx.fillStyle = '#e2e8f0'; ctx.font = '10px sans-serif';
       ctx.fillText(cam.camera_id || 'cam', cx + 7, cy + 3);
     });
@@ -276,13 +273,13 @@
     window.BEVMinimap?.render(canvas, homography, zones, activeCameraId);
   }
 
-  async function fetchAndRender(canvas, activeCameraId, homography, zones) {
+  async function fetchAndRender(canvas, activeCameraId, homography, zones, force = false) {
     if (!canvas) return;
     lastRenderCtx = { canvas, activeCameraId, homography, zones };
     if (viewport.viewMode === 'camera') { renderActiveView(canvas, activeCameraId, homography, zones); return; }
     if (dragPreview) { renderWorldMap(canvas, getEffectiveWorldMap(), activeCameraId); return; }
     const now = Date.now();
-    if (!fetchInFlight && (now - lastFetchMs > 750 || !cachedWorldMap)) {
+    if (!fetchInFlight && (force || now - lastFetchMs > 750 || !cachedWorldMap)) {
       fetchInFlight = true;
       lastFetchMs = now;
       try {
@@ -327,7 +324,7 @@
           origin_x: num('world-pose-x', 0), origin_y: num('world-pose-y', 0), yaw_deg: num('world-pose-yaw', 0),
           fov_deg: Math.max(10, Math.min(180, num('world-pose-fov', 75))), range_m: Math.max(1, num('world-pose-range', 12)), scale: 1.0,
         });
-        await fetchAndRender(document.getElementById('bev-minimap-canvas'), cameraId, lastRenderCtx.homography, lastRenderCtx.zones);
+        await fetchAndRender(document.getElementById('bev-minimap-canvas'), cameraId, lastRenderCtx.homography, lastRenderCtx.zones, true);
         window.showToast?.('World Pose Saved', `Updated ${cameraId} pose`, 'success');
       } catch (err) {
         window.showToast?.('Pose Save Failed', err.message || 'Error', 'error');
@@ -340,5 +337,6 @@
     fetchAndRender, rerender, savePose, bindPoseEditor, toCanvasXY, toWorldXY, normalizeBounds,
     getCachedWorldMap: getEffectiveWorldMap, setDragPreview, syncPoseInputs,
     getViewport: () => ({ ...viewport }), fitToBounds, setZoom, panBy, setViewMode, toggleViewMode,
+    setBevQuadMode, getBevQuadMode: () => viewport.bevQuadMode,
   };
 })();

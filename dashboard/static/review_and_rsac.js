@@ -60,39 +60,65 @@
     setTimeout(() => { if (toast.parentElement) toast.remove(); }, 6000);
   }
 
-  async function loadReviewQueue(status = 'pending') {
+  async function loadReviewQueue(status = 'pending', opts = {}) {
     state.currentReviewStatus = status;
     const container = document.getElementById('review-queue-container');
     const counter = document.getElementById('review-inbox-counter');
-    const badge = document.getElementById('header-review-badge');
-
     if (!container) return;
+    const controls = window.ReviewQueueControls;
+    if (controls) controls.setState({ status, ...(opts.resetOffset ? { offset: 0 } : {}) });
 
     try {
-      const res = await fetch(`/api/review/queue?status=${encodeURIComponent(status)}&limit=50`);
+      const url = controls
+        ? controls.buildQueryUrl({ status })
+        : `/api/review/queue?status=${encodeURIComponent(status)}&limit=50`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const items = data.items || [];
+      const totalCount = typeof data.total === 'number' ? data.total : items.length;
+      const pendingCount = typeof data.total_pending === 'number'
+        ? data.total_pending
+        : (status === 'pending' ? totalCount : state.pendingReviewCount);
 
-      if (status === 'pending') {
-        state.pendingReviewCount = items.length;
+      if (status === 'pending' || typeof data.total_pending === 'number') {
+        state.pendingReviewCount = pendingCount;
         ['header-review-badge', 'drawer-review-badge', 'drawer-review-count'].forEach((id) => {
           const b = document.getElementById(id);
           if (b) {
-            b.textContent = items.length;
-            b.style.display = items.length > 0 ? 'inline-block' : 'none';
+            b.textContent = pendingCount;
+            b.style.display = pendingCount > 0 ? 'inline-block' : 'none';
           }
         });
       }
 
       if (counter) {
-        counter.textContent = `${items.length} Candidate${items.length === 1 ? '' : 's'}`;
+        counter.textContent = `${totalCount} Candidate${totalCount === 1 ? '' : 's'}`;
       }
 
       renderReviewGrid(items, container, status);
+      controls?.updatePagination?.({
+        total: totalCount, totalPending: pendingCount, count: items.length,
+        offset: data.offset ?? 0, limit: data.limit ?? 50, status,
+      });
     } catch (err) {
       container.innerHTML = `<div class="empty-state">Failed to load review queue: ${escapeHtml(err.message)}</div>`;
     }
+  }
+
+  async function openReviewItem(reviewId) {
+    await loadReviewQueue('pending', { resetOffset: true });
+    if (reviewId === undefined || reviewId === null || reviewId === '') return null;
+    const container = document.getElementById('review-queue-container');
+    if (window.ReviewQueueControls?.highlightReviewItem) {
+      return window.ReviewQueueControls.highlightReviewItem(reviewId, {
+        container, buildCardHtml: buildReviewCardHtml, bindCardButtons: bindReviewActionButtons, fetchFn: fetch,
+      });
+    }
+    const cards = container?.querySelectorAll ? Array.from(container.querySelectorAll('.review-card')) : [];
+    const card = cards.find((el) => String(el.getAttribute?.('data-item-id') ?? '') === String(reviewId)) || null;
+    card?.classList?.add?.('review-card-highlight');
+    return card;
   }
 
   function normalizeCropUrl(item) {
@@ -188,31 +214,16 @@
 
   function bindReviewActionButtons(container) {
     container.querySelectorAll('.btn-confirm').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-id');
-        await confirmReviewItem(id, btn.getAttribute('data-name') || '');
-      });
+      btn.addEventListener('click', () => confirmReviewItem(btn.getAttribute('data-id'), btn.getAttribute('data-name') || ''));
     });
-
     container.querySelectorAll('.btn-reassign').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        window.ReviewModals?.openReassignModal(id);
-      });
+      btn.addEventListener('click', () => window.ReviewModals?.openReassignModal(btn.getAttribute('data-id')));
     });
-
     container.querySelectorAll('.btn-enroll-new').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        window.ReviewModals?.enrollNewFromReview(id);
-      });
+      btn.addEventListener('click', () => window.ReviewModals?.enrollNewFromReview(btn.getAttribute('data-id')));
     });
-
     container.querySelectorAll('.btn-dismiss').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-id');
-        await dismissReviewItem(id);
-      });
+      btn.addEventListener('click', () => dismissReviewItem(btn.getAttribute('data-id')));
     });
     window.ReviewUndoAndFlag?.bindCardUndoButtons?.(container);
   }
@@ -273,14 +284,16 @@
 
       if (ev.event_type === 'review_item_queued') {
         const sim = (ev.similarity || 0) * 100;
+        const ref = ev.review_id != null ? { reviewId: ev.review_id } : {};
         showToast(
           '🧠 Review Candidate Queued',
           `Borderline match (${sim.toFixed(1)}%) for track #${ev.track_id} (${ev.camera_id}).`,
           'review',
           'Review Candidate',
           () => {
-            const btn = document.getElementById('tab-btn-review');
-            if (btn) btn.click();
+            if (window.App?.navigate) return window.App.navigate('tab-review', ref);
+            if (window.AppNavigation?.navigate) return window.AppNavigation.navigate('tab-review', ref);
+            document.getElementById('tab-btn-review')?.click();
           }
         );
         loadReviewQueue(state.currentReviewStatus);
@@ -309,13 +322,13 @@
     window.ReviewModals?.initReassignModal((data) => notifyReviewResolved(data));
     window.ReviewModals?.initQuickEnrollModal((data) => notifyReviewResolved(data));
     window.RSACVersions?.init();
+    window.ReviewQueueControls?.bindControls?.(() => loadReviewQueue(state.currentReviewStatus), showToast);
 
     document.querySelectorAll('.review-filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.review-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        const st = btn.getAttribute('data-status');
-        loadReviewQueue(st);
+        loadReviewQueue(btn.getAttribute('data-status'), { resetOffset: true });
       });
     });
 
@@ -323,17 +336,14 @@
       loadReviewQueue(state.currentReviewStatus);
     });
 
-    loadReviewQueue('pending');
+    if (!/[?&]review_id=/.test(window.location?.hash || '')) loadReviewQueue('pending');
   });
 
-  const ReviewAndRSAC = {
+  window.ReviewAndRSAC = {
     loadQueue: loadReviewQueue,
+    openReviewItem,
     openVersionsModal: (entityId, entityName) => window.RSACVersions?.openVersionsModal(entityId, entityName),
-    checkAlertEvents: checkAlertEvents,
-    showToast: showToast,
+    checkAlertEvents,
+    showToast,
   };
-
-  window.ReviewAndRSAC = ReviewAndRSAC;
-  window.ReviewAndRSAC.checkAlertEvents = checkAlertEvents;
-  window.ReviewAndRSAC.openVersionsModal = (entityId, entityName) => window.RSACVersions?.openVersionsModal(entityId, entityName);
 })();

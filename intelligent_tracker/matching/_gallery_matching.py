@@ -297,3 +297,40 @@ def match_persistent_gallery(
         matcher, track, query_vec, similarities, raw_similarities,
         matched_priors, best_idx, best_score, source, now, zone_id, frame=frame,
     )
+
+
+def enforce_unique_entity_bindings(
+    matcher: Any,
+    tracks: Dict[int, Track],
+    events: List[EntityIdentifiedEvent],
+    source: str,
+) -> List[EntityIdentifiedEvent]:
+    """Ensure at most one active track per camera claims a given ``entity_id`` in a frame."""
+    claims: Dict[int, List[tuple[tuple[float, int, float, int], int, Track]]] = {}
+    hyst = getattr(matcher, "hysteresis", None)
+    for tid, trk in tracks.items():
+        eid = getattr(trk, "entity_id", None)
+        if eid is None:
+            continue
+        locked = hyst.get_locked(tid) if hyst is not None else None
+        score = float(getattr(trk, "reid_score", locked.similarity if locked is not None else 0.0) or 0.0)
+        is_locked = 1 if locked is not None else 0
+        locked_at = float(locked.locked_at) if locked is not None else float("inf")
+        claims.setdefault(int(eid), []).append(((score, is_locked, -locked_at, -int(tid)), int(tid), trk))
+    dropped: set[tuple[int, int]] = set()
+    for eid, contenders in claims.items():
+        if len(contenders) <= 1:
+            continue
+        contenders.sort(key=lambda item: item[0], reverse=True)
+        for _, loser_tid, loser_trk in contenders[1:]:
+            if hyst is not None:
+                hyst.clear_track(loser_tid, loser_trk)
+            else:
+                loser_trk.entity_name, loser_trk.identity_label = None, None
+                if hasattr(loser_trk, "entity_id"):
+                    delattr(loser_trk, "entity_id")
+            matcher._identified_tracks.pop(loser_tid, None)
+            dropped.add((loser_tid, eid))
+    if not dropped:
+        return events
+    return [ev for ev in events if (int(ev.track_id), int(getattr(ev, "entity_id", -1))) not in dropped]

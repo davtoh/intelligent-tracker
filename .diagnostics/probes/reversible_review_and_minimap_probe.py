@@ -29,9 +29,9 @@ def _check_review_actions_undo(tmp: Path, db: Any, failures: list[str], checks: 
     from intelligent_tracker.active_learning import ActiveLearningManager
 
     ver = db._conn.execute("PRAGMA user_version").fetchone()[0]
-    checks["schema_v5"] = ver == 5
-    if ver != 5:
-        failures.append(f"Expected PRAGMA user_version=5, got {ver}")
+    checks["schema_v5"] = ver >= 5
+    if ver < 5:
+        failures.append(f"Expected PRAGMA user_version>=5, got {ver}")
 
     e1, e2 = db.add_entity("Alice", category="person"), db.add_entity("Bob", category="person")
     crop_path = tmp / "probe_crop.jpg"

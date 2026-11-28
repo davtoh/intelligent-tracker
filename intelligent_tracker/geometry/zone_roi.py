@@ -19,6 +19,8 @@ class ZoneEvent:
     event_type: str  # 'enter', 'exit', 'dwell'
     timestamp: float
     dwell_time: float = 0.0
+    entry_time: Optional[float] = None
+    exit_time: Optional[float] = None
     centroid: Optional[Tuple[float, float]] = None
     bbox: Optional[Tuple[int, int, int, int]] = None
 
@@ -142,6 +144,9 @@ class ZoneROI:
         centroid: Optional[Tuple[float, float]],
         bbox: Optional[Tuple[int, int, int, int]],
         events: List[ZoneEvent],
+        *,
+        entry_time: Optional[float] = None,
+        exit_time: Optional[float] = None,
     ) -> None:
         """Record a ZoneEvent onto both the current frame batch and history log."""
         event = ZoneEvent(
@@ -150,6 +155,8 @@ class ZoneROI:
             event_type=event_type,
             timestamp=now,
             dwell_time=dwell_time,
+            entry_time=entry_time,
+            exit_time=exit_time,
             centroid=centroid,
             bbox=bbox,
         )
@@ -166,7 +173,7 @@ class ZoneROI:
                 "bbox": bbox,
             }
             self.total_entries += 1
-            self._append_zone_event("enter", tid, now, 0.0, centroid, bbox, events)
+            self._append_zone_event("enter", tid, now, 0.0, centroid, bbox, events, entry_time=now)
             return
 
         occ = self.current_occupants[tid]
@@ -176,7 +183,9 @@ class ZoneROI:
         dwell_dur = now - occ["entry_time"]
         if dwell_dur >= self.dwell_threshold and not occ["dwell_emitted"]:
             occ["dwell_emitted"] = True
-            self._append_zone_event("dwell", tid, now, dwell_dur, centroid, bbox, events)
+            self._append_zone_event(
+                "dwell", tid, now, dwell_dur, centroid, bbox, events, entry_time=occ["entry_time"]
+            )
 
     def _handle_departed_occupants(self, present_tids, now, events):
         departed_tids = [tid for tid in self.current_occupants if tid not in present_tids]
@@ -185,7 +194,15 @@ class ZoneROI:
             dwell_dur = max(0.0, now - occ["entry_time"])
             self.total_exits += 1
             self._append_zone_event(
-                "exit", tid, now, dwell_dur, occ.get("centroid"), occ.get("bbox"), events
+                "exit",
+                tid,
+                now,
+                dwell_dur,
+                occ.get("centroid"),
+                occ.get("bbox"),
+                events,
+                entry_time=occ["entry_time"],
+                exit_time=now,
             )
 
     def draw(self, frame: np.ndarray, alpha=0.25, color=None, show_label=True) -> np.ndarray:

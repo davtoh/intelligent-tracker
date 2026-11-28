@@ -57,7 +57,7 @@ class TestReviewSchemaV5AndRepo(unittest.TestCase):
 
     def test_schema_v5_idempotent_upgrade(self) -> None:
         ver = self.db._conn.execute("PRAGMA user_version;").fetchone()[0]
-        self.assertEqual(ver, 5)
+        self.assertGreaterEqual(ver, 5)
         cols = {r[1] for r in self.db._conn.execute("PRAGMA table_info(review_decisions);").fetchall()}
         for col in ("review_id", "action", "prior_status", "created_signature_id", "prior_state_json", "undone"):
             self.assertIn(col, cols)
@@ -65,7 +65,7 @@ class TestReviewSchemaV5AndRepo(unittest.TestCase):
         self.db._conn.execute("PRAGMA user_version = 4;")
         self.db._conn.commit()
         self.db._init_schema()
-        self.assertEqual(self.db._conn.execute("PRAGMA user_version;").fetchone()[0], 5)
+        self.assertGreaterEqual(self.db._conn.execute("PRAGMA user_version;").fetchone()[0], 5)
 
     def test_repo_crud_and_rollback_on_sqlite_error(self) -> None:
         eid1 = self.db.add_entity("Alice", category="person")

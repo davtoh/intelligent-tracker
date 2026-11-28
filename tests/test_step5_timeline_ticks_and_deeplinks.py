@@ -106,7 +106,8 @@ process.stdout.write(JSON.stringify({ emptyBtn, btnHtml, switched, type: dispatc
 """
         res = _run_node(script)
         self.assertEqual(res["emptyBtn"], "")
-        self.assertIn("📼 Seek in Studio", res["btnHtml"])
+        self.assertIn("▶ Clip @ 00:12", res["btnHtml"])
+        self.assertIn("btn-seek-studio", res["btnHtml"])
         self.assertEqual(res["switched"], "tab-videos")
         self.assertEqual(res["type"], "video-seek-request")
         self.assertEqual(res["detail"], {"filename": "clip.mp4", "offsetSec": 12.5})

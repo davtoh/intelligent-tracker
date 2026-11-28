@@ -1,14 +1,14 @@
 # Intelligent Tracker — Current Architecture & Alignment Audit
 
-> **Snapshot Basis**: Branch `feature/ci-and-debug-session-hardening` (post-`reid_unification` & `integration_seams` audits, `OBS-001`–`OBS-022`).
+> **Snapshot Basis**: Branch `feature/debug-session-applications` (`HEAD` `251471c`, post-`runtime_ux_and_reid_parity_master_roadmap` completion; `OBS-001`–`OBS-019` resolved; `26` new observations `OBS-023`–`OBS-048` + `DBG-01`–`DBG-04` triaged).
 > **Measured Static & Test Baseline**:
-> - `diagnose.py arch-map` = `431` source files, `80,085` lines, `154` API routes across 20 routers + `dashboard/app.py`; `0` upward imports from `intelligent_tracker/` to `dashboard/` or `scripts/`; `0` CSS `!important`; `2` unused imports (`dashboard/routers/rsac.py` -> `dashboard.routers.categories.create_custom_category`, `intelligent_tracker/video/_capture_guard_worker.py` -> `typing.Tuple`); `1` hard overrun (`high_objects.py` `523L`), `7` WARN files (`video_library.js` `471L`, `interactive.py` `451L`, `scripts/cdp_inspect.py` `436L`, `intelligent_tracker/rsac.py` `402L`, `dashboard/routers/rsac.py` `353L`, `dashboard/static/app.js` `353L`, `dashboard/dependencies.py` `351L`), `55` functions `> 40L`.
-> - `diagnose.py surface --verify` = `0` mismatches (`441` IDs, `32` selects, `891` globals, `154` routes).
+> - `diagnose.py arch-map` = `432` source files, `80,711` lines, `154` API routes across 21 routers + `dashboard/app.py`; `0` upward imports from `intelligent_tracker/` to `dashboard/` or `scripts/`; `0` CSS `!important`; `0` unused imports; `1` hard overrun (`high_objects.py` `523L`), `4` WARN files (`video_library.js` `471L`, `interactive.py` `451L`, `scripts/cdp_inspect.py` `436L`, `intelligent_tracker/rsac.py` `402L`), `56` functions `> 40L`. (`app.js`, `routers/rsac.py`, and `dependencies.py` are now all `< 350L`.)
+> - `diagnose.py surface --verify --strict` = `0` mismatches (`442` IDs, `32` selects, `915` globals, `154` routes).
 > - `diagnose.py scan` = `0` active defects (`118` resolved).
-> - `diagnose.py audit` = `mypy`: `163` (`intelligent_tracker`) + `149` (`dashboard`) + `1` (`scripts`); `ruff`: `59` + `6` + `2`.
-> - Workspace probes: `11/12` passing (including `spa_nine_tab_cdp_probe`, `deep_link_navigation_probe`, `effective_config_probe`, `reversible_review_and_minimap_probe`), while `debug_session` is `error` due to `21` open observations (`OBS-001`–`OBS-022`) + `1` logged error (`CRIT=0 ERR=1 WARN=121`).
-> - Full `unittest` suite was not re-run during read-only audit discovery (prior baseline: `1,077` total).
-> **Reference Target**: [Ideal World Architecture & Target Blueprint](IDEAL_WORLD_ARCHITECTURE.md) (`ADRs 01–21`, Layers 1–5).
+> - `diagnose.py audit` = `mypy`: `163` (`intelligent_tracker`) + `121` (`dashboard`) + `1` (`scripts`); `ruff`: `58` + `6` + `2`.
+> - Workspace probes (`brief --run-probes`): `12/13` passing (`alerts_store_probe`, `cold_boot_world_probe`, `deep_link_navigation_probe`, `effective_config_probe`, `multiview_grid_wake_probe`, `replay_pipeline_probe`, `reversible_review_and_minimap_probe`, `sightings_provenance_probe`, `spa_nine_tab_cdp_probe`, `studio_drag_put_probe`, `video_studio_contract_probe`, `camera_hardware`); `debug_session` = `error` (`CRIT=0 ERR=1942 WARN=489`, `26` triaged observations `OBS-023`–`OBS-048`).
+> - Full `unittest` suite was skipped during read-only discovery per `FOR AUDITS` token-hygiene gate (`test_step4_overflow_popover_and_guards.py` baseline exit `0`).
+> **Reference Target**: [Ideal World Architecture & Target Blueprint](IDEAL_WORLD_ARCHITECTURE.md) (`ADRs 01–23`, Layers 1–5).
 
 ### Pre-Run Verification One-Liners
 
@@ -243,3 +243,34 @@ The dashboard implements the app side of the `system-diagnostics` **Debug Observ
 - **Multiview grid wake (`OBS-002`)**: Add `multiview_grid_wake_probe` booting `focus_only` -> subscribing `2x2` -> asserting `_is_hibernating is False` and `source_status == "online"`.
 - **Synthetic Re-ID & batch provenance (`OBS-005`–`007`, `016`)**: Extend `replay_pipeline_probe` (enrolled `P1` matches synthetic live track) and `video_studio_contract_probe` (`video:<filename>` review provenance, `config_meta.tracked_categories`).
 - **Stateful UI & long-fixture CDP (`OBS-001`, `004`, `010`–`015`, `019`)**: Add Node VM tests for `TagTrackQueue` Next/Prev retention and `TextTruncationManager.clear()`, JS AST rules for `syncCanvasDpr` in rAF and `localStorage` in `timeupdate`, and `60+` char filename fixtures in `spa_nine_tab_cdp_probe`.
+
+---
+
+## 10. Post-`251471c` Runtime, Studio, Alerts & Recording Audit (`OBS-023`–`OBS-048`, `DBG-01`–`DBG-04`)
+
+> **Audit Basis**: All 4 milestones of `.TODO/runtime_ux_and_reid_parity_master_roadmap.md` (`2622156`–`251471c`) completed (`OBS-001`–`OBS-019` resolved; `12/13` probes passing). Live testing logged `26` new observations (`OBS-023`–`OBS-048`, triaged in `.diagnostics/observation_catalog.json`) plus `4` backend runtime defects (`DBG-01`–`DBG-04`), scheduled into `.TODO/tracking_studio_alerts_and_recording_parity_master_roadmap.md` (`ADRs 22–23`, Steps 1–4) and standalone `.TODO/debug_hud_picker_filter_sort_and_drag_plan.md` (`system-diagnostics` HUD).
+
+### Verified `P0`–`P2` Catalog (`OBS-023`–`OBS-048` + `DBG-01`–`DBG-04`)
+| Sev | ID(s) | Area & Verified Root Cause | Target Step |
+| :--- | :--- | :--- | :--- |
+| **P0** | `DBG-01`, `OBS-036` | `post_detection_governance.py:69` passes `track_id=tid` to `MultiCameraHandoffCoordinator.record_zone_exit()` (`handoff.py:66-71`) causing `1,939` `TypeError` crashes; `camera_ai_config.js:120-124,197-198` matches `.btn-cat-chip`/`.btn-gallery-ent-chip` via `.btn-tag-preset:not([data-target])`. | Step 1 |
+| **P0** | `DBG-02` | `intelligent_tracker/reid/profile.py:10,39` hardcodes `CANONICAL_REID_DIM = 608` while `DualModelFeatureExtractor` (`dual.py:39-62`) outputs `2560` dims (`512+2048`), causing `gallery_reembed.py:42-61` to fail `4/4` valid signatures at boot. | Step 1 |
+| **P0** | `OBS-047`, `OBS-036` | `SortTracker` (`sort.py:94-99,121-141,202`) uses IoU-only `0.30` matching (`confirmed_only=False` at `frame_processor.py:234`) and serializes `1.5s` coasting boxes (`stream_telemetry.py:56-85`), spawning trailing boxes at `8 FPS` and resetting `track_id` before `K=3` Re-ID. | Step 1 |
+| **P0** | `OBS-040` | `GalleryMatcher.match_tracks()` (`gallery.py:266-270`) and `IdentityHysteresisTracker` (`identity_hysteresis.py:37`) match greedily without per-frame 1-to-1 entity exclusion, letting two concurrent tracks bind `"Samir"`. | Step 1 |
+| **P0** | `OBS-028`, `OBS-029` | `studio_media.js:117-125` omits `?annotated=false` on `/stream/{id}` (burning legacy boxes); `studio.js:56-63` lacks a live telemetry redraw loop and calls undefined `ScrubberOverlay.getCurrentTracks()`. | Step 1 |
+| **P0** | `OBS-035` | `analytics_drilldown.js:127-132` sends float epochs compared as strings against UTC `YYYY-MM-DD HH:MM:SS` in `sightings_query_helpers.py:37-42`; `gallery_timeline.js:13-15` retains hidden `start`/`end` bounds with no Clear/Reset UI. | Step 1 |
+| **P1** | `OBS-030`–`034`, `DBG-04` | `EventFTSIndex` (`fts_index.py:23,61`) indexes `0.5s` `world_entity_state_changed` ticks; `_event_formatters.py:23-165` omits `severity` and mixes scoped/unscoped `zone_id`; `alerts_view.js:72` hides `zone_dwell` duration; `EventBus.set_write_through_handler` & `WorldPolicy` unwired. | Step 2 |
+| **P1** | `OBS-038`, `039`, `041`, `DBG-03` | `writers.py:11` prefers `mp4v` over `avc1`; `stream_recording.py:128-134,247-265` lacks auto-transcode on stop and alert/sighting clip provenance; `video_jobs.py:143-169` lacks active-recording transcode guard (`moov atom not found`); `videos.py:51-61` runs sync `ffprobe` in `async def`. | Step 3 |
+| **P1** | `OBS-024`–`027` | `studio_shape_editor.js:212-240` uses `prompt()` rename only; `world_minimap.js` ignores `bevQuadMode` & `fov_corners_global`; uncalibrated `(0,0)` cones mix with raw-pixel entities; `save_homography` (`coordinates.py:204-225`) never updates `CameraWorldPose`. | Step 3 |
+| **P1** | `OBS-023`, `043`, `048` | *(Resolved in Step 4)* `/api/review/queue` pagination/filters/bulk-dismiss & `total_pending`; `/analytics/heatmap` `mode=filtered` historical DB heatmap. | Step 4 (Done) |
+| **P2** | `OBS-037`, `042`, `044`–`046` | `system-diagnostics` Debug HUD: long selector clips `x` in `.fh-chip` (`hud_core.js:246,271`), filter omits `resolved` (`hud_drawer.js:254`), static card, `last_seen` re-sort on edit (`observation_store.py:274,299`), and no `rel-input` dropdown. | HUD Plan |
+
+### Step 4 Completed Contracts (`step_4_review_triage_and_filtered_heatmaps`)
+- **Review Queue Pagination, Filtering, Bulk-Dismiss & Toast Deep-Link (`OBS-043`, `OBS-048`)**:
+  - `intelligent_tracker/repositories/learning_repo.py` (`count_review_items`, `list_review_items`, `bulk_dismiss_review_items`) and `dashboard/routers/review.py` (`GET /api/review/queue`, `POST /api/review/bulk-dismiss`) expose real DB `total` & `total_pending` counts, `status`/`limit`/`offset`/`matched`/`reason`/`sort` filtering, and bulk-dismissal of filtered pending items.
+  - `dashboard/static/js/review_queue_controls.js`, `dashboard/static/review_and_rsac.js`, `dashboard/static/js/app_navigation.js`, `dashboard/static/app.js`, and `dashboard/static/partials/tabs/review.html` render `#header-review-badge` and `#review-inbox-counter` from DB `total_pending`, paginate/filter/bulk-dismiss in `#review`, and deep-link `Review Candidate` toast actions directly to `#review?review_id=<id>` with target highlighting.
+- **Filtered Historical DB Heatmaps (`OBS-023`)**:
+  - `dashboard/services/heatmap_history_service.py` and `dashboard/routers/analytics.py` (`GET /analytics/heatmap`) support `mode=all|filtered` alongside `camera_id`, `entity_id`, `zone_id`, `event_type`, `range_sec`, and `end_time` filters, rendering historical DB sighting/event footpoint densities when `filtered` mode is selected.
+  - `dashboard/static/js/analytics_view.js`, `dashboard/static/js/live_player.js`, and `dashboard/static/partials/tabs/analytics.html` provide the `All (Live)` vs. `Filtered (History)` heatmap mode selector synchronized with `#analytics` traffic-flow filters.
+- **`system-diagnostics` AST Guard (`DBG-01` Prevention)**:
+  - `signature_drift_rules.py` (`check_method_kwarg_mismatch`, wired into `cross_module_rules.py`) adds the `METHOD_KWARG_MISMATCH` cross-module AST rule inspecting method calls across all scopes (not only inside `try/except`) to catch unknown keyword arguments while avoiding false positives on dynamic, stdlib, and mock receivers; fixed latent kwarg bugs in `dashboard/services/entity_tagger.py` and `dashboard/services/video_scenario_reeval_service.py`.

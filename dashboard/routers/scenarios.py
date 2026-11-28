@@ -105,9 +105,9 @@ async def get_all_scenarios(sm: ScenarioManager = Depends(get_scenario_mgr)):
             for cam_id, c_data in sm.cameras.items()
         },
         "spatial_transitions": [
-            l.to_dict()
-            for l in sm.topology.list_links()
-            if not l.link_id.endswith("_rev")
+            link.to_dict()
+            for link in sm.topology.list_links()
+            if not link.link_id.endswith("_rev")
         ],
     }
 
@@ -132,17 +132,13 @@ async def create_or_update_zone(
     sm: ScenarioManager = Depends(get_scenario_mgr),
 ):
     """Create or update a polygonal zone for a camera, persisting to YAML & SQLite."""
-    color_tuple = (
-        tuple(req.color) if req.color and len(req.color) >= 3 else (0, 200, 100)
+    color_tuple: tuple[int, int, int] = (
+        (int(req.color[0]), int(req.color[1]), int(req.color[2])) if req.color and len(req.color) >= 3 else (0, 200, 100)
     )
     zone = sm.save_zone(
-        camera_id=req.camera_id,
-        name=req.name,
-        polygon=req.polygon,
-        category_filter=req.category_filter or "",
-        dwell_threshold=req.dwell_threshold or 5.0,
-        capacity_limit=req.capacity_limit,
-        color=color_tuple,
+        camera_id=req.camera_id, name=req.name, polygon=list(req.polygon),
+        category_filter=req.category_filter or "", dwell_threshold=req.dwell_threshold or 5.0,
+        capacity_limit=req.capacity_limit, color=color_tuple,
     )
 
     mgr = get_active_stream_manager(req.camera_id, conn=request)
@@ -187,15 +183,12 @@ async def create_or_update_tripwire(
     sm: ScenarioManager = Depends(get_scenario_mgr),
 ):
     """Create or update a directional tripwire line for a camera."""
-    color_tuple = (
-        tuple(req.color) if req.color and len(req.color) >= 3 else (0, 255, 255)
+    color_tuple: tuple[int, int, int] = (
+        (int(req.color[0]), int(req.color[1]), int(req.color[2])) if req.color and len(req.color) >= 3 else (0, 255, 255)
     )
     tw = sm.save_tripwire(
-        camera_id=req.camera_id,
-        name=req.name,
-        line_segment=req.line_segment,
-        bidirectional=req.bidirectional if req.bidirectional is not None else True,
-        color=color_tuple,
+        camera_id=req.camera_id, name=req.name, line_segment=list(req.line_segment),
+        bidirectional=req.bidirectional if req.bidirectional is not None else True, color=color_tuple,
     )
 
     mgr = get_active_stream_manager(req.camera_id, conn=request)
@@ -239,17 +232,24 @@ async def save_homography_route(
 ):
     """Calibrate 4-point perspective ground plane homography matrix for camera."""
     try:
+        src_pts = [(float(p[0]), float(p[1])) for p in req.src_points]
+        dst_pts = [(float(p[0]), float(p[1])) for p in req.dst_points] if req.dst_points else None
         homo = sm.save_homography(
             camera_id=req.camera_id,
-            src_points=req.src_points,
-            dst_points=req.dst_points,
+            src_points=src_pts,
+            dst_points=dst_pts,
             metric_width=req.metric_width or 10.0,
             metric_height=req.metric_height or 10.0,
         )
+        if sm.db and homo.is_calibrated and sm.db.get_world_pose(req.camera_id) is None:
+            from intelligent_tracker.world.coordinates import derive_pose_from_homography
+
+            pose = derive_pose_from_homography(req.camera_id, homo)
+            sm.db.save_world_pose(req.camera_id, pose.origin_x, pose.origin_y, pose.yaw_deg, pose.scale)
 
         mgr = get_active_stream_manager(req.camera_id, conn=request)
         if mgr:
-            mgr.homography = homo
+            setattr(mgr, "homography", homo)
 
         return {"status": "success", "homography": homo.to_dict()}
     except Exception as e:
@@ -282,7 +282,7 @@ async def delete_homography_route(
 
     mgr = get_active_stream_manager(camera_id, conn=request)
     if mgr:
-        mgr.homography = c_entry["homography"]
+        setattr(mgr, "homography", c_entry["homography"])
 
     from intelligent_tracker.world.coordinates import clear_homography_from_world
 

@@ -1,5 +1,63 @@
 # Changelog
 
+## [2026-11-28] feat: Step 4: Review Queue Pagination/Triage, Filtered Historical Heatmaps & AST Guard
+- **Type**: feat
+- **Summary**: Completed Step 4 of tracking_studio_alerts_and_recording_parity_master_roadmap: paginated/filtered #review queue with real DB total_pending badges, bulk-dismiss, and toast deep-linking (OBS-043, OBS-048); filtered historical DB heatmaps in #analytics (OBS-023); METHOD_KWARG_MISMATCH AST guard in system-diagnostics (fixing real kwarg bugs in entity_tagger.py and video_scenario_reeval_service.py).
+- **Files** (11):
+  - `intelligent_tracker/repositories/learning_repo.py`
+  - `dashboard/routers/review.py`
+  - `dashboard/routers/analytics.py`
+  - `dashboard/services/heatmap_history_service.py`
+  - `dashboard/services/entity_tagger.py`
+  - `dashboard/services/video_scenario_reeval_service.py`
+  - `dashboard/static/js/review_queue_controls.js`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+3 more)
+- **Verification**: spa_nine_tab_cdp_probe PASS, mini_ci --fast PASS, sphinx -W PASS
+
+## [2026-11-28] feat: Studio Full Modal Editing, Derived BEV Poses & BEV Quad Minimap Filtering (Step 3 M3)
+- **Type**: feat
+- **Summary**: OBS-024..027: Reused #modal-studio-zone and #modal-studio-tripwire for full PUT editing, staggered uncalibrated cameras and excluded raw-pixel entities from world bounds, derived default CameraWorldPose from 4-point homography on sync and POST /api/scenarios/homography, and added WorldMinimapFovHelper with fov_corners_global polygon rendering and bevQuadMode filtering.
+- **Files** (11):
+  - `intelligent_tracker/world/minimap.py`
+  - `intelligent_tracker/world/_minimap_render.py`
+  - `intelligent_tracker/world/_bridge_helpers.py`
+  - `intelligent_tracker/world/coordinates.py`
+  - `dashboard/routers/scenarios.py`
+  - `dashboard/static/js/scenario_modals.js`
+  - `dashboard/static/js/studio_shape_editor.js`
+  - `dashboard/static/studio.js`
+  - ... (+3 more)
+
+## [2026-11-28] feat: Step 2 M3: Alerts Dwell Window UI, Min-Severity Policy & Promotion Rules CRUD
+- **Type**: feat
+- **Summary**: Added #alerts-filter-min-severity, collapsible #alerts-rules-panel + alert_rules.js controller, ev.summary dwell-window rendering (OBS-033), canonical deduplicated zone facets, hardened alerts_store_probe, Node VM frontend tests, and restored CameraPool <=10 methods budget.
+- **Files** (8):
+  - `dashboard/static/partials/tabs/alerts.html`
+  - `dashboard/static/js/alerts_view.js`
+  - `dashboard/static/js/alerts_admin.js`
+  - `dashboard/static/js/alert_rules.js`
+  - `dashboard/static/index.html`
+  - `dashboard/camera_pool.py`
+  - `.diagnostics/probes/alerts_store_probe.py`
+  - `tests/test_step2_alerts_governance_frontend.py`
+- **Verification**: audit PASS, surface 0 mismatches, alerts_store_probe PASS, mini_ci --fast (1264 tests + Sphinx) PASS
+
+## [2026-11-27] fixed: Step 1 P0 runtime tracking, Re-ID parity, studio overlays & timeline reset
+- **Type**: fixed
+- **Summary**: Added track_id support to MultiCameraHandoffCoordinator.record_zone_exit, aligned CANONICAL_REID_DIM to 2560D, added SortTracker bounded centroid fallback and stream telemetry ghost filtering, enforced 1-to-1 per-frame entity uniqueness in GalleryMatcher, isolated CameraAIConfig preset chips, switched #studio live streams to ?annotated=false with ScrubberOverlay.getCurrentTracks(), normalized float Unix epoch sightings bounds, and added #timeline active window chip and Reset button.
+- **Files** (25):
+  - `.diagnostics/probes/deep_link_navigation_probe.py`
+  - `.diagnostics/probes/effective_config_probe.py`
+  - `.diagnostics/probes/replay_pipeline_probe.py`
+  - `.diagnostics/probes/sightings_provenance_probe.py`
+  - `dashboard/services/stream_telemetry.py`
+  - `dashboard/static/js/active_source_context.js`
+  - `dashboard/static/js/camera_ai_config.js`
+  - `dashboard/static/js/gallery_timeline.js`
+  - ... (+17 more)
+- **Verification**: 67 unit tests + 5 probes + surface --verify --strict PASS
+
 ## [2026-11-27] feat: Step 4: Layout Overflow Containment, Status Popover Cleanup & Long-Fixture Tooling Guards
 - **Type**: feat
 - **Summary**: Fixed flex/select overflow regressions on #videos, #analytics, and #review (OBS-011, OBS-013, OBS-015), cleared stale #connection-status-text popover state on camera/mode changes (OBS-012), added 71-char filename CDP checks, added JS runtime guard rules in system-diagnostics, and resolved Step 1/3 budget and surface regressions.
@@ -78,20 +136,6 @@
   - `intelligent_tracker/matching/learned_class_matcher.py`
   - ... (+5 more)
 
-## [2026-11-25] feat: Step 3 M4: Exemplar Learned Classes & Per-Camera COCO Overrides
-- **Type**: feat
-- **Summary**: Added schema v4, LearnedClassMixin, LearnedClassMatcher, LearnedClassService, /api/classes/* router, and unified Classes & Badges 3-tab gallery sub-view.
-- **Files** (17):
-  - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/partials/tabs/gallery.html`
-  - `intelligent_tracker/database.py`
-  - `intelligent_tracker/pipeline/bundle.py`
-  - `intelligent_tracker/pipeline/frame_processor.py`
-  - `intelligent_tracker/repositories/__init__.py`
-  - ... (+9 more)
-
 ## [2026-11-25] feat: Step 2: Unified SourceRef Provenance, ActiveSourceContext & Media Freeze Controls
 - **Type**: feat
 - **Summary**: Implemented canonical SourceRef provenance, world_timeline_events run_id migration, ActiveSourceContext cross-tab sync, #studio and Enrollment /freeze_frame controls, and #journey/#review deep-link jump buttons.
@@ -105,53 +149,3 @@
   - `dashboard/static/partials/modals/entity_modals.html`
   - `dashboard/static/review_and_rsac.js`
   - ... (+1 more)
-
-## [2026-11-25] feat: Step 1: P0 Integration Seams and Probe Hardening
-- **Type**: feat
-- **Summary**: Upgraded probe_runner, cdp_inspect/audit_layout, cross_module_rules (SILENT_SHAPE_SKIP), and surface_contracts/surface_verifier; added 5 workspace seam probes and hardened spa_nine_tab_cdp_probe.
-- **Files** (2):
-  - `.diagnostics/probes/`
-  - `CHANGELOG.md`
-
-## [2026-11-24] feat: Step 4 M3: Minimap Interactions and Stale Camera Pruning
-- **Type**: feat
-- **Summary**: Pruned stale cameras from /api/topology/world-map via world_map_service, cleaned up camera_world_poses on CameraPool.remove_camera, and added interactive 2D minimap cone-focus and origin/yaw/range drag controls.
-- **Files** (8):
-  - `dashboard/services/world_map_service.py`
-  - `dashboard/routers/topology.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/static/js/world_minimap.js`
-  - `dashboard/static/js/world_minimap_interactions.js`
-  - `dashboard/static/partials/scripts_studio.html`
-  - `dashboard/static/studio.js`
-  - `tests/test_step4_minimap_interactions.py`
-
-## [2026-11-24] feat: Step 3: Traceability, Analytics Drill-Down & Stateful Alerts Lifecycle
-- **Type**: feat
-- **Summary**: Added #timeline pagination and Live/Studio jump links, #analytics explicit X/Y axes and 32x24 peak/hotspot drill-down, #alerts unread state (is_read/acknowledged_at) and /api/events/* admin endpoints, and #alerts frontend lifecycle (alerts_admin.js, facets datalists, mark-read/delete/clear/export, snapshot download, Live/Studio deep-links, real unread_alert_count badge sync).
-- **Files** (10):
-  - `dashboard/static/partials/tabs/alerts.html`
-  - `dashboard/static/partials/scripts_traceability.html`
-  - `dashboard/static/partials/modals/video_modals.html`
-  - `dashboard/static/css/analytics_alerts.css`
-  - `dashboard/static/js/alerts_admin.js`
-  - `dashboard/static/js/alerts_view.js`
-  - `dashboard/static/app.js`
-  - `dashboard/static/js/multiview/grid_tile_overlay.js`
-  - ... (+2 more)
-- **Verification**: diagnose.py audit/surface/scan PASS; 37 targeted Step 3 M4 tests OK
-
-## [2026-11-24] feat: Step 2 M1: Unified Category SSOT, Universal Defaults & COCO Mapping
-- **Type**: feat
-- **Summary**: Added intelligent_tracker/category_registry.py with 9 universal defaults, legacy migration/pruning, slug validation, and COCO label mapping; wired CategoryRepoMixin into TrackerDB; moved /api/rsac/categories CRUD + export/import + guarded delete to dashboard/routers/categories.py; enforced category SSOT validation across entity/tag/review/enroll/RSAC routes.
-- **Files** (16):
-  - `intelligent_tracker/category_registry.py`
-  - `intelligent_tracker/repositories/category_repo.py`
-  - `intelligent_tracker/repositories/schema_manager.py`
-  - `intelligent_tracker/rsac.py`
-  - `intelligent_tracker/database.py`
-  - `intelligent_tracker/analytics/zone_stats.py`
-  - `dashboard/services/category_service.py`
-  - `dashboard/routers/categories.py`
-  - ... (+8 more)
-- **Verification**: plan_engine verify: 53/53 OK; targeted 14 modules: 88/88 OK; audit: 0 new issues; surface --verify --strict: 0 mismatches; discover tests: 1024/1027 (3 unrelated timing races pass standalone)

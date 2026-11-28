@@ -81,7 +81,7 @@ class TestEventFTSIndex(unittest.TestCase):
             self.bus.publish(ev)
 
     def test_event_bus_ingestion_across_event_types_and_clip_captions(self) -> None:
-        """All supported event dataclasses and clip captions index into FTS5 asynchronously."""
+        """Supported alert/spatial events and clip captions index while state ticks stay in-memory (ADR-23)."""
         now = 1_700_000_000.0
         self._publish_sample_events(now)
         self.assertTrue(self.bus.wait_until_empty(timeout=3.0))
@@ -93,15 +93,16 @@ class TestEventFTSIndex(unittest.TestCase):
         )
 
         all_events = self.db.search_timeline_events(query="", limit=20)
-        self.assertEqual(len(all_events), 7)
+        self.assertEqual(len(all_events), 6)
+        self.assertEqual(len(self.db.search_timeline_events(query="", event_type="world_entity_state_changed")), 0)
         self.assertEqual(len(self.db.search_timeline_events(query="delivery package")), 1)
         self.assertEqual(len(self.db.search_timeline_events(query="", event_type="rsac_violation")), 1)
         self.assertEqual(len(self.db.search_timeline_events(query="", event_type="pet_activity")), 1)
         self.assertEqual(len(self.db.search_timeline_events(query="", event_type="tripwire_cross")), 1)
 
     def test_synthetic_entity_fk_fallback_and_state_cooldown(self) -> None:
-        """Unlinked synthetic entity IDs still index cleanly and cooldown throttles noisy updates."""
-        cooldown_indexer = EventFTSIndex(self.db, state_event_cooldown=30.0)
+        """Unlinked synthetic entity IDs still index cleanly and cooldown throttles noisy updates when opted in."""
+        cooldown_indexer = EventFTSIndex(self.db, state_event_cooldown=30.0, index_state_events=True)
         row_id = cooldown_indexer.handle_event(EntityStateChangedEvent(
             camera_id="cam_01", world_entity_id="entity:999999",
             entity_id=999999, change_type="updated",

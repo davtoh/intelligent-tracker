@@ -76,9 +76,9 @@ def _sync_matcher_and_bridge(
             }
     if live_track is not None and resolved_avatar:
         live_track.avatar_url = resolved_avatar
-    if world_bridge is not None and track_id is not None and entity_id is not None and hasattr(world_bridge, "reassign_track"):
+    if world_bridge is not None and live_track is not None and entity_id is not None and hasattr(world_bridge, "reassign_track"):
         try:
-            world_bridge.reassign_track(camera_id=camera_id, track_id=track_id, entity_id=entity_id, name=entity_name, category=category)
+            world_bridge.reassign_track(camera_id=camera_id, track=live_track, new_entity_id=int(entity_id), name=entity_name, category=category)
         except Exception:
             pass
 

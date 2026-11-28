@@ -15,9 +15,14 @@
             <option value="warning">Warning</option>
             <option value="info">Info</option>
           </select>
-          <input type="text" id="alerts-filter-type" class="form-input" list="alerts-type-options" placeholder="Event type..." aria-label="Filter by event type" style="max-width:150px;" />
+          <select id="alerts-filter-min-severity" class="form-input" aria-label="Filter by minimum severity" style="max-width:140px;">
+            <option value="">Min: All</option>
+            <option value="warning">Warning+</option>
+            <option value="critical">Critical</option>
+          </select>
+          <input type="text" id="alerts-filter-type" class="form-input" list="alerts-type-options" placeholder="Type (e.g. dwell, intrusion)..." title="Substring or comma-separated event types" aria-label="Filter by event type" style="max-width:170px;" />
           <datalist id="alerts-type-options"></datalist>
-          <input type="text" id="alerts-filter-zone" class="form-input" list="alerts-zone-options" placeholder="Zone ID..." aria-label="Filter by zone" style="max-width:140px;" />
+          <input type="text" id="alerts-filter-zone" class="form-input" list="alerts-zone-options" placeholder="Zone (e.g. lobby, vault)..." title="Substring or comma-separated zone names" aria-label="Filter by zone" style="max-width:165px;" />
           <datalist id="alerts-zone-options"></datalist>
           <button type="button" class="btn btn-sm btn-primary" id="alerts-filter-apply">Apply</button>
           <button type="button" class="btn btn-sm btn-outline" id="alerts-filter-reset">Reset</button>
@@ -62,4 +67,27 @@
           <button type="button" class="btn btn-sm btn-outline" id="alerts-next-btn" disabled>Next</button>
         </div>
       </div>
+      <details class="glass-panel alerts-rules-panel" id="alerts-rules-panel" style="margin-top:12px;padding:12px 16px;">
+        <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:600;">
+          <span>Alert Promotion Rules &amp; Default Policy</span>
+          <span class="panel-badge" id="alert-rules-count">0 rules</span>
+          <span class="text-subtle" id="alert-policy-status" style="margin-left:auto;font-size:12px;">Default: All</span>
+        </summary>
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--border-subtle, rgba(255,255,255,0.08));">
+          <input type="text" id="alert-rule-name" class="form-input" placeholder="Rule name..." aria-label="Rule name" style="max-width:160px;" />
+          <input type="text" id="alert-rule-event-type" class="form-input" list="alerts-type-options" placeholder="Event type (e.g. zone_dwell)" aria-label="Rule event type" style="max-width:170px;" />
+          <input type="text" id="alert-rule-zone" class="form-input" list="alerts-zone-options" placeholder="Zone (e.g. vault)" aria-label="Rule zone" style="max-width:140px;" />
+          <input type="number" id="alert-rule-min-dwell" class="form-input" min="0" step="0.5" placeholder="Min dwell (s)" aria-label="Minimum dwell seconds" style="max-width:120px;" />
+          <select id="alert-rule-severity" class="form-input" aria-label="Target severity" style="max-width:120px;">
+            <option value="warning">Warning</option>
+            <option value="critical">Critical</option>
+          </select>
+          <input type="text" id="alert-rule-tags" class="form-input" placeholder="Tags (comma-sep)" aria-label="Additional tags" style="max-width:140px;" />
+          <button type="button" class="btn btn-sm btn-primary" id="btn-alert-rule-add">+ Add Rule</button>
+          <button type="button" class="btn btn-sm btn-outline" id="btn-alerts-save-policy" title="Persist current Min Severity filter as default policy">Save Min-Severity Policy</button>
+        </div>
+        <div id="alert-rules-list" style="margin-top:8px;">
+          <div class="text-subtle" style="padding:8px 0;">No custom alert promotion rules configured.</div>
+        </div>
+      </details>
     </section>

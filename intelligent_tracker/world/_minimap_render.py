@@ -6,6 +6,35 @@ from typing import Any
 import cv2
 import numpy as np
 
+from intelligent_tracker.world.coordinates import CameraWorldPose
+
+
+def stagger_uncalibrated_pose(
+    pose: CameraWorldPose,
+    occupied_origins: list[tuple[float, float]],
+    *,
+    spacing_m: float = 16.0,
+    cols: int = 3,
+) -> CameraWorldPose:
+    """Assign a deterministic non-overlapping world slot to uncalibrated default-origin cameras."""
+    if (pose.origin_x, pose.origin_y, pose.yaw_deg) != (0.0, 0.0, 0.0):
+        return pose
+    slot = 0
+    while True:
+        cx, cy = float((slot % cols) * spacing_m), float((slot // cols) * spacing_m)
+        if all(math.hypot(cx - ox, cy - oy) >= 4.0 for ox, oy in occupied_origins):
+            return CameraWorldPose(camera_id=pose.camera_id, origin_x=cx, origin_y=cy, yaw_deg=pose.yaw_deg, scale=pose.scale)
+        slot += 1
+
+
+def _pad_span(lo: float, hi: float, min_span: float = 5.0) -> tuple[float, float]:
+    """Pad a 1D interval and enforce a minimum metric span."""
+    lo, hi = lo - 1.5, hi + 1.5
+    if (hi - lo) < min_span:
+        mid = 0.5 * (lo + hi)
+        return mid - min_span * 0.5, mid + min_span * 0.5
+    return lo, hi
+
 
 def compute_world_bounds(
     cameras: list[dict[str, Any]],
@@ -14,31 +43,24 @@ def compute_world_bounds(
     default_bounds: tuple[float, float, float, float],
 ) -> dict[str, float]:
     """Compute padded global metric bounding box covering all world features."""
-    xs, ys = [], []
+    pts: list[tuple[float, float]] = []
     for cam in cameras:
         pose = cam["world_pose"]
-        xs.append(pose["origin_x"]); ys.append(pose["origin_y"])
-        for pt in cam.get("fov_corners_global", []):
-            xs.append(pt[0]); ys.append(pt[1])
+        pts.append((pose["origin_x"], pose["origin_y"]))
+        pts.extend((pt[0], pt[1]) for pt in cam.get("fov_corners_global", []))
     for zone in zones:
-        for pt in zone.get("global_polygon", []):
-            xs.append(pt[0]); ys.append(pt[1])
+        pts.extend((pt[0], pt[1]) for pt in zone.get("global_polygon", []))
     for ent in entities:
+        if ent.get("calibrated") is False:
+            continue
         if ent.get("global_xy") is not None:
-            xs.append(ent["global_xy"][0]); ys.append(ent["global_xy"][1])
-        for pt in ent.get("global_trajectory", []):
-            xs.append(pt[0]); ys.append(pt[1])
-    if not xs or not ys:
+            pts.append((ent["global_xy"][0], ent["global_xy"][1]))
+        pts.extend((pt[0], pt[1]) for pt in ent.get("global_trajectory", []))
+    if not pts:
         min_x, min_y, max_x, max_y = default_bounds
     else:
-        min_x, max_x = min(xs) - 1.5, max(xs) + 1.5
-        min_y, max_y = min(ys) - 1.5, max(ys) + 1.5
-        if (max_x - min_x) < 5.0:
-            mid_x = 0.5 * (min_x + max_x)
-            min_x, max_x = mid_x - 2.5, mid_x + 2.5
-        if (max_y - min_y) < 5.0:
-            mid_y = 0.5 * (min_y + max_y)
-            min_y, max_y = mid_y - 2.5, mid_y + 2.5
+        min_x, max_x = _pad_span(min(p[0] for p in pts), max(p[0] for p in pts))
+        min_y, max_y = _pad_span(min(p[1] for p in pts), max(p[1] for p in pts))
     return {
         "min_x": round(min_x, 3), "max_x": round(max_x, 3),
         "min_y": round(min_y, 3), "max_y": round(max_y, 3),

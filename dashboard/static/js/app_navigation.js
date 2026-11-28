@@ -63,6 +63,8 @@
     if (entityId !== undefined && entityId !== null && entityId !== '') qs.set('entity', String(entityId));
     const zone = sourceRef.zoneId || sourceRef.zone_id || sourceRef.zone || '';
     if (zone) qs.set('zone', String(zone));
+    const reviewId = sourceRef.reviewId ?? sourceRef.review_id;
+    if (reviewId !== undefined && reviewId !== null && reviewId !== '') qs.set('review_id', String(reviewId));
     const bbox = parseBboxParam(sourceRef.bbox);
     if (bbox) qs.set('bbox', bbox.join(','));
     const fromVal = sourceRef.from ?? sourceRef.startTime;
@@ -222,6 +224,15 @@
       });
       return true;
     }
+    if (tabId === 'tab-review') {
+      const reviewId = sourceRef.reviewId ?? sourceRef.review_id;
+      if (reviewId !== undefined && reviewId !== null && reviewId !== '') {
+        await window.ReviewAndRSAC?.openReviewItem?.(reviewId);
+      } else {
+        await window.ReviewAndRSAC?.loadQueue?.('pending', { resetOffset: true });
+      }
+      return true;
+    }
     return false;
   }
 
@@ -230,7 +241,11 @@
     const tabId = raw.startsWith('tab-') ? raw : `tab-${raw}`;
     const updateHash = opts.updateHash !== false;
     const hasRef = Boolean(sourceRef && Object.keys(sourceRef).length > 0);
-    window.switchTab?.(tabId, false, { skipTimelineAutoLoad: tabId === 'tab-timeline' && hasRef });
+    const hasReviewId = Boolean(sourceRef && (sourceRef.reviewId !== undefined || sourceRef.review_id !== undefined));
+    window.switchTab?.(tabId, false, {
+      skipTimelineAutoLoad: tabId === 'tab-timeline' && hasRef,
+      skipReviewAutoLoad: tabId === 'tab-review' && hasReviewId,
+    });
     if (updateHash) {
       const nextHash = buildHash(tabId, sourceRef);
       if (window.location.hash !== nextHash) {
@@ -257,6 +272,10 @@
     if (rawTrack !== undefined && rawTrack !== '' && Number.isFinite(Number(rawTrack))) ref.trackId = Number(rawTrack);
     if (p.entity || p.entity_id) ref.entityId = p.entity || p.entity_id;
     if (p.zone || p.zone_id) ref.zoneId = p.zone || p.zone_id;
+    const rawReview = p.review_id ?? p.reviewId;
+    if (rawReview !== undefined && rawReview !== '') {
+      ref.reviewId = Number.isFinite(Number(rawReview)) ? Number(rawReview) : String(rawReview);
+    }
     const bbox = parseBboxParam(p.bbox);
     if (bbox) ref.bbox = bbox;
     if (p.from !== undefined) ref.from = p.from;

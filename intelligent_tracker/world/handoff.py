@@ -68,6 +68,7 @@ class MultiCameraHandoffCoordinator:
         world_entity_id: str | None = None, entity_name: str = "Unidentified",
         exit_global_xy: tuple[float, float] | None = None, embedding: Any = None,
         timestamp: float | None = None, metadata: dict[str, Any] | None = None,
+        track_id: int | None = None,
     ) -> list[Any]:
         """Record a zone exit, snapshot departing WorldEntity state, and spawn transit priors."""
         now = float(timestamp) if timestamp is not None else time.time()
@@ -79,6 +80,8 @@ class MultiCameraHandoffCoordinator:
             exit_global_xy = exit_global_xy or node.global_xy
             entity_name = entity_name if entity_name != "Unidentified" else node.name
         meta = dict(metadata or {})
+        if track_id is not None:
+            meta.setdefault("track_id", int(track_id))
         if we_id:
             meta.setdefault("world_entity_id", we_id)
             self.register_embedding(we_id, embedding)
@@ -189,9 +192,7 @@ class MultiCameraHandoffCoordinator:
             if entity is None or not categories_compatible(cat, entity.category):
                 continue
             cached_emb = emb_snap.get(entity.world_entity_id)
-            exit_xy = prior_attr(prior, "exit_global_xy")
-            if exit_xy is None:
-                exit_xy = entity.global_xy
+            exit_xy = prior_attr(prior, "exit_global_xy") or entity.global_xy
             if not is_transit_kinematically_plausible(exit_xy, cand_xy, float(prior_attr(prior, "exit_time", now)), now, self.max_transit_speed_mps):
                 continue
             prior_emb = prior_attr(prior, "embedding")
@@ -208,8 +209,10 @@ class MultiCameraHandoffCoordinator:
         if best is None:
             return None
         pid = prior_attr(best[1], "prior_id")
-        if pid and (self.topology or self.transition_registry):
-            (self.topology or self.transition_registry).consume_prior(pid)
+        if pid:
+            consumer = self.topology if self.topology is not None else self.transition_registry
+            if consumer is not None:
+                consumer.consume_prior(pid)
         with self._lock:
             self._departed.pop(best[2].world_entity_id, None)
         return best[2]

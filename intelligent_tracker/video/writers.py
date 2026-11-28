@@ -8,7 +8,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-DEFAULT_CODEC_FALLBACKS: tuple[str, ...] = ("mp4v", "avc1", "MJPG", "XVID")
+DEFAULT_CODEC_FALLBACKS: tuple[str, ...] = ("avc1", "mp4v", "MJPG", "XVID")
 
 
 def _open_cv_writer(
@@ -160,6 +160,7 @@ class PipelineVideoWriter:
                 "width": self.width,
                 "height": self.height,
                 "frames_written": self.frames_written,
+                "started_at": self.started_at,
                 "elapsed_s": elapsed,
                 "size_bytes": size_bytes,
                 "is_open": not self._released and self._writer is not None,

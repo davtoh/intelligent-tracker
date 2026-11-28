@@ -22,12 +22,14 @@
   function readFiltersFromDom() {
     const camEl = document.getElementById('alerts-filter-camera');
     const sevEl = document.getElementById('alerts-filter-severity');
+    const minSevEl = document.getElementById('alerts-filter-min-severity');
     const typeEl = document.getElementById('alerts-filter-type');
     const zoneEl = document.getElementById('alerts-filter-zone');
     const cameraVal = camEl ? String(camEl.value ?? '').trim() : String(window.App?.getActiveCameraId?.() ?? '').trim();
     return {
       camera_id: cameraVal,
       severity: (sevEl?.value || '').trim(),
+      min_severity: (minSevEl?.value || '').trim(),
       event_type: (typeEl?.value || '').trim(),
       zone_id: (zoneEl?.value || '').trim(),
     };
@@ -41,11 +43,41 @@
     });
     if (filters.camera_id) params.set('camera_id', filters.camera_id);
     if (filters.severity) params.set('severity', filters.severity);
+    if (filters.min_severity) params.set('min_severity', filters.min_severity);
     if (filters.event_type) params.set('event_type', filters.event_type);
     if (filters.zone_id) params.set('zone_id', filters.zone_id);
     if (filters.start_time !== undefined && filters.start_time !== '') params.set('start_time', String(filters.start_time));
     if (filters.end_time !== undefined && filters.end_time !== '') params.set('end_time', String(filters.end_time));
     return `/events?${params.toString()}`;
+  }
+
+  function formatShortTime(ts) {
+    const n = Number(ts);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    return new Date(n * 1000).toLocaleTimeString([], { hour12: false });
+  }
+
+  function formatDwellWindow(ev) {
+    const meta = ev?.metadata || {};
+    const entry = ev?.entry_time ?? meta.entry_time;
+    const exit = ev?.exit_time ?? meta.exit_time;
+    const dwell = ev?.dwell_time ?? meta.dwell_time;
+    const entryStr = formatShortTime(entry);
+    const exitStr = formatShortTime(exit);
+    const dwellStr = Number.isFinite(Number(dwell)) && dwell !== null && dwell !== '' ? `${Number(dwell).toFixed(1)}s` : '';
+    if (entryStr && exitStr) return dwellStr ? `${entryStr} -> ${exitStr} · ${dwellStr}` : `${entryStr} -> ${exitStr}`;
+    if (entryStr && dwellStr) return `${entryStr} · ${dwellStr}`;
+    return dwellStr ? `Dwell ${dwellStr}` : '';
+  }
+
+  function formatAlertDetails(ev) {
+    const primary = ev.summary || ev.message || ev.reason || ev.title || JSON.stringify(ev.metadata || {});
+    const dwellWindow = formatDwellWindow(ev);
+    const promotedBy = ev.metadata?.promoted_by_rule ? ` [Rule: ${ev.metadata.promoted_by_rule}]` : '';
+    if (dwellWindow && !String(primary).includes('->') && !String(primary).includes('→')) {
+      return `${primary} (${dwellWindow})${promotedBy}`;
+    }
+    return `${primary}${promotedBy}`;
   }
 
   function resolveSnapshotSrc(ev) {
@@ -69,12 +101,15 @@
       severityText = rawSev || 'WARNING';
     }
     const entityLabel = ev.name || ev.entity_name || ev.suggested_name || (ev.entity_id ? `#${ev.entity_id}` : 'Unknown');
-    const detailText = ev.message || ev.reason || ev.title || ev.summary || JSON.stringify(ev.metadata || {});
+    const detailText = formatAlertDetails(ev);
     const snapSrc = resolveSnapshotSrc(ev);
     const snapshotBtn = snapSrc
       ? `<button type="button" class="btn btn-xs btn-outline btn-alert-snapshot" data-alert-index="${idx}" onclick="window.AlertsView?.openAlertSnapshot?.(${idx})">View</button>`
       : '<span class="text-subtle">None</span>';
-    const vFile = ev.video_filename || ev.metadata?.video_filename || '';
+    const rawFile = ev.video_filename || ev.metadata?.video_filename || '';
+    const vFile = window.VideoTimelineLinks?.resolvePlayableFilename?.(rawFile)
+      || window.VideoLibrary?.getPairedH264?.(rawFile)?.convertedFilename
+      || rawFile;
     const vOffset = ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0;
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(vFile, vOffset) || '';
     const rowClass = ev.is_read ? 'alert-row-read' : 'alert-row-unread';
@@ -89,7 +124,7 @@
         <td><span class="${severityClass}">${escapeHtml(severityText)}</span></td>
         <td>${sourceCell}</td>
         <td>${escapeHtml(entityLabel)}</td><td>${escapeHtml(detailText)}</td>
-        <td>${snapshotBtn}${seekBtn}</td>
+        <td>${snapshotBtn}${seekBtn ? ` ${seekBtn}` : ''}</td>
         <td>${actionCell}</td>
       </tr>`;
   }
@@ -147,6 +182,7 @@
     if (!tbody) return [];
     try {
       await window.AlertsAdmin?.loadFacets?.();
+      await window.AlertRules?.ensureLoaded?.(!opts.filters);
       const res = await fetch(buildEventsUrl(opts.filters || readFiltersFromDom()));
       const payload = await res.json();
       const items = Array.isArray(payload) ? payload : (Array.isArray(payload?.items) ? payload.items : []);
@@ -171,6 +207,7 @@
     const map = {
       camera_id: 'alerts-filter-camera',
       severity: 'alerts-filter-severity',
+      min_severity: 'alerts-filter-min-severity',
       event_type: 'alerts-filter-type',
       zone_id: 'alerts-filter-zone',
     };
@@ -194,14 +231,15 @@
 
   function bindControls() {
     window.AlertsAdmin?.bindAdminControls?.(readFiltersFromDom);
+    window.AlertRules?.bindControls?.();
     bindOnce('alerts-filter-apply', 'click', () => { state.offset = 0; loadAlerts(); });
     bindOnce('alerts-filter-reset', 'click', () => {
-      ['alerts-filter-camera', 'alerts-filter-severity', 'alerts-filter-type', 'alerts-filter-zone'].forEach((id) => {
+      ['alerts-filter-camera', 'alerts-filter-severity', 'alerts-filter-min-severity', 'alerts-filter-type', 'alerts-filter-zone'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
       state.offset = 0;
-      loadAlerts();
+      loadAlerts({ filters: readFiltersFromDom() });
     });
     bindOnce('alerts-prev-btn', 'click', () => { state.offset = Math.max(0, state.offset - state.limit); loadAlerts(); });
     bindOnce('alerts-next-btn', 'click', () => { if (state.hasMore) { state.offset += state.limit; loadAlerts(); } });

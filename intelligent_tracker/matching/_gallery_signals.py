@@ -100,10 +100,10 @@ def apply_track_confidence_signals(
     boosted = float(similarities[best_idx])
     raw_sim = float(raw_similarities[best_idx]) if raw_similarities is not None else boosted
     face_score, body_score = compute_modality_scores(extractor, query_vec, gallery_matrix[best_idx], raw_sim)
-    track.face_score = face_score
-    track.body_score = body_score
-    track.topology_prior = compute_topology_prior_signal(matched_priors.get(best_idx), raw_sim, boosted)
-    track.reid_ambiguity = compute_reid_ambiguity(similarities, best_idx, gallery_entity_ids)
+    setattr(track, "face_score", face_score)
+    setattr(track, "body_score", body_score)
+    setattr(track, "topology_prior", compute_topology_prior_signal(matched_priors.get(best_idx), raw_sim, boosted))
+    setattr(track, "reid_ambiguity", compute_reid_ambiguity(similarities, best_idx, gallery_entity_ids))
 
 
 def _resolve_media_fields(
@@ -211,13 +211,13 @@ def emit_periodic_sighting(
         return False
     resolved_video, resolved_offset = _resolve_media_fields(matcher, video_filename, media_offset_sec, timestamp)
     resolved_run_id = str(getattr(matcher, "run_id", "") or "").strip()
-    resolved_camera_id = str(getattr(matcher, "camera_id", "") or ("" if resolved_video else source) or "").strip()
+    fallback_cam = "" if (resolved_video and (not source or source == "offline_video" or str(source).startswith("video:"))) else source
+    resolved_camera_id = str(getattr(matcher, "camera_id", "") or fallback_cam or "").strip()
     snapshot_path = _save_sighting_crop(matcher, frame, track.bbox, entity_id, tid, timestamp)
     matcher.db.add_sighting(
         entity_id=entity_id, track_id=tid, source=source, timestamp=timestamp, zone_id=zone_id,
         bbox=track.bbox, confidence=confidence, snapshot_path=snapshot_path,
-        video_filename=resolved_video, media_offset_sec=resolved_offset,
-        camera_id=resolved_camera_id, run_id=resolved_run_id,
+        video_filename=resolved_video, media_offset_sec=resolved_offset, camera_id=resolved_camera_id, run_id=resolved_run_id,
     )
     matcher._last_sighting_time[tid] = timestamp
     _index_periodic_sighting_fts(
@@ -261,7 +261,7 @@ def _apply_identified_metadata(
     """Propagate confirmed entity identity and avatar URL onto Track and WorldEntityBridge."""
     avatar_url = (getattr(matcher, "entity_avatars", None) or {}).get(entity_id)
     if avatar_url:
-        track.avatar_url = avatar_url
+        setattr(track, "avatar_url", avatar_url)
     elif hasattr(track, "avatar_url"):
         delattr(track, "avatar_url")
     if matcher.world_bridge is not None:
@@ -270,8 +270,11 @@ def _apply_identified_metadata(
             confidence=best_score, zone_id=zone_id, timestamp=now,
         )
         return
-    track.entity_id, track.entity_name, track.entity_category = entity_id, name, category
-    track.reid_score, track.identity_label = best_score, name
+    setattr(track, "entity_id", entity_id)
+    setattr(track, "entity_name", name)
+    setattr(track, "entity_category", category)
+    setattr(track, "reid_score", best_score)
+    setattr(track, "identity_label", name)
 
 
 def process_confirmed_identification(

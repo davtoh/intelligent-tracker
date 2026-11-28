@@ -209,34 +209,47 @@
     return persistGeometryEdit({ type: 'tripwire', name, kind: 'flip', origPoints, currentPoints });
   }
 
-  async function renameShape(type, cameraId, oldName, providedName) {
-    if (!cameraId || !oldName) return false;
-    const raw = providedName !== undefined
-      ? providedName
-      : (typeof prompt === 'function' ? prompt(`Rename ${type} '${oldName}':`, oldName) : null);
-    const nextName = raw ? String(raw).trim() : '';
-    if (!nextName || nextName === oldName) return false;
-    const endpoint = type === 'zone'
-      ? `/api/scenarios/zones/${encodeURIComponent(cameraId)}/${encodeURIComponent(oldName)}`
-      : `/api/scenarios/tripwires/${encodeURIComponent(cameraId)}/${encodeURIComponent(oldName)}`;
+  async function updateShapeMetadata(type, cameraId, oldName, payload) {
+    if (!cameraId || !oldName || !payload) return false;
+    const nextName = payload.name ? String(payload.name).trim() : oldName;
+    if (!nextName) return false;
+    const body = { ...payload, name: nextName };
+    const base = type === 'zone' ? '/api/scenarios/zones' : '/api/scenarios/tripwires';
+    const endpoint = `${base}/${encodeURIComponent(cameraId)}/${encodeURIComponent(oldName)}`;
     try {
-      const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: nextName }) });
+      const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || res.statusText || `HTTP ${res.status}`);
       }
       const item = findShape(type, oldName);
-      if (item) item.name = nextName;
-      if (_selected && _selected.type === type && _selected.name === oldName) _selected.name = nextName;
+      if (item) Object.assign(item, body);
+      if (_selected?.type === type && _selected.name === oldName) _selected.name = nextName;
       window.StudioOverlays?.renderScenarioListUI?.();
       _callbacks.drawOverlay?.();
-      _callbacks.updateStatus?.(`Renamed ${type} '${oldName}' to '${nextName}'.`);
-      _callbacks.showToast?.('Renamed', `${type} renamed to '${nextName}'.`, 'success');
+      _callbacks.updateStatus?.(`Updated ${type} '${nextName}'.`);
+      _callbacks.showToast?.('Scenario Updated', `Saved '${nextName}'.`, 'success');
       return true;
     } catch (err) {
-      _callbacks.showToast?.('Rename Failed', err.message || 'Could not rename shape.', 'error');
+      _callbacks.showToast?.('Update Failed', err.message || 'Could not update shape.', 'error');
       return false;
     }
+  }
+
+  async function renameShape(type, cameraId, oldName, providedName) {
+    if (!cameraId || !oldName) return false;
+    if (providedName === undefined) {
+      const item = findShape(type, oldName);
+      const opener = type === 'zone' ? window.ScenarioModals?.openEditZoneModal : window.ScenarioModals?.openEditTripwireModal;
+      if (item && typeof opener === 'function') {
+        opener(item, cameraId, (cid, orig, payload) => updateShapeMetadata(type, cid, orig, payload));
+        return true;
+      }
+    }
+    const raw = providedName !== undefined ? providedName : (typeof prompt === 'function' ? prompt(`Rename ${type} '${oldName}':`, oldName) : null);
+    const nextName = raw ? String(raw).trim() : '';
+    if (!nextName || nextName === oldName) return false;
+    return updateShapeMetadata(type, cameraId, oldName, { name: nextName });
   }
 
   function drawHandles(ctx, pts, isSelected) {
@@ -268,8 +281,7 @@
     (saved.tripwires || []).forEach((tw) => {
       const seg = tw.line_segment || tw.line;
       const isSel = _selected?.type === 'tripwire' && _selected?.name === tw.name;
-      drawHandles(ctx, seg, isSel);
-      drawFlipHandle(ctx, seg, isSel);
+      drawHandles(ctx, seg, isSel); drawFlipHandle(ctx, seg, isSel);
     });
     ctx.restore();
   }
@@ -277,13 +289,11 @@
   function selectShape(type, name) {
     const item = findShape(type, name);
     if (!item) return false;
-    _selected = { type, name: item.name };
-    _callbacks.drawOverlay?.();
-    return true;
+    _selected = { type, name: item.name }; _callbacks.drawOverlay?.(); return true;
   }
 
   window.StudioShapeEditor = {
-    init, hitTest, onMouseDown, onMouseMove, onMouseUp, cancelDrag,
+    init, hitTest, onMouseDown, onMouseMove, onMouseUp, cancelDrag, updateShapeMetadata,
     renameShape, flipTripwire, drawSelection, selectShape, getSelected: () => _selected,
   };
 })();

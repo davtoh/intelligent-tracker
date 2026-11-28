@@ -35,19 +35,12 @@
     const nextBtn = document.getElementById('btn-analytics-next');
     const liveBtn = document.getElementById('btn-analytics-live');
     if (nextBtn) nextBtn.disabled = isLive;
-    if (liveBtn) {
-      liveBtn.disabled = isLive;
-      liveBtn.classList.toggle('active', !isLive);
-    }
+    if (liveBtn) { liveBtn.disabled = isLive; liveBtn.classList.toggle('active', !isLive); }
     if (pageEl) {
-      const pg = data?.pagination;
-      const shown = Array.isArray(data?.buckets) ? data.buckets.length : 0;
-      const total = Number(pg?.total_buckets ?? shown);
-      const curPage = Number(pg?.page ?? 1);
+      const pg = data?.pagination, shown = Array.isArray(data?.buckets) ? data.buckets.length : 0;
+      const total = Number(pg?.total_buckets ?? shown), curPage = Number(pg?.page ?? 1);
       const totalPages = Math.max(1, Number(pg?.total_pages ?? 1));
-      pageEl.textContent = totalPages > 1
-        ? `Page ${curPage}/${totalPages} · ${shown}/${total} buckets`
-        : `${total} bucket${total !== 1 ? 's' : ''}`;
+      pageEl.textContent = totalPages > 1 ? `Page ${curPage}/${totalPages} · ${shown}/${total} buckets` : `${total} bucket${total !== 1 ? 's' : ''}`;
     }
     if (!labelEl) return;
     const totals = data?.totals || {};
@@ -77,11 +70,35 @@
     return { id: fallback, kind: fallback ? 'camera' : '', ref: fallback ? { kind: 'camera', cameraId: fallback } : null };
   }
 
+  function getHeatmapMode() {
+    return String(document.getElementById('analytics-heatmap-mode-select')?.value || 'all').trim().toLowerCase() === 'filtered' ? 'filtered' : 'all';
+  }
+
+  function buildHeatmapQueryParams(extra = {}) {
+    const src = resolveAnalyticsSource(), mode = getHeatmapMode(), params = new URLSearchParams();
+    Object.entries(extra || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') params.set(k, String(v)); });
+    if (src.id) params.set('camera_id', (mode === 'filtered' && src.kind === 'video') ? `video:${src.id}` : src.id);
+    if (mode === 'filtered') {
+      params.set('mode', 'filtered'); params.set('range_sec', String(rangeSec));
+      const z = String(document.getElementById('analytics-zone-select')?.value || '').trim();
+      const ev = String(document.getElementById('analytics-event-type-select')?.value || '').trim();
+      if (z) params.set('zone_id', z);
+      if (ev) params.set('event_type', ev);
+      if (!isLive && endTime !== null) params.set('end_time', String(endTime));
+    }
+    return params;
+  }
+
+  function buildHeatmapUrl(baseSrc = '/analytics/heatmap', extra = {}) {
+    const qs = buildHeatmapQueryParams(extra).toString();
+    return qs ? `${baseSrc}?${qs}` : baseSrc;
+  }
+
   function syncHeatmapBadgeAndLink(src) {
-    const badge = document.getElementById('heatmap-camera-badge');
-    const dlBtn = document.getElementById('btn-download-heatmap');
-    if (badge) badge.textContent = src.id ? `${src.kind === 'video' ? 'Video' : 'Camera'}: ${src.id}` : 'All Cameras';
-    if (dlBtn) dlBtn.href = src.id ? `/analytics/heatmap?camera_id=${encodeURIComponent(src.id)}` : '/analytics/heatmap';
+    const badge = document.getElementById('heatmap-camera-badge'), dlBtn = document.getElementById('btn-download-heatmap');
+    const suffix = getHeatmapMode() === 'filtered' ? ' · Filtered' : '';
+    if (badge) badge.textContent = (src.id ? `${src.kind === 'video' ? 'Video' : 'Camera'}: ${src.id}` : 'All Cameras') + suffix;
+    if (dlBtn) dlBtn.href = buildHeatmapUrl('/analytics/heatmap');
   }
 
   async function populateZoneFilter() {
@@ -90,8 +107,7 @@
     try {
       const res = await fetch('/zones');
       if (!res?.ok) return;
-      const zones = await res.json();
-      const prev = sel.value || '';
+      const zones = await res.json(), prev = sel.value || '';
       const opts = ['<option value="">All Zones</option>'];
       (Array.isArray(zones) ? zones : []).forEach((z) => {
         const name = String(z?.name || z?.zone_id || '').trim();
@@ -99,9 +115,7 @@
       });
       sel.innerHTML = opts.join('');
       if (prev) sel.value = prev;
-    } catch (_err) {
-      // Keep default All Zones option when /zones is unavailable
-    }
+    } catch (_err) { /* Keep default All Zones option when /zones is unavailable */ }
   }
 
   async function initSourceSelect() {
@@ -176,11 +190,22 @@
     }
   }
 
+  function refreshHeatmap() {
+    const img = document.getElementById('static-heatmap-img');
+    if (window.LivePlayer?.attachHeatmapImage) window.LivePlayer.attachHeatmapImage(img);
+    else if (img) img.src = buildHeatmapUrl('/analytics/heatmap', { t: String(Date.now()) });
+    loadHeatmapMetadata();
+  }
+
+  function refreshHeatmapIfFiltered() {
+    if (getHeatmapMode() === 'filtered') refreshHeatmap();
+  }
+
   async function loadHeatmapMetadata() {
     const src = resolveAnalyticsSource();
     const camId = src.id;
     syncHeatmapBadgeAndLink(src);
-    const url = camId ? `/analytics/heatmap?format=json&camera_id=${encodeURIComponent(camId)}` : '/analytics/heatmap?format=json';
+    const url = buildHeatmapUrl('/analytics/heatmap', { format: 'json' });
     try {
       const res = await fetch(url);
       if (!res.ok) {
@@ -188,22 +213,21 @@
         return null;
       }
       const data = await res.json();
-      const minEl = document.getElementById('heatmap-legend-min');
-      const midEl = document.getElementById('heatmap-legend-mid');
-      const maxEl = document.getElementById('heatmap-legend-max');
-      const metaEl = document.getElementById('heatmap-meta-summary');
-      const barEl = document.querySelector('#heatmap-colorbar-legend .heatmap-colorbar');
       const maxVal = Number(data?.max_value || 0);
-      if (minEl) minEl.textContent = '0.00';
-      if (midEl) midEl.textContent = (maxVal * 0.5).toFixed(2);
-      if (maxEl) maxEl.textContent = maxVal.toFixed(2);
+      const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+      setTxt('heatmap-legend-min', '0.00');
+      setTxt('heatmap-legend-mid', (maxVal * 0.5).toFixed(2));
+      setTxt('heatmap-legend-max', maxVal.toFixed(2));
+      const barEl = document.querySelector('#heatmap-colorbar-legend .heatmap-colorbar');
       if (barEl && Array.isArray(data?.stops) && data.stops.length >= 2) {
         barEl.style.background = `linear-gradient(90deg, ${data.stops.map((s) => `${s.color} ${Math.round(Number(s.ratio || 0) * 100)}%`).join(', ')})`;
       }
+      const metaEl = document.getElementById('heatmap-meta-summary');
       if (metaEl) {
         const decayStr = data?.decay_rate !== null && data?.decay_rate !== undefined ? data.decay_rate : 'cumulative';
+        const ptsStr = data?.mode === 'filtered' ? ` · ${Number(data.point_count || 0)} pts` : '';
         metaEl.textContent = (data && data.initialized !== false && Array.isArray(data.resolution))
-          ? `${data.camera_id || 'All Cameras'} · ${data.colormap || 'JET'} · ${data.resolution[0]}x${data.resolution[1]} · r=${data.radius || 25}px · decay=${decayStr}`
+          ? `${data.camera_id || 'All Cameras'} · ${data.colormap || 'JET'} · ${data.resolution[0]}x${data.resolution[1]} · r=${data.radius || 25}px · decay=${decayStr}${ptsStr}`
           : `${data?.camera_id || 'All Cameras'} · Heatmap uninitialized`;
       }
       window.AnalyticsDrilldown?.setHeatmapData?.(data);
@@ -223,25 +247,26 @@
   }
 
   function bindFlowControls() {
+    bindOnce('analytics-heatmap-mode-select', 'change', () => refreshHeatmap());
     bindOnce('analytics-range-select', 'change', () => {
       rangeSec = Math.max(60, Number(document.getElementById('analytics-range-select')?.value) || 3600);
-      endTime = null; isLive = true; bucketPage = 1; loadTrafficFlows();
+      endTime = null; isLive = true; bucketPage = 1; loadTrafficFlows(); refreshHeatmapIfFiltered();
     });
-    bindOnce('analytics-zone-select', 'change', () => { bucketPage = 1; loadTrafficFlows(); });
-    bindOnce('analytics-event-type-select', 'change', () => { bucketPage = 1; loadTrafficFlows(); });
+    bindOnce('analytics-zone-select', 'change', () => { bucketPage = 1; loadTrafficFlows(); refreshHeatmapIfFiltered(); });
+    bindOnce('analytics-event-type-select', 'change', () => { bucketPage = 1; loadTrafficFlows(); refreshHeatmapIfFiltered(); });
     bindOnce('btn-analytics-prev', 'click', () => {
       const nowSec = Math.floor(Date.now() / 1000);
       endTime = (isLive || endTime === null) ? (nowSec - rangeSec) : (endTime - rangeSec);
-      isLive = false; bucketPage = 1; loadTrafficFlows();
+      isLive = false; bucketPage = 1; loadTrafficFlows(); refreshHeatmapIfFiltered();
     });
     bindOnce('btn-analytics-next', 'click', () => {
       if (isLive || endTime === null) return;
       const nowSec = Math.floor(Date.now() / 1000);
       const nextEnd = endTime + rangeSec;
       if (nextEnd >= nowSec) { endTime = null; isLive = true; } else { endTime = nextEnd; }
-      bucketPage = 1; loadTrafficFlows();
+      bucketPage = 1; loadTrafficFlows(); refreshHeatmapIfFiltered();
     });
-    bindOnce('btn-analytics-live', 'click', () => { endTime = null; isLive = true; bucketPage = 1; loadTrafficFlows(); });
+    bindOnce('btn-analytics-live', 'click', () => { endTime = null; isLive = true; bucketPage = 1; loadTrafficFlows(); refreshHeatmapIfFiltered(); });
   }
 
   function initTrafficChart() {
@@ -269,15 +294,11 @@
     populateZoneFilter();
     if (window.ActiveSourceContext?.populateSelect && document.getElementById('analytics-source-select')) {
       initSourceSelect().then(() => { loadTrafficFlows(); loadHeatmapMetadata(); });
-    } else {
-      loadTrafficFlows();
-      loadHeatmapMetadata();
-    }
+    } else { loadTrafficFlows(); loadHeatmapMetadata(); }
   }
 
   function updateTrafficChart() {
-    if (!isLive) return;
-    if (!document.getElementById('tab-analytics')?.classList?.contains('active')) return;
+    if (!isLive || !document.getElementById('tab-analytics')?.classList?.contains('active')) return;
     if (Date.now() - lastFlowRefreshAt >= 5000) loadTrafficFlows();
   }
 
@@ -288,8 +309,7 @@
     if (!tbody) return [];
     try {
       const camId = window.App?.getActiveCameraId?.();
-      const res = await fetch(camId ? `/events?limit=50&camera_id=${encodeURIComponent(camId)}` : '/events?limit=50');
-      const events = await res.json();
+      const events = await (await fetch(camId ? `/events?limit=50&camera_id=${encodeURIComponent(camId)}` : '/events?limit=50')).json();
       if (badge) badge.textContent = `${events.length} event${events.length !== 1 ? 's' : ''}`;
       tbody.innerHTML = events.length ? events.map((ev) => {
         const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(ev.video_filename || ev.metadata?.video_filename || '', ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0) || '';
@@ -298,40 +318,29 @@
         return `<tr><td>${escapeHtml(ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : '--')}</td><td><strong>${escapeHtml(ev.event_type || 'alert')}</strong></td><td><span class="panel-badge">${escapeHtml(String(ev.severity || 'INFO').toUpperCase())}</span></td><td>${escapeHtml(ev.zone_id || ev.camera_id || 'System')}</td><td>${escapeHtml(who)}</td><td>${escapeHtml(msg)}</td><td>${seekBtn}</td></tr>`;
       }).join('') : '<tr><td colspan="7" class="text-center">No alerts logged yet.</td></tr>';
       return events;
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`;
-      return [];
-    }
+    } catch (err) { tbody.innerHTML = `<tr><td colspan="7" class="text-center">Error loading events: ${escapeHtml(err.message)}</td></tr>`; return []; }
   }
 
   function initHeatmapControls() {
     let heatmapActive = false;
     const toggleBtn = document.getElementById('toggle-heatmap-btn');
-    const refreshBtn = document.getElementById('btn-refresh-heatmap');
+    bindOnce('analytics-heatmap-mode-select', 'change', () => refreshHeatmap());
     toggleBtn?.addEventListener('click', async () => {
       try {
-        const res = await fetch('/analytics/heatmap/toggle', { method: 'POST' });
-        const data = await res.json();
+        const data = await (await fetch('/analytics/heatmap/toggle', { method: 'POST' })).json();
         heatmapActive = data.draw_heatmap;
         toggleBtn.textContent = heatmapActive ? '🔥 Heatmap: ON' : '🔥 Heatmap: OFF';
         toggleBtn.classList.toggle('active', heatmapActive);
       } catch (err) { console.error('Heatmap toggle error:', err); }
     });
-    refreshBtn?.addEventListener('click', () => {
-      const img = document.getElementById('static-heatmap-img');
-      if (window.LivePlayer?.attachHeatmapImage) window.LivePlayer.attachHeatmapImage(img);
-      else if (img) img.src = `/analytics/heatmap?t=${Date.now()}`;
-      loadHeatmapMetadata();
-    });
-    if (document.getElementById('tab-analytics')?.classList?.contains('active')) {
-      window.LivePlayer?.attachHeatmapImage?.(document.getElementById('static-heatmap-img'));
-      loadHeatmapMetadata();
-    }
+    document.getElementById('btn-refresh-heatmap')?.addEventListener('click', () => refreshHeatmap());
+    if (document.getElementById('tab-analytics')?.classList?.contains('active')) refreshHeatmap();
   }
 
   window.AnalyticsView = {
     initChart: initTrafficChart, updateChart: updateTrafficChart, loadTrafficFlows,
     loadHeatmapMetadata, loadAlerts: loadAlertsTable, initHeatmap: initHeatmapControls,
     initSourceSelect, getSelectedSource: resolveAnalyticsSource,
+    getHeatmapMode, buildHeatmapQueryParams, buildHeatmapUrl,
   };
 })();

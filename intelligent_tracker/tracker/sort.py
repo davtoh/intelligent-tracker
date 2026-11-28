@@ -4,15 +4,55 @@ Uses pure NumPy 2D Kinematic Kalman filters for continuous bounding box tracking
 and IoU association.
 """
 
+import math
 import time
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 
-from intelligent_tracker.tracker.association import extract_detection_embeddings
+from intelligent_tracker.tracker.association import classes_compatible, extract_detection_embeddings
 from intelligent_tracker.tracker.bytetrack_association import associate_two_stage
 from intelligent_tracker.tracker.kalman import KalmanBoxTracker
 from intelligent_tracker.tracker.track import Track
 from intelligent_tracker.tracker.utils import parse_detections
+
+
+def _match_by_centroid_fallback(
+    unmatched_trks: Sequence[int],
+    unmatched_dets: Sequence[int],
+    predicted_boxes: Sequence[Tuple[int, int, int, int]],
+    det_bboxes: Sequence[Tuple[int, int, int, int]],
+    trk_labels: Sequence[str],
+    trk_classes: Sequence[int],
+    det_labels: Sequence[str],
+    det_classes: Sequence[int],
+) -> List[Tuple[int, int]]:
+    """Stage-2 bounded centroid-distance fallback when IoU drops to 0 under low FPS."""
+    if not unmatched_trks or not unmatched_dets:
+        return []
+    candidates: List[Tuple[float, int, int]] = []
+    for r in unmatched_trks:
+        px, py, pw, ph = predicted_boxes[r]
+        pcx, pcy = px + pw / 2.0, py + ph / 2.0
+        p_diag = math.hypot(float(pw), float(ph))
+        for c in unmatched_dets:
+            if not classes_compatible(trk_labels[r], trk_classes[r], det_labels[c], det_classes[c]):
+                continue
+            dx, dy, dw, dh = det_bboxes[c]
+            dcx, dcy = dx + dw / 2.0, dy + dh / 2.0
+            max_dist = max(64.0, 1.5 * max(p_diag, math.hypot(float(dw), float(dh))))
+            dist = math.hypot(pcx - dcx, pcy - dcy)
+            if dist <= max_dist:
+                candidates.append((dist, r, c))
+    candidates.sort(key=lambda item: item[0])
+    used_r: Set[int] = set()
+    used_c: Set[int] = set()
+    matched: List[Tuple[int, int]] = []
+    for _, r, c in candidates:
+        if r not in used_r and c not in used_c:
+            used_r.add(r)
+            used_c.add(c)
+            matched.append((r, c))
+    return matched
 
 
 class SortTracker:
@@ -97,7 +137,18 @@ class SortTracker:
             high_conf_threshold=self.high_conf_threshold, low_conf_threshold=self.low_conf_threshold,
             appearance_weight=getattr(self, "appearance_weight", 0.35),
         )
-        matched_trks: Set[int] = set()
+        matched_trks: Set[int] = {r for r, _ in matches}
+        unmatched_trks = [r for r in range(len(predicted_boxes)) if r not in matched_trks]
+        if unmatched_trks and unmatched_high_dets:
+            fallback = _match_by_centroid_fallback(
+                unmatched_trks, unmatched_high_dets, predicted_boxes, det_bboxes,
+                trk_labels, trk_classes, det_labels, det_classes,
+            )
+            if fallback:
+                matches = list(matches) + fallback
+                matched_fb_dets = {c for _, c in fallback}
+                unmatched_high_dets = [c for c in unmatched_high_dets if c not in matched_fb_dets]
+        matched_trks = set()
         for r, c in matches:
             self.trackers[r].update(det_bboxes[c], timestamp=now)
             self.track_metadata[self.trackers[r].id] = {

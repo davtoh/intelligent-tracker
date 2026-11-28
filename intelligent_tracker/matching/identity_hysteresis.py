@@ -42,6 +42,16 @@ class IdentityHysteresisTracker:
         """Return the active LockedIdentity for ``track_id``, or ``None`` if unbound."""
         return self._locked.get(int(track_id))
 
+    def get_owner_track(self, entity_id: int, *, exclude_track_id: Optional[int] = None) -> Optional[int]:
+        """Return the active ``track_id`` currently locked to ``entity_id``, if any."""
+        target = int(entity_id)
+        for tid, locked in self._locked.items():
+            if exclude_track_id is not None and tid == int(exclude_track_id):
+                continue
+            if locked.entity_id == target:
+                return tid
+        return None
+
     def observe(
         self, track_id: int, candidate_entity_id: Optional[int], similarity: float = 0.0,
         *, entity_name: str = "", entity_category: str = "", avatar_url: Optional[str] = None,

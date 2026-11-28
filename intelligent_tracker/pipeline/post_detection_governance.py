@@ -94,6 +94,38 @@ def sync_world_bridge(
         logger.debug("World bridge sync error: %s", exc)
 
 
+def _resolve_clip_metadata(bundle: PipelineBundle) -> dict[str, Any]:
+    """Extract active recording/video clip provenance from bundle collaborators."""
+    for holder in (getattr(bundle, "gallery_matcher", None), getattr(bundle, "analytics", None)):
+        vf = str(getattr(holder, "video_filename", "") or "").strip()
+        if vf:
+            meta: dict[str, Any] = {"video_filename": vf}
+            offset = getattr(holder, "current_media_offset_sec", None)
+            if offset is not None:
+                meta["media_offset_sec"] = round(max(0.0, float(offset)), 3)
+            return meta
+    return {}
+
+
+def _build_id_event(
+    ev: Any, camera_id: str, zone_id: Any, snap_b64: str | None, timestamp: float, clip_meta: dict[str, Any],
+) -> EntityIdentifiedEvent:
+    """Normalize an identification event and attach clip provenance metadata."""
+    if isinstance(ev, EntityIdentifiedEvent):
+        ev.camera_id = ev.camera_id or camera_id
+        ev.zone_id = ev.zone_id or zone_id
+        ev.snapshot_base64 = ev.snapshot_base64 if ev.snapshot_base64 is not None else snap_b64
+        if clip_meta and isinstance(getattr(ev, "metadata", None), dict):
+            for k, v in clip_meta.items():
+                ev.metadata.setdefault(k, v)
+        return ev
+    return EntityIdentifiedEvent(
+        camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
+        name=ev.name, category=ev.category, similarity=ev.similarity,
+        zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp, metadata=dict(clip_meta),
+    )
+
+
 def publish_id_events(
     bundle: PipelineBundle,
     frame: np.ndarray,
@@ -106,6 +138,7 @@ def publish_id_events(
     if bus is None or not events:
         return
     camera_id = resolve_camera_id(bundle)
+    clip_meta = _resolve_clip_metadata(bundle)
     for ev in events:
         try:
             trk = tracks.get(ev.track_id)
@@ -113,24 +146,13 @@ def publish_id_events(
             if snap_b64 is None and trk is not None and getattr(trk, "bbox", None) is not None:
                 snap_b64 = crop_to_base64(frame, trk.bbox)
             zone_id = getattr(ev, "zone_id", None) or getattr(trk, "current_zone", None)
-            if isinstance(ev, EntityIdentifiedEvent):
-                ev.camera_id = ev.camera_id or camera_id
-                ev.zone_id = ev.zone_id or zone_id
-                ev.snapshot_base64 = ev.snapshot_base64 if ev.snapshot_base64 is not None else snap_b64
-                id_ev = ev
-            else:
-                id_ev = EntityIdentifiedEvent(
-                    camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
-                    name=ev.name, category=ev.category, similarity=ev.similarity,
-                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp,
-                )
-            bus.publish(id_ev)
+            bus.publish(_build_id_event(ev, camera_id, zone_id, snap_b64, timestamp, clip_meta))
             if str(getattr(ev, "category", "")).lower() in _RESTRICTED_CATEGORIES:
                 bus.publish(RestrictedEntityAlert(
                     camera_id=camera_id, track_id=ev.track_id, entity_id=getattr(ev, "entity_id", 0),
                     name=ev.name, category=ev.category, severity="critical",
                     message=f"Restricted entity '{ev.name}' detected",
-                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp,
+                    zone_id=zone_id, snapshot_base64=snap_b64, timestamp=timestamp, metadata=dict(clip_meta),
                 ))
         except Exception as exc:
             logger.debug("Event publish error: %s", exc)

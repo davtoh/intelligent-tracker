@@ -12,6 +12,7 @@ import numpy as np
 
 from intelligent_tracker.analytics.heatmap import OccupancyHeatmap
 from intelligent_tracker.analytics.zone_stats import (
+    build_clip_metadata,
     draw_track_overlays,
     evaluate_tripwire_crossings,
     evaluate_zone_capacity_limits,
@@ -68,6 +69,8 @@ class AnalyticsEngine:
         self._prev_centroids: dict[int, tuple[float, float]] = {}
         self._start_time = time.time()
         self.total_frames_analyzed = 0
+        self.video_filename: str = ""
+        self.current_media_offset_sec: float | None = None
 
     def add_zone(self, zone: ZoneROI):
         """Register a ZoneROI by name."""
@@ -86,18 +89,22 @@ class AnalyticsEngine:
         now = timestamp if timestamp is not None else (frame_time if frame_time is not None else time.time())
         active_frame = current_frame if current_frame is not None else frame
         self.total_frames_analyzed += 1
+        media_meta = build_clip_metadata(
+            kwargs.get("video_filename") or self.video_filename,
+            kwargs.get("media_offset_sec") if kwargs.get("media_offset_sec") is not None else self.current_media_offset_sec,
+        )
 
         new_events = (
             evaluate_tripwire_crossings(
                 tracks, self._prev_centroids, self.tripwires, self.camera_id,
-                self.event_bus, active_frame, now, self.events,
+                self.event_bus, active_frame, now, self.events, media_meta=media_meta,
             )
             + evaluate_zone_updates(
                 tracks, self.zones, self.camera_id, self.event_bus,
-                self.rsac_manager, self.pet_whitelist, active_frame, now, self.events,
+                self.rsac_manager, self.pet_whitelist, active_frame, now, self.events, media_meta=media_meta,
             )
             + evaluate_zone_capacity_limits(
-                self.zones, self.camera_id, self.event_bus, active_frame, now, self.events,
+                self.zones, self.camera_id, self.event_bus, active_frame, now, self.events, media_meta=media_meta,
             )
         )
         if self.heatmap is not None:

@@ -7,7 +7,15 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 CANONICAL_REID_MODEL = "dual"
-CANONICAL_REID_DIM = 608
+CANONICAL_REID_DIM = 2560
+
+
+def resolve_canonical_reid_dim(extractor: Any = None) -> int:
+    """Return canonical DualModel embedding dimension, dynamically verified from extractor if available."""
+    dim = getattr(extractor, "embedding_dim", None) if extractor is not None else None
+    if isinstance(dim, int) and dim > 0:
+        return dim
+    return CANONICAL_REID_DIM
 
 
 def _normalize_reid_name(raw_name: Any) -> str | None:
@@ -47,6 +55,7 @@ def resolve_reid_profile(
     cfg: dict[str, Any] | None = None,
     *,
     strict_canonical: bool = True,
+    extractor: Any = None,
 ) -> ReidProfile:
     """Resolve canonical DualModel Re-ID profile; YAML reid.model is advisory."""
     data: dict[str, Any] = cfg if isinstance(cfg, dict) else {}
@@ -69,4 +78,5 @@ def resolve_reid_profile(
         if not strict_canonical:
             return ReidProfile(advisory, None, threshold, tracked, advisory, False)
 
-    return ReidProfile(CANONICAL_REID_MODEL, CANONICAL_REID_DIM, threshold, tracked, advisory, True)
+    expected_dim = resolve_canonical_reid_dim(extractor)
+    return ReidProfile(CANONICAL_REID_MODEL, expected_dim, threshold, tracked, advisory, True)

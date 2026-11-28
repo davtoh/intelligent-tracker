@@ -26,11 +26,12 @@ def run_probe() -> dict[str, Any]:
         db = TrackerDB(str(Path(tmpdir) / "tracker.db"))
         try:
             ent_id = db.add_entity("ProvPerson", category="person")
+            ts_now = time.time()
             db.add_sighting(
                 entity_id=ent_id,
                 track_id=7,
                 source="cam_prov",
-                timestamp=time.time(),
+                timestamp=ts_now,
                 zone_id="zone_prov",
                 bbox=[10, 20, 50, 80],
                 confidence=0.91,
@@ -46,6 +47,13 @@ def run_probe() -> dict[str, Any]:
                 row = rows[0]
                 if row.get("camera_id") != "cam_prov" or row.get("run_id") != "run_abc123":
                     failures.append(f"Provenance mismatch: camera_id={row.get('camera_id')} run_id={row.get('run_id')}")
+            epoch_rows = db.query_sightings(
+                entity_id=ent_id,
+                start_time=f"{ts_now - 60.0:.2f}",
+                end_time=f"{ts_now + 60.0:.2f}",
+            )
+            if len(epoch_rows) != 1:
+                failures.append(f"Float-epoch sightings range query returned {len(epoch_rows)} rows (expected 1)")
         finally:
             db.close()
 

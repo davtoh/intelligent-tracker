@@ -160,7 +160,7 @@ class TestMultiviewSession(unittest.TestCase):
         async def _run() -> None:
             cam1 = _FakeStreamManager("cam_01")
             pool = _FakePool({"cam_01": cam1})
-            ws = _FakeWebSocket([], send_delay=0.08)
+            ws = _FakeWebSocket([], send_delay=0.25)
             session = MultiviewSession(ws, pool=pool, limits=_limits(send_timeout_s=0.02), session_id="s1")
 
             async def _drive() -> None:

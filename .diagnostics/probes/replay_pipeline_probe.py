@@ -314,6 +314,17 @@ def _check_auto_sighting_crop(tmp: Path, failures: list[str], checks: dict[str, 
         checks["auto_sighting_crop_persisted"] = ok
         if not ok:
             failures.append("Automatic sighting crop persistence or /crops/sighting_* enrichment failed")
+        from intelligent_tracker.pipeline.post_detection_governance import handle_zone_exits
+        from intelligent_tracker.world.graph import WorldGraph
+        from intelligent_tracker.world.handoff import MultiCameraHandoffCoordinator
+        from intelligent_tracker.world.transitions import WorldTransitionRegistry
+        wg = WorldGraph()
+        reg = WorldTransitionRegistry(wg)
+        coord = MultiCameraHandoffCoordinator(wg, transition_registry=reg)
+        bridge = type("B", (), {"handoff_coordinator": coord})()
+        bundle = type("P", (), {"analytics": type("A", (), {"camera_id": "cam_1"})(), "config": None, "gallery_matcher": None})()
+        handle_zone_exits(bundle, {"new_events": [{"action": "exit", "track_id": 7, "zone_id": "z1"}]}, {7: Track(track_id=7, bbox=(10, 10, 40, 60), label="person")}, 100.0, topology=reg, world_bridge=bridge)
+        checks["handoff_zone_exit_ok"] = True
     finally:
         db.close()
 
@@ -323,8 +334,7 @@ def run_probe() -> dict[str, Any]:
     checks: dict[str, Any] = {}
     failures: list[str] = []
     with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
-        vid = tmp / "vid.mp4"
+        tmp, vid = Path(tmpdir), Path(tmpdir) / "vid.mp4"
         _write_hd_video(vid)
         _check_track_and_fps(vid, failures, checks)
         _check_hd_scale_and_centroid(tmp, failures, checks)
@@ -333,13 +343,8 @@ def run_probe() -> dict[str, Any]:
         _check_replay_bridge_and_ttl(tmp, vid, failures, checks)
         _check_eof_and_motion_pause(vid, failures, checks)
         _check_auto_sighting_crop(tmp, failures, checks)
-
     status = "error" if failures else "ok"
-    summary = (
-        f"Replay pipeline probe: {len(failures)} failure(s)"
-        if failures
-        else "Replay pipeline probe passed all checks."
-    )
+    summary = f"Replay pipeline probe: {len(failures)} failure(s)" if failures else "Replay pipeline probe passed all checks."
     return {"status": status, "summary": summary, "details": {"checks": checks, "failures": failures}}
 
 

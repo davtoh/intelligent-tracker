@@ -18,6 +18,7 @@ from intelligent_tracker.matching.identity_hysteresis import IdentityHysteresisT
 from intelligent_tracker.matching.session_gallery import SessionGalleryManager
 from intelligent_tracker.matching.adaptive_memory import apply_bounded_ema_update
 from intelligent_tracker.matching._gallery_matching import (
+    enforce_unique_entity_bindings,
     log_skipped_signature_dims,
     match_persistent_gallery,
     resolve_entity_avatars,
@@ -205,7 +206,7 @@ class GalleryMatcher:
     ) -> Optional[EntityIdentifiedEvent]:
         """Process a single track: extract feature, smooth embedding, and query gallery."""
         now = timestamp if timestamp is not None else time.time()
-        if _should_skip_track_reid(self, track, now):
+        if _should_skip_track_reid(self, track, now) or self.extractor is None:
             return None
 
         source = source or self.camera_id
@@ -268,6 +269,8 @@ class GalleryMatcher:
             ev = self.match_track(trk, frame, source=source, timestamp=now, zone_id=zid)
             if ev is not None:
                 events.append(ev)
+
+        events = enforce_unique_entity_bindings(self, tracks, events, source)
 
         if self.world_bridge is not None:
             coasting_tids = {tid for tid, trk in tracks.items() if _is_coasting_or_occluded(trk)}

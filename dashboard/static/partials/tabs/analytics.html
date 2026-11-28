@@ -46,6 +46,10 @@
             <h3>Cumulative Spatial Density Heatmap</h3>
             <div class="heatmap-actions">
               <span class="panel-badge" id="heatmap-camera-badge">All Cameras</span>
+              <select id="analytics-heatmap-mode-select" class="form-control form-control-sm" aria-label="Heatmap Mode">
+                <option value="all" selected>All (Live)</option>
+                <option value="filtered">Filtered (History)</option>
+              </select>
               <button class="btn btn-sm btn-outline" id="btn-refresh-heatmap">🔄 Refresh Heatmap</button>
               <a class="btn btn-sm btn-secondary" id="btn-download-heatmap" href="/analytics/heatmap" target="_blank">📥
                 Export High-Res</a>

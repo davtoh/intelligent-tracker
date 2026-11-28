@@ -117,6 +117,36 @@ class FrameProcessor:
         self.measured_fps = 0.0
         self._last_step_perf: float | None = None
         self._fps_history: deque[float] = deque(maxlen=max(1, int(fps_window)))
+        self._recording_filename: str | None = None
+        self._recording_started_at: float | None = None
+        self._applied_live_recording: bool = False
+
+    def set_recording_provenance(self, filename: str | None, started_at: float | None = None) -> None:
+        """Bind or clear active live-recording clip provenance for subsequent steps."""
+        clean = str(filename or "").strip() or None
+        self._recording_filename = clean
+        self._recording_started_at = float(started_at) if (clean and started_at is not None) else None
+
+    def _sync_live_recording_provenance(self, now: float) -> None:
+        """Apply live recording offset to bundle collaborators without disturbing offline runs."""
+        targets = (self.bundle.gallery_matcher, self.bundle.active_learning, self.bundle.analytics)
+        if self._recording_filename:
+            offset = (
+                round(max(0.0, now - self._recording_started_at), 3)
+                if self._recording_started_at is not None
+                else 0.0
+            )
+            for target in targets:
+                if target is not None:
+                    setattr(target, "video_filename", self._recording_filename)
+                    setattr(target, "current_media_offset_sec", offset)
+            self._applied_live_recording = True
+        elif self._applied_live_recording:
+            for target in targets:
+                if target is not None:
+                    setattr(target, "video_filename", "")
+                    setattr(target, "current_media_offset_sec", None)
+            self._applied_live_recording = False
 
     @property
     def world_bridge(self) -> Any:
@@ -144,6 +174,7 @@ class FrameProcessor:
         """Run one canonical CV pipeline step on a single BGR frame."""
         t_perf = time.perf_counter()
         now = float(timestamp) if timestamp is not None else time.time()
+        self._sync_live_recording_provenance(now)
         processed = prepare_frame(frame, target_size=target_size, max_dim=max_dim)
 
         detections = self._run_detector(processed)

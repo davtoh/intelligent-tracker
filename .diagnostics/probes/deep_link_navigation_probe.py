@@ -58,8 +58,8 @@ def _verify_live_to_studio_nav_click() -> list[str]:
         return [f"Live->Studio nav click check crashed: {proc.stderr.strip()}"]
     data = json.loads(proc.stdout.strip())
     errs: list[str] = []
-    if not str(data.get("src", "")).startswith("/stream/cam_01"):
-        errs.append(f"Studio media did not attach live stream on .nav-tab click: src={data.get('src')!r}")
+    if not str(data.get("src", "")).startswith("/stream/cam_01") or "annotated=false" not in str(data.get("src", "")):
+        errs.append(f"Studio media did not attach clean ?annotated=false live stream on .nav-tab click: src={data.get('src')!r}")
     if data.get("display") != "block" or data.get("hidden"):
         errs.append(f"Studio media remained hidden on .nav-tab click: display={data.get('display')!r}, hidden={data.get('hidden')!r}")
     if int(data.get("drawCount", 0)) < 1:

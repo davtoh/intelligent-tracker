@@ -128,6 +128,8 @@ class ZoneEvent(BaseEvent):
     track_id: int = 0
     action: str = "enter"  # 'enter', 'exit', 'dwell'
     dwell_time: float = 0.0
+    entry_time: Optional[float] = None
+    exit_time: Optional[float] = None
     centroid: Optional[Tuple[float, float]] = None
     bbox: Optional[Tuple[int, int, int, int]] = None
     entity_id: Optional[int] = None

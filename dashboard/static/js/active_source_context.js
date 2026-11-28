@@ -277,7 +277,7 @@
       }
       if (img && camId) {
         const base = (img.dataset?.activeStreamSrc || `/stream/${encodeURIComponent(camId)}`).split('?')[0];
-        const nextSrc = `${base}?t=${Date.now()}`;
+        const nextSrc = `${base}?annotated=false&t=${Date.now()}`;
         if (window.MediaEmptyState?.setSource) window.MediaEmptyState.setSource(img, nextSrc);
         else { if (img.style) img.style.display = 'block'; img.src = nextSrc; }
       }

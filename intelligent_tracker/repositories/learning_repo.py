@@ -5,10 +5,15 @@ Manages active learning candidate queues ("Review & Learn" Inbox) and
 role-based custom categories for spatial and access control rules.
 """
 
-import json
 import time
 from typing import Optional, Dict, Any, List
 
+from intelligent_tracker.repositories.learning_helpers import (
+    _build_review_insert_params,
+    _matches_review_candidate,
+    _parse_bbox_json,
+    _serialize_bbox,
+)
 from intelligent_tracker.repositories.video_schema import expand_video_aliases
 
 
@@ -21,86 +26,36 @@ INSERT INTO review_queue (
 """
 
 
-def _serialize_bbox(bbox: Any, raw_json: str = "") -> str:
-    """Serialize a 4-element bbox sequence to JSON string."""
-    if raw_json:
-        return str(raw_json).strip()
-    if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
-        return json.dumps([int(round(float(v))) for v in bbox])
-    return ""
+_REVIEW_SORT_SQL = {
+    "newest": "id DESC",
+    "oldest": "id ASC",
+    "sim_desc": "similarity DESC, id DESC",
+    "sim_asc": "similarity ASC, id DESC",
+}
 
 
-def _parse_bbox_json(raw: str | None) -> list[int] | None:
-    """Parse ``bbox_json`` into a 4-int list or None."""
-    if not raw:
-        return None
-    try:
-        vals = json.loads(raw)
-        if isinstance(vals, list) and len(vals) == 4:
-            return [int(v) for v in vals]
-    except (TypeError, ValueError):
-        pass
-    return None
-
-
-def _bbox_iou(a: list[int] | None, b: list[int] | None) -> float:
-    """Compute IoU between two ``[x, y, w, h]`` boxes."""
-    if not a or not b:
-        return 0.0
-    ax1, ay1, aw, ah = a
-    bx1, by1, bw, bh = b
-    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-    ix2, iy2 = min(ax1 + aw, bx1 + bw), min(ay1 + ah, by1 + bh)
-    iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
-    inter = iw * ih
-    if inter <= 0:
-        return 0.0
-    union = max(1, aw * ah + bw * bh - inter)
-    return inter / union
-
-
-def _matches_review_candidate(
-    row: dict[str, Any],
-    track_id: int | None,
-    media_offset_sec: float | None,
-    target_bbox: list[int] | None,
-) -> bool:
-    """Return True if a pending ``review_queue`` row matches the Studio/ROI target."""
-    if track_id is not None and int(row.get("track_id") or 0) == int(track_id):
-        if media_offset_sec is None:
-            return True
-        row_offset = float(row.get("media_offset_sec") or 0.0)
-        return abs(row_offset - float(media_offset_sec)) <= 5.0
-    if media_offset_sec is not None:
-        row_offset = float(row.get("media_offset_sec") or 0.0)
-        if abs(row_offset - float(media_offset_sec)) <= 2.0:
-            row_bbox = _parse_bbox_json(row.get("bbox_json"))
-            if target_bbox is None or row_bbox is None:
-                return True
-            return _bbox_iou(row_bbox, target_bbox) >= 0.3
-    return False
-
-
-def _build_review_insert_params(
-    camera_id: str, track_id: int, crop_path: str, suggested_entity_id: Optional[int],
-    suggested_name: str, suggested_category: str, similarity: float, status: str,
-    video_filename: str, media_offset_sec: float, bbox: Any,
-    frame_width: int, frame_height: int, run_id: str, reason: str, kwargs: dict[str, Any],
-) -> tuple[Any, ...]:
-    """Build parameter tuple for ``_INSERT_REVIEW_SQL``."""
-    sim = float(kwargs.get("similarity_score", similarity))
-    ent_id = suggested_entity_id if suggested_entity_id is not None else kwargs.get("matched_entity_id")
-    s_name = (suggested_name or kwargs.get("matched_entity_name", "")).strip()
-    s_cat = (suggested_category or kwargs.get("matched_category", "")).strip()
-    bbox_str = _serialize_bbox(bbox, str(kwargs.get("bbox_json", "")))
-    now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-    resolved_reason = str(reason or kwargs.get("reason") or "borderline").strip() or "borderline"
-    return (
-        camera_id, track_id, crop_path.strip(), now, ent_id, s_name, s_cat,
-        sim, status.strip(), str(video_filename or "").strip(), float(media_offset_sec or 0.0),
-        bbox_str, int(frame_width or 0), int(frame_height or 0), str(run_id or "").strip(),
-        resolved_reason,
-    )
+def _build_review_filter_sql(
+    status: Optional[str] = None,
+    matched: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> tuple[str, List[Any]]:
+    """Build parameterized WHERE clause for ``review_queue`` triage queries."""
+    clauses: List[str] = []
+    params: List[Any] = []
+    st = (status or "").strip().lower()
+    if st and st != "all":
+        clauses.append("status = ?")
+        params.append(st)
+    mt = (matched or "").strip().lower()
+    if mt == "matched":
+        clauses.append("(suggested_entity_id IS NOT NULL OR TRIM(COALESCE(suggested_name, '')) != '')")
+    elif mt == "unmatched":
+        clauses.append("(suggested_entity_id IS NULL AND TRIM(COALESCE(suggested_name, '')) = '')")
+    rs = (reason or "").strip().lower()
+    if rs and rs != "all":
+        clauses.append("LOWER(COALESCE(reason, 'borderline')) = ?")
+        params.append(rs)
+    return (f" WHERE {' AND '.join(clauses)}" if clauses else "", params)
 
 
 class LearningMixin:
@@ -137,17 +92,45 @@ class LearningMixin:
             finally:
                 cur.close()
 
-    def list_review_items(self, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """List active learning review items, optionally filtered by status."""
-        query = "SELECT * FROM review_queue"
-        params: List[Any] = []
-        if status:
-            query += " WHERE status = ?"
-            params.append(status.strip())
-        query += " ORDER BY id DESC"
+    def count_review_items(
+        self,
+        status: Optional[str] = None,
+        matched: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> int:
+        """Count active learning review items matching optional triage filters."""
+        where_sql, params = _build_review_filter_sql(status=status, matched=matched, reason=reason)
+        with self._lock:
+            if self._conn is None:
+                return 0
+            cur = self._conn.cursor()
+            try:
+                cur.execute(f"SELECT COUNT(*) FROM review_queue{where_sql}", params)
+                row = cur.fetchone()
+                return int(row[0]) if row else 0
+            finally:
+                cur.close()
+
+    def list_review_items(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+        matched: Optional[str] = None,
+        reason: Optional[str] = None,
+        sort: str = "newest",
+    ) -> List[Dict[str, Any]]:
+        """List active learning review items with triage filters, sorting, and pagination."""
+        where_sql, params = _build_review_filter_sql(status=status, matched=matched, reason=reason)
+        order_sql = _REVIEW_SORT_SQL.get((sort or "newest").strip().lower(), "id DESC")
+        query = f"SELECT * FROM review_queue{where_sql} ORDER BY {order_sql}"
+        safe_offset = max(0, int(offset or 0))
         if limit > 0:
-            query += " LIMIT ?"
-            params.append(int(limit))
+            query += " LIMIT ? OFFSET ?"
+            params.extend([int(limit), safe_offset])
+        elif safe_offset > 0:
+            query += " LIMIT -1 OFFSET ?"
+            params.append(safe_offset)
 
         with self._lock:
             if self._conn is None:
@@ -156,6 +139,46 @@ class LearningMixin:
             try:
                 cur.execute(query, params)
                 return [dict(r) for r in cur.fetchall()]
+            finally:
+                cur.close()
+
+    def bulk_dismiss_review_items(
+        self,
+        item_ids: Optional[List[int]] = None,
+        status: str = "pending",
+        matched: Optional[str] = None,
+        reason: Optional[str] = None,
+        reviewed_by: str = "operator",
+    ) -> int:
+        """Bulk-dismiss review queue items by explicit IDs or triage filter."""
+        now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        reviewer = (reviewed_by or "operator").strip() or "operator"
+        if item_ids is not None:
+            clean_ids = [int(i) for i in item_ids if i is not None]
+            if not clean_ids:
+                return 0
+            marks = ", ".join("?" for _ in clean_ids)
+            st = (status or "").strip().lower()
+            where_sql = f" WHERE id IN ({marks})" + (" AND status = ?" if st and st != "all" else "")
+            where_params: List[Any] = [*clean_ids, *([st] if st and st != "all" else [])]
+        else:
+            where_sql, where_params = _build_review_filter_sql(
+                status=status or "pending", matched=matched, reason=reason,
+            )
+        with self._lock:
+            if self._conn is None:
+                return 0
+            cur = self._conn.cursor()
+            try:
+                cur.execute(
+                    f"UPDATE review_queue SET status = 'dismissed', reviewed_at = ?, reviewed_by = ?{where_sql}",
+                    [now, reviewer, *where_params],
+                )
+                self._conn.commit()
+                return int(cur.rowcount or 0)
+            except Exception:
+                self._conn.rollback()
+                raise
             finally:
                 cur.close()
 
