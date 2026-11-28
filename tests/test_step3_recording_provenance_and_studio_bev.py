@@ -352,5 +352,97 @@ class TestStep3Milestone1RecordingAndTranscode(unittest.TestCase):
             self.assertEqual((ev.get("video_filename"), round(float(ev.get("media_offset_sec") or 0.0), 2)), ("cam_live_rec.mp4", 14.25))
 
 
+class TestStep3Milestone3BevPoseAndBounds(unittest.TestCase):
+    """Verify OBS-025/026 staggered cameras, entity calibrated bounds, and derived poses."""
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory(prefix="step3_m3_bev_")
+        self.addCleanup(self.tmpdir.cleanup)
+
+    def test_stagger_uncalibrated_cameras_and_exclude_raw_pixel_entities(self) -> None:
+        """Uncalibrated cameras stagger into non-overlapping slots and raw-pixel entities skip bounds."""
+        from intelligent_tracker.world.graph import WorldGraph
+        from intelligent_tracker.world.minimap import WorldTacticalMinimap
+        from intelligent_tracker.world.nodes import CameraNode, WorldEntity
+
+        wg = WorldGraph()
+        wg.register_camera(CameraNode(camera_id="cam_a", name="Cam A"))
+        wg.register_camera(CameraNode(camera_id="cam_b", name="Cam B"))
+        wg.upsert_entity(WorldEntity(
+            world_entity_id="session:cam_a:1", name="RawPx",
+            camera_tracks={"cam_a": 1}, global_xy=(960.0, 540.0),
+        ))
+        telemetry = WorldTacticalMinimap(wg).build_world_minimap_telemetry()
+        cams = {c["camera_id"]: c for c in telemetry["cameras"]}
+        pa, pb = cams["cam_a"]["world_pose"], cams["cam_b"]["world_pose"]
+        self.assertNotEqual((pa["origin_x"], pa["origin_y"]), (pb["origin_x"], pb["origin_y"]))
+        self.assertGreaterEqual(abs(pb["origin_x"] - pa["origin_x"]) + abs(pb["origin_y"] - pa["origin_y"]), 4.0)
+        self.assertFalse(telemetry["entities"][0]["calibrated"])
+        self.assertLess(telemetry["bounds"]["width_m"], 100.0)
+        self.assertLess(telemetry["bounds"]["height_m"], 100.0)
+
+    def test_derive_pose_from_homography_and_preserve_custom_pose(self) -> None:
+        """sync_homography_to_world derives a default pose only when no custom pose exists."""
+        from intelligent_tracker.homography import GroundPlaneHomography
+        from intelligent_tracker.world._bridge_helpers import is_camera_calibrated
+        from intelligent_tracker.world.coordinates import (
+            GlobalCoordinateMapper,
+            derive_pose_from_homography,
+            sync_homography_to_world,
+        )
+        from intelligent_tracker.world.graph import WorldGraph
+        from intelligent_tracker.world.nodes import CameraNode
+
+        mapper = GlobalCoordinateMapper()
+        wg = WorldGraph(coordinate_mapper=mapper)
+        homo = GroundPlaneHomography(
+            src_points=[(0, 0), (100, 0), (100, 80), (0, 80)],
+            metric_width=10.0, metric_height=8.0, camera_id="cam_cal",
+        )
+        derived = derive_pose_from_homography("cam_cal", homo)
+        self.assertEqual((derived.origin_x, derived.origin_y, derived.yaw_deg), (5.0, 8.0, -90.0))
+
+        sync_homography_to_world(wg, mapper, "cam_cal", homo)
+        self.assertTrue(is_camera_calibrated("cam_cal", coordinate_mapper=mapper, world_graph=wg))
+        pose_cal = mapper.get_pose("cam_cal")
+        self.assertIsNotNone(pose_cal)
+        self.assertEqual((pose_cal.origin_x, pose_cal.origin_y, pose_cal.yaw_deg), (5.0, 8.0, -90.0))
+
+        wg.register_camera(CameraNode(camera_id="cam_custom", name="Custom", world_pose=(12.0, 4.0, 45.0)))
+        sync_homography_to_world(wg, mapper, "cam_custom", homo)
+        custom_node = wg.get_node("cam_custom", node_type="camera")
+        self.assertEqual(tuple(custom_node.world_pose), (12.0, 4.0, 45.0))
+
+    def test_post_homography_route_persists_derived_pose_only_when_missing(self) -> None:
+        """POST /api/scenarios/homography persists derived CameraWorldPose without clobbering custom pose."""
+        import asyncio
+        from unittest.mock import patch
+        from dashboard.routers.scenarios import save_homography_route
+        from dashboard.schemas import HomographyCalibrationRequest
+        from intelligent_tracker.scenarios import ScenarioManager
+
+        db = TrackerDB(db_path=os.path.join(self.tmpdir.name, "homo_pose.db"))
+        self.addCleanup(db.close)
+        sm = ScenarioManager(config_path=os.path.join(self.tmpdir.name, "scen.yaml"), db=db)
+        req = HomographyCalibrationRequest(
+            camera_id="cam_api",
+            src_points=[[0, 0], [100, 0], [100, 80], [0, 80]],
+            metric_width=10.0, metric_height=8.0,
+        )
+        fake_request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+        with patch("dashboard.routers.scenarios.get_active_stream_manager", return_value=None):
+            res = asyncio.run(save_homography_route(req, fake_request, sm))
+        self.assertEqual(res["status"], "success")
+        saved = db.get_world_pose("cam_api")
+        self.assertIsNotNone(saved)
+        self.assertEqual((saved["origin_x"], saved["origin_y"], saved["yaw_deg"]), (5.0, 8.0, -90.0))
+
+        db.save_world_pose("cam_api", 20.0, 30.0, 15.0, 1.0)
+        with patch("dashboard.routers.scenarios.get_active_stream_manager", return_value=None):
+            asyncio.run(save_homography_route(req, fake_request, sm))
+        kept = db.get_world_pose("cam_api")
+        self.assertEqual((kept["origin_x"], kept["origin_y"], kept["yaw_deg"]), (20.0, 30.0, 15.0))
+
+
 if __name__ == "__main__":
     unittest.main()

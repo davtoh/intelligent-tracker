@@ -201,28 +201,53 @@ class GlobalCoordinateMapper:
         return [pose.to_global(pt) for pt in local_pts] if pose is not None else local_pts
 
 
+def derive_pose_from_homography(camera_id: str, homo: GroundPlaneHomography) -> CameraWorldPose:
+    """Derive a default CameraWorldPose from a calibrated 4-point homography quad."""
+    dst = homo.dst_points
+    if dst is not None and len(dst) >= 4:
+        tl, tr, br, bl = dst[0], dst[1], dst[2], dst[3]
+        nx, ny = 0.5 * (float(bl[0]) + float(br[0])), 0.5 * (float(bl[1]) + float(br[1]))
+        fx, fy = 0.5 * (float(tl[0]) + float(tr[0])), 0.5 * (float(tl[1]) + float(tr[1]))
+        dx, dy = fx - nx, fy - ny
+        yaw = round(math.degrees(math.atan2(dy, dx)), 2) if math.hypot(dx, dy) > 1e-6 else 0.0
+        return CameraWorldPose(camera_id=camera_id, origin_x=round(nx, 4), origin_y=round(ny, 4), yaw_deg=yaw)
+    w = float(getattr(homo, "metric_width", 10.0) or 10.0)
+    h = float(getattr(homo, "metric_height", 10.0) or 10.0)
+    return CameraWorldPose(camera_id=camera_id, origin_x=round(w * 0.5, 4), origin_y=round(h, 4), yaw_deg=-90.0)
+
+
+def _has_custom_pose(camera_id: str, existing: Any, coordinate_mapper: GlobalCoordinateMapper | None) -> bool:
+    """Return True if a world pose is already registered for camera_id."""
+    if isinstance(existing, CameraNode) and tuple(existing.world_pose) != (0.0, 0.0, 0.0):
+        return True
+    return coordinate_mapper is not None and coordinate_mapper.get_pose(camera_id) is not None
+
+
 def sync_homography_to_world(
     world_graph: Any,
     coordinate_mapper: GlobalCoordinateMapper | None,
     camera_id: str,
     homo: GroundPlaneHomography,
 ) -> None:
-    """Register a calibrated homography on attached WorldGraph CameraNode and GlobalCoordinateMapper."""
+    """Register a calibrated homography and derived default pose on WorldGraph and mapper."""
     if not homo.is_calibrated:
         return
+    existing = world_graph.get_node(camera_id, node_type="camera") if world_graph is not None else None
+    derived_pose = None if _has_custom_pose(camera_id, existing, coordinate_mapper) else derive_pose_from_homography(camera_id, homo)
     if coordinate_mapper is not None:
-        coordinate_mapper.register_camera(camera_id, homography=homo)
+        coordinate_mapper.register_camera(camera_id, homography=homo, pose=derived_pose)
     if world_graph is not None:
-        existing = world_graph.get_node(camera_id, node_type="camera")
         extra = dict(existing.extra) if isinstance(existing, CameraNode) else {}
         extra["homography_profile"] = homo.to_dict()
         cam = existing if isinstance(existing, CameraNode) else CameraNode(camera_id=camera_id, name=camera_id)
         cam.homography = homo.H.tolist() if homo.H is not None else None
+        if derived_pose is not None:
+            cam.world_pose = (derived_pose.origin_x, derived_pose.origin_y, derived_pose.yaw_deg)
         cam.extra = extra
-        world_graph.register_camera(cam)
+        world_graph.register_camera(cam, preserve_defaults=derived_pose is None)
         graph_mapper = getattr(world_graph, "coordinate_mapper", None)
         if graph_mapper is not None and graph_mapper is not coordinate_mapper:
-            graph_mapper.register_camera(camera_id, homography=homo)
+            graph_mapper.register_camera(camera_id, homography=homo, pose=derived_pose)
 
 
 def clear_homography_from_world(
@@ -299,6 +324,11 @@ def compute_hop_global_path(
         except Exception:
             continue
         if len(vals) >= 4:
-            gx, gy = coordinate_mapper.project_track_bbox(camera_id, vals) if use_mapper else homo.track_to_ground(tuple(vals[:4]))
+            if use_mapper:
+                gx, gy = coordinate_mapper.project_track_bbox(camera_id, vals)
+            elif homo is not None:
+                gx, gy = homo.track_to_ground(tuple(vals[:4]))
+            else:
+                continue
             path.append((round(float(gx), 4), round(float(gy), 4)))
     return path

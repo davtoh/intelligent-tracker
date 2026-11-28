@@ -238,28 +238,17 @@ def draw_track_overlays(out: np.ndarray, tracks: dict[int, Track]) -> None:
     """Render bounding boxes, state badges, and motion history trails onto frame."""
     for tid, trk in tracks.items():
         x, y, w, h = trk.bbox
-        if trk.state == "predicting":
-            col, border_th = (0, 165, 255), 1  # Orange for predictive dead-reckoning
-        elif trk.state == "confirmed":
-            col, border_th = (0, 255, 0), 2
-        else:
-            col, border_th = (0, 220, 255), 2
-
+        col, border_th = ((0, 165, 255), 1) if trk.state == "predicting" else (((0, 255, 0), 2) if trk.state == "confirmed" else ((0, 220, 255), 2))
         cv2.rectangle(out, (x, y), (x + w, y + h), col, border_th)
-
         if getattr(trk, "entity_name", None):
-            label_text = "#{}: {} ({:.0f}%)".format(tid, trk.entity_name, getattr(trk, "reid_score", 1.0) * 100)
+            label_text = f"#{tid}: {trk.entity_name} ({getattr(trk, 'reid_score', 1.0) * 100:.0f}%)"
         elif getattr(trk, "identity_label", None):
-            suffix = " [PREDICTING]" if trk.state == "predicting" else " [Active]"
-            label_text = "#{}: {}{}".format(tid, trk.identity_label, suffix)
+            label_text = f"#{tid}: {trk.identity_label}{' [PREDICTING]' if trk.state == 'predicting' else ' [Active]'}"
         else:
-            suffix = " [PREDICTING]" if trk.state == "predicting" else ""
-            label_text = "#{}: {} ({:.2f}){}".format(tid, trk.label, trk.confidence, suffix)
-
+            label_text = f"#{tid}: {trk.label} ({trk.confidence:.2f}){' [PREDICTING]' if trk.state == 'predicting' else ''}"
         (tw_val, th_val), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
         cv2.rectangle(out, (x, max(0, y - th_val - 6)), (x + tw_val + 6, y), col, -1)
         cv2.putText(out, label_text, (x + 3, max(10, y - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1, cv2.LINE_AA)
-
         if len(trk.history) > 1:
             pts = np.array([(int(p[0]), int(p[1])) for p in trk.history], dtype=np.int32).reshape((-1, 1, 2))
             cv2.polylines(out, [pts], False, (0, 200, 255), 2, cv2.LINE_AA)

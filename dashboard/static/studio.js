@@ -49,7 +49,9 @@
       if (btn.dataset) btn.dataset.quadMode = mode;
       btn.setAttribute?.('aria-pressed', mode !== 'off' ? 'true' : 'false');
     }
+    window.WorldTacticalMinimapView?.setBevQuadMode?.(mode);
     drawOverlay();
+    if (studioState.bevCanvas) renderBEVMinimap();
     return mode;
   }
 
@@ -184,9 +186,10 @@
     } catch (err) { console.warn('Failed to load scenario:', err); }
   }
 
-  function renderBEVMinimap() {
-    if (window.WorldTacticalMinimapView) return window.WorldTacticalMinimapView.fetchAndRender(studioState.bevCanvas, studioState.activeCamera, studioState.homography, studioState.zones);
-    window.BEVMinimap?.render(studioState.bevCanvas, studioState.homography, studioState.zones, studioState.activeCamera);
+  function renderBEVMinimap(force = false) {
+    const canvas = studioState.bevCanvas || document.getElementById('bev-minimap-canvas');
+    if (window.WorldTacticalMinimapView) return window.WorldTacticalMinimapView.fetchAndRender(canvas, studioState.activeCamera, studioState.homography, studioState.zones, force);
+    window.BEVMinimap?.render(canvas, studioState.homography, studioState.zones, studioState.activeCamera);
   }
 
   function requireActiveCamera() {
@@ -240,7 +243,7 @@
       studioState.homography = result.homography || data;
       studioState.points = []; studioState.mode = 'idle';
       updateStudioStatus(`Homography calibrated for ${data.camera_id} (${data.metric_width}m x ${data.metric_height}m).`);
-      drawOverlay(); renderBEVMinimap();
+      drawOverlay(); renderBEVMinimap(true);
     });
   }
 

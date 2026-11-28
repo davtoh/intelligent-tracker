@@ -5,7 +5,7 @@ from typing import Any
 from intelligent_tracker.world._lifecycle import find_entity_by_track, resolve_zone_node
 from intelligent_tracker.world.coordinates import project_bbox_from_camera_node
 from intelligent_tracker.world.graph import WorldGraph
-from intelligent_tracker.world.nodes import CameraNode, WorldEntity
+from intelligent_tracker.world.nodes import CameraNode, WorldEntity, ZoneNode
 
 
 def scoped_session_id(camera_id: str, session_id: int | str) -> str:
@@ -126,6 +126,30 @@ def calibrate_entity_confidence(
     }
 
 
+def is_camera_calibrated(
+    camera_id: str,
+    *,
+    coordinate_mapper: Any = None,
+    world_graph: WorldGraph | None = None,
+) -> bool:
+    """Return True if camera_id has a calibrated GroundPlaneHomography."""
+    if not camera_id:
+        return False
+    if coordinate_mapper is not None:
+        homo = coordinate_mapper.get_homography(camera_id)
+        if homo is not None and getattr(homo, "is_calibrated", False):
+            return True
+    if world_graph is not None:
+        cam_node = world_graph.get_node(camera_id, node_type="camera")
+        if isinstance(cam_node, CameraNode):
+            if cam_node.homography is not None:
+                return True
+            profile = cam_node.extra.get("homography_profile") if isinstance(cam_node.extra, dict) else None
+            if isinstance(profile, dict) and profile.get("src_points"):
+                return True
+    return False
+
+
 def replace_zone_entity_ref(
     graph: WorldGraph,
     camera_id: str,
@@ -134,6 +158,8 @@ def replace_zone_entity_ref(
 ) -> None:
     """Swap superseded ephemeral WorldEntity references inside camera ZoneNodes."""
     for zone in graph.get_children(camera_id).get("zones", []):
+        if not isinstance(zone, ZoneNode):
+            continue
         if old_we_id in zone.active_entity_ids:
             zone.active_entity_ids.discard(old_we_id)
             zone.active_entity_ids.add(new_we_id)
@@ -194,6 +220,8 @@ def remove_track_from_zones(
 ) -> None:
     """Remove track_id and optional WorldEntity ID from camera ZoneNodes."""
     for zone in graph.get_children(camera_id).get("zones", []):
+        if not isinstance(zone, ZoneNode):
+            continue
         changed = False
         if track_id is not None and track_id in zone.active_track_ids:
             zone.active_track_ids.discard(track_id)

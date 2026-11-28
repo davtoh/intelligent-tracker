@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-28] feat: Studio Full Modal Editing, Derived BEV Poses & BEV Quad Minimap Filtering (Step 3 M3)
+- **Type**: feat
+- **Summary**: OBS-024..027: Reused #modal-studio-zone and #modal-studio-tripwire for full PUT editing, staggered uncalibrated cameras and excluded raw-pixel entities from world bounds, derived default CameraWorldPose from 4-point homography on sync and POST /api/scenarios/homography, and added WorldMinimapFovHelper with fov_corners_global polygon rendering and bevQuadMode filtering.
+- **Files** (11):
+  - `intelligent_tracker/world/minimap.py`
+  - `intelligent_tracker/world/_minimap_render.py`
+  - `intelligent_tracker/world/_bridge_helpers.py`
+  - `intelligent_tracker/world/coordinates.py`
+  - `dashboard/routers/scenarios.py`
+  - `dashboard/static/js/scenario_modals.js`
+  - `dashboard/static/js/studio_shape_editor.js`
+  - `dashboard/static/studio.js`
+  - ... (+3 more)
+
 ## [2026-11-28] feat: Step 2 M3: Alerts Dwell Window UI, Min-Severity Policy & Promotion Rules CRUD
 - **Type**: feat
 - **Summary**: Added #alerts-filter-min-severity, collapsible #alerts-rules-panel + alert_rules.js controller, ev.summary dwell-window rendering (OBS-033), canonical deduplicated zone facets, hardened alerts_store_probe, Node VM frontend tests, and restored CameraPool <=10 methods budget.
@@ -134,10 +148,3 @@
   - `dashboard/static/partials/modals/entity_modals.html`
   - `dashboard/static/review_and_rsac.js`
   - ... (+1 more)
-
-## [2026-11-25] feat: Step 1: P0 Integration Seams and Probe Hardening
-- **Type**: feat
-- **Summary**: Upgraded probe_runner, cdp_inspect/audit_layout, cross_module_rules (SILENT_SHAPE_SKIP), and surface_contracts/surface_verifier; added 5 workspace seam probes and hardened spa_nine_tab_cdp_probe.
-- **Files** (2):
-  - `.diagnostics/probes/`
-  - `CHANGELOG.md`

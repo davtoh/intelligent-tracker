@@ -12,6 +12,7 @@ from intelligent_tracker.world._minimap_render import (
     draw_world_cameras_and_entities,
     draw_world_grid,
     draw_world_zones_and_transitions,
+    stagger_uncalibrated_pose,
 )
 from intelligent_tracker.world.coordinates import (
     CameraWorldPose,
@@ -89,22 +90,29 @@ class WorldTacticalMinimap:
     def _build_cameras_telemetry(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
         """Serialize calibrated cameras, rigid world poses, and projected FOV corners."""
         cameras: list[dict[str, Any]] = []
-        for cid, cam_snap in sorted(snapshot.get("cameras", {}).items()):
+        raw_items = sorted(snapshot.get("cameras", {}).items())
+        occupied: list[tuple[float, float]] = []
+        resolved: list[tuple[str, dict[str, Any], CameraWorldPose, GroundPlaneHomography | None, bool]] = []
+        for cid, cam_snap in raw_items:
             pose = _pose_from_camera(cid, cam_snap, self.coordinate_mapper)
             homo = _homography_from_camera(cid, cam_snap, self.coordinate_mapper)
+            is_cal = homo is not None and homo.is_calibrated
+            if is_cal or (pose.origin_x, pose.origin_y, pose.yaw_deg) != (0.0, 0.0, 0.0):
+                occupied.append((pose.origin_x, pose.origin_y))
+            resolved.append((cid, cam_snap, pose, homo, is_cal))
+        for cid, cam_snap, pose, homo, is_cal in resolved:
+            if not is_cal:
+                pose = stagger_uncalibrated_pose(pose, occupied)
+                occupied.append((pose.origin_x, pose.origin_y))
             extra = cam_snap.get("extra") or {}
             fov_src = homo.src_points.tolist() if homo is not None and homo.src_points is not None else []
             fov_global = self._project_camera_polygon(cid, fov_src, cam_snap) if fov_src else []
             cameras.append({
                 "camera_id": cid, "name": cam_snap.get("name") or cid, "enabled": bool(cam_snap.get("enabled", True)),
-                "calibrated": homo is not None and homo.is_calibrated,
+                "calibrated": is_cal,
                 "world_pose": {
-                    "origin_x": pose.origin_x,
-                    "origin_y": pose.origin_y,
-                    "yaw_deg": pose.yaw_deg,
-                    "scale": pose.scale,
-                    "fov_deg": float(extra.get("fov_deg", 75.0)),
-                    "range_m": float(extra.get("range_m", 12.0)),
+                    "origin_x": pose.origin_x, "origin_y": pose.origin_y, "yaw_deg": pose.yaw_deg, "scale": pose.scale,
+                    "fov_deg": float(extra.get("fov_deg", 75.0)), "range_m": float(extra.get("range_m", 12.0)),
                 },
                 "fov_corners_global": fov_global,
             })
@@ -149,9 +157,12 @@ class WorldTacticalMinimap:
             })
         return transitions
 
-    def _build_entities_telemetry(self, snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    def _build_entities_telemetry(
+        self, snapshot: dict[str, Any], cam_map: dict[str, dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         """Serialize live WorldEntities with global coordinates, trajectories, and velocity vectors."""
         entities: list[dict[str, Any]] = []
+        any_cam_cal = any(bool(c.get("calibrated")) for c in (cam_map or {}).values()) if cam_map else True
         for we_id, ent in sorted(snapshot.get("entities", {}).items()):
             gxy = ent.get("global_xy")
             traj = [[round(float(p[0]), 4), round(float(p[1]), 4), float(p[2])] for p in ent.get("global_trajectory", [])]
@@ -162,10 +173,16 @@ class WorldTacticalMinimap:
                     vx = round((traj[-1][0] - traj[-2][0]) / dt, 4)
                     vy = round((traj[-1][1] - traj[-2][1]) / dt, 4)
                     speed_mps = round(math.hypot(vx, vy), 4)
+            cam_tracks = dict(ent.get("camera_tracks", {}))
+            if cam_tracks and cam_map is not None:
+                is_cal = any(bool(cam_map.get(cid, {}).get("calibrated")) for cid in cam_tracks)
+            else:
+                is_cal = any_cam_cal
             entities.append({
                 "world_entity_id": ent.get("world_entity_id", we_id), "entity_id": ent.get("entity_id"),
                 "session_id": ent.get("session_id"), "name": ent.get("name", ""), "category": ent.get("category", "unknown"),
-                "restricted": bool(ent.get("restricted", False)), "camera_tracks": dict(ent.get("camera_tracks", {})),
+                "restricted": bool(ent.get("restricted", False)), "camera_tracks": cam_tracks,
+                "calibrated": is_cal,
                 "global_xy": [round(float(gxy[0]), 4), round(float(gxy[1]), 4)] if gxy is not None else None,
                 "global_trajectory": traj,
                 "vx": vx,
@@ -183,7 +200,7 @@ class WorldTacticalMinimap:
         cam_map = {c["camera_id"]: c for c in cameras}
         zones, centroids = self._build_zones_telemetry(snapshot, raw_cameras)
         transitions = self._build_transitions_telemetry(snapshot, centroids, cam_map)
-        entities = self._build_entities_telemetry(snapshot)
+        entities = self._build_entities_telemetry(snapshot, cam_map)
         bounds = compute_world_bounds(cameras, zones, entities, self.default_bounds)
         return {
             "timestamp": time.time(), "bounds": bounds, "cameras": cameras,
