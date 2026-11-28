@@ -159,6 +159,15 @@ def _build_heatmap_hotspots(
     return hotspots
 
 
+HEATMAP_GRID_COLS = _HEATMAP_GRID_COLS
+HEATMAP_GRID_ROWS = _HEATMAP_GRID_ROWS
+DEFAULT_HEATMAP_STOPS = _DEFAULT_HEATMAP_STOPS
+downsample_heatmap_grid = _downsample_heatmap_grid
+build_heatmap_hotspots = _build_heatmap_hotspots
+build_axis_ticks = _build_axis_ticks
+resolve_colormap_name = _resolve_colormap_name
+
+
 def build_heatmap_json(mgr: Any, camera_id: Optional[str]) -> dict[str, Any]:
     """Build enriched JSON metadata payload for the spatial density heatmap."""
     resolved_cam = camera_id or getattr(mgr, "camera_id", None)

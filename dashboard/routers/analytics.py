@@ -27,6 +27,10 @@ from dashboard.services.analytics_query_service import (
     query_traffic_flows_service,
 )
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
+from dashboard.services.heatmap_history_service import (
+    build_filtered_heatmap_jpeg,
+    build_filtered_heatmap_json,
+)
 from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger("intelligent_tracker.dashboard.routers.analytics")
@@ -67,17 +71,27 @@ async def get_heatmap(
     request: Request,
     camera_id: Optional[str] = None,
     format: str = Query("image", description="'image' or 'json'"),
+    mode: str = Query("all", description="'all' (live) or 'filtered' (historical DB)"),
+    zone_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    range_sec: int = Query(3600, ge=60, le=30 * 86400),
+    end_time: Optional[float] = None,
+    entity_id: Optional[int] = None,
+    db: TrackerDB = Depends(get_db),
 ):
-    """Retrieve the accumulated spatial occupancy density heatmap."""
+    """Retrieve live or filtered historical DB spatial occupancy density heatmap."""
     mgr = get_active_stream_manager(camera_id, conn=request)
+    if str(mode or "all").strip().lower() == "filtered":
+        now_ts = time.time()
+        if format == "json":
+            return await asyncio.to_thread(build_filtered_heatmap_json, db, camera_id=camera_id, zone_id=zone_id, event_type=event_type, range_sec=range_sec, end_time=end_time, entity_id=entity_id, mgr=mgr, now_ts=now_ts)
+        jpeg_bytes = await asyncio.to_thread(build_filtered_heatmap_jpeg, db, camera_id=camera_id, zone_id=zone_id, event_type=event_type, range_sec=range_sec, end_time=end_time, entity_id=entity_id, mgr=mgr, now_ts=now_ts)
+        return StreamingResponse(io.BytesIO(jpeg_bytes), media_type="image/jpeg")
     if not mgr:
         raise HTTPException(status_code=503, detail="Stream manager not initialized")
-
     if format == "json":
         return build_heatmap_json(mgr, camera_id)
-
-    jpeg_bytes = mgr.get_heatmap_jpeg()
-    return StreamingResponse(io.BytesIO(jpeg_bytes), media_type="image/jpeg")
+    return StreamingResponse(io.BytesIO(mgr.get_heatmap_jpeg()), media_type="image/jpeg")
 
 
 @router.post("/analytics/heatmap/toggle")

@@ -230,7 +230,9 @@
     const baseSrc = (heatmapImg.dataset?.src || heatmapImg.getAttribute?.('data-src') || '/analytics/heatmap').split('?')[0];
     const selSrc = window.AnalyticsView?.getSelectedSource?.();
     const camId = selSrc ? selSrc.id : (window.App?.getActiveCameraId?.() || '');
-    const url = camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`;
+    const url = window.AnalyticsView?.buildHeatmapUrl
+      ? window.AnalyticsView.buildHeatmapUrl(baseSrc, { t: String(Date.now()) })
+      : (camId ? `${baseSrc}?camera_id=${encodeURIComponent(camId)}&t=${Date.now()}` : `${baseSrc}?t=${Date.now()}`);
     if (window.MediaEmptyState) window.MediaEmptyState.setSource(heatmapImg, url);
     else heatmapImg.src = url;
     const badge = document.getElementById('heatmap-camera-badge');

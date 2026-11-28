@@ -272,5 +272,23 @@ class TestReviewQueueFrontendAndToastCss(unittest.TestCase):
         self.assertTrue(out["fetchedFallback99"])
 
 
+class TestFilteredHeatmapPart2Smoke(unittest.TestCase):
+    """Part 2 smoke check ensuring filtered historical heatmap integrates with TrackerDB."""
+
+    def test_filtered_heatmap_aggregates_sighting_footpoint(self) -> None:
+        from dashboard.services.heatmap_history_service import build_filtered_heatmap_json
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = TrackerDB(os.path.join(tmpdir, "hm_smoke.db"))
+            try:
+                eid = db.add_entity("Dana", "person")
+                db.add_sighting(eid, track_id=1, source="cam_s", camera_id="cam_s", zone_id="Entry", bbox=[80, 90, 40, 60])
+                res = build_filtered_heatmap_json(db, camera_id="cam_s", zone_id="Entry", range_sec=3600)
+                self.assertEqual((res["mode"], res["point_count"]), ("filtered", 1))
+                self.assertTrue(res["initialized"] and res["hotspots"])
+            finally:
+                db.close()
+
+
 if __name__ == "__main__":
     unittest.main()
