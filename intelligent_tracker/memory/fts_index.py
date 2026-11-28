@@ -6,7 +6,11 @@ import threading
 import time
 from typing import Any
 
-from intelligent_tracker.memory._event_formatters import normalize_event_doc
+from intelligent_tracker.memory._event_formatters import (
+    _append_severity_tag,
+    normalize_event_doc,
+    normalize_zone_id,
+)
 from intelligent_tracker.world.events import EntityStateChangedEvent
 
 logger = logging.getLogger(__name__)
@@ -22,9 +26,13 @@ class EventFTSIndex:
         event_bus: Any = None,
         state_event_cooldown: float = 0.0,
         auto_attach: bool = True,
+        index_state_events: bool = False,
+        use_write_through: bool = True,
     ) -> None:
         self.db = db
         self.state_event_cooldown = max(0.0, float(state_event_cooldown))
+        self.index_state_events = bool(index_state_events)
+        self.use_write_through = bool(use_write_through)
         self._lock = threading.Lock()
         self._attached_buses: list[Any] = []
         self._last_state_indexed: dict[str, float] = {}
@@ -32,18 +40,21 @@ class EventFTSIndex:
             self.attach(event_bus)
 
     def attach(self, event_bus: Any) -> bool:
-        """Attach subscriber handler to an EventBus instance."""
+        """Attach write-through or subscriber handler to an EventBus instance."""
         if event_bus is None:
             return False
         with self._lock:
             if any(bus is event_bus for bus in self._attached_buses):
                 return False
             self._attached_buses.append(event_bus)
-        event_bus.subscribe(self.handle_event)
+        if self.use_write_through and hasattr(event_bus, "set_write_through_handler"):
+            event_bus.set_write_through_handler(self.handle_event)
+        else:
+            event_bus.subscribe(self.handle_event)
         return True
 
     def detach(self, event_bus: Any = None) -> None:
-        """Detach subscriber handler from one or all attached EventBus instances."""
+        """Detach write-through and subscriber handlers from attached EventBus instances."""
         with self._lock:
             if event_bus is None:
                 targets = list(self._attached_buses)
@@ -52,6 +63,8 @@ class EventFTSIndex:
                 targets = [bus for bus in self._attached_buses if bus is event_bus]
                 self._attached_buses = [bus for bus in self._attached_buses if bus is not event_bus]
         for bus in targets:
+            if getattr(bus, "_write_through_handler", None) == self.handle_event:
+                bus.set_write_through_handler(None)
             bus.unsubscribe(self.handle_event)
 
     stop = detach
@@ -117,8 +130,9 @@ class EventFTSIndex:
 
     def handle_event(self, event: Any) -> int | None:
         """Normalize and index an incoming EventBus event outside internal locks."""
-        if isinstance(event, EntityStateChangedEvent) and not self._should_index_state_event(event):
-            return None
+        if isinstance(event, EntityStateChangedEvent):
+            if not self.index_state_events or not self._should_index_state_event(event):
+                return None
         doc = normalize_event_doc(event)
         if doc is None:
             return None
@@ -142,21 +156,25 @@ class EventFTSIndex:
     ) -> int | None:
         """Explicitly index a sighting observation into the searchable timeline."""
         who = entity_name or (f"Entity {entity_id}" if entity_id is not None else "Unknown entity")
-        zone_txt = f" in {zone_id}" if zone_id else ""
+        clean_zone = normalize_zone_id(zone_id)
+        zone_txt = f" in {clean_zone}" if clean_zone else ""
         text = summary or f"{who} sighted on {camera_id or 'unknown camera'}{zone_txt} (confidence {confidence:.2f})."
+        meta = dict(metadata or {})
+        severity = str(meta.get("severity") or "info").strip().lower() or "info"
+        meta["severity"] = severity
         return self._persist_document({
             "event_type": "sighting",
             "entity_id": entity_id,
             "entity_name": entity_name,
             "category": category,
             "camera_id": camera_id,
-            "zone_id": zone_id,
+            "zone_id": clean_zone,
             "timestamp": timestamp if timestamp is not None else time.time(),
             "confidence": float(confidence),
             "title": f"Sighting: {who}",
             "summary": text,
-            "tags": tags,
-            "metadata": dict(metadata or {}),
+            "tags": _append_severity_tag(tags, severity),
+            "metadata": meta,
             "video_filename": str(video_filename or "").strip(),
             "media_offset_sec": float(media_offset_sec or 0.0),
         })
@@ -182,19 +200,15 @@ class EventFTSIndex:
         clean_caption = str(caption or "").strip()
         if not clean_caption:
             return None
+        meta = dict(metadata or {})
+        severity = str(meta.get("severity") or "info").strip().lower() or "info"
+        meta["severity"] = severity
         return self._persist_document({
-            "event_type": "clip_caption",
-            "entity_id": entity_id,
-            "entity_name": entity_name,
-            "category": category,
-            "camera_id": camera_id,
-            "zone_id": zone_id,
+            "event_type": "clip_caption", "entity_id": entity_id, "entity_name": entity_name,
+            "category": category, "camera_id": camera_id, "zone_id": normalize_zone_id(zone_id),
             "timestamp": timestamp if timestamp is not None else time.time(),
-            "confidence": float(confidence),
-            "title": title or f"Clip caption: {camera_id or 'camera'}",
-            "summary": clean_caption,
-            "tags": tags,
-            "metadata": dict(metadata or {}),
-            "video_filename": str(video_filename or "").strip(),
+            "confidence": float(confidence), "title": title or f"Clip caption: {camera_id or 'camera'}",
+            "summary": clean_caption, "tags": _append_severity_tag(tags, severity),
+            "metadata": meta, "video_filename": str(video_filename or "").strip(),
             "media_offset_sec": float(media_offset_sec or 0.0),
         })

@@ -12,6 +12,22 @@ from intelligent_tracker.events.types import BaseEvent
 logger = logging.getLogger(__name__)
 
 
+def _dispatch_to_subscribers(
+    subscribers: List[Tuple[Callable[[BaseEvent], Any], Optional[Callable[[BaseEvent], bool]], Optional[Type]]],
+    event: BaseEvent,
+) -> None:
+    """Dispatch event to a subscriber snapshot with per-handler exception isolation."""
+    for handler, filter_fn, event_type in subscribers:
+        try:
+            if event_type is not None and not isinstance(event, event_type):
+                continue
+            if filter_fn is not None and not filter_fn(event):
+                continue
+            handler(event)
+        except Exception as e:
+            logger.error("EventBus subscriber %s failed on event %s: %s", handler, event, e)
+
+
 class EventBus:
     """
     Thread-safe Publish/Subscribe asynchronous event bus.
@@ -28,7 +44,7 @@ class EventBus:
         if capacity is not None:
             history_limit = capacity
 
-        self._queue = queue.Queue()
+        self._queue: queue.Queue[BaseEvent] = queue.Queue()
         self._subscribers: List[Tuple[Callable[[BaseEvent], Any], Optional[Callable[[BaseEvent], bool]], Optional[Type]]] = []
         self._sub_lock = threading.Lock()
         self._workers: List[threading.Thread] = []
@@ -36,7 +52,7 @@ class EventBus:
         self._stop_event = threading.Event()
         self._history: deque = deque(maxlen=max(10, int(history_limit)))
         self._history_lock = threading.Lock()
-        self._sentinel = object()
+        self._sentinel: Any = object()
         self._write_through_handler: Optional[Callable[[BaseEvent], Any]] = None
 
     def set_write_through_handler(self, handler: Optional[Callable[[BaseEvent], Any]]) -> None:
@@ -90,24 +106,11 @@ class EventBus:
             self._history.append(event)
 
         if sync:
-            self._dispatch_event(event)
+            with self._sub_lock:
+                current_subs = list(self._subscribers)
+            _dispatch_to_subscribers(current_subs, event)
         else:
             self._queue.put(event)
-
-    def _dispatch_event(self, event: BaseEvent):
-        """Internal dispatch to registered subscribers with exception isolation."""
-        with self._sub_lock:
-            current_subs = list(self._subscribers)
-
-        for handler, filter_fn, event_type in current_subs:
-            try:
-                if event_type is not None and not isinstance(event, event_type):
-                    continue
-                if filter_fn is not None and not filter_fn(event):
-                    continue
-                handler(event)
-            except Exception as e:
-                logger.error("EventBus subscriber %s failed on event %s: %s", handler, event, e)
 
     def _worker_loop(self):
         """Background worker thread processing events from the queue."""
@@ -122,7 +125,9 @@ class EventBus:
                 break
 
             try:
-                self._dispatch_event(event)
+                with self._sub_lock:
+                    current_subs = list(self._subscribers)
+                _dispatch_to_subscribers(current_subs, event)
             finally:
                 self._queue.task_done()
 

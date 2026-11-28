@@ -114,7 +114,9 @@ def _build_offline_analytics_and_bus(
     collected_alerts: list[dict[str, Any]] = []
     media_state: dict[str, Any] = {"offset_sec": 0.0, "start_wall_time": None, "run_id": ""}
 
-    def _tag_and_collect(event: Any) -> None:
+    fts_index = EventFTSIndex(db=db, auto_attach=False)
+
+    def _stamp_collect_and_persist(event: Any) -> int | None:
         raw_offset = getattr(event, "media_offset_sec", None)
         ev_ts = float(getattr(event, "timestamp", 0.0) or 0.0)
         base = media_state.get("start_wall_time")
@@ -133,9 +135,8 @@ def _build_offline_analytics_and_bus(
                 meta["run_id"] = active_run_id
         if isinstance(event, _ALERT_EVENT_TYPES):
             collected_alerts.append(_serialize_offline_alert(event, safe_name, offset_sec))
-
-    event_bus.subscribe(_tag_and_collect)
-    fts_index = EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
+        return fts_index.handle_event(event)
+    event_bus.set_write_through_handler(_stamp_collect_and_persist)
     analytics = AnalyticsEngine(
         camera_id=scenario_camera_id or (f"video:{safe_name}" if safe_name else "offline_video"),
         event_bus=event_bus, rsac_manager=rsac_mgr,

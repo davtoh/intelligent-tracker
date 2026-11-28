@@ -139,7 +139,9 @@ def evaluate_zone_updates(
                 snap_b64 = crop_to_base64(active_frame, ev_box) if (active_frame is not None and ev_box is not None) else None
                 event_bus.publish(BusZoneEvent(
                     camera_id=camera_id, zone_id=z_ev.zone_id, track_id=z_ev.track_id,
-                    action=z_ev.event_type, dwell_time=z_ev.dwell_time, centroid=z_ev.centroid, bbox=z_ev.bbox,
+                    action=z_ev.event_type, dwell_time=z_ev.dwell_time,
+                    entry_time=z_ev.entry_time, exit_time=z_ev.exit_time,
+                    centroid=z_ev.centroid, bbox=z_ev.bbox,
                     entity_id=getattr(trk, "entity_id", None) if trk else None,
                     entity_name=getattr(trk, "entity_name", getattr(trk, "identity_label", None)) if trk else None,
                     entity_category=getattr(trk, "entity_category", None) if trk else None,
