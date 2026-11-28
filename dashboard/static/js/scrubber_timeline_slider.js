@@ -26,10 +26,8 @@
 
   function create(opts = {}) {
     const {
-      videoPlayer, slider, timeDisplay, playBtn, prevBtn, nextBtn,
-      speedButtons = [], fps = 30,
-      onTimeUpdate = null, onSeek = null, onStep = null,
-      onPlayStateChange = null, onLoadedMetadata = null, onError = null,
+      videoPlayer, slider, timeDisplay, playBtn, prevBtn, nextBtn, speedButtons = [], fps = 30,
+      onTimeUpdate = null, onSeek = null, onStep = null, onPlayStateChange = null, onLoadedMetadata = null, onError = null,
     } = opts;
     let frameDur = 1.0 / (Number(fps) || 30);
 
@@ -100,8 +98,9 @@
           if (typeof onLoadedMetadata === 'function') onLoadedMetadata(videoPlayer.duration);
         });
         videoPlayer.addEventListener('play', syncPlayBtn);
-        videoPlayer.addEventListener('pause', syncPlayBtn);
-        videoPlayer.addEventListener('ended', syncPlayBtn);
+        videoPlayer.addEventListener('pause', () => { syncPlayBtn(); window.ScrubberPlaybackState?.flushPendingPersist?.(); });
+        videoPlayer.addEventListener('ended', () => { syncPlayBtn(); window.ScrubberPlaybackState?.flushPendingPersist?.(); });
+        window.ScrubberPlaybackState?.bindStallRecovery?.(videoPlayer);
         if (typeof onError === 'function') videoPlayer.addEventListener('error', onError);
       }
       if (playBtn) playBtn.addEventListener('click', togglePlayPause);

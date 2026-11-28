@@ -137,7 +137,8 @@ def _build_offline_analytics_and_bus(
     event_bus.subscribe(_tag_and_collect)
     fts_index = EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True)
     analytics = AnalyticsEngine(
-        camera_id=scenario_camera_id or "offline_video", event_bus=event_bus, rsac_manager=rsac_mgr,
+        camera_id=scenario_camera_id or (f"video:{safe_name}" if safe_name else "offline_video"),
+        event_bus=event_bus, rsac_manager=rsac_mgr,
     )
     _apply_scenario_to_analytics(analytics, scenario_camera_id)
     return analytics, rsac_mgr, event_bus, collected_alerts, fts_index, media_state
@@ -309,7 +310,7 @@ def submit_async_analytics_job(
     config_meta = {
         "detector": opts["detector"], "sample_rate": opts["sample_rate"],
         "confidence": opts["confidence"], "classes": opts["classes"],
-        "scenario_camera_id": opts.get("scenario_camera_id"),
+        "tracked_categories": opts.get("tracked_categories"), "scenario_camera_id": opts.get("scenario_camera_id"),
     }
 
     def _runner(job, stop_event, progress_cb):
@@ -336,7 +337,7 @@ def run_sync_analytics(safe_name: str, path: str, opts: dict[str, Any]) -> dict[
     config_meta = {
         "detector": opts["detector"], "sample_rate": opts["sample_rate"],
         "confidence": opts["confidence"], "classes": opts["classes"],
-        "scenario_camera_id": opts.get("scenario_camera_id"),
+        "tracked_categories": opts.get("tracked_categories"), "scenario_camera_id": opts.get("scenario_camera_id"),
     }
     run_id = f"run_{uuid.uuid4().hex[:8]}"
     indexer = create_video_indexer(db, opts, safe_name=safe_name, run_id=run_id)

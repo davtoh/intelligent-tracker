@@ -19,12 +19,23 @@
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  async function loadGallery() {
+  function resetGalleryFilters() {
+    const gs = document.getElementById('gallery-search-input');
+    if (gs) gs.value = '';
+    document.querySelectorAll('#gallery-category-filters .filter-pill').forEach(p => p.classList.toggle('active', !p.getAttribute('data-category')));
+  }
+
+  async function loadGallery(options = {}) {
     const galleryGrid = document.getElementById('entity-gallery-grid');
     if (!galleryGrid) return;
     try {
       const res = await fetch('/entities');
       allGalleryEntities = await res.json();
+      const ent = options?.highlightEntityId != null && Array.isArray(allGalleryEntities)
+        ? allGalleryEntities.find(e => String(e.id) === String(options.highlightEntityId)) : null;
+      const q = (document.getElementById('gallery-search-input')?.value || '').toLowerCase().trim();
+      const cat = document.querySelector('.filter-pill.active')?.getAttribute('data-category') || '';
+      if (ent && ((q && !ent.name?.toLowerCase().includes(q) && !ent.notes?.toLowerCase().includes(q)) || (cat && ent.category !== cat))) resetGalleryFilters();
       renderGalleryGrid();
     } catch (err) {
       galleryGrid.innerHTML = `<div class="empty-state">Error loading gallery: ${escapeHtml(err.message)}</div>`;
@@ -136,16 +147,12 @@
         fetch('/zones'),
         fetch('/sightings/sources').catch(() => null),
       ]);
-      const entities = await entRes.json();
-      const zones = await zoneRes.json();
+      const [entities, zones] = await Promise.all([entRes.json(), zoneRes.json()]);
       const sources = srcRes && typeof srcRes.json === 'function' ? await srcRes.json().catch(() => []) : [];
-
       timelineSelectEntity.innerHTML = '<option value="">All Entities</option>' +
         (Array.isArray(entities) ? entities : []).map(e => `<option value="${e.id}">${escapeHtml(e.name)} (${escapeHtml(e.category)})</option>`).join('');
-
       timelineSelectZone.innerHTML = '<option value="">All Zones</option>' +
         (Array.isArray(zones) ? zones : []).map(z => `<option value="${escapeHtml(z.name)}">${escapeHtml(z.name)}</option>`).join('');
-
       if (timelineSelectSource) {
         const prevSrc = timelineSelectSource.value;
         timelineSelectSource.innerHTML = '<option value="">All Sources</option>' +
@@ -330,7 +337,7 @@
   }
 
   window.GalleryTimeline = {
-    loadGallery, renderGalleryGrid, bindGalleryEvents, loadTimelineFilters,
+    loadGallery, resetGalleryFilters, renderGalleryGrid, bindGalleryEvents, loadTimelineFilters,
     loadSightings, bindTimelineEvents, showSnapshotModal, initSnapshotModal,
   };
 

@@ -127,6 +127,11 @@
       clearTileOverlay(tile);
       return;
     }
+    const badge = tile.querySelector?.('.tile-status-badge');
+    if (badge) {
+      badge.className = 'tile-status-badge online';
+      badge.textContent = 'ONLINE';
+    }
     if (msg.seq != null && lastSeqByTile.get(tile) === msg.seq && (!msg.tracks || !msg.tracks.length)) {
       clearTileOverlay(tile);
     }

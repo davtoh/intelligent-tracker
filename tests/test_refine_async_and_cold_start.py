@@ -91,11 +91,13 @@ class TestRsacAsyncOffloading(unittest.IsolatedAsyncioTestCase):
         def _reload_galleries(conn=None) -> None:
             call_tids.append(threading.get_ident())
 
+        import dashboard.routers.categories as categories_router
+
         fake_rsac = SimpleNamespace(register_category=_register_category)
         req = CustomCategoryCreateRequest(id="badge_x", name="Badge X")
         fake_http_req = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
-        with patch.object(rsac_router, "reload_all_galleries", side_effect=_reload_galleries):
-            resp = await rsac_router.create_custom_category(req, fake_http_req, rsac=fake_rsac)
+        with patch.object(categories_router, "reload_all_galleries", side_effect=_reload_galleries):
+            resp = await categories_router.create_custom_category(req, fake_http_req, rsac=fake_rsac)
         self.assertEqual(resp["status"], "success")
         self.assertEqual(len(call_tids), 2)
         self.assertTrue(all(tid != loop_tid for tid in call_tids))

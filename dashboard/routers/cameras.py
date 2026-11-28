@@ -92,9 +92,10 @@ async def add_camera(
     pool.add_camera(
         camera_id=req.id, name=req.name, source=req.source, cam_type=req.type or "rtsp",
         detector=req.detector, tracker=req.tracker, confidence=req.confidence,
-        classes=req.classes, tracked_categories=req.tracked_categories,
+        classes=req.classes if not isinstance(req.classes, str) else [c.strip() for c in req.classes.split(",") if c.strip()],
+        tracked_categories=req.tracked_categories if not isinstance(req.tracked_categories, str) else [c.strip() for c in req.tracked_categories.split(",") if c.strip()],
         enabled=req.enabled if req.enabled is not None else True, autostart=True,
-        details=req.details, armed=bool(req.armed),
+        details=req.details, armed=bool(req.armed), agnostic_nms=req.agnostic_nms,
     )
     return {"status": "success", "camera": pool.camera_configs.get(req.id)}
 
@@ -126,7 +127,7 @@ async def test_camera_route(
     pool: Optional[CameraPool] = Depends(get_camera_pool),
 ):
     """Test video source connectivity and return live preview snapshot."""
-    return probe_camera_test_request(req, pool=pool)
+    return probe_camera_test_request(req, pool=pool, device_name=req.device_name)
 
 
 @router.post("/api/cameras/release")
@@ -229,9 +230,10 @@ async def update_camera(
         detector=req.detector,
         tracker=req.tracker,
         confidence=req.confidence,
-        classes=req.classes,
-        tracked_categories=req.tracked_categories,
+        classes=req.classes if not isinstance(req.classes, str) else [c.strip() for c in req.classes.split(",") if c.strip()],
+        tracked_categories=req.tracked_categories if not isinstance(req.tracked_categories, str) else [c.strip() for c in req.tracked_categories.split(",") if c.strip()],
         armed=req.armed,
+        agnostic_nms=req.agnostic_nms,
     )
     return {
         "status": "success" if success else "failed",
@@ -317,9 +319,14 @@ async def get_freeze_frame(
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
 
     raw = None
-    with mgr._lock:
-        if mgr._latest_raw_frame is not None:
-            raw = mgr._latest_raw_frame.copy()
+    mgr_lock = getattr(mgr, "_lock", None)
+    if mgr_lock is not None:
+        with mgr_lock:
+            latest_raw = getattr(mgr, "_latest_raw_frame", None)
+            raw = latest_raw.copy() if latest_raw is not None else None
+    else:
+        latest_raw = getattr(mgr, "_latest_raw_frame", None)
+        raw = latest_raw.copy() if latest_raw is not None else None
 
     if raw is None:
         raise HTTPException(

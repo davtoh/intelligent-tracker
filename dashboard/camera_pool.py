@@ -107,6 +107,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         details: dict[str, Any] | None = None,
         device_name: str | None = None,
         armed: bool = False,
+        agnostic_nms: bool | None = None,
     ) -> StreamManager:
         """Hot-add a new camera feed dynamically without server restarts."""
         with self._lock:
@@ -115,6 +116,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
                 detector=detector, tracker=tracker, confidence=confidence,
                 classes=classes, tracked_categories=tracked_categories,
                 enabled=enabled, details=details, device_name=device_name, armed=armed,
+                agnostic_nms=agnostic_nms,
             )
         self.save_cameras()
         return self._coordinator.register_camera_stream(
@@ -139,6 +141,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
         device_name: str | None = None,
         details: dict[str, Any] | None = None,
         armed: bool | None = None,
+        agnostic_nms: bool | None = None,
     ) -> bool:
         """Update an existing camera configuration and hot-reload its stream if needed."""
         with self._lock:
@@ -146,6 +149,7 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
                 camera_id, name=name, source=source, cam_type=cam_type, enabled=enabled,
                 detector=detector, tracker=tracker, confidence=confidence, classes=classes,
                 tracked_categories=tracked_categories, device_name=device_name, details=details, armed=armed,
+                agnostic_nms=agnostic_nms,
             )
             if not found or cfg is None:
                 return False
@@ -200,9 +204,9 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
     def stop_all(self, parallel: bool = True) -> None:
         """Stop all active camera streams concurrently in parallel."""
         self._coordinator.stop_all(parallel=parallel)
-        if getattr(self, "event_fts_index", None) is not None:
+        if self.event_fts_index is not None:
             self.event_fts_index.detach()
-        if getattr(self, "event_bus", None) is not None:
+        if self.event_bus is not None:
             self.event_bus.stop(timeout=0.2)
-        if getattr(self, "_db", None) is not None:
+        if self._db is not None:
             self._db.close()

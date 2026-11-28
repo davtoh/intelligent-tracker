@@ -151,6 +151,23 @@
       return element;
     }
 
+    clear(element) {
+      if (!element) return element;
+      if (this.currentTarget === element) {
+        this.isMouseOverPopover = false;
+        this.hidePopover();
+      }
+      element.classList?.remove?.('truncate-trigger');
+      ['data-full-text', 'data-truncate-label', 'aria-describedby', 'aria-expanded'].forEach((attr) => {
+        element.removeAttribute?.(attr);
+      });
+      if (element.getAttribute?.('role') === 'button' && !['BUTTON', 'A', 'INPUT'].includes(element.tagName)) {
+        element.removeAttribute?.('tabindex');
+        element.removeAttribute?.('role');
+      }
+      return element;
+    }
+
     showPopover(targetEl, text, label = 'Details') {
       if (!this.popoverEl) this.init();
       clearTimeout(this.showTimer);

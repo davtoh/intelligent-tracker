@@ -191,6 +191,7 @@
     if (classesInput) classesInput.value = Array.isArray(cam.classes) ? cam.classes.join(', ') : (cam.classes || '');
     const catsInput = document.getElementById('cam-tracked-categories-input');
     if (catsInput) catsInput.value = Array.isArray(cam.tracked_categories) ? cam.tracked_categories.join(', ') : (cam.tracked_categories || '');
+    window.CategoryChipPicker?.mountForInput?.('cam-tracked-categories-input');
     const armedCb = document.getElementById('cam-armed-checkbox');
     if (armedCb) armedCb.checked = Boolean(cam.armed);
     const activeClasses = classesInput ? classesInput.value.trim() : '';

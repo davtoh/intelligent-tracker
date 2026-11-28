@@ -25,7 +25,7 @@ def get_windows_device_names() -> List[str]:
                     with winreg.OpenKey(key, sub) as subkey:
                         try:
                             fname, _ = winreg.QueryValueEx(subkey, "FriendlyName")
-                            if fname and fname not in names:
+                            if fname:
                                 names.append(str(fname))
                         except OSError:
                             pass

@@ -141,23 +141,16 @@ async def get_active_learning_item(
 async def confirm_active_learning_item(
     item_id: int,
     request: Request,
-    req: ReviewConfirmRequest = ReviewConfirmRequest(),
+    req: ReviewConfirmRequest = ReviewConfirmRequest(notes=None),
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
 ):
     """Operator Confirm (Ground Truth): promote candidate crop as a Locked Anchor for the entity."""
-    res = await asyncio.to_thread(al_mgr.confirm_candidate, item_id=item_id, notes=req.notes)
+    res = await asyncio.to_thread(al_mgr.confirm_candidate, item_id=item_id, notes=req.notes or "")
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    from dashboard.dependencies import get_camera_pool, get_db
-    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+    from dashboard.services.rsac_enrollment_helper import finalize_active_learning_side_effects
 
-    ent_id = res.get("entity_id") if isinstance(res, dict) else None
-    if ent_id is not None:
-        await asyncio.to_thread(
-            relabel_video_runs_on_entity_mutation,
-            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
-        )
-    await asyncio.to_thread(reload_all_galleries, conn=request)
+    await asyncio.to_thread(finalize_active_learning_side_effects, request, res, reload_all_galleries)
     return res
 
 
@@ -170,20 +163,13 @@ async def reassign_active_learning_item(
 ):
     """Operator Reassign: assign candidate crop as a Locked Anchor for a different entity."""
     res = await asyncio.to_thread(
-        al_mgr.reassign_candidate, item_id=item_id, target_entity_id=req.target_entity_id, notes=req.notes,
+        al_mgr.reassign_candidate, item_id=item_id, target_entity_id=req.target_entity_id, notes=req.notes or "",
     )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    from dashboard.dependencies import get_camera_pool, get_db
-    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+    from dashboard.services.rsac_enrollment_helper import finalize_active_learning_side_effects
 
-    ent_id = res.get("entity_id") if isinstance(res, dict) else None
-    if ent_id is not None:
-        await asyncio.to_thread(
-            relabel_video_runs_on_entity_mutation,
-            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
-        )
-    await asyncio.to_thread(reload_all_galleries, conn=request)
+    await asyncio.to_thread(finalize_active_learning_side_effects, request, res, reload_all_galleries)
     return res
 
 
@@ -203,33 +189,23 @@ async def enroll_new_from_active_learning(
     )
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
-    from dashboard.dependencies import get_camera_pool, get_db
-    from dashboard.services.video_run_relabel_service import relabel_video_runs_on_entity_mutation
+    from dashboard.services.rsac_enrollment_helper import finalize_active_learning_side_effects
 
-    ent_id = res.get("entity_id") if isinstance(res, dict) else None
-    if ent_id is not None:
-        await asyncio.to_thread(
-            relabel_video_runs_on_entity_mutation,
-            get_db(conn=request), pool=get_camera_pool(conn=request), updated_entity_id=int(ent_id),
-        )
-    await asyncio.to_thread(reload_all_galleries, conn=request)
+    await asyncio.to_thread(finalize_active_learning_side_effects, request, res, reload_all_galleries)
     return res
 
 
 @router.post("/api/active-learning/{item_id}/dismiss")
 async def dismiss_active_learning_item(
     item_id: int,
-    req: ReviewDismissRequest = ReviewDismissRequest(),
+    req: ReviewDismissRequest = ReviewDismissRequest(notes=None),
     al_mgr: ActiveLearningManager = Depends(get_active_learning_mgr),
 ):
     """Operator Dismiss: reject candidate crop without modifying Re-ID gallery."""
-    res = await asyncio.to_thread(al_mgr.dismiss_candidate, item_id=item_id, notes=req.notes)
+    res = await asyncio.to_thread(al_mgr.dismiss_candidate, item_id=item_id, notes=req.notes or "")
     if res.get("status") == "not_found":
         raise HTTPException(status_code=404, detail=f"Review item {item_id} not found")
     return res
-
-
-from dashboard.routers.categories import create_custom_category  # noqa: F401
 
 
 @router.get("/api/rsac/rules")
@@ -336,7 +312,7 @@ async def rollback_entity_descriptor(
     entity_id: int,
     version: int,
     request: Request,
-    req: RollbackRequest = RollbackRequest(),
+    req: RollbackRequest = RollbackRequest(notes=None),
     db: TrackerDB = Depends(get_db),
 ):
     """Roll back entity visual descriptor to a prior verified snapshot version."""

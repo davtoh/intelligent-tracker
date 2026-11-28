@@ -248,10 +248,12 @@ class CameraDeviceHandler:
             for idx in range(max_devices):
                 if idx in skip:
                     meta = dict((active_devices or {}).get(idx) or {})
-                    name = meta.get("name") or cls.get_friendly_name(idx)
+                    name = meta.get("device_name") or meta.get("name") or cls.get_friendly_name(idx)
                     discovered.append({
-                        "index": idx, "name": name, "resolution": meta.get("resolution", "640x480"), "width": meta.get("width", 640),
-                        "height": meta.get("height", 480), "fps": meta.get("fps", 30.0), "backend": meta.get("backend", backend_default),
+                        "index": idx, "name": name, "device_name": meta.get("device_name") or name,
+                        "resolution": meta.get("resolution", "640x480"), "width": meta.get("width", 640),
+                        "height": meta.get("height", 480), "fps": meta.get("fps", 30.0),
+                        "backend": meta.get("backend", backend_default),
                         "valid": True, "in_use": True, "is_virtual": meta.get("is_virtual", cls.is_virtual_device(name)),
                     })
                     continue

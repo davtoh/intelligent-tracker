@@ -195,6 +195,10 @@ class StreamManager(StreamSubscriberMixin, StreamMediaMixin, StreamRecordingMixi
             is_armed=bool(getattr(self, "is_armed", False)),
         ):
             return
+        self._is_hibernating = False
+        with self._lock:
+            if isinstance(getattr(self, "_latest_telemetry", None), dict):
+                self._latest_telemetry["status"] = "online"
         if self.video_source and hasattr(self.video_source, "resume"):
             self.video_source.resume()
 

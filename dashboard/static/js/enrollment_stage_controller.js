@@ -169,6 +169,88 @@
     return { isLive: () => isLive, startLive, freezeFromLive, stopLive, toggle };
   }
 
+  let roiCheckTimer = null;
+  let roiCheckSeq = 0;
+
+  function escapeText(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function cancelRoiPreviewCheck() {
+    roiCheckSeq += 1;
+    if (roiCheckTimer !== null) {
+      ((id) => clearTimeout(id))(roiCheckTimer);
+      roiCheckTimer = null;
+    }
+  }
+
+  function renderEnrollCollisionBanner(col, callbacks = {}) {
+    const banner = document.getElementById('enroll-collision-banner');
+    if (!banner) return;
+    const top = col?.has_collision ? col.matches?.[0] : null;
+    if (!top) {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      return;
+    }
+    const pct = Math.round((Number(top.similarity) || 0) * 100);
+    const name = escapeText(top.name || 'Entity');
+    banner.style.display = 'block';
+    banner.innerHTML = `<strong>Possible duplicate:</strong> ${name} (${pct}%) <button type="button" class="btn btn-xs btn-primary" id="btn-enroll-merge-existing">Merge into ${name}</button> <button type="button" class="btn btn-xs btn-outline" id="btn-enroll-create-new">Create New</button>`;
+    document.getElementById('btn-enroll-merge-existing')?.addEventListener('click', () => {
+      banner.style.display = 'none';
+      callbacks.onMerge?.(top.entity_id);
+    });
+    document.getElementById('btn-enroll-create-new')?.addEventListener('click', () => {
+      banner.style.display = 'none';
+      callbacks.onCreateNew?.();
+    });
+  }
+
+  function updateRoiSuggestionMeta(baseText, rec) {
+    const meta = document.getElementById('enroll-crop-meta');
+    if (!meta || !baseText) return;
+    const payload = rec?.data || rec || {};
+    const ai = payload.classification || payload.ai_class;
+    const topCand = Array.isArray(payload.candidates) ? payload.candidates[0] : null;
+    let hint = '';
+    if (ai?.label) {
+      const pct = Math.round((Number(ai.confidence) || 0) * 100);
+      hint = ` • AI: ${ai.label}${pct > 0 ? ` (${pct}%)` : ''}`;
+    } else if (topCand?.name || topCand?.entity_name) {
+      hint = ` • Match: ${topCand.name || topCand.entity_name}`;
+    }
+    meta.textContent = `${baseText}${hint}`;
+  }
+
+  function scheduleRoiPreviewCheck(opts = {}, callbacks = {}) {
+    cancelRoiPreviewCheck();
+    const seq = roiCheckSeq;
+    const run = async () => {
+      roiCheckTimer = null;
+      if (seq !== roiCheckSeq || typeof fetch !== 'function') return;
+      const colReq = fetch('/api/enroll/check-collision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ camera_id: opts.camera_id || null, bbox: opts.bbox || null, crop_base64: opts.crop_base64 || null }),
+      }).then((r) => (r?.ok ? r.json() : null)).catch(() => null);
+      const recReq = fetch('/api/tag/recognize-roi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          camera_id: opts.camera_id || null, video_filename: opts.video_filename || null,
+          timestamp_sec: opts.timestamp_sec ?? null, bbox: opts.bbox || null,
+          crop_base64: opts.crop_base64 || null, top_k: 3,
+        }),
+      }).then((r) => (r?.ok ? r.json() : null)).catch(() => null);
+      const [colRes, recRes] = await Promise.allSettled([colReq, recReq]);
+      if (seq !== roiCheckSeq) return;
+      renderEnrollCollisionBanner(colRes.status === 'fulfilled' ? colRes.value : null, callbacks);
+      updateRoiSuggestionMeta(opts.baseMetaText || '', recRes.status === 'fulfilled' ? recRes.value : null);
+    };
+    roiCheckTimer = ((fn, ms) => setTimeout(fn, ms))(run, 250);
+  }
+
   function initStageControls(canvas, placeholder) {
     const ctrl = bindLiveToggle(canvas, placeholder);
     const camSel = document.getElementById('enroll-camera-select');
@@ -192,6 +274,8 @@
     getSelectedSourceMeta,
     syncVideoStageClasses,
     bindLiveToggle,
+    scheduleRoiPreviewCheck,
+    cancelRoiPreviewCheck,
     initStageControls,
   };
 })();

@@ -172,20 +172,53 @@
     });
   }
 
+  function computeTripwireFlipHandle(p1, p2, offset = 26) {
+    if (!Array.isArray(p1) || !Array.isArray(p2) || p1.length < 2 || p2.length < 2) return null;
+    const dx = Number(p2[0]) - Number(p1[0]), dy = Number(p2[1]) - Number(p1[1]);
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-3) return null;
+    const midX = (Number(p1[0]) + Number(p2[0])) / 2, midY = (Number(p1[1]) + Number(p2[1])) / 2;
+    const nx = -dy / len, ny = dx / len;
+    return {
+      x: midX + nx * offset, y: midY + ny * offset, midX, midY, nx, ny, len,
+      inTip: [midX + nx * offset, midY + ny * offset],
+      outTip: [midX - nx * offset, midY - ny * offset],
+    };
+  }
+
+  function drawNormalArrow(ctx, mx, my, tx, ty, color, label) {
+    const angle = Math.atan2(ty - my, tx - mx);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tx, ty);
+    ctx.lineTo(tx - 6 * Math.cos(angle - 0.55), ty - 6 * Math.sin(angle - 0.55));
+    ctx.lineTo(tx - 6 * Math.cos(angle + 0.55), ty - 6 * Math.sin(angle + 0.55));
+    ctx.closePath(); ctx.fill();
+    ctx.font = 'bold 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, tx + Math.cos(angle) * 6, ty + Math.sin(angle) * 6);
+  }
+
   function drawTripwires(ctx, tripwires, transform) {
     if (!ctx || !Array.isArray(tripwires)) return;
     const { ox, oy, sx, sy } = unpackTransform(transform);
     tripwires.forEach((tw) => {
-      const seg = tw?.line;
+      const seg = tw?.line || tw?.line_segment;
       if (!Array.isArray(seg) || seg.length < 2) return;
       const p1 = Array.isArray(seg[0]) ? seg[0] : [seg[0], seg[1]];
       const p2 = Array.isArray(seg[1]) ? seg[1] : [seg[2], seg[3]];
       const x1 = ox + p1[0] * sx, y1 = oy + p1[1] * sy;
       const x2 = ox + p2[0] * sx, y2 = oy + p2[1] * sy;
       ctx.save();
-      ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2.5;
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-      ctx.setLineDash([]);
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+      const handle = computeTripwireFlipHandle([x1, y1], [x2, y2], 22);
+      if (handle && handle.len >= 12) {
+        drawNormalArrow(ctx, handle.midX, handle.midY, handle.inTip[0], handle.inTip[1], '#10b981', 'IN');
+        drawNormalArrow(ctx, handle.midX, handle.midY, handle.outTip[0], handle.outTip[1], '#f43f5e', 'OUT');
+      }
       const counts = (tw.in_count != null || tw.out_count != null) ? ` ${tw.in_count || 0}/${tw.out_count || 0}` : '';
       drawLabelPill(ctx, `${tw.name || 'Tripwire'}${counts}`, (x1 + x2) / 2, (y1 + y2) / 2 - 9, PALETTES[1]);
       ctx.restore();
@@ -229,10 +262,7 @@
         const tid = track.id ?? track.track_id;
         const isHovered = hoveredId != null && tid === hoveredId;
         if (vis.bboxes || vis.track_ids || vis.dwell_timers) {
-          drawTrackBox(ctx, track, transform, {
-            visibility: vis, palette: scene.palette || PALETTES[0],
-            labelPrefix: scene.labelPrefix || '', isHovered,
-          });
+          drawTrackBox(ctx, track, transform, { visibility: vis, palette: scene.palette || PALETTES[0], labelPrefix: scene.labelPrefix || '', isHovered });
         }
         if (vis.velocity) drawVelocityVector(ctx, track, transform, scene.palette || PALETTES[0]);
       });
@@ -241,7 +271,7 @@
 
   window.UnifiedCanvasOverlay = {
     PALETTES, DEFAULT_VISIBILITY, computeContainBox, computeCoverBox, syncCanvasDpr,
-    resolveScaleFactors, drawTrackBox, drawVelocityVector, drawZones,
+    resolveScaleFactors, computeTripwireFlipHandle, drawTrackBox, drawVelocityVector, drawZones,
     drawTripwires, drawHeatmapLayer, renderScene,
   };
 })();

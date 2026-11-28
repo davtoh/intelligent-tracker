@@ -66,6 +66,8 @@ def build_camera_status_row(
         "tracker": cfg.get("tracker", "centroid"),
         "confidence": cfg.get("confidence", 0.40),
         "classes": cfg.get("classes"),
+        "tracked_categories": cfg.get("tracked_categories"),
+        "agnostic_nms": bool(cfg.get("agnostic_nms", True)),
         "enabled": cfg.get("enabled", True),
         "status": health_status,
         "is_hibernating": is_hib,
@@ -85,6 +87,9 @@ def build_camera_status_row(
 
 class CameraPoolStateMixin:
     """Property facade exposing live ``camera_configs`` and ``streams`` mappings."""
+
+    _config_store: Any
+    _coordinator: Any
 
     @property
     def camera_configs(self) -> dict[str, dict[str, Any]]:
@@ -109,6 +114,11 @@ class CameraPoolStateMixin:
 
 class CameraPoolQueryMixin:
     """Read-only properties, stream lookup, and gallery reload helpers for CameraPool."""
+
+    _coordinator: Any
+    _lock: Any
+    streams: dict[str, Any]
+    camera_configs: dict[str, dict[str, Any]]
 
     @property
     def primary_stream(self) -> StreamManager | None:
@@ -186,15 +196,17 @@ class CameraPoolQueryMixin:
                 if not mgr or not getattr(mgr, "is_running", False):
                     continue
                 cfg = (self.camera_configs or {}).get(cam_id, {})
-                src = getattr(mgr, "source_override", None)
-                if src is None:
-                    src = cfg.get("source")
-                if src is None and getattr(mgr, "video_source", None) is not None:
-                    src = getattr(mgr.video_source, "source", None)
-                if isinstance(src, int) and not isinstance(src, bool):
-                    indices.add(src)
-                elif isinstance(src, str) and src.strip().isdigit():
-                    if str(cfg.get("type", "")).lower() in ("", "usb", "webcam"):
+                vs = getattr(mgr, "video_source", None)
+                candidates = (
+                    getattr(mgr, "source_override", None),
+                    cfg.get("source"),
+                    getattr(mgr, "_resolved_source", None),
+                    getattr(vs, "source", None) if vs is not None else None,
+                )
+                for src in candidates:
+                    if isinstance(src, int) and not isinstance(src, bool):
+                        indices.add(src)
+                    elif isinstance(src, str) and src.strip().isdigit():
                         indices.add(int(src.strip()))
         return indices
 

@@ -114,10 +114,20 @@
 
   async function runRoiRecognition(payload) {
     const panel = el('tag-roi-preview-panel'), badge = el('tag-ai-class-badge'), cropImg = el('tag-roi-crop-img');
+    const qState = payload?.queueItemState || null;
+    const cropSrc = qState?.frozenCropBase64 || payload?.cropBase64 || null;
     if (panel) panel.style.display = 'flex';
     if (badge) badge.textContent = 'AI: Analyzing...';
-    if (cropImg) { if (window.MediaEmptyState) window.MediaEmptyState.setSource(cropImg, payload?.cropBase64, { compact: true }); else if (payload?.cropBase64) cropImg.src = payload.cropBase64; else cropImg.removeAttribute?.('src'); }
+    if (cropImg) { if (window.MediaEmptyState) window.MediaEmptyState.setSource(cropImg, cropSrc, { compact: true }); else if (cropSrc) cropImg.src = cropSrc; else cropImg.removeAttribute?.('src'); }
     if (el('tag-identity-candidates')) el('tag-identity-candidates').innerHTML = '';
+    if (qState?.cachedCandidates && cropSrc) {
+      if (el('tag-crop-base64')) el('tag-crop-base64').value = cropSrc;
+      if (badge) badge.textContent = 'AI: Restored from queue';
+      const filtered = window.TagTrackQueue?.filterCandidates?.(qState.cachedCandidates) || qState.cachedCandidates;
+      renderCandidateChips(filtered);
+      window.TagModalState?.syncFromDom?.();
+      return;
+    }
     const seq = ++recognitionSeq;
     try {
       const res = await fetch('/api/tag/recognize-roi', {
@@ -125,21 +135,20 @@
         body: JSON.stringify({
           camera_id: payload?.sourceType === 'video' ? null : (payload?.cameraId || activeCameraGetter?.() || null),
           video_filename: payload?.videoFilename || null, timestamp_sec: payload?.timestampSec ?? null,
-          bbox: payload?.bbox || payload?.track?.bbox || null, crop_base64: payload?.cropBase64 || null, top_k: 3,
+          bbox: payload?.bbox || payload?.track?.bbox || null, crop_base64: cropSrc, top_k: 3,
         }),
       });
       if (!res.ok || seq !== recognitionSeq) { if (badge && seq === recognitionSeq) badge.textContent = 'AI: Ready for manual tag'; return; }
       const { data } = await res.json();
       if (!data || seq !== recognitionSeq) return;
-      if (data.crop_base64) {
-        if (cropImg) cropImg.src = data.crop_base64;
-        if (el('tag-crop-base64')) el('tag-crop-base64').value = data.crop_base64;
-      }
+      if (data.crop_base64) { if (cropImg) cropImg.src = data.crop_base64; if (el('tag-crop-base64')) el('tag-crop-base64').value = data.crop_base64; }
       const cls = data.classification || {};
       if (badge) badge.textContent = `AI: ${cls.label || 'object'} (${Math.round((Number(cls.confidence) || 0) * 100)}%)`;
       const mapped = !categoryTouched ? mapClassToCategory(cls.label) : null;
       if (mapped && el('tag-category-select')) el('tag-category-select').value = mapped;
-      renderCandidateChips(data.candidates || []);
+      const cands = window.TagTrackQueue?.filterCandidates?.(data.candidates || []) || (data.candidates || []);
+      window.TagTrackQueue?.updateActiveItem?.({ frozenCropBase64: data.crop_base64 || cropSrc, cachedCandidates: cands });
+      renderCandidateChips(cands);
     } catch { if (badge && seq === recognitionSeq) badge.textContent = 'AI: Offline (manual tag)'; }
   }
 
@@ -155,8 +164,9 @@
       if (Array.isArray(queueTracks) && queueTracks.length > 1) window.TagTrackQueue?.init?.(queueTracks, { activeTrack: track, context: options, onSelect: (t, ctx) => handleRoiRecognition({ ...ctx, track: t, bbox: t?.bbox || null, fromQueueSwitch: true }) });
       else window.TagTrackQueue?.clear?.();
     }
-    const bbox = options.bbox || track?.bbox || null, trackId = track?.id ?? track?.track_id ?? '';
-    const fields = { 'tag-entity-id': track?.entity_id != null ? String(track.entity_id) : '', 'tag-source-type': options.sourceType || 'live', 'tag-video-filename': options.videoFilename || '', 'tag-timestamp-sec': options.timestampSec != null ? String(options.timestampSec) : '', 'tag-crop-base64': options.cropBase64 || '', 'tag-track-id': trackId, 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '', 'tag-name-input': track?.entity_name || '', 'tag-category-select': track?.category || 'person' };
+    const qState = options.queueItemState || null, bbox = options.bbox || track?.bbox || null, trackId = track?.id ?? track?.track_id ?? '';
+    const entId = qState?.selectedEntityId ?? (track?.entity_id != null ? String(track.entity_id) : '');
+    const fields = { 'tag-entity-id': entId, 'tag-source-type': options.sourceType || 'live', 'tag-video-filename': options.videoFilename || '', 'tag-timestamp-sec': options.timestampSec != null ? String(options.timestampSec) : '', 'tag-crop-base64': qState?.frozenCropBase64 || options.cropBase64 || '', 'tag-track-id': trackId, 'tag-bbox-val': bbox ? JSON.stringify(bbox) : '', 'tag-name-input': track?.entity_name || '', 'tag-category-select': track?.category || 'person', 'tag-notes-input': qState?.notes ?? '' };
     Object.entries(fields).forEach(([id, val]) => { if (el(id)) el(id).value = val; });
     if (el('tag-modal-title')) el('tag-modal-title').textContent = options.title || (track ? `🏷️ Tag Active Track #${trackId}` : '🏷️ Enroll New Identity');
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
@@ -174,8 +184,7 @@
   }
 
   function closeTagModal() {
-    recognitionSeq += 1;
-    window.TagTrackQueue?.clear?.();
+    recognitionSeq += 1; window.TagTrackQueue?.clear?.();
     if (el('modal-tag-entity')) el('modal-tag-entity').style.display = 'none';
     if (el('tag-roi-preview-panel')) el('tag-roi-preview-panel').style.display = 'none';
     if (el('tag-identity-candidates')) el('tag-identity-candidates').innerHTML = '';
@@ -185,11 +194,9 @@
     e.preventDefault();
     const name = (el('tag-name-input')?.value || '').trim();
     if (!name) return;
-    const category = el('tag-category-select')?.value || 'person', sourceType = el('tag-source-type')?.value || 'live', tsVal = el('tag-timestamp-sec')?.value;
-    const cropBase64 = el('tag-crop-base64')?.value || null;
+    const category = el('tag-category-select')?.value || 'person', sourceType = el('tag-source-type')?.value || 'live', tsVal = el('tag-timestamp-sec')?.value, cropBase64 = el('tag-crop-base64')?.value || null;
     const payload = {
-      entity_name: name, category,
-      entity_id: el('tag-entity-id')?.value ? parseInt(el('tag-entity-id').value, 10) : null,
+      entity_name: name, category, entity_id: el('tag-entity-id')?.value ? parseInt(el('tag-entity-id').value, 10) : null,
       track_id: el('tag-track-id')?.value ? parseInt(el('tag-track-id').value, 10) : null,
       bbox: cropBase64 ? null : (el('tag-bbox-val')?.value ? JSON.parse(el('tag-bbox-val').value) : null),
       crop_base64: cropBase64, notes: (el('tag-notes-input')?.value || '').trim(),
@@ -201,8 +208,7 @@
       const res = await fetch('/api/tag/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Tagging failed');
       const data = await res.json().catch(() => ({}));
-      const adv = window.TagTrackQueue?.markCurrentDoneAndAdvance?.();
-      if (!adv?.advanced) closeTagModal();
+      if (!window.TagTrackQueue?.markCurrentDoneAndAdvance?.()?.advanced) closeTagModal();
       window.showToast?.('Entity Enrolled', `Successfully enrolled "${name}" as ${category.toUpperCase()}!`, 'success');
       if (window.TagFeedbackActions?.onTagCommitted) window.TagFeedbackActions.onTagCommitted(payload, data);
       else window.loadGallery?.() || window.GalleryTimeline?.loadGallery?.();
@@ -214,26 +220,19 @@
     const liveCanvas = el('interactive-canvas'), liveVideo = el('live-stream-img') || el('video-stream');
     if (liveCanvas && window.RoiDrawTagger?.attach) {
       window.RoiDrawTagger.attach({
-        canvas: liveCanvas, mediaEl: liveVideo, containerEl: liveCanvas.parentElement,
-        getTracks: () => latestState.tracks,
-        getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, sourceWidth: liveVideo?.naturalWidth || 0, sourceHeight: liveVideo?.naturalHeight || 0 }),
+        canvas: liveCanvas, mediaEl: liveVideo, containerEl: liveCanvas.parentElement, getTracks: () => latestState.tracks,
+        getSourceContext: () => ({ sourceType: 'live', cameraId: activeCameraGetter?.() || null, sourceWidth: latestState.sceneExtras?.sourceRes?.[0] || liveVideo?.naturalWidth || 0, sourceHeight: latestState.sceneExtras?.sourceRes?.[1] || liveVideo?.naturalHeight || 0 }),
         onRenderOverlay: () => drawInteractiveOverlay(latestState.ctx, latestState.canvas, latestState.videoImg, latestState.tracks, latestState.hoveredTrack, latestState.sceneExtras),
         onTrackClick: ({ track, overlappingTracks, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track, overlappingTracks, bbox: track.bbox }),
         onRoiDrawn: ({ bbox, sourceContext }) => window.RoiDrawTagger.openWithRecognition({ ...sourceContext, track: null, bbox }),
       });
     }
     el('btn-quick-tag')?.addEventListener('click', () => { const t = latestState.tracks || []; if (t.length > 0) openTagModal(t[0], { queueTracks: t }); else if (window.UniversalEnrollment?.openModal) window.UniversalEnrollment.openModal(); else openTagModal(null); });
-    el('modal-tag-close')?.addEventListener('click', closeTagModal);
-    el('modal-tag-cancel')?.addEventListener('click', closeTagModal);
+    el('modal-tag-close')?.addEventListener('click', closeTagModal); el('modal-tag-cancel')?.addEventListener('click', closeTagModal);
     el('btn-tag-discourage')?.addEventListener('click', () => window.TagFeedbackActions?.discourageFromModal?.(activeCameraGetter));
     el('tag-name-input')?.addEventListener('input', () => { if (el('tag-entity-id')) el('tag-entity-id').value = ''; window.TagModalState?.syncFromDom?.(); });
     el('tag-category-select')?.addEventListener('change', () => { categoryTouched = true; });
     el('tag-entity-form')?.addEventListener('submit', submitTagForm);
   }
-
-  window.InteractiveCanvas = {
-    syncSize: syncCanvasSize, drawOverlay: drawInteractiveOverlay, findHoveredTrack,
-    updateTooltip: updateTooltipPosition, openTagModal, closeTagModal, initTagModal,
-    openWithRecognition: handleRoiRecognition,
-  };
+  window.InteractiveCanvas = { syncSize: syncCanvasSize, drawOverlay: drawInteractiveOverlay, findHoveredTrack, updateTooltip: updateTooltipPosition, openTagModal, closeTagModal, initTagModal, openWithRecognition: handleRoiRecognition };
 })();

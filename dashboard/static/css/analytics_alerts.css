@@ -7,12 +7,24 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .analytics-flow-controls .form-control-sm {
   width: auto;
   min-width: 72px;
+  max-width: 100%;
   min-height: 32px;
+}
+
+#analytics-source-select,
+#analytics-zone-select {
+  min-width: 0;
+  max-width: min(100%, 240px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .analytics-window-bar {

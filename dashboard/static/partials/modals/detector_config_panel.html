@@ -51,8 +51,9 @@
                 </div>
 
                 <div class="form-group">
-                  <label for="cam-classes-input">Target Class Filter (comma-separated, empty for all)</label>
+                  <label for="cam-classes-input">Detector Classes (COCO) (comma-separated, empty for all)</label>
                   <input type="text" id="cam-classes-input" class="form-input" placeholder="e.g. person, car" />
+                  <small class="form-hint" style="display: block; color: #94a3b8; font-size: 11px; margin-top: 4px;">Raw object detector classes (COCO). For specific enrolled identities, filter by Tracked Gallery Categories below.</small>
                   <select id="cam-coco-class-select" class="form-input" multiple size="3" aria-label="COCO Class Multi-Select" style="margin-top: 6px; font-size: 12px;"></select>
                   <div class="class-presets-bar">
                     <button type="button" class="btn-tag-preset" data-classes="person">👤 Person</button>

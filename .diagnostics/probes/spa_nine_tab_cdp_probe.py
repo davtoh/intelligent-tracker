@@ -53,6 +53,8 @@ def _seed_spa_env(tmp: Path) -> tuple[str, str, str, Path, bytes]:
     vdir.mkdir(parents=True, exist_ok=True)
     rec_mp4 = vdir / "recorded_clip.mp4"
     jpeg_bytes = _write_synth_mp4(rec_mp4)
+    long_video = "warehouse_north_entrance_security_recording_2026_11_27_long_clip_01.mp4"
+    (vdir / long_video).write_bytes(rec_mp4.read_bytes())
     cfg_path = tmp / "cameras.json"
     cfg_path.write_text(json.dumps([
         {"id": "cam_short", "name": "Cam1", "source": str(rec_mp4), "enabled": True},
@@ -64,9 +66,15 @@ def _seed_spa_env(tmp: Path) -> tuple[str, str, str, Path, bytes]:
     db_path = tmp / "tracker.db"
     db = TrackerDB(str(db_path))
     db.save_video_run(video_filename="recorded_clip.mp4", report={"entities": [], "alerts": []}, frame_detections=[], source_fps=10.0)
+    db.save_video_run(video_filename=long_video, report={"entities": [], "alerts": []}, frame_detections=[], source_fps=10.0)
     db.add_review_item(
         camera_id="cam_short", track_id=1, crop_path="", similarity=0.58,
         video_filename="recorded_clip.mp4", media_offset_sec=0.5,
+        bbox=[40, 40, 100, 140], frame_width=320, frame_height=240,
+    )
+    db.add_review_item(
+        camera_id=f"video:{long_video}", track_id=2, crop_path="", similarity=0.55,
+        video_filename=long_video, media_offset_sec=0.5,
         bbox=[40, 40, 100, 140], frame_width=320, frame_height=240,
     )
     db.close()
@@ -197,6 +205,10 @@ def _evaluate_sweep(sweep: dict[str, Any], failures: list[str]) -> None:
         ("enrollChanged", "#enroll-camera-select change did not render freeze-frame"),
         ("camTableErgonomic", "#modal-camera-manager .data-table horizontally squeezed"),
         ("candidateXNonClosing", "#modal-tag-entity candidate X closed the modal"),
+        ("uploadHintContained", "#videos .upload-status-hint overflowed .video-upload-panel"),
+        ("analyticsSelectContained", "#analytics #analytics-source-select overflowed .chart-card"),
+        ("reviewCardContained", "#review .review-card child overflowed card bounds"),
+        ("connStatusPopoverCleared", "#connection-status-text retained stale truncate-trigger/data-full-text after camera switch"),
     ):
         if not sweep.get(key):
             failures.append(msg)

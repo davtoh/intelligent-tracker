@@ -14,7 +14,7 @@ from pathlib import Path
 import sys
 from typing import Any, Optional
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -106,37 +106,64 @@ def get_recent_traces(limit: int = 10, workspace_root: Optional[Path] = None) ->
     return []
 
 
-class DiagnosticTraceMiddleware(BaseHTTPMiddleware):
-    """FastAPI/Starlette middleware capturing unhandled HTTP 500 exceptions into trace catalog.
+class StaticNoCacheMiddleware:
+    """Pure ASGI middleware adding Cache-Control: no-cache to /static/* without buffering /videos/*."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or not str(scope.get("path", "")).startswith("/static/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def _send_wrapper(message: dict[str, Any]) -> None:
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers") or [])
+                if not any(k.lower() == b"cache-control" for k, _ in headers):
+                    headers.append((b"cache-control", b"no-cache"))
+                    message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, _send_wrapper)
+
+
+class DiagnosticTraceMiddleware:
+    """Pure ASGI middleware capturing unhandled HTTP 500 exceptions without buffering range streams.
 
     Copies validated ``X-Debug-Recording-Id`` request headers into the trace context as
-    ``recording_id`` for correlation with HUD observations. WebSocket-handler exceptions
-    (e.g. ``dashboard/routers/multiview.py``) are not stamped in v1 because Starlette
-    ``BaseHTTPMiddleware`` intercepts HTTP requests only.
+    ``recording_id`` for correlation with HUD observations.
     """
 
     def __init__(self, app: Any, workspace_root: Optional[Path] = None) -> None:
-        super().__init__(app)
+        self.app = app
         self.workspace_root = workspace_root
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
         try:
-            return await call_next(request)
+            await self.app(scope, receive, send)
         except Exception as exc:
+            headers = Headers(scope=scope)
+            client = scope.get("client")
+            method = str(scope.get("method", "GET"))
+            path = str(scope.get("path", "/"))
             context: dict[str, Any] = {
-                "http_method": request.method,
-                "http_path": request.url.path,
-                "client_host": request.client.host if request.client else "unknown",
+                "http_method": method,
+                "http_path": path,
+                "client_host": str(client[0]) if client else "unknown",
             }
-            recording_id = _clean_recording_id(request.headers.get(RECORDING_ID_HEADER))
+            recording_id = _clean_recording_id(headers.get(RECORDING_ID_HEADER))
             if recording_id:
                 context["recording_id"] = recording_id
             capture_runtime_exception(exc, context=context, workspace_root=self.workspace_root)
             from dashboard.services.debug_session import is_debug_mode, record_debug_event
 
             if is_debug_mode():
-                logger.exception("Unhandled HTTP 500 on %s %s", request.method, request.url.path)
-                record_debug_event(exc, http_method=request.method, http_path=request.url.path)
+                logger.exception("Unhandled HTTP 500 on %s %s", method, path)
+                record_debug_event(exc, http_method=method, http_path=path)
             raise exc
 
 

@@ -49,6 +49,7 @@
       window.InteractiveCanvas?.closeTagModal?.();
     } else {
       opts.chipBtn?.remove?.();
+      window.TagTrackQueue?.recordSuppressedEntity?.(payload.entity_id);
       window.TagModalState?.onCandidateSuppressed?.(payload.entity_id);
     }
     const msg = payload.entity_id

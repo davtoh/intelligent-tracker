@@ -265,6 +265,44 @@ def _check_js_payload_parity(failures: list[str], checks: dict[str, Any]) -> Non
         failures.append(f"JS payload key parity failed (events={events_ok}, detections={det_ok})")
 
 
+def _check_batch_provenance_and_camera_test(tmp: Path, failures: list[str], checks: dict[str, Any]) -> None:
+    """Verify non-scenario batch provenance (video:<filename>) and /api/cameras/test device_name parity."""
+    from unittest.mock import patch
+    from dashboard.schemas import CameraTestRequest
+    from dashboard.services.camera_diagnostics import probe_camera_test_request
+    from dashboard.services.video_analytics_service import _teardown_indexer_bus, create_video_indexer
+    from intelligent_tracker.database import TrackerDB
+
+    db = TrackerDB(str(tmp / "prov.db"))
+    try:
+        idx = create_video_indexer(
+            db, {"detector": "mock", "sample_rate": 4, "confidence": 0.4, "classes": None},
+            safe_name="demo_batch.mp4",
+        )
+        try:
+            cam_id = getattr(getattr(idx, "analytics", None), "camera_id", None)
+            prov_ok = cam_id == "video:demo_batch.mp4"
+            checks["batch_provenance_video_prefix"] = prov_ok
+            if not prov_ok:
+                failures.append(f"Non-scenario batch camera_id expected 'video:demo_batch.mp4', got {cam_id!r}")
+        finally:
+            _teardown_indexer_bus(idx)
+            idx.close()
+    finally:
+        db.close()
+
+    req = CameraTestRequest(source="0", device_name="Logitech C920")
+    with (
+        patch("intelligent_tracker.camera_resolver.CameraPathResolver.resolve_camera_source", return_value=(2, {"status": "ok", "device_name": "Logitech C920"})),
+        patch("intelligent_tracker.discovery.test_camera_connection", return_value={"success": True, "source": "2", "resolution": "640x480", "fps": 30.0}),
+    ):
+        res = probe_camera_test_request(req, pool=None)
+    parity_ok = res.get("resolved_source") == "2" and res.get("device_name") == "Logitech C920"
+    checks["camera_test_device_name_parity"] = parity_ok
+    if not parity_ok:
+        failures.append(f"/api/cameras/test device_name parity failed: {res}")
+
+
 def run_probe() -> dict[str, Any]:
     """Execute Video Studio contract assertions."""
     checks: dict[str, Any] = {}
@@ -280,6 +318,7 @@ def run_probe() -> dict[str, Any]:
         _check_enroll_indexer_relabel_and_detections(tmp, vid, failures, checks)
         _check_entity_tagger_sync(tmp, failures, checks)
         _check_js_payload_parity(failures, checks)
+        _check_batch_provenance_and_camera_test(tmp, failures, checks)
 
     status = "error" if failures else "ok"
     summary = (

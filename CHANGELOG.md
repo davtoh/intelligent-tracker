@@ -1,5 +1,35 @@
 # Changelog
 
+## [2026-11-27] feat: Step 4: Layout Overflow Containment, Status Popover Cleanup & Long-Fixture Tooling Guards
+- **Type**: feat
+- **Summary**: Fixed flex/select overflow regressions on #videos, #analytics, and #review (OBS-011, OBS-013, OBS-015), cleared stale #connection-status-text popover state on camera/mode changes (OBS-012), added 71-char filename CDP checks, added JS runtime guard rules in system-diagnostics, and resolved Step 1/3 budget and surface regressions.
+- **Files** (17):
+  - `dashboard/static/css/sidebar.css`
+  - `dashboard/static/css/scrubber.css`
+  - `dashboard/static/css/views.css`
+  - `dashboard/static/css/analytics_alerts.css`
+  - `dashboard/static/css/review.css`
+  - `dashboard/static/js/analytics_view.js`
+  - `dashboard/static/js/text_truncation_manager.js`
+  - `dashboard/static/js/app_ui_helpers.js`
+  - ... (+9 more)
+- **Verification**: 1227/1227 unittest OK; spa_nine_tab_cdp_probe ok; scan --strict 0 active defects; surface --verify 0 mismatches; sphinx -W 0 warnings
+
+## [2026-11-27] feat: Step 2: Synthetic Re-ID Parity, Live ROI-Draw Enrollment & Camera/Batch Config
+- **Type**: feat
+- **Summary**: Aligned MockDetector with SyntheticFrameGenerator P1/P2, added debounced ROI collision and recognize-roi suggestions, auto-reset #gallery filters on enrollment, preserved tracked_categories and agnostic_nms across camera edit, preserved tracked_categories in batch config_meta, and added gallery entity pickers and COCO vs RSAC helper copy.
+- **Files** (16):
+  - `intelligent_tracker/detectors/mock_detector.py`
+  - `dashboard/schemas.py`
+  - `dashboard/routers/cameras.py`
+  - `dashboard/camera_pool.py`
+  - `dashboard/services/camera_pool_queries.py`
+  - `dashboard/services/video_analytics_service.py`
+  - `dashboard/routers/system.py`
+  - `dashboard/static/js/universal_enrollment.js`
+  - ... (+8 more)
+- **Verification**: tests/test_step2_synthetic_reid_and_config.py + 9 related suites (73 passed), replay_pipeline_probe PASS, video_studio_contract_probe PASS, surface --verify (0 mismatches), scan --strict (0 tactical defects)
+
 ## [2026-11-27] feat: Local Mini-CI Linux Parity Verification (Milestone 2)
 - **Type**: feat
 - **Summary**: Verified scripts/mini_ci.py --linux end-to-end via Docker (1,217 tests OK), hardened Windows-to-WSL pure-LF stdin delivery, added nodejs to Docker CI image, patched test_discovery container check, and documented WSL/Docker setup in SETUP_GUIDE.md
@@ -125,27 +155,3 @@
   - `dashboard/routers/categories.py`
   - ... (+8 more)
 - **Verification**: plan_engine verify: 53/53 OK; targeted 14 modules: 88/88 OK; audit: 0 new issues; surface --verify --strict: 0 mismatches; discover tests: 1024/1027 (3 unrelated timing races pass standalone)
-
-## [2026-11-24] feat: Step 1: Re-ID unification, sighting crops, responsive dialogs, and diagnostics elevation
-- **Type**: feat
-- **Summary**: Unified DualModel Re-ID, sighting crop persistence, wide/resizable dialogs, MediaEmptyState, and upgraded system-diagnostics rules and workspace probes.
-- **Files** (4):
-  - `.diagnostics/probes/replay_pipeline_probe.py`
-  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
-  - `.diagnostics/probes/spa_nine_tab_sweep.js`
-  - `.diagnostics/probes/video_studio_contract_probe.py`
-
-## [2026-11-23] feat: Step 4 M4: Bidirectional #review <-> Video Studio Sync & Full Sign-Off
-- **Type**: feat
-- **Summary**: Migrated review_queue with bbox/frame/run_id provenance, added ReviewSyncService + /api/review/* router, wired frontend VideoBatchReports/Gallery/Review sync, and verified 1008 tests + 4 probes.
-- **Files** (20):
-  - `.diagnostics/probes/spa_nine_tab_cdp_probe.py`
-  - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/routers/topology.py`
-  - `dashboard/services/negative_exemplar_service.py`
-  - `dashboard/services/roi_recognition_service.py`
-  - `dashboard/static/css/review.css`
-  - `dashboard/static/js/interactive_canvas.js`
-  - ... (+12 more)
-- **Verification**: MPLBACKEND=Agg python -m unittest discover tests

@@ -165,6 +165,26 @@
     window.LivePlayer?.updateInferenceLagHud?.(data);
   }
 
+  function _syncConnectionStatusText(txt, label) {
+    if (!txt) return;
+    if (window.TextTruncationManager && label.length > 24) {
+      window.TextTruncationManager.apply(txt, {
+        fullText: label, mode: 'middle', maxLength: 24, preserveExt: false, label: 'Active Stream',
+      });
+      return;
+    }
+    if (window.AppUIHelpers?.clearTruncationState) {
+      window.AppUIHelpers.clearTruncationState(txt);
+    } else {
+      window.TextTruncationManager?.clear?.(txt);
+      txt.classList?.remove?.('truncate-trigger');
+      txt.removeAttribute?.('data-full-text');
+      txt.removeAttribute?.('data-truncate-label');
+    }
+    txt.textContent = label;
+    txt.title = label;
+  }
+
   function updateConnectionStatus(data, fallbackCamId) {
     const raw = String(data?.status || data?.detector_status || '').trim().toLowerCase();
     if (!raw) return;
@@ -187,10 +207,7 @@
     const txt = document.getElementById('connection-status-text');
     const drawerPill = document.getElementById('drawer-connection-status-pill');
     if (pill) pill.className = `connection-status-pill ${stateClass}`;
-    if (txt) {
-      txt.textContent = label;
-      txt.title = label;
-    }
+    _syncConnectionStatusText(txt, label);
     if (drawerPill) {
       drawerPill.className = `connection-status-pill ${stateClass}`;
       const span = drawerPill.querySelector?.('span:last-child');

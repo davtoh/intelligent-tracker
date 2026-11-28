@@ -79,21 +79,28 @@
     }
   }
 
-  async function testConnection() {
+  async function testConnection(deviceName = '') {
     const btnTest = document.getElementById('btn-test-connection');
     const meta = document.getElementById('test-preview-meta');
-    const source = (document.getElementById('cam-source-input')?.value || '').trim();
+    const sourceInput = document.getElementById('cam-source-input');
+    const source = (sourceInput?.value || '').trim();
     if (!source) {
       showToast('Please enter a source (RTSP URL, USB index, or video file) to test.', 'warning');
       return;
     }
+    const resolvedDeviceName = (
+      typeof deviceName === 'string' && deviceName.trim()
+        ? deviceName.trim()
+        : (sourceInput?.dataset?.deviceName || '').trim()
+    );
+    const payload = resolvedDeviceName ? { source, device_name: resolvedDeviceName } : { source };
     if (btnTest) { btnTest.disabled = true; btnTest.textContent = '⏳ Testing...'; }
     if (meta) meta.textContent = 'Connecting to video source...';
     try {
       const resp = await fetch('/api/cameras/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source }),
+        body: JSON.stringify(payload),
       });
       renderTestPreview(await resp.json());
     } catch (e) {
@@ -121,7 +128,7 @@
             </div>
           </div>
           <div class="dev-actions">
-            <button class="btn btn-xs btn-outline btn-test-discovered" data-source="${escapeHtml(String(dev.source))}">Test</button>
+            <button class="btn btn-xs btn-outline btn-test-discovered" data-source="${escapeHtml(String(dev.source))}" data-device-name="${escapeHtml(devName)}">Test</button>
             <button class="btn btn-xs btn-primary btn-add-discovered"
               data-id="${escapeHtml(dev.id)}" data-name="${escapeHtml(dev.name)}"
               data-source="${escapeHtml(String(dev.source))}" data-type="${escapeHtml(dev.type || '')}"
@@ -135,8 +142,12 @@
     listEl.querySelectorAll('.btn-test-discovered').forEach(btn => {
       btn.addEventListener('click', () => {
         const inputCamSource = document.getElementById('cam-source-input');
-        if (inputCamSource) inputCamSource.value = btn.getAttribute('data-source');
-        testConnection();
+        const devName = btn.getAttribute('data-device-name') || '';
+        if (inputCamSource) {
+          inputCamSource.value = btn.getAttribute('data-source');
+          if (inputCamSource.dataset) inputCamSource.dataset.deviceName = devName;
+        }
+        testConnection(devName);
       });
     });
     listEl.querySelectorAll('.btn-add-discovered').forEach(btn => {

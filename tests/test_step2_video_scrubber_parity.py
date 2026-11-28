@@ -94,8 +94,8 @@ class TestVideoScrubberParity(unittest.TestCase):
         self.assertTrue(out["layersPalettesMatch"])
         self.assertEqual(out["canvasW"], 1600)
         self.assertEqual(out["canvasH"], 900)
-        self.assertEqual(out["styleW"], "800px")
-        self.assertEqual(out["styleH"], "450px")
+        self.assertEqual(out["styleW"], "")
+        self.assertEqual(out["styleH"], "")
         self.assertTrue(out["setTransformCalled"])
         self.assertTrue(any("#7" in txt and "2.5s" in txt for txt in out["labelsDrawn"]))
 

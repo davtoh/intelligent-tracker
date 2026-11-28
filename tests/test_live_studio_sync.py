@@ -162,7 +162,8 @@ class TestLiveStudioSync(unittest.TestCase):
         )
         out = _run_node(script)
         self.assertEqual(out["mediaId"], "live-stream-img")
-        self.assertEqual(out["srcCtx"]["sourceWidth"], 640)
+        self.assertEqual(out["srcCtx"]["sourceWidth"], 1280)
+        self.assertEqual(out["srcCtx"]["sourceHeight"], 720)
         self.assertEqual(out["hitId"], 9)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js required for JS VM tests")

@@ -185,22 +185,36 @@ def _discover_registered_backends() -> Dict[str, Any]:
     }
 
 
+def _list_enrolled_entities(db: Any) -> list[dict[str, Any]]:
+    """Return compact enrolled entity summaries for capability pickers."""
+    try:
+        raw = db.list_entities() if db is not None and hasattr(db, "list_entities") else []
+        return [
+            {"id": e.get("id"), "name": e.get("name"), "category": e.get("category") or "person"}
+            for e in (raw or [])[:100]
+            if isinstance(e, dict) and e.get("name")
+        ]
+    except Exception:
+        return []
+
+
 @router.get("/api/system/capabilities")
 async def get_system_capabilities(
     rsac: Optional[RSACManager] = Depends(get_rsac_mgr),
+    db: Any = Depends(get_db),
 ):
     """Expose available detectors, trackers, Re-ID extractors, target classes, and presets."""
     from intelligent_tracker.detectors.coco_classes import COCO_CLASSES
 
-    if rsac is not None and hasattr(rsac, "list_categories"):
-        tracked_categories = rsac.list_categories()
-    else:
-        tracked_categories = RSACManager(db=None).list_categories()
-
+    tracked_categories = (
+        rsac.list_categories() if rsac is not None and hasattr(rsac, "list_categories")
+        else RSACManager(db=None).list_categories()
+    )
     return {
         **_discover_registered_backends(),
         "coco_classes": COCO_CLASSES,
         "tracked_categories": tracked_categories,
+        "enrolled_entities": _list_enrolled_entities(db),
         "default_classes": [
             "person", "car", "bicycle", "motorcycle", "bus", "truck", "dog", "cat"
         ],

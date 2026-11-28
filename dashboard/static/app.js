@@ -93,6 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (previousTab === 'tab-live' && targetTabId !== 'tab-live') {
       detachLiveStream();
     }
+    window.Studio?.syncStudioTabState?.(targetTabId === 'tab-studio');
 
     if (targetTabId === 'tab-live') {
       if (activeCameraId && (pendingLiveWsCamId === activeCameraId || activeLiveWsCamId !== activeCameraId)) {
@@ -150,13 +151,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!document.getElementById(tabId)) return;
     const sourceRef = window.AppNavigation?.paramsToSourceRef?.(parsed.params || {}) || {};
     if (window.AppNavigation?.navigate) window.AppNavigation.navigate(tabId, sourceRef, { updateHash: false });
-    else switchTab(tabId, false);
+    else window.switchTab(tabId, false);
   }
 
   let _syncingCamera = false;
   function switchCamera(camId) {
     if (!camId || camId === activeCameraId) return;
     activeCameraId = camId;
+    if (window.AppUIHelpers?.clearTruncationState) window.AppUIHelpers.clearTruncationState(connStatusText);
+    else window.TextTruncationManager?.clear?.(connStatusText);
     if (window.ActiveSourceContext) window.ActiveSourceContext.set({ kind: 'camera', cameraId: camId }, { silent: true }); else try { window.localStorage?.setItem('it_focused_camera_id', camId); } catch (err) { console.debug('localStorage focused camera write failed:', err); }
     const camSel = document.getElementById('active-camera-select');
     if (camSel && camSel.value !== camId) camSel.value = camId;
@@ -220,27 +223,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function onWsStatusChange(isOnline) {
-    if (connStatusPill) connStatusPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
-    const drawerPill = document.getElementById('drawer-connection-status-pill');
-    if (drawerPill) {
-      drawerPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
-      const span = drawerPill.querySelector?.('span:last-child');
-      if (span) span.textContent = isOnline ? 'Online' : 'Offline';
-    }
-    if (connStatusText) {
-      const fullText = isOnline ? `Connected (${activeCameraId})` : 'Reconnecting...';
-      if (window.TextTruncationManager && isOnline && activeCameraId && activeCameraId.length > 14) {
-        window.TextTruncationManager.apply(connStatusText, {
-          fullText: fullText,
-          mode: 'middle',
-          maxLength: 24,
-          preserveExt: false,
-          label: 'Active Stream'
-        });
-      } else {
-        connStatusText.textContent = fullText;
-        connStatusText.title = fullText;
-      }
+    if (window.AppUIHelpers?.updateWsStatus) {
+      window.AppUIHelpers.updateWsStatus(isOnline, activeCameraId, connStatusPill, connStatusText);
+    } else if (connStatusPill) {
+      connStatusPill.className = `connection-status-pill ${isOnline ? 'online' : 'offline'}`;
     }
   }
 
@@ -290,10 +276,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Setup Lifecycle Listeners
-  navTabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab'))));
+  navTabs.forEach(tab => tab.addEventListener('click', () => window.switchTab(tab.getAttribute('data-tab'))));
   window.addEventListener('hashchange', handleHashRoute);
   window.addEventListener('popstate', handleHashRoute);
-  document.getElementById('view-all-alerts-link')?.addEventListener('click', () => switchTab('tab-alerts'));
+  document.getElementById('view-all-alerts-link')?.addEventListener('click', () => window.switchTab('tab-alerts'));
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
@@ -325,7 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.LivePlayer?.bindHudButtons(videoImg, () => activeCameraId);
   window.InteractiveCanvas?.initTagModal(() => activeCameraId);
   bindCanvasEvents();
-  window.AppUIHelpers?.bindDrawerAndBackup?.(drawerTabs, switchTab);
+  window.AppUIHelpers?.bindDrawerAndBackup?.(drawerTabs, (tabId, updateHash, opts) => window.switchTab(tabId, updateHash, opts));
   window.GalleryTimeline?.bindGalleryEvents();
   window.GalleryTimeline?.bindTimelineEvents();
   window.GalleryTimeline?.initSnapshotModal();
@@ -344,10 +330,9 @@ document.addEventListener('DOMContentLoaded', () => {
     navigate: (tab, sourceRef, opts) => (
       window.AppNavigation?.navigate
         ? window.AppNavigation.navigate(tab, sourceRef, opts)
-        : switchTab(String(tab || 'tab-live').startsWith('tab-') ? tab : `tab-${tab}`)
+        : window.switchTab(String(tab || 'tab-live').startsWith('tab-') ? tab : `tab-${tab}`)
     ),
   };
-  window.App.switchCamera = switchCamera;
   window.showSnapshotModal = (imgUrl, title) => window.GalleryTimeline?.showSnapshotModal(imgUrl, title);
   window.loadGallery = () => window.GalleryTimeline?.loadGallery();
 });

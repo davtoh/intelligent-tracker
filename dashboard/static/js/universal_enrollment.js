@@ -74,12 +74,11 @@
   }
 
   function resetEnrollmentState(form, canvas, placeholder) {
-    enrollState.freezeFrameImg = null;
-    enrollState.freezeFrameDataUrl = null;
-    enrollState.selectedBbox = null;
-    enrollState.selectedCropBase64 = null;
-    enrollState.mergeEntityId = null;
-    enrollState.forceCreateNew = false;
+    Object.assign(enrollState, {
+      freezeFrameImg: null, freezeFrameDataUrl: null, selectedBbox: null,
+      selectedCropBase64: null, mergeEntityId: null, forceCreateNew: false,
+    });
+    window.EnrollmentStageController?.cancelRoiPreviewCheck?.();
     window.ScrubberTimelineSlider?.hideEnrollmentScrubber?.(canvas);
     if (form?.reset) form.reset();
     const banner = document.getElementById('enroll-collision-banner');
@@ -187,23 +186,29 @@
 
   function extractCropThumbnail(x, y, w, h) {
     if (!enrollState.freezeFrameImg) return;
+    enrollState.mergeEntityId = null;
+    enrollState.forceCreateNew = false;
     const cropCanvas = document.createElement('canvas');
     cropCanvas.width = w;
     cropCanvas.height = h;
-    const cctx = cropCanvas.getContext('2d');
-    cctx.drawImage(enrollState.freezeFrameImg, x, y, w, h, 0, 0, w, h);
+    cropCanvas.getContext('2d').drawImage(enrollState.freezeFrameImg, x, y, w, h, 0, 0, w, h);
     const cropData = cropCanvas.toDataURL('image/jpeg', 0.9);
     enrollState.selectedCropBase64 = cropData;
-
     const previewBox = document.getElementById('enroll-crop-preview-box');
     const previewImg = document.getElementById('enroll-crop-preview-img');
     const previewMeta = document.getElementById('enroll-crop-meta');
-
+    const metaText = `Region: ${w}x${h} px at (${x}, ${y})`;
     if (previewBox && previewImg) {
       previewImg.src = cropData;
       previewBox.style.display = 'flex';
-      if (previewMeta) previewMeta.textContent = `Region: ${w}x${h} px at (${x}, ${y})`;
+      if (previewMeta) previewMeta.textContent = metaText;
     }
+    const camSel = document.getElementById('enroll-camera-select');
+    const srcMeta = window.EnrollmentStageController?.getSelectedSourceMeta?.(camSel) || { camera_id: camSel?.value || null };
+    window.EnrollmentStageController?.scheduleRoiPreviewCheck?.(
+      { ...srcMeta, timestamp_sec: srcMeta.media_offset_sec ?? null, bbox: [x, y, w, h], crop_base64: cropData, baseMetaText: metaText },
+      { onMerge: (id) => { enrollState.mergeEntityId = id; }, onCreateNew: () => { enrollState.forceCreateNew = true; } }
+    );
   }
 
   function buildEnrollmentPayload() {
@@ -271,22 +276,18 @@
       if (modal) modal.style.display = 'none';
       resetEnrollmentState(form, canvas, placeholder);
       showToast('Enrollment Successful', `"${payload.name}" enrolled as ${payload.category.toUpperCase()} (ID #${result.entity_id})!`, 'success');
-      if (typeof window.loadGallery === 'function') window.loadGallery();
+      if (window.GalleryTimeline?.loadGallery) window.GalleryTimeline.loadGallery({ highlightEntityId: result.entity_id });
+      else if (typeof window.loadGallery === 'function') window.loadGallery();
     } catch (err) {
       showToast('Enrollment Failed', err.message, 'error');
     } finally {
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '✨ Enroll & Lock Anchor'; }
     }
   }
-
   function bindEnrollmentForm(form, modal, canvas, placeholder) {
     if (!form) return;
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await submitEnrollment(form, modal, canvas, placeholder);
-    });
+    form.addEventListener('submit', async (e) => { e.preventDefault(); await submitEnrollment(form, modal, canvas, placeholder); });
   }
-
   async function openModal(options = {}) {
     const modal = document.getElementById('modal-universal-enrollment');
     const canvas = document.getElementById('enroll-bbox-canvas');

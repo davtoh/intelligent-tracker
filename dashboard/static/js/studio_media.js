@@ -90,6 +90,7 @@
     const img = document.getElementById('studio-live-img');
     const vid = document.getElementById('studio-video-player');
     syncFreezeButtonVisibility(isVideo, Boolean(targetId));
+    const triggerRedraw = () => window.Studio?.drawOverlay?.();
     if (isVideo) {
       if (img) {
         if (img.dataset) delete img.dataset.activeStreamSrc;
@@ -98,7 +99,10 @@
         if (img.style) img.style.display = 'none';
       }
       if (vid && targetId) {
+        vid.hidden = false;
+        vid.removeAttribute?.('hidden');
         if (vid.style) vid.style.display = 'block';
+        vid.addEventListener?.('loadeddata', triggerRedraw, { once: true });
         vid.src = `/videos/${encodeURIComponent(targetId)}`;
         vid.load?.();
       }
@@ -113,6 +117,9 @@
       const streamBase = `/stream/${encodeURIComponent(targetId)}`;
       if (img.dataset) img.dataset.activeStreamSrc = streamBase;
       if (isActive) {
+        img.hidden = false;
+        img.removeAttribute?.('hidden');
+        img.addEventListener?.('load', triggerRedraw, { once: true });
         if (window.MediaEmptyState) window.MediaEmptyState.setSource(img, `${streamBase}?t=${Date.now()}`);
         else { if (img.style) img.style.display = 'block'; img.src = `${streamBase}?t=${Date.now()}`; }
       }
