@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (targetTabId === 'tab-journey') {
       document.getElementById('journey-search-query')?.focus();
     } else if (targetTabId === 'tab-review') {
-      window.ReviewAndRSAC?.loadQueue('pending');
+      if (!opts.skipReviewAutoLoad) window.ReviewAndRSAC?.loadQueue('pending');
     }
   }
 

@@ -15,7 +15,24 @@
               <button class="btn btn-xs btn-outline review-filter-btn" data-status="dismissed">Dismissed</button>
             </div>
           </div>
-          <div class="toolbar-right">
+          <div class="toolbar-right review-triage-controls">
+            <select class="form-select form-select-xs" id="review-filter-matched" aria-label="Filter by match status">
+              <option value="">All Matches</option>
+              <option value="matched">Matched Only</option>
+              <option value="unmatched">Unidentified Only</option>
+            </select>
+            <select class="form-select form-select-xs" id="review-filter-reason" aria-label="Filter by queue reason">
+              <option value="">All Reasons</option>
+              <option value="borderline">Borderline</option>
+              <option value="reported_wrong">Reported Wrong</option>
+            </select>
+            <select class="form-select form-select-xs" id="review-sort-select" aria-label="Sort review queue">
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="sim_desc">Confidence: High → Low</option>
+              <option value="sim_asc">Confidence: Low → High</option>
+            </select>
+            <button class="btn btn-sm btn-outline btn-dismiss" id="btn-review-bulk-dismiss" title="Dismiss all pending candidates matching current filter">✕ Dismiss Filtered</button>
             <button class="btn btn-sm btn-outline" id="btn-refresh-review-queue">🔄 Refresh Queue</button>
           </div>
         </div>
@@ -27,6 +44,13 @@
         <div id="review-queue-container" class="review-queue-grid">
           <div class="empty-state">No pending review candidates in queue. Borderline detections (0.45 &lt; sim &lt;
             0.70) are automatically routed here for human-in-the-loop verification.</div>
+        </div>
+
+        <!-- Pagination Footer -->
+        <div id="review-pagination-bar" class="glass-panel review-pagination-bar" style="display: none;">
+          <button class="btn btn-xs btn-outline" id="review-page-prev" disabled>← Prev</button>
+          <span id="review-page-info" class="review-page-info">Showing 0 of 0</span>
+          <button class="btn btn-xs btn-outline" id="review-page-next" disabled>Next →</button>
         </div>
       </div>
     </section>

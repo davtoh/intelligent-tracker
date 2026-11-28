@@ -24,7 +24,11 @@ from dashboard.schemas import (
     ReviewEnrollNewRequest,
     ReviewReassignRequest,
 )
-from dashboard.schemas_review import ReportWrongSightingRequest, ReviewUndoRequest
+from dashboard.schemas_review import (
+    BulkDismissRequest,
+    ReportWrongSightingRequest,
+    ReviewUndoRequest,
+)
 from dashboard.services.category_service import ensure_known_category, resolve_rsac_for_request
 from dashboard.services.reversible_review_service import (
     execute_review_action_with_audit,
@@ -53,15 +57,64 @@ def _resolve_confidence_engine(al_mgr: Any, pool: Any) -> Any:
     return getattr(al_mgr, "confidence_engine", None) or getattr(pool, "confidence_engine", None)
 
 
+def _fetch_review_queue_page(
+    db: TrackerDB, status: str, limit: int, offset: int,
+    matched: str | None, reason: str | None, sort: str,
+) -> dict[str, Any]:
+    """Fetch paginated review items along with filtered and pending totals."""
+    items = db.list_review_items(
+        status=status, limit=limit, offset=offset, matched=matched, reason=reason, sort=sort,
+    )
+    total = db.count_review_items(status=status, matched=matched, reason=reason)
+    total_pending = db.count_review_items(status="pending")
+    return {
+        "status": "success",
+        "count": len(items),
+        "total": total,
+        "total_pending": total_pending,
+        "offset": offset,
+        "limit": limit,
+        "items": items,
+    }
+
+
 @router.get("/api/review/queue")
 async def list_review_queue(
     status: str = Query("pending"),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    matched: str | None = Query(default=None),
+    reason: str | None = Query(default=None),
+    sort: str = Query("newest"),
     db: TrackerDB = Depends(get_db),
 ) -> dict[str, Any]:
-    """List active learning review items with bbox and source provenance."""
-    items = await asyncio.to_thread(db.list_review_items, status=status, limit=limit)
-    return {"status": "success", "count": len(items), "items": items}
+    """List active learning review items with pagination, filters, and totals."""
+    return await asyncio.to_thread(
+        _fetch_review_queue_page, db, status, limit, offset, matched, reason, sort,
+    )
+
+
+@router.post("/api/review/bulk-dismiss")
+async def bulk_dismiss_review_queue(
+    req: BulkDismissRequest | None = Body(default=None),
+    db: TrackerDB = Depends(get_db),
+) -> dict[str, Any]:
+    """Bulk-dismiss review queue candidates matching IDs or triage filters."""
+    payload = req or BulkDismissRequest()
+    dismissed = await asyncio.to_thread(
+        db.bulk_dismiss_review_items,
+        item_ids=payload.item_ids,
+        status=payload.status,
+        matched=payload.matched,
+        reason=payload.reason,
+        reviewed_by=payload.reviewer,
+    )
+    remaining_pending = await asyncio.to_thread(db.count_review_items, status="pending")
+    return {
+        "status": "success",
+        "dismissed": dismissed,
+        "total_pending": remaining_pending,
+    }
 
 
 @router.get("/api/review/decisions")

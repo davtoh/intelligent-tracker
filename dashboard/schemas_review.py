@@ -78,3 +78,13 @@ class TagCorrectRequest(BaseModel):
     track_id: int | None = None
     run_id: str = Field("")
     reviewer: str = Field("operator")
+
+
+class BulkDismissRequest(BaseModel):
+    """Request payload for bulk-dismissing pending review queue candidates."""
+
+    item_ids: list[int] | None = Field(default=None, description="Optional explicit list of review item IDs")
+    status: str = Field(default="pending", description="Target status filter (defaults to pending)")
+    matched: str | None = Field(default=None, description="Optional match filter: 'matched' or 'unmatched'")
+    reason: str | None = Field(default=None, description="Optional reason filter: 'borderline' or 'reported_wrong'")
+    reviewer: str = Field(default="operator", description="Operator performing the bulk dismissal")

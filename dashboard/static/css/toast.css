@@ -4,14 +4,20 @@
 
 .toast-container {
   position: fixed;
-  bottom: 24px;
+  top: 72px;
   right: 24px;
-  z-index: 1000;
+  bottom: auto;
+  z-index: 1050;
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-width: 360px;
   pointer-events: none;
+}
+
+.review-card-highlight {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.45), 0 8px 24px -6px rgba(6, 182, 212, 0.35);
 }
 
 .toast-message {
