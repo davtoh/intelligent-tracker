@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-11-28] feat: Step 4: Review Queue Pagination/Triage, Filtered Historical Heatmaps & AST Guard
+- **Type**: feat
+- **Summary**: Completed Step 4 of tracking_studio_alerts_and_recording_parity_master_roadmap: paginated/filtered #review queue with real DB total_pending badges, bulk-dismiss, and toast deep-linking (OBS-043, OBS-048); filtered historical DB heatmaps in #analytics (OBS-023); METHOD_KWARG_MISMATCH AST guard in system-diagnostics (fixing real kwarg bugs in entity_tagger.py and video_scenario_reeval_service.py).
+- **Files** (11):
+  - `intelligent_tracker/repositories/learning_repo.py`
+  - `dashboard/routers/review.py`
+  - `dashboard/routers/analytics.py`
+  - `dashboard/services/heatmap_history_service.py`
+  - `dashboard/services/entity_tagger.py`
+  - `dashboard/services/video_scenario_reeval_service.py`
+  - `dashboard/static/js/review_queue_controls.js`
+  - `dashboard/static/review_and_rsac.js`
+  - ... (+3 more)
+- **Verification**: spa_nine_tab_cdp_probe PASS, mini_ci --fast PASS, sphinx -W PASS
+
 ## [2026-11-28] feat: Studio Full Modal Editing, Derived BEV Poses & BEV Quad Minimap Filtering (Step 3 M3)
 - **Type**: feat
 - **Summary**: OBS-024..027: Reused #modal-studio-zone and #modal-studio-tripwire for full PUT editing, staggered uncalibrated cameras and excluded raw-pixel entities from world bounds, derived default CameraWorldPose from 4-point homography on sync and POST /api/scenarios/homography, and added WorldMinimapFovHelper with fov_corners_global polygon rendering and bevQuadMode filtering.
@@ -120,20 +135,6 @@
   - `intelligent_tracker/matching/gallery.py`
   - `intelligent_tracker/matching/learned_class_matcher.py`
   - ... (+5 more)
-
-## [2026-11-25] feat: Step 3 M4: Exemplar Learned Classes & Per-Camera COCO Overrides
-- **Type**: feat
-- **Summary**: Added schema v4, LearnedClassMixin, LearnedClassMatcher, LearnedClassService, /api/classes/* router, and unified Classes & Badges 3-tab gallery sub-view.
-- **Files** (17):
-  - `dashboard/app.py`
-  - `dashboard/routers/__init__.py`
-  - `dashboard/static/index.html`
-  - `dashboard/static/partials/tabs/gallery.html`
-  - `intelligent_tracker/database.py`
-  - `intelligent_tracker/pipeline/bundle.py`
-  - `intelligent_tracker/pipeline/frame_processor.py`
-  - `intelligent_tracker/repositories/__init__.py`
-  - ... (+9 more)
 
 ## [2026-11-25] feat: Step 2: Unified SourceRef Provenance, ActiveSourceContext & Media Freeze Controls
 - **Type**: feat

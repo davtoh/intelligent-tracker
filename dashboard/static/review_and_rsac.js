@@ -336,7 +336,7 @@
       loadReviewQueue(state.currentReviewStatus);
     });
 
-    loadReviewQueue('pending');
+    if (!/[?&]review_id=/.test(window.location?.hash || '')) loadReviewQueue('pending');
   });
 
   window.ReviewAndRSAC = {

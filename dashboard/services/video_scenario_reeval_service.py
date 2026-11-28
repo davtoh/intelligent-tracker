@@ -28,7 +28,7 @@ def _resolve_target_run(db: Any, safe_name: str, run_id: str | None) -> tuple[di
         raise RuntimeError("Database connection is unavailable")
     run_row = db.get_video_run(run_id) if run_id else None
     if run_row is None and not run_id:
-        runs = db.list_video_runs(video_filename=safe_name, limit=1)
+        runs = db.list_video_runs(video_filename=safe_name)
         run_row = runs[0] if runs else None
     if run_row is None:
         raise LookupError(f"No indexed video run found for '{safe_name}'")

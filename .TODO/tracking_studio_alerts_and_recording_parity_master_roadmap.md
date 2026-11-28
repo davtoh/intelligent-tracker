@@ -46,13 +46,13 @@
 
 ---
 
-## Step 4: Review Queue Pagination/Triage, Filtered Historical Heatmaps & Tooling Guards *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Return `total_pending`, `offset`, matched-vs-unknown/reason filters, confidence sorting, and bulk-dismiss in `/api/review/queue` & `#review`, and wire toast `"Review Candidate"` clicks to deep-link/highlight `ev.review_id` cleanly above/clear of the HUD (`OBS-043`, `OBS-048`). Add optional `mode=all|filtered` historical DB heatmap aggregation (`sightings` / `world_timeline_events` bbox footpoints matching `zone_id`, `event_type`, `range_sec`, `entity_id`) on `/analytics/heatmap` & `#analytics` (`OBS-023`). Add AST method-kwarg parity guard in `system-diagnostics` and complete full regression sign-off.
-- [ ] **Target Scope**:
-  - [ ] `dashboard/routers/review.py`, `intelligent_tracker/repositories/learning_repo.py`, `dashboard/static/review_and_rsac.js`, `dashboard/static/partials/tabs/review.html`, `dashboard/static/css/toast.css`.
-  - [ ] `dashboard/routers/analytics.py`, `dashboard/services/analytics_query_service.py`, `dashboard/static/js/analytics_view.js`, `dashboard/static/partials/tabs/analytics.html`.
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step4_review_triage_and_filtered_heatmaps.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" scan --strict; MPLBACKEND=Agg python -m unittest discover tests; python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.
-- [ ] **Review Gate**: Fresh reviewer validates non-mocked branch sign-off, all workspace probes green, full `unittest`, Sphinx `-W`, and `diagnose.py scan --strict`, and resolves `OBS-023`, `OBS-043`, `OBS-048`.
+## Step 4: Review Queue Pagination/Triage, Filtered Historical Heatmaps & Tooling Guards
+- [x] **Goal**: Return `total_pending`, `offset`, matched-vs-unknown/reason filters, confidence sorting, and bulk-dismiss in `/api/review/queue` & `#review`, and wire toast `"Review Candidate"` clicks to deep-link/highlight `ev.review_id` cleanly above/clear of the HUD (`OBS-043`, `OBS-048`). Add optional `mode=all|filtered` historical DB heatmap aggregation (`sightings` / `world_timeline_events` bbox footpoints matching `zone_id`, `event_type`, `range_sec`, `entity_id`) on `/analytics/heatmap` & `#analytics` (`OBS-023`). Add AST method-kwarg parity guard in `system-diagnostics` and complete full regression sign-off.
+- [x] **Target Scope**:
+  - [x] `dashboard/routers/review.py`, `intelligent_tracker/repositories/learning_repo.py`, `dashboard/static/review_and_rsac.js`, `dashboard/static/partials/tabs/review.html`, `dashboard/static/css/toast.css`.
+  - [x] `dashboard/routers/analytics.py`, `dashboard/services/analytics_query_service.py`, `dashboard/static/js/analytics_view.js`, `dashboard/static/partials/tabs/analytics.html`.
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step4_review_triage_and_filtered_heatmaps.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run spa_nine_tab_cdp_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" scan --strict; MPLBACKEND=Agg python -m unittest discover tests; python -m sphinx -W --keep-going documentation/ documentation/_build/html/`.
+- [x] **Review Gate**: Fresh reviewer validates non-mocked branch sign-off, all workspace probes green, full `unittest`, Sphinx `-W`, and `diagnose.py scan --strict`, and resolves `OBS-023`, `OBS-043`, `OBS-048`.
 
 ---
 

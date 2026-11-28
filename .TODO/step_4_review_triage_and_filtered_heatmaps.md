@@ -58,12 +58,12 @@
 
 ---
 
-## Milestone 3: `system-diagnostics` AST Method-Kwarg Guard & Master Roadmap Sign-Off *(Deferred to Next Turn / Milestone)*
+## Milestone 3: `system-diagnostics` AST Method-Kwarg Guard & Master Roadmap Sign-Off
 
-- [ ] **<config_dir>/skills/system-diagnostics/scripts/signature_drift_rules.py**: Add `METHOD_KWARG_MISMATCH` AST guard inspecting method calls across all scopes (not only inside `try/except`), flagging unknown keyword arguments when receiver type is resolved OR when zero repo-defined methods with that name accept the kwarg or `**kwargs`, while avoiding false positives on dynamic/stdlib/mock receivers.
-- [ ] **<config_dir>/skills/system-diagnostics/tests/test_cross_module_rules.py**: Add unit tests verifying `METHOD_KWARG_MISMATCH` catches `DBG-01`-style `record_zone_exit(..., track_id=tid)` drift, permits valid kwargs/`**kwargs`, and preserves existing `CALLABLE_SIGNATURE_DRIFT` checks.
-- [ ] **docs/architecture/CURRENT_ARCHITECTURE.md**: Record Step 4 completed contracts (`#review` pagination/triage/bulk-dismiss/toast deep-link, `#analytics` filtered historical DB heatmaps, `METHOD_KWARG_MISMATCH` guard) and update changelog via `diagnose.py changelog add`.
-- [ ] **Final Verification & Review Gate**: Run `diagnose.py scan --strict`, `diagnose.py probe run spa_nine_tab_cdp_probe`, `scripts/mini_ci.py --fast` (full `unittest` suite), `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`, and resolve `OBS-023`, `OBS-043`, `OBS-048` after fresh reviewer sign-off.
+- [x] **<config_dir>/skills/system-diagnostics/scripts/signature_drift_rules.py**: Add `METHOD_KWARG_MISMATCH` AST guard inspecting method calls across all scopes (not only inside `try/except`), flagging unknown keyword arguments when receiver type is resolved OR when zero repo-defined methods with that name accept the kwarg or `**kwargs`, while avoiding false positives on dynamic/stdlib/mock receivers.
+- [x] **<config_dir>/skills/system-diagnostics/tests/test_cross_module_rules.py**: Add unit tests verifying `METHOD_KWARG_MISMATCH` catches `DBG-01`-style `record_zone_exit(..., track_id=tid)` drift, permits valid kwargs/`**kwargs`, and preserves existing `CALLABLE_SIGNATURE_DRIFT` checks.
+- [x] **docs/architecture/CURRENT_ARCHITECTURE.md**: Record Step 4 completed contracts (`#review` pagination/triage/bulk-dismiss/toast deep-link, `#analytics` filtered historical DB heatmaps, `METHOD_KWARG_MISMATCH` guard) and update changelog via `diagnose.py changelog add`.
+- [x] **Final Verification & Review Gate**: Run `diagnose.py scan --strict`, `diagnose.py probe run spa_nine_tab_cdp_probe`, `scripts/mini_ci.py --fast` (full `unittest` suite), `python -m sphinx -W --keep-going documentation/ documentation/_build/html/`, and resolve `OBS-023`, `OBS-043`, `OBS-048` after fresh reviewer sign-off.
 
 ### Verifier (Milestone 3)
 - `python -m unittest discover -s "<config_dir>/skills/system-diagnostics/tests" -p "test_*.py"`
