@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for `.diagnostics/mini_ci.json`, `scripts/mini_ci.py` wrapper, and clean-env gate."""
+"""Unit tests for `.diagnostics/mini_ci.json`, standalone `scripts/mini_ci.py`, and clean-env gate."""
 
 import json
 import os
@@ -47,12 +47,12 @@ class TestExternalSkillIsolation(unittest.TestCase):
         self.assertEqual(res.returncode, 0, msg=res.stderr)
 
 
-class TestMiniCiConfigAndWrapper(unittest.TestCase):
-    """Verify `.diagnostics/mini_ci.json` SSOT and `scripts/mini_ci.py` delegation."""
+class TestMiniCiConfigAndHelpers(unittest.TestCase):
+    """Verify `.diagnostics/mini_ci.json` SSOT, CLI parsing, and snapshot filtering."""
 
     def test_mini_ci_json_declares_required_parity_contract(self) -> None:
         self.assertTrue(mini_ci.CONFIG_PATH.is_file(), "Missing .diagnostics/mini_ci.json")
-        cfg = json.loads(mini_ci.CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = mini_ci.load_config(mini_ci.REPO_ROOT)
         self.assertEqual(cfg["env"]["IT_DISABLE_EXTERNAL_SKILLS"], "1")
         for pkg in ("libgl1", "libglib2.0-0", "ffmpeg", "nodejs"):
             self.assertIn(pkg, cfg["apt_packages"])
@@ -65,79 +65,97 @@ class TestMiniCiConfigAndWrapper(unittest.TestCase):
         self.assertTrue(any("unittest" in s for s in joined))
         self.assertTrue(any("sphinx" in s for s in joined))
 
-    def test_resolve_host_python_windows_and_posix(self) -> None:
+    def test_parse_args_defaults_and_linux_flags(self) -> None:
+        args = mini_ci.parse_args([], config={"wsl_distro": "Ubuntu-24.04"})
+        self.assertTrue(args.fast)
+        self.assertFalse(args.linux)
+        self.assertEqual(args.wsl_distro, "Ubuntu-24.04")
+
+        linux = mini_ci.parse_args(["--linux", "--backend", "docker", "--tests", "tests/test_mini_ci.py", "--skip-lint", "--skip-docs"])
+        self.assertTrue(linux.linux)
+        self.assertFalse(linux.fast)
+        self.assertEqual(linux.backend, "docker")
+        self.assertEqual(linux.tests, ["tests/test_mini_ci.py"])
+        self.assertTrue(linux.skip_lint and linux.skip_docs)
+
+    def test_resolve_host_python_respects_platform(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             win_py = root / ".venv" / "Scripts" / "python.exe"
             win_py.parent.mkdir(parents=True)
             win_py.write_bytes(b"")
             self.assertEqual(mini_ci.resolve_host_python(root, platform="win32"), win_py)
+            self.assertEqual(mini_ci.resolve_host_python(root, platform="linux"), Path(sys.executable))
 
             posix_py = root / ".venv" / "bin" / "python"
             posix_py.parent.mkdir(parents=True)
             posix_py.write_bytes(b"")
             self.assertEqual(mini_ci.resolve_host_python(root, platform="linux"), posix_py)
 
-    def test_find_diagnose_script_prefers_env_then_home(self) -> None:
+    def test_windows_to_wsl_path_and_snapshot_excludes(self) -> None:
+        self.assertEqual(mini_ci.windows_to_wsl_path(Path(r"C:\dev\repo")), "/mnt/c/dev/repo")
+        self.assertEqual(mini_ci.windows_to_wsl_path(Path("/home/user/repo")), "/home/user/repo")
         with tempfile.TemporaryDirectory() as tmp:
-            base = Path(tmp)
-            env_diag = base / "custom_sd" / "scripts" / "diagnose.py"
-            env_diag.parent.mkdir(parents=True)
-            env_diag.write_text("# stub\n", encoding="utf-8")
-            found = mini_ci.find_diagnose_script(
-                env={"SYSTEM_DIAGNOSTICS_DIR": str(base / "custom_sd")},
-                home=base / "empty_home",
-            )
-            self.assertEqual(found, env_diag)
+            src, dst = Path(tmp) / "src", Path(tmp) / "dst"
+            for d in ("models", "data", ".venv"):
+                (src / d).mkdir(parents=True)
+                (src / d / "file.bin").write_bytes(b"x")
+            (src / "requirements.txt").write_text("ruff\n", encoding="utf-8")
+            mini_ci.create_clean_snapshot(src, dst, exclude_dirs=["models", "data"])
+            self.assertFalse((dst / "models").exists())
+            self.assertFalse((dst / "data").exists())
+            self.assertFalse((dst / ".venv").exists())
+            self.assertTrue((dst / "requirements.txt").exists())
 
-            home_diag = base / "home" / ".gemini" / "config" / "skills" / "system-diagnostics" / "scripts" / "diagnose.py"
-            home_diag.parent.mkdir(parents=True)
-            home_diag.write_text("# stub\n", encoding="utf-8")
-            self.assertEqual(mini_ci.find_diagnose_script(env={}, home=base / "home"), home_diag)
-            self.assertIsNone(mini_ci.find_diagnose_script(env={}, home=base / "missing"))
 
-    def test_build_diagnose_argv_injects_repo_path_and_forwards_flags(self) -> None:
-        diag = Path("/skills/system-diagnostics/scripts/diagnose.py")
-        cmd = mini_ci.build_diagnose_argv(
-            diag,
-            ["--linux", "--backend", "docker", "--tests", "tests/test_mini_ci.py"],
-            python_exe=Path("/venv/python"),
-            repo_root=Path("/repo"),
-        )
-        self.assertEqual(
-            cmd,
-            [
-                str(Path("/venv/python")),
-                str(diag),
-                "ci",
-                "--path",
-                str(Path("/repo")),
-                "--linux",
-                "--backend",
-                "docker",
-                "--tests",
-                "tests/test_mini_ci.py",
-            ],
-        )
+class TestMiniCiCommandConstruction(unittest.TestCase):
+    """Verify standalone command construction across --fast, WSL, and Docker."""
 
-    def test_main_delegates_to_diagnose_when_available(self) -> None:
-        fake_diag = Path("/fake/diagnose.py")
-        with (
-            patch.object(mini_ci, "find_diagnose_script", return_value=fake_diag),
-            patch("scripts.mini_ci.subprocess.run") as mock_run,
-        ):
-            mock_run.return_value.returncode = 0
-            rc = mini_ci.main(["--fast", "--dry-run"])
-            self.assertEqual(rc, 0)
-            called_cmd = mock_run.call_args.args[0]
-            self.assertIn("ci", called_cmd)
-            self.assertIn("--fast", called_cmd)
-            self.assertIn("--dry-run", called_cmd)
+    def test_steps_env_and_skip_filters(self) -> None:
+        cfg = json.loads(mini_ci.CONFIG_PATH.read_text(encoding="utf-8"))
+        env = mini_ci.build_fast_env({"USERPROFILE": r"C:\Users\Alice"}, config=cfg)
+        self.assertEqual(env["USERPROFILE"], r"C:\Users\Alice")
+        self.assertEqual(env["MPLBACKEND"], "Agg")
+        self.assertEqual(env["IT_DISABLE_EXTERNAL_SKILLS"], "1")
 
-    def test_standalone_fallback_dry_run_and_linux_error(self) -> None:
-        with patch.object(mini_ci, "find_diagnose_script", return_value=None):
-            self.assertEqual(mini_ci.main(["--fast", "--dry-run"]), 0)
-            self.assertEqual(mini_ci.main(["--linux"]), 2)
+        full = mini_ci.build_ci_step_commands("/venv/python", config=cfg)
+        self.assertEqual(len(full), 3)
+        only_tests = mini_ci.build_ci_step_commands("/venv/python", config=cfg, skip_lint=True, skip_docs=True)
+        self.assertEqual(only_tests, [["/venv/python", "-m", "unittest", "discover", "tests"]])
+        targeted = mini_ci.build_ci_step_commands("/venv/python", config=cfg, tests=["tests/test_mini_ci.py"])
+        self.assertEqual(targeted, [["/venv/python", "-m", "unittest", "-v", "tests/test_mini_ci.py"]])
+
+    def test_wsl_script_and_docker_commands(self) -> None:
+        cfg = mini_ci.load_config(mini_ci.REPO_ROOT)
+        script = mini_ci.build_wsl_script("/mnt/c/repo", cfg, tests=["tests/test_mini_ci.py"])
+        self.assertNotIn("\r", script)
+        self.assertIn('if [ ! -f "$VENV/.ready" ]; then', script)
+        self.assertIn("import ensurepip", script)
+        self.assertIn("export IT_DISABLE_EXTERNAL_SKILLS=1", script)
+        self.assertIn("unittest -v tests/test_mini_ci.py", script)
+
+        df = mini_ci.build_dockerfile(cfg)
+        self.assertIn("nodejs", df)
+        with tempfile.TemporaryDirectory() as tmp:
+            req = Path(tmp) / "requirements.txt"
+            req.write_text("a==1\n", encoding="utf-8")
+            tag1 = mini_ci.docker_image_tag(df, req)
+            req.write_text("a==2\n", encoding="utf-8")
+            tag2 = mini_ci.docker_image_tag(df, req)
+            self.assertNotEqual(tag1, tag2)
+
+        cmd = mini_ci.build_docker_run_command(Path("."), tag1, cfg, tests=["tests/test_mini_ci.py"])
+        self.assertEqual(cmd[:3], ["docker", "run", "--rm"])
+        self.assertIn("IT_DISABLE_EXTERNAL_SKILLS=1", cmd)
+        self.assertIn("HOME=/tmp/mini_ci_home", cmd)
+        self.assertIn("unittest -v tests/test_mini_ci.py", cmd[-1])
+
+    def test_select_linux_backend_auto(self) -> None:
+        with patch("scripts.mini_ci.shutil.which", side_effect=lambda name: "/bin/wsl" if name == "wsl" else None):
+            self.assertEqual(mini_ci.select_linux_backend("auto", platform="win32"), "wsl")
+        with patch("scripts.mini_ci.shutil.which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None):
+            self.assertEqual(mini_ci.select_linux_backend("auto", platform="win32"), "docker")
+            self.assertEqual(mini_ci.select_linux_backend("auto", platform="darwin"), "docker")
 
 
 if __name__ == "__main__":

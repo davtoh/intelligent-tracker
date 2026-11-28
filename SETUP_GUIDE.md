@@ -171,8 +171,8 @@ $env:MPLBACKEND="Agg"
 .\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
-### Local Mini-CI Parity (`.diagnostics/mini_ci.json` & `scripts/mini_ci.py`)
-Mirror `.github/workflows/ci.yml` locally before pushing PRs (Ruff lint, `unittest`, and Sphinx docs) without touching your host `.venv` or leaking external skills. Configuration lives in `.diagnostics/mini_ci.json` and runs via `diagnose.py ci` (or the thin `scripts/mini_ci.py` wrapper):
+### Local Mini-CI Parity (`scripts/mini_ci.py` & `.diagnostics/mini_ci.json`)
+Mirror `.github/workflows/ci.yml` locally before pushing PRs (Ruff lint, `unittest`, and Sphinx docs) without touching your host `.venv` or leaking external skills. `scripts/mini_ci.py` is **100% standalone** (zero external tool dependencies) and reads `.diagnostics/mini_ci.json` as shared config SSOT:
 ```powershell
 # Fast clean-env check in host .venv (Windows / macOS / Linux)
 .\.venv\Scripts\python.exe scripts/mini_ci.py --fast
@@ -185,11 +185,11 @@ Mirror `.github/workflows/ci.yml` locally before pushing PRs (Ruff lint, `unitte
 .\.venv\Scripts\python.exe scripts/mini_ci.py --linux --backend docker
 ```
 
-- **WSL one-time setup (Windows, `Ubuntu-24.04`)**: WSL keeps an isolated ext4 venv at `/tmp/mini_ci_venvs/<req_hash>` keyed by the `requirements.txt` + extra pip packages hash. Install the required system packages once inside WSL:
+- **WSL one-time setup (Windows, `Ubuntu-24.04`)**: WSL keeps an isolated ext4 venv at `/tmp/mini_ci_venvs/<req_hash>` keyed by `requirements.txt` + extra pip packages. Install the required system packages once inside WSL:
   ```bash
   sudo apt-get update && sudo apt-get install -y python3-venv libgl1 libglib2.0-0 ffmpeg nodejs
   ```
-- **Docker backend (zero WSL setup, works on Windows / macOS / Linux)**: `--linux --backend docker` builds and caches `mini-ci-<hash>` on `python:3.12-slim` from a minimal build context with `libgl1`, `libglib2.0-0`, `ffmpeg`, and `nodejs` pre-installed.
+- **Docker backend (zero WSL setup, works on Windows / macOS / Linux)**: `--linux --backend docker` builds and caches `intelligent-tracker-mini-ci:<hash>` on `python:3.12-slim` from a minimal build context with `libgl1`, `libglib2.0-0`, `ffmpeg`, and `nodejs` pre-installed.
 - **Clean snapshot**: Add `--clean-snapshot` to run against an isolated temp copy excluding `models`, `data`, and `_build`.
 
 ### Sample Executions
