@@ -7,6 +7,7 @@ Provides endpoints for video file listing, chunked uploads, background H.264
 transcoding, dynamic camera registration, and HTML5 video streaming/seeking.
 """
 
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -58,7 +59,7 @@ async def list_videos():
             if lower_name.endswith((".mp4", ".avi", ".mkv", ".mov")) and not lower_name.endswith(".part.mp4"):
                 full = os.path.join(VIDEOS_DIR, f)
                 stat = os.stat(full)
-                probe = VideoTranscodeService.probe_video(full)
+                probe = await asyncio.to_thread(VideoTranscodeService.probe_video, full)
                 is_web = probe.get("web_compatible", False)
                 pair = VideoTranscodeService.get_h264_pair_info(full)
                 has_converted = (not is_web) and pair["has_converted_h264"]
@@ -108,11 +109,11 @@ async def upload_video(
         content = await file.read()
         buffer.write(content)
 
-    probe = VideoTranscodeService.probe_video(dest_path)
+    probe = await asyncio.to_thread(VideoTranscodeService.probe_video, dest_path)
     is_web = probe.get("web_compatible", False)
 
     if auto_transcode and not is_web:
-        safe_name, dest_path, probe = _handle_auto_transcode(dest_path, safe_name)
+        safe_name, dest_path, probe = await asyncio.to_thread(_handle_auto_transcode, dest_path, safe_name)
 
     stat = os.stat(dest_path)
     return {

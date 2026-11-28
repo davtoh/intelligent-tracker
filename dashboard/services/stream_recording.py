@@ -11,6 +11,7 @@ import uuid
 
 import numpy as np
 
+from dashboard.services.recording_transcode_helper import maybe_queue_h264_transcode
 from intelligent_tracker.video import PipelineVideoWriter
 
 logger = logging.getLogger("intelligent_tracker.stream_recording")
@@ -50,7 +51,7 @@ def _idle_status(camera_id: str) -> dict[str, Any]:
         "recording_id": None, "filename": None, "output_path": None, "codec": None,
         "fps": None, "width": None, "height": None, "frames_written": 0,
         "elapsed_s": 0.0, "size_bytes": 0, "annotated": True,
-        "processing_mode": None, "deferred_job_id": None,
+        "processing_mode": None, "deferred_job_id": None, "transcode_job_id": None,
     }
 
 
@@ -80,6 +81,8 @@ class StreamRecordingController:
         writer_factory: Any = None,
         db_getter: Callable[[], Any] | None = None,
         mode_service_getter: Callable[[], Any] | None = None,
+        auto_transcode: bool = True,
+        job_mgr_getter: Callable[[], Any] | None = None,
     ) -> None:
         self.camera_id = camera_id
         self._explicit_output_dir = output_dir is not None
@@ -87,6 +90,8 @@ class StreamRecordingController:
         self._writer_factory = writer_factory or PipelineVideoWriter
         self._db_getter = db_getter
         self._mode_service_getter = mode_service_getter
+        self._auto_transcode = bool(auto_transcode)
+        self._job_mgr_getter = job_mgr_getter
         self._lock = threading.RLock()
         self._writer: PipelineVideoWriter | None = None
         self._active_meta: dict[str, Any] | None = None
@@ -258,6 +263,10 @@ class StreamRecordingController:
             run_rec = self._persist_live_capture_run(meta, recorded_frames, stats)
             if run_rec and run_rec.get("run_id"):
                 updates["report_run_id"] = run_rec["run_id"]
+        job_mgr = self._job_mgr_getter() if callable(self._job_mgr_getter) else None
+        transcode_job_id = maybe_queue_h264_transcode(meta, job_mgr=job_mgr, enabled=self._auto_transcode)
+        if transcode_job_id:
+            updates["transcode_job_id"] = transcode_job_id
         if updates:
             meta.update(updates)
             with self._lock:

@@ -32,10 +32,14 @@ def create_test_clip(
     fps: float = 12.5,
     width: int = 320,
     height: int = 240,
+    codecs: tuple[str, ...] | None = None,
 ) -> str:
     """Create a tiny synthetic MP4 clip with a moving green target."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    with PipelineVideoWriter(path, fps=fps, resolution=(width, height)) as writer:
+    writer_kwargs: dict = {"fps": fps, "resolution": (width, height)}
+    if codecs is not None:
+        writer_kwargs["codecs"] = codecs
+    with PipelineVideoWriter(path, **writer_kwargs) as writer:
         for i in range(num_frames):
             frame = np.zeros((height, width, 3), dtype=np.uint8)
             x = int(20 + (i * 10) % max(40, width - 60))
@@ -61,7 +65,8 @@ class TestVideoPairingAndIdempotencyAPI(unittest.TestCase):
 
         for name in (cls.paired_src, cls.paired_h264, cls.unpaired_src, cls.zero_byte_src):
             full = os.path.join(VIDEOS_DIR, name)
-            create_test_clip(full, num_frames=6, fps=10.0)
+            clip_codecs = None if name == cls.paired_h264 else ("mp4v", "MJPG", "XVID")
+            create_test_clip(full, num_frames=6, fps=10.0, codecs=clip_codecs)
             cls.created_files.append(full)
 
         zero_path = os.path.join(VIDEOS_DIR, cls.zero_byte_h264)

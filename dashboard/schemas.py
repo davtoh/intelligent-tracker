@@ -319,6 +319,7 @@ class CameraRecordStatusResponse(BaseModel):
     report_run_id: Optional[str] = None
     processing_mode: Optional[str] = None
     deferred_job_id: Optional[str] = None
+    transcode_job_id: Optional[str] = None
 
 
 class ProcessingModeUpdateRequest(BaseModel):

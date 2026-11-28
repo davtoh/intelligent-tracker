@@ -8,13 +8,14 @@ import os
 import subprocess
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from dashboard.dependencies import VIDEOS_DIR, get_camera_pool, get_db, get_scenario_mgr
+from dashboard.dependencies import VIDEOS_DIR, get_camera_pool, get_db, get_scenario_mgr, get_stream_manager
 from dashboard.schemas import VideoAnalyzeRequest
 from dashboard.schemas_scenarios import VideoReevalRequest
 from dashboard.services.progressive_stream_store import build_job_stream_response
+from dashboard.services.recording_transcode_helper import find_active_recording_for_file
 from dashboard.services.video_analytics_service import (
     parse_analyze_options,
     run_sync_analytics,
@@ -110,9 +111,19 @@ def _run_sync_transcode(
 
 
 def _transcode_conflict_or_cached(
-    job_mgr, safe_name: str, output_filename: str, output_path: str, force: bool
+    job_mgr, safe_name: str, output_filename: str, output_path: str, force: bool, pool=None, sm=None
 ) -> Optional[JSONResponse]:
     """Return 409 conflict or 200 cached response if transcode does not need to run."""
+    active_rec = find_active_recording_for_file(safe_name, pool, sm)
+    if active_rec is not None:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "conflict",
+                "message": f"Video '{safe_name}' is actively recording on camera '{active_rec['camera_id']}'.",
+                "active_recording": active_rec,
+            },
+        )
     active_job = job_mgr.get_active_job_for_file(safe_name)
     if active_job is not None:
         return JSONResponse(
@@ -128,13 +139,9 @@ def _transcode_conflict_or_cached(
         return JSONResponse(
             status_code=200,
             content={
-                "status": "success",
-                "already_exists": True,
-                "original_filename": safe_name,
-                "output_filename": output_filename,
-                "video_url": f"/videos/{output_filename}",
-                "size_bytes": stat.st_size,
-                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                "status": "success", "already_exists": True, "original_filename": safe_name,
+                "output_filename": output_filename, "video_url": f"/videos/{output_filename}",
+                "size_bytes": stat.st_size, "size_mb": round(stat.st_size / (1024 * 1024), 2),
             },
         )
     return None
@@ -146,17 +153,18 @@ async def transcode_video(
     target_resolution: Optional[str] = "1080p",
     async_mode: bool = Query(True),
     force: bool = Query(False),
+    pool=Depends(get_camera_pool),
+    sm=Depends(get_stream_manager),
 ):
     """Transcodes a video recording (e.g. HEVC/H.265 or AVI) to web-optimized H.264 MP4."""
     safe_name = os.path.basename(filename)
     path = os.path.join(VIDEOS_DIR, safe_name)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Video file not found")
-
     pair = VideoTranscodeService.get_h264_pair_info(path)
     output_filename, output_path = pair["output_filename"], pair["output_path"]
     job_mgr = _require_active_job_manager()
-    early_resp = _transcode_conflict_or_cached(job_mgr, safe_name, output_filename, output_path, force)
+    early_resp = _transcode_conflict_or_cached(job_mgr, safe_name, output_filename, output_path, force, pool, sm)
     if early_resp is not None:
         return early_resp
     if async_mode:
@@ -164,9 +172,7 @@ async def transcode_video(
             return _submit_async_transcode(job_mgr, safe_name, path, output_path, output_filename, target_resolution)
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return await asyncio.to_thread(
-        _run_sync_transcode, safe_name, path, output_path, output_filename, target_resolution
-    )
+    return await asyncio.to_thread(_run_sync_transcode, safe_name, path, output_path, output_filename, target_resolution)
 
 
 @router.get("/api/videos/jobs/{job_id}")
