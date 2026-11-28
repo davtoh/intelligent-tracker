@@ -28,6 +28,7 @@ from intelligent_tracker.repositories.negative_exemplar_repo import NegativeExem
 from intelligent_tracker.repositories.world_pose_repo import WorldPoseMixin
 from intelligent_tracker.repositories.learned_class_repo import LearnedClassMixin
 from intelligent_tracker.repositories.review_decision_repo import ReviewDecisionMixin
+from intelligent_tracker.repositories.alert_rules_repo import AlertRulesMixin
 
 __all__ = [
     "SQLiteConnectionCoordinator",
@@ -50,5 +51,6 @@ __all__ = [
     "WorldPoseMixin",
     "LearnedClassMixin",
     "ReviewDecisionMixin",
+    "AlertRulesMixin",
 ]
 

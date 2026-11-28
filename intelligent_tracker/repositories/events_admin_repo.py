@@ -4,6 +4,10 @@ import sqlite3
 import time
 from typing import Any
 
+from intelligent_tracker.repositories._event_filter_sql import (
+    build_event_filter_clauses,
+    dedupe_normalized_zones,
+)
 from intelligent_tracker.repositories.memory_repo import _hydrate_row
 
 
@@ -15,33 +19,19 @@ def _build_admin_filter_where(
     start_time: float | None = None,
     end_time: float | None = None,
     read_only: bool = False,
+    min_severity: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Build parameterized WHERE clause for timeline admin clear and export queries."""
-    clauses: list[str] = []
-    params: list[Any] = []
-    for col, val in (
-        ("camera_id = ?", camera_id.strip() if camera_id else None),
-        ("zone_id = ?", zone_id.strip() if zone_id else None),
-        ("event_type = ?", event_type.strip() if event_type else None),
-    ):
-        if val is not None:
-            clauses.append(col)
-            params.append(val)
-    if start_time is not None:
-        clauses.append("timestamp >= ?")
-        params.append(float(start_time))
-    if end_time is not None:
-        clauses.append("timestamp <= ?")
-        params.append(float(end_time))
-    sev = severity.strip().lower() if severity else ""
-    if sev:
-        clauses.append(
-            "(LOWER(COALESCE(json_extract(metadata_json, '$.severity'), '')) = ? "
-            "OR (',' || LOWER(COALESCE(tags, '')) || ',') LIKE ?)"
-        )
-        params.extend([sev, f"%,{sev},%"])
-    if read_only:
-        clauses.append("COALESCE(is_read, 0) = 1")
+    clauses, params = build_event_filter_clauses(
+        camera_id=camera_id,
+        severity=severity,
+        min_severity=min_severity,
+        event_type=event_type,
+        zone_id=zone_id,
+        start_time=start_time,
+        end_time=end_time,
+        read_only=read_only,
+    )
     where_sql = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return where_sql, params
 
@@ -85,7 +75,7 @@ class EventsAdminMixin:
 
                 return {
                     "cameras": _distinct("camera_id"),
-                    "zones": _distinct("zone_id"),
+                    "zones": dedupe_normalized_zones(_distinct("zone_id")),
                     "event_types": _distinct("event_type"),
                     "severities": _distinct("LOWER(TRIM(json_extract(metadata_json, '$.severity')))"),
                 }

@@ -271,6 +271,8 @@ class WorldGraph(WorldGraphEdgeMixin):
         dispatch_events(self._event_bus, [event])
         return result
 
+    update_policy = set_policy
+
     def get_policy(self) -> WorldPolicy:
         """Return an isolated copy of the active WorldPolicy."""
         with self._lock:

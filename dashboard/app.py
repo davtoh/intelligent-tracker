@@ -54,6 +54,7 @@ from dashboard.dependencies import (
     set_shutting_down,
 )
 from dashboard.routers import (
+    alert_rules_router,
     analytics_router,
     cameras_router,
     camera_diagnostics_router,
@@ -262,7 +263,8 @@ def create_app() -> FastAPI:
     for router in (
         system_router, cameras_router, camera_diagnostics_router,
         camera_recording_router, categories_router, categories_and_collision_router,
-        events_admin_router, gallery_health_router, learned_classes_router, processing_mode_router, multiview_router,
+        events_admin_router, alert_rules_router, gallery_health_router, learned_classes_router,
+        processing_mode_router, multiview_router,
         streaming_router, scenarios_router, review_router, rsac_router, analytics_router,
         tagging_router, videos_router, topology_router, world_router,
     ):

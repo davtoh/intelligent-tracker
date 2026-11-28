@@ -28,11 +28,13 @@ class EventFTSIndex:
         auto_attach: bool = True,
         index_state_events: bool = False,
         use_write_through: bool = True,
+        promotion_engine: Any = None,
     ) -> None:
         self.db = db
         self.state_event_cooldown = max(0.0, float(state_event_cooldown))
         self.index_state_events = bool(index_state_events)
         self.use_write_through = bool(use_write_through)
+        self.promotion_engine = promotion_engine
         self._lock = threading.Lock()
         self._attached_buses: list[Any] = []
         self._last_state_indexed: dict[str, float] = {}
@@ -100,12 +102,15 @@ class EventFTSIndex:
         if self.db is None:
             return None
         name, cat = self._resolve_entity_meta(doc["entity_id"], doc["entity_name"], doc["category"])
+        doc = {**doc, "entity_name": name, "category": cat}
+        if self.promotion_engine is not None:
+            doc = self.promotion_engine.evaluate(doc)
         kwargs = {
             "summary": doc["summary"],
             "event_type": doc["event_type"],
             "entity_id": doc["entity_id"],
-            "entity_name": name,
-            "category": cat,
+            "entity_name": doc["entity_name"],
+            "category": doc["category"],
             "camera_id": doc["camera_id"],
             "zone_id": doc["zone_id"],
             "timestamp": doc["timestamp"],

@@ -21,6 +21,7 @@ from dashboard.services.stream_pool_coordinator import StreamPoolCoordinator
 from dashboard.stream_manager import StreamManager
 from intelligent_tracker.database import TrackerDB
 from intelligent_tracker.events import EventBus
+from intelligent_tracker.events.promotion_engine import AlertPromotionEngine
 from intelligent_tracker.memory import ConfidenceEngine, EventFTSIndex
 from intelligent_tracker.world import (
     GlobalCoordinateMapper,
@@ -61,24 +62,31 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             coordinate_mapper=self.coordinate_mapper,
         )
         self.world_graph.handoff_coordinator = self.handoff_coordinator
-        self._db = TrackerDB(db_path) if db_path else None
-        self._confidence_engine = ConfidenceEngine(db=self._db, event_bus=self.event_bus)
-        self.event_fts_index = (
-            EventFTSIndex(db=self._db, event_bus=self.event_bus, auto_attach=True) if self._db is not None else None
-        )
+        self._init_memory_and_promotion(db_path)
         self._config_store = CameraConfigStore(config_file=config_file, lock=self._lock)
         self._coordinator = StreamPoolCoordinator(
-            db_path=db_path,
-            base_config_path=resolved_base_config,
-            world_graph=self.world_graph,
-            lock=self._lock,
-            event_bus=self.event_bus,
-            confidence_engine=self._confidence_engine,
-            event_fts_index=self.event_fts_index,
+            db_path=db_path, base_config_path=resolved_base_config, world_graph=self.world_graph,
+            lock=self._lock, event_bus=self.event_bus,
+            confidence_engine=self._confidence_engine, event_fts_index=self.event_fts_index,
         )
-
-        # Auto-restore configured cameras
         self.load_cameras()
+
+    def _init_memory_and_promotion(self, db_path: str) -> None:
+        """Initialize pool-scoped TrackerDB, ConfidenceEngine, AlertPromotionEngine, and EventFTSIndex."""
+        self._db = TrackerDB(db_path) if db_path else None
+        self._confidence_engine = ConfidenceEngine(db=self._db, event_bus=self.event_bus)
+        self.promotion_engine = (
+            AlertPromotionEngine(db=self._db, world_graph=self.world_graph) if self._db is not None else None
+        )
+        if self.promotion_engine is not None:
+            self.promotion_engine.sync_policy()
+        self.event_fts_index = (
+            EventFTSIndex(
+                db=self._db, event_bus=self.event_bus, auto_attach=True, promotion_engine=self.promotion_engine
+            )
+            if self._db is not None
+            else None
+        )
 
     def load_cameras(self) -> None:
         """Load saved camera configurations and instantiate enabled streams."""

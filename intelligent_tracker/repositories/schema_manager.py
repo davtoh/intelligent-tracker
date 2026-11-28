@@ -10,11 +10,13 @@ import sqlite3
 from typing import Any
 
 from intelligent_tracker.category_registry import DEFAULT_CUSTOM_CATEGORIES, migrate_category_registry
+from intelligent_tracker.repositories.alert_rules_schema import _migrate_v6_alert_rules
 from intelligent_tracker.repositories.memory_schema import apply_memory_schema_migrations
 from intelligent_tracker.repositories.review_schema import _migrate_v5_review_decisions
 from intelligent_tracker.repositories.video_schema import apply_video_schema_migrations
 
 logger = logging.getLogger(__name__)
+SCHEMA_VERSION = 6
 
 _CORE_TABLES_DDL = (
     """CREATE TABLE IF NOT EXISTS entities (
@@ -287,6 +289,8 @@ class SchemaMixin:
             _migrate_v4_learned_classes(cursor)
         if cur_ver < 5:
             _migrate_v5_review_decisions(cursor)
+        if cur_ver < 6:
+            _migrate_v6_alert_rules(cursor)
 
     def _seed_default_data(self, cursor: sqlite3.Cursor) -> None:
         """Seed default role-based categories and pet whitelist entries."""

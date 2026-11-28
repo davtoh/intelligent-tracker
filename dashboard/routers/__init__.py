@@ -15,6 +15,7 @@ Exports the 8 domain APIRouters:
 - world: World intelligence Q&A, entity confidence, and FTS5 timeline search
 """
 
+from dashboard.routers.alert_rules import router as alert_rules_router
 from dashboard.routers.analytics import router as analytics_router
 from dashboard.routers.cameras import router as cameras_router
 from dashboard.routers.camera_diagnostics import router as camera_diagnostics_router
@@ -37,6 +38,7 @@ from dashboard.routers.videos import router as videos_router
 from dashboard.routers.world import router as world_router
 
 __all__ = [
+    "alert_rules_router",
     "analytics_router",
     "cameras_router",
     "camera_diagnostics_router",
@@ -44,6 +46,8 @@ __all__ = [
     "categories_router",
     "categories_and_collision_router",
     "events_admin_router",
+    "gallery_health_router",
+    "learned_classes_router",
     "multiview_router",
     "processing_mode_router",
     "review_router",
