@@ -99,9 +99,16 @@ from dashboard.schemas import (
     WorldQueryRequest,
     ZoneCreateRequest,
 )
+from dashboard.services.debug_session import (
+    install_debug_runtime,
+    is_debug_mode,
+    uninstall_debug_runtime,
+)
 from dashboard.services.diagnostic_bridge import (
     DiagnosticTraceMiddleware,
     init_diagnostic_tracer,
+    observations_enabled,
+    register_observation_routes,
 )
 from dashboard.services.diagnostic_log_handler import (
     install_diagnostic_log_handler,
@@ -152,22 +159,18 @@ _probe_video_file = VideoTranscodeService.probe_video
 def _init_runtime_services(application: FastAPI):
     """Initialize CameraPool, ScenarioManager, TrackerDB, and StreamLifecycleManager."""
     cfg_file = os.getenv("CAMERAS_CONFIG_PATH") or "configs/cameras.json"
-    db_file = os.getenv("TRACKER_DB_PATH") or "data/tracker.db"
+    db_file = os.getenv("TRACKER_DB_PATH") or os.getenv("TRACKER_DB") or "data/tracker.db"
     scen_file = os.getenv("SCENARIOS_CONFIG_PATH") or "configs/scenarios.yaml"
     pool = CameraPool(config_file=cfg_file, db_path=db_file)
     primary_sm = pool.primary_stream
     db = TrackerDB(db_file)
     owned_db: Optional[TrackerDB] = db
     scen_mgr = ScenarioManager(
-        config_path=scen_file,
-        db=db,
-        db_path=db_file,
-        world_graph=getattr(pool, "world_graph", None),
-        coordinate_mapper=getattr(pool, "coordinate_mapper", None),
+        config_path=scen_file, db=db, db_path=db_file,
+        world_graph=getattr(pool, "world_graph", None), coordinate_mapper=getattr(pool, "coordinate_mapper", None),
     )
-    handoff = getattr(pool, "handoff_coordinator", None)
-    if handoff is not None:
-        handoff.topology, handoff.transition_registry = scen_mgr.topology, scen_mgr.world_transitions
+    if getattr(pool, "handoff_coordinator", None) is not None:
+        pool.handoff_coordinator.topology, pool.handoff_coordinator.transition_registry = scen_mgr.topology, scen_mgr.world_transitions
     if getattr(pool, "_coordinator", None) is not None:
         pool._coordinator.scenario_manager = scen_mgr
     lifecycle_mgr = StreamLifecycleManager(db=db, camera_pool=pool)
@@ -187,7 +190,6 @@ def _init_runtime_services(application: FastAPI):
         scen_mgr.apply_to_stream_manager(sm)
     try:
         from intelligent_tracker.reid.gallery_reembed import reembed_mismatched_signatures
-
         reembed_mismatched_signatures(db)
     except Exception as exc:
         logger.warning("Startup gallery re-embed check skipped: %s", exc)
@@ -201,6 +203,8 @@ async def lifespan(application: FastAPI):
     set_parent_death_signal()
     start_parent_watchdog()
     log_handler = install_diagnostic_log_handler()
+    if is_debug_mode():
+        install_debug_runtime()
     logger.info("Initializing Intelligent Tracker CameraPool & ScenarioManager...")
     pool, primary_sm, lifecycle_mgr, owned_db = _init_runtime_services(application)
 
@@ -216,6 +220,8 @@ async def lifespan(application: FastAPI):
     if owned_db is not None:
         owned_db.close()
     clear_app_state(application)
+    if is_debug_mode():
+        uninstall_debug_runtime()
     remove_diagnostic_log_handler(log_handler)
     stop_parent_watchdog()
 
@@ -236,6 +242,7 @@ def create_app() -> FastAPI:
         title="Intelligent Tracker Web Dashboard & VMS",
         description="Edge AI Retail & Security Analytics Multi-Camera VMS Platform",
         version="1.2.0",
+        debug=is_debug_mode(),
         lifespan=lifespan,
     )
 
@@ -264,19 +271,21 @@ def create_app() -> FastAPI:
     ):
         application.include_router(router)
 
+    application.add_api_route("/", serve_index, methods=["GET"], response_class=HTMLResponse)
+    register_observation_routes(application)
     return application
 
 
-app = create_app()
-
-
-@app.get("/", response_class=HTMLResponse)
 async def serve_index():
     """Serve the modern single-page dashboard."""
     index_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(index_path):
-        return HTMLResponse(content=_jinja_env.get_template("index.html").render())
+        html = _jinja_env.get_template("index.html").render(frontier_debug_observations=observations_enabled())
+        return HTMLResponse(content=html)
     return HTMLResponse("<h1>Intelligent Tracker Dashboard Initializing...</h1>")
+
+
+app = create_app()
 
 
 __all__ = [

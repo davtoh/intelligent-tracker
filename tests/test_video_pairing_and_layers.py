@@ -155,6 +155,7 @@ class TestBatchPTSAndResolutionMetadata(unittest.TestCase):
             db_path=self.db_path,
             detector_name="mock",
             sample_rate=1,
+            conf_threshold=0.95,
         )
         try:
             summary = indexer.process_video(self.video_path, verbose=False)
@@ -203,7 +204,7 @@ class TestBatchPTSAndResolutionMetadata(unittest.TestCase):
         mock_cap.get.side_effect = _cap_get
         mock_cap.read.side_effect = _cap_read
 
-        indexer = VideoIndexer(db_path=self.db_path, detector_name="mock", sample_rate=1)
+        indexer = VideoIndexer(db_path=self.db_path, detector_name="mock", sample_rate=1, conf_threshold=0.95)
         try:
             with patch("intelligent_tracker.batch.cv2.VideoCapture", return_value=mock_cap):
                 summary = indexer.process_video(self.video_path, verbose=False)

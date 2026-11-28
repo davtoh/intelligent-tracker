@@ -28,7 +28,7 @@ from intelligent_tracker.database import TrackerDB
 
 logger = logging.getLogger(__name__)
 
-REPORTS_DIR = os.path.join("data", "reports")
+REPORTS_DIR = os.getenv("TRACKER_REPORTS_DIR") or os.path.join("data", "reports")
 _DEFAULT_REPORTS_DIR_ABS = os.path.abspath(REPORTS_DIR)
 _VIDEO_EXTENSIONS = (".mp4", ".mkv", ".avi", ".mov")
 _store_lock = threading.RLock()

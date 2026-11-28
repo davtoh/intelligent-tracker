@@ -199,3 +199,21 @@ All 4 steps of `.TODO/integration_seams_entity_persistence_master_roadmap.md` (`
 - **Studio Minimap Zoom/Fit/Pan, 4-Point BEV Quad & `< 260L` Split (`BUG-25`)**: `dashboard/static/js/studio_media.js` split from `studio_canvas.js` (`< 260L`), `world_minimap.js`, and `world_minimap_interactions.js`.
 - **Journey, Analytics & Snapshot Overlay Isolation (`ADRs 09, 12`)**: `journey_search.js` empty-prefix suggestions, `analytics_flow_helpers.py` (`zone_id`, `event_type`, `page`, `page_size`, `video:<filename>`), and `dashboard/static/js/snapshot_modal_overlay.js` (`ResizeObserver` + `#timeline` reset).
 - **Seam Probe**: `.diagnostics/probes/reversible_review_and_minimap_probe.py` alongside the 9 workspace seam probes.
+
+---
+
+## 8. Debug Observation Connector (Tier A Adapted)
+
+The dashboard implements the app side of the `system-diagnostics` **Debug Observation Connector (Wire Contract v1)** using **Tier A (Adapted)**:
+
+- **Flag & Loopback Gate**: Routes under `/api/diagnostics/*` are registered in `dashboard/app.py` (`register_observation_routes(application)`) via `dashboard/services/diagnostic_bridge.py` **only** when `FRONTIER_DEBUG_OBSERVATIONS=1` (off by default; all routes return `404` when disabled). Non-loopback clients (`host` not in `127.0.0.1` / `::1`) receive `403`, and every response carries `X-Diagnostics-Contract: 1`.
+- **Contract Routes**: `GET /api/diagnostics/health`, `POST /api/diagnostics/observation` (with `?dry_run=1`, 64 KB cap, server-side redaction of `value`/`password`/`authorization`/`cookie`, and SHA-256 fingerprint deduplication), `GET /api/diagnostics/observations`, `GET /api/diagnostics/observations/{id_or_fingerprint}`, and `GET /api/diagnostics/hud.js` (`Cache-Control: no-store`).
+- **HUD Workflow & Trace Correlation**: When `FRONTIER_DEBUG_OBSERVATIONS=1`, `dashboard/static/index.html` injects the dev-only HUD overlay (`/api/diagnostics/hud.js`) without adding a new dashboard component. While recording, the HUD attaches `X-Debug-Recording-Id` to `fetch`/XHR calls; `DiagnosticTraceMiddleware` copies validated values into `capture_runtime_exception(..., context={"recording_id": ...})`.
+- **Known Limits (Contract v1)**: Live WebSocket frames (`dashboard/routers/multiview.py`, `/ws/{camera_id}`) are not recorded by the HUD, and WebSocket-handler exceptions are not stamped with `recording_id` (Starlette `BaseHTTPMiddleware` intercepts HTTP only).
+- **Local Isolation, Migration & Probe**: Observations live strictly on the local machine under `.diagnostics/` (gitignored via `.diagnostics/.gitignore`). Legacy observations in `data/debug_session/events.jsonl` migrate idempotently via `scripts/debug_inspect.py --migrate-observations`, and `.diagnostics/probes/debug_session.py` surfaces `open_observations_count` with `status: "warning"` whenever active `OBS-XXX` items await triage.
+- **Triage & Audit Commands**:
+  - `diagnose.py observations list` / `show <OBS-ID>` / `pull --url http://127.0.0.1:<port>`
+  - `diagnose.py observations triage --id <OBS-ID> --root-cause "..." --missed-by ... --guard "..."`
+  - `diagnose.py observations resolve --id <OBS-ID> --resolution "..." --commit <sha>`
+  - `diagnose.py observations verify-connector --url http://127.0.0.1:<port>`
+  - `diagnose.py brief --run-probes --pull http://127.0.0.1:<port>`

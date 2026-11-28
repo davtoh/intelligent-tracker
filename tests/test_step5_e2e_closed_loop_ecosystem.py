@@ -95,9 +95,9 @@ class TestStep5E2EClosedLoopEcosystem(unittest.TestCase):
         self, filename: str, path: str, cam_id: str | None, classes: list[int] | None = None,
     ) -> dict:
         opts = vas.parse_analyze_options(
-            1, "mock", 0.2, None, False,
+            1, "mock", 0.95, None, False,
             VideoAnalyzeRequest(
-                detector="mock", sample_rate=1, classes=classes, scenario_camera_id=cam_id,
+                detector="mock", sample_rate=1, confidence=0.95, classes=classes, scenario_camera_id=cam_id,
             ),
         )
         with (

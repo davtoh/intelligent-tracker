@@ -173,5 +173,6 @@
   <script src="/static/video_scrubber.js"></script>
   {% include "partials/scripts_studio.html" %}
   <script src="/static/review_and_rsac.js"></script>
+  {% if frontier_debug_observations %}<script>window.__FRONTIER_DEBUG__ = true;</script><script src="/api/diagnostics/hud.js"></script>{% endif %}
 </body>
 </html>

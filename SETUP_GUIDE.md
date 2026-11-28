@@ -171,6 +171,27 @@ $env:MPLBACKEND="Agg"
 .\.venv\Scripts\python.exe -m unittest discover tests
 ```
 
+### Local Mini-CI Parity (`scripts/mini_ci.py`)
+Mirror `.github/workflows/ci.yml` locally before pushing PRs (Ruff lint, `unittest`, and Sphinx docs) without touching your host `.venv` or leaking external skills:
+```powershell
+# Fast clean-env check in host .venv (Windows / macOS / Linux)
+.\.venv\Scripts\python.exe scripts/mini_ci.py --fast
+
+# Targeted tests only (seconds)
+.\.venv\Scripts\python.exe scripts/mini_ci.py --fast --tests tests/test_mini_ci.py tests/test_diagnostics_contract.py
+
+# True Linux (ubuntu-latest) parity via WSL or Docker
+.\.venv\Scripts\python.exe scripts/mini_ci.py --linux
+.\.venv\Scripts\python.exe scripts/mini_ci.py --linux --backend docker
+```
+
+- **WSL one-time setup (Windows, `Ubuntu-24.04`)**: WSL keeps an isolated ext4 venv at `~/.venvs/intelligent_tracker` keyed by the `requirements.txt` hash. Install the required system packages once inside WSL:
+  ```bash
+  sudo apt-get update && sudo apt-get install -y python3-venv libgl1 libglib2.0-0 ffmpeg nodejs
+  ```
+- **Docker backend (zero WSL setup, works on Windows / macOS / Linux)**: `--linux --backend docker` builds and caches `intelligent-tracker-mini-ci:<req_hash>` on `python:3.12-slim` with `libgl1`, `libglib2.0-0`, `ffmpeg`, and `nodejs` pre-installed.
+- **Clean snapshot**: Add `--clean-snapshot` to exclude local `models/*.onnx` and `data/*.db` files from the CI run.
+
 ### Sample Executions
 ```powershell
 # Windows: Start resilient Web Dashboard with reload bounds & trace recorder

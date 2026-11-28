@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from dashboard.services.camera_pool_queries import snapshot_pool_streams
 import psutil
 
@@ -49,7 +50,9 @@ async def system_status(
     mem_info = process.memory_info()
 
     streams = snapshot_pool_streams(pool)
-    uptime_sec = time.time() - (mgr.start_time if mgr else time.time())
+    start_ts = getattr(mgr, "start_time", time.time()) if mgr else time.time()
+    latest_telemetry = getattr(mgr, "_latest_telemetry", {}) if mgr else {}
+    uptime_sec = time.time() - start_ts
     running = (pool and any(s.is_running for s in streams.values())) or (
         mgr and mgr._running
     )
@@ -65,7 +68,7 @@ async def system_status(
         "pipeline": {
             "camera_id": mgr.camera_id if mgr else "none",
             "cameras_active": len(streams) if pool else 1,
-            "fps": mgr._latest_telemetry.get("fps", 0.0) if mgr else 0.0,
+            "fps": latest_telemetry.get("fps", 0.0),
             "detector": mgr.detector.__class__.__name__ if mgr and mgr.detector else "none",
             "tracker": mgr.tracker.__class__.__name__ if mgr and mgr.tracker else "none",
             "reid_extractor": (
@@ -73,7 +76,7 @@ async def system_status(
                 if mgr and mgr.reid_extractor
                 else "none"
             ),
-            "active_tracks": len(mgr._latest_telemetry.get("active_tracks", [])) if mgr else 0,
+            "active_tracks": len(latest_telemetry.get("active_tracks", [])),
             "event_bus_events": mgr.event_bus.published_count if mgr and mgr.event_bus else 0,
         },
     }
@@ -223,7 +226,7 @@ async def evict_stream_subscribers(
     lm: StreamLifecycleManager = Depends(get_lifecycle_manager),
 ):
     """Forcibly evict all active subscriber leases for a camera, putting it immediately into hibernation."""
-    res = lm.evict_subscribers(camera_id, reason=reason)
+    res = lm.evict_subscribers(camera_id, reason=reason or "Admin eviction")
     if not res.get("success"):
         raise HTTPException(
             status_code=404, detail=res.get("error", "Failed to evict stream")
@@ -275,4 +278,51 @@ async def verify_system_models(model_name: Optional[str] = Query(None)):
         return check_status(model_name=model_name, verify=True, quiet=True)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class DebugObservationRequest(BaseModel):
+    """Payload submitted by the client Debug Observation HUD."""
+
+    note: str = Field(..., min_length=1, max_length=2000)
+    tab: str = Field("", max_length=120)
+    url: str = Field("", max_length=500)
+    breadcrumbs: list[Dict[str, Any]] = Field(default_factory=list)
+    viewport: Optional[Dict[str, Any]] = None
+
+
+@router.get("/api/system/debug/summary")
+async def get_debug_session_summary(
+    min_level: str = Query("WARNING"),
+    limit: int = Query(20, ge=1, le=200),
+):
+    """Return deduplicated error/warning summary, user observations, and debug mode status."""
+    from dashboard.services.debug_session import is_debug_mode, summarize_debug_session
+
+    summary = summarize_debug_session(min_level=min_level, limit=limit)
+    summary["debug_mode"] = is_debug_mode()
+    return summary
+
+
+@router.post("/api/system/debug/observation")
+async def record_debug_observation(payload: DebugObservationRequest):
+    """Record a qualitative user observation with client breadcrumbs when IT_DEBUG_MODE=1."""
+    from dashboard.services.debug_session import is_debug_mode, record_user_observation
+
+    if not is_debug_mode():
+        raise HTTPException(
+            status_code=403,
+            detail="Debug observation mode is disabled (set IT_DEBUG_MODE=1)",
+        )
+    try:
+        obs = record_user_observation(
+            note=payload.note,
+            tab=payload.tab,
+            url=payload.url,
+            breadcrumbs=payload.breadcrumbs,
+            viewport=payload.viewport,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "recorded", "observation": obs}
+
 

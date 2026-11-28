@@ -4,6 +4,7 @@
 
 import asyncio
 import json
+import time
 import unittest
 
 from fastapi import WebSocketDisconnect
@@ -60,7 +61,7 @@ class _FakePool:
 
 class _FakeWebSocket:
     def __init__(self, incoming: list[str], send_delay: float = 0.0) -> None:
-        self._incoming = asyncio.Queue()
+        self._incoming: asyncio.Queue[str | None] = asyncio.Queue()
         for item in incoming:
             self._incoming.put_nowait(item)
         self.accepted = False
@@ -197,6 +198,8 @@ class TestMultiviewSession(unittest.TestCase):
             await asyncio.gather(session.run(), _drive())
             self.assertEqual(len(ws.sent_bytes), 1)
             self.assertEqual(unpack_frame(ws.sent_bytes[0]).seq, 9)
+            self.assertIsNotNone(ws.closed)
+            assert ws.closed is not None
             self.assertEqual(ws.closed[0], 1001)
             self.assertFalse(cam1.thumbnail_cache.has_leases())
 
@@ -223,6 +226,45 @@ class TestMultiviewSession(unittest.TestCase):
             self.assertEqual([s["status"] for s in statuses], ["online", "offline"])
 
         asyncio.run(_run())
+
+    def test_slow_hanging_websocket_close_completes_within_bounded_timeout(self) -> None:
+        """A hanging ws.close() during shutdown times out at ~1.0s without hanging teardown."""
+
+        class _HangingCloseWebSocket(_FakeWebSocket):
+            def __init__(self) -> None:
+                super().__init__([])
+                self.close_started: tuple[int, str] | None = None
+
+            async def close(self, code: int = 1000, reason: str = "") -> None:
+                self.close_started = (code, reason)
+                await asyncio.sleep(10.0)
+                await super().close(code=code, reason=reason)
+
+        async def _run() -> float:
+            cam1 = _FakeStreamManager("cam_01")
+            pool = _FakePool({"cam_01": cam1})
+            ws = _HangingCloseWebSocket()
+            shutdown_evt = asyncio.Event()
+            session = MultiviewSession(ws, pool=pool, limits=_limits(), shutdown_event=shutdown_evt, session_id="s1")
+
+            async def _trigger_shutdown() -> None:
+                await asyncio.sleep(0.02)
+                ws._incoming.put_nowait(json.dumps({"v": 1, "action": "subscribe", "cameras": ["cam_01"], "layout": "2x2"}))
+                await asyncio.sleep(0.02)
+                shutdown_evt.set()
+
+            started = time.monotonic()
+            await asyncio.gather(session.run(), _trigger_shutdown())
+            elapsed = time.monotonic() - started
+            self.assertEqual(ws.close_started, (1001, "Server shutting down"))
+            self.assertIsNone(ws.closed)
+            self.assertFalse(cam1.thumbnail_cache.has_leases())
+            self.assertIn("s1:cam_01", cam1.removed)
+            return elapsed
+
+        elapsed = asyncio.run(_run())
+        self.assertGreaterEqual(elapsed, 0.9)
+        self.assertLess(elapsed, 2.5)
 
 
 if __name__ == "__main__":

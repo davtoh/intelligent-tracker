@@ -89,7 +89,9 @@ class TestStep2ClockAndCoordinates(unittest.TestCase):
 
         db = TrackerDB(os.path.join(tmpdir.name, "batch.db"))
         self.addCleanup(db.close)
-        indexer = VideoIndexer(db=db, detector_name="mock", reid_name="color", video_filename="clip.mp4")
+        indexer = VideoIndexer(
+            db=db, detector_name="mock", reid_name="color", conf_threshold=0.95, video_filename="clip.mp4",
+        )
         seen_ts: list[float] = []
         orig_step = FrameProcessor.step
 
