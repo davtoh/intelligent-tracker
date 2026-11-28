@@ -42,19 +42,19 @@
 
 ---
 
-## Milestone 2: Live Recording -> Alert & Sighting Clip Provenance + `#alerts` Clip Jump *(Deferred to Next Turn / Milestone)*
+## Milestone 2: Live Recording -> Alert & Sighting Clip Provenance + `#alerts` Clip Jump
 
-- [ ] **dashboard/services/recording_transcode_helper.py**: Add `get_active_recording_provenance(controller) -> tuple[str | None, float | None]` returning `(filename, started_at)` safely when actively recording.
-- [ ] **dashboard/services/stream_worker.py** & **intelligent_tracker/pipeline/frame_processor.py**: Propagate active recording `(filename, started_at)` from `StreamRecordingController` into `FrameProcessor` before `step()` so live ticks compute `media_offset_sec = max(0.0, now - started_at)` and populate `gallery_matcher.video_filename` / `current_media_offset_sec` (clearing them when recording stops; never disturbing offline `VideoIndexer` provenance).
-- [ ] **intelligent_tracker/analytics/zone_stats.py**, **intelligent_tracker/matching/_gallery_signals.py**, & **intelligent_tracker/pipeline/post_detection_governance.py**: Stamp `video_filename` and `media_offset_sec` into `metadata` of live zone, tripwire, occupancy, pet, entity-identified, and restricted-entity events and periodic sightings during active recording (`OBS-039`, `OBS-041`).
-- [ ] **dashboard/services/alerts_query_service.py**: Surface top-level `video_filename` and `media_offset_sec` from `event.metadata` in `_event_to_dict()` for EventBus fallback consistency.
-- [ ] **dashboard/static/js/video_timeline_links.js** & **dashboard/static/js/alerts_view.js**: Update `buildSeekInStudioButtonHtml(videoFilename, offsetSec)` to render `"▶ Clip @ MM:SS"` (preserving `.btn-seek-studio`, `data-video-filename`, `data-offset-sec`) and resolve paired `_h264.mp4` playback seamlessly when available (`OBS-039`, `OBS-041`).
-- [ ] **tests/test_step3_recording_provenance_and_studio_bev.py** & **tests/test_step3_studio_bev_frontend.py**: Add backend + Node VM tests verifying live alert/sighting clip provenance persistence and `#alerts` `"▶ Clip @ MM:SS"` deep-link rendering.
+- [x] **dashboard/services/recording_transcode_helper.py**: Add `get_active_recording_provenance(controller) -> tuple[str | None, float | None]` returning `(filename, started_at)` safely when actively recording.
+- [x] **dashboard/services/stream_worker.py** & **intelligent_tracker/pipeline/frame_processor.py**: Propagate active recording `(filename, started_at)` from `StreamRecordingController` into `FrameProcessor` before `step()` so live ticks compute `media_offset_sec = max(0.0, now - started_at)` and populate `gallery_matcher.video_filename` / `current_media_offset_sec` (clearing them when recording stops; never disturbing offline `VideoIndexer` provenance).
+- [x] **intelligent_tracker/analytics/zone_stats.py**, **intelligent_tracker/matching/_gallery_signals.py**, & **intelligent_tracker/pipeline/post_detection_governance.py**: Stamp `video_filename` and `media_offset_sec` into `metadata` of live zone, tripwire, occupancy, pet, entity-identified, and restricted-entity events and periodic sightings during active recording (`OBS-039`, `OBS-041`).
+- [x] **dashboard/services/alerts_query_service.py**: Surface top-level `video_filename` and `media_offset_sec` from `event.metadata` in `_event_to_dict()` for EventBus fallback consistency.
+- [x] **dashboard/static/js/video_timeline_links.js** & **dashboard/static/js/alerts_view.js**: Update `buildSeekInStudioButtonHtml(videoFilename, offsetSec)` to render `"▶ Clip @ MM:SS"` (preserving `.btn-seek-studio`, `data-video-filename`, `data-offset-sec`) and resolve paired `_h264.mp4` playback seamlessly when available (`OBS-039`, `OBS-041`).
+- [x] **tests/test_step3_recording_provenance_and_studio_bev.py** & **tests/test_step3_studio_bev_frontend.py**: Add backend + Node VM tests verifying live alert/sighting clip provenance persistence and `#alerts` `"▶ Clip @ MM:SS"` deep-link rendering.
 
 **Milestone 2 Verifier**:
-- `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path dashboard/services/recording_transcode_helper.py intelligent_tracker/pipeline/frame_processor.py intelligent_tracker/analytics/zone_stats.py intelligent_tracker/matching/_gallery_signals.py intelligent_tracker/pipeline/post_detection_governance.py dashboard/services/alerts_query_service.py dashboard/static/js/video_timeline_links.js dashboard/static/js/alerts_view.js --max-lines 350 --max-fn-lines 40`
-- `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_recording_provenance_and_studio_bev.py tests/test_step3_studio_bev_frontend.py tests/test_step5_timeline_ticks_and_deeplinks.py tests/test_step2_alerts_governance_and_rules.py`
-- `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run video_studio_contract_probe`
+- [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path dashboard/services/recording_transcode_helper.py intelligent_tracker/pipeline/frame_processor.py intelligent_tracker/analytics/zone_stats.py intelligent_tracker/matching/_gallery_signals.py intelligent_tracker/pipeline/post_detection_governance.py dashboard/services/alerts_query_service.py dashboard/static/js/video_timeline_links.js dashboard/static/js/alerts_view.js --max-lines 350 --max-fn-lines 40`
+- [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step3_recording_provenance_and_studio_bev.py tests/test_step3_studio_bev_frontend.py tests/test_step5_timeline_ticks_and_deeplinks.py tests/test_step2_alerts_governance_and_rules.py`
+- [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run video_studio_contract_probe`
 
 ---
 

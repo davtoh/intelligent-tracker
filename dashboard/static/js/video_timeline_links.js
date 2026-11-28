@@ -22,7 +22,14 @@
     const sec = Math.max(0, Number(offsetSec) || 0);
     const mins = Math.floor(sec / 60);
     const rem = Math.floor(sec % 60);
-    return `${mins}:${rem < 10 ? '0' : ''}${rem}`;
+    return `${mins < 10 ? '0' : ''}${mins}:${rem < 10 ? '0' : ''}${rem}`;
+  }
+
+  function resolvePlayableFilename(videoFilename) {
+    const clean = typeof videoFilename === 'string' ? videoFilename.trim() : '';
+    if (!clean) return '';
+    const paired = window.VideoLibrary?.getPairedH264?.(clean);
+    return paired?.convertedFilename ? String(paired.convertedFilename).trim() : clean;
   }
 
   function resolveTickType(ev) {
@@ -124,16 +131,18 @@
   }
 
   function buildSeekInStudioButtonHtml(videoFilename, offsetSec = 0) {
-    if (!videoFilename || typeof videoFilename !== 'string' || !videoFilename.trim()) return '';
-    const safeFile = escapeHtml(videoFilename.trim());
+    const playable = resolvePlayableFilename(videoFilename);
+    if (!playable) return '';
+    const safeFile = escapeHtml(playable);
     const safeOffset = Math.max(0, Number(offsetSec) || 0).toFixed(2);
-    const title = `Jump to ${videoFilename.trim()} at ${formatOffsetLabel(safeOffset)}`;
-    return `<button type="button" class="btn btn-xs btn-outline btn-seek-studio" data-video-filename="${safeFile}" data-offset-sec="${safeOffset}" onclick="window.VideoTimelineLinks?.seekFromButton?.(this)" title="${escapeHtml(title)}">📼 Seek in Studio</button>`;
+    const offsetLabel = formatOffsetLabel(safeOffset);
+    const title = `Jump to ${playable} at ${offsetLabel}`;
+    return `<button type="button" class="btn btn-xs btn-outline btn-seek-studio" data-video-filename="${safeFile}" data-offset-sec="${safeOffset}" onclick="window.VideoTimelineLinks?.seekFromButton?.(this)" title="${escapeHtml(title)}">▶ Clip @ ${offsetLabel}</button>`;
   }
 
   function seekToVideoTimestamp(videoFilename, offsetSec = 0) {
-    if (!videoFilename || typeof videoFilename !== 'string' || !videoFilename.trim()) return false;
-    const cleanFilename = videoFilename.trim();
+    const playable = resolvePlayableFilename(videoFilename);
+    if (!playable) return false;
     const safeOffset = Math.max(0, Number(offsetSec) || 0);
     if (typeof window.switchTab === 'function') {
       window.switchTab('tab-videos');
@@ -141,7 +150,7 @@
       window.location.hash = '#videos';
     }
     window.dispatchEvent(new CustomEvent('video-seek-request', {
-      detail: { filename: cleanFilename, offsetSec: safeOffset },
+      detail: { filename: playable, offsetSec: safeOffset },
     }));
     return true;
   }
@@ -220,6 +229,7 @@
     renderTimelineTicks,
     extractEventsFromReport,
     computeTickPercent,
+    resolvePlayableFilename,
     buildSeekInStudioButtonHtml,
     buildSourceJumpButtonsHtml,
     handleSourceJumpClick,

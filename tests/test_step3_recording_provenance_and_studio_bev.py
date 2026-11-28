@@ -17,11 +17,21 @@ import numpy as np
 from dashboard.app import app
 from dashboard.dependencies import get_camera_pool, get_stream_manager
 from dashboard.routers import videos as videos_router
+from dashboard.services.alerts_query_service import query_merged_events
 from dashboard.services.recording_transcode_helper import (
     find_active_recording_for_file,
+    get_active_recording_provenance,
     is_web_playable_codec,
 )
 from dashboard.services.stream_recording import StreamRecordingController
+from intelligent_tracker.analytics import AnalyticsEngine
+from intelligent_tracker.database import TrackerDB
+from intelligent_tracker.events import EventBus
+from intelligent_tracker.geometry import Tripwire, ZoneROI
+from intelligent_tracker.matching._gallery_signals import emit_periodic_sighting
+from intelligent_tracker.pipeline import FrameProcessor, PipelineBundle, PipelineConfig
+from intelligent_tracker.pipeline.post_detection_governance import publish_id_events
+from intelligent_tracker.tracker import Track
 from intelligent_tracker.video.writers import DEFAULT_CODEC_FALLBACKS, PipelineVideoWriter
 
 
@@ -269,6 +279,77 @@ class TestStep3Milestone1RecordingAndTranscode(unittest.TestCase):
                 self.assertEqual(offloaded, ["probe_video", "_handle_auto_transcode"])
 
         asyncio.run(_run())
+
+    def test_get_active_recording_provenance_and_frame_processor_propagation(self) -> None:
+        """Active recording provenance propagates to FrameProcessor and clears cleanly on stop."""
+        self.assertEqual(get_active_recording_provenance(None), (None, None))
+        ctrl = StreamRecordingController(
+            camera_id="cam_live", output_dir=self.tmpdir.name,
+            writer_factory=lambda p, **kw: _StubWriter(p, codec="avc1", **kw), auto_transcode=False,
+        )
+        self.assertEqual(get_active_recording_provenance(ctrl), (None, None))
+        ctrl.start(filename="live_prov.mp4")
+        fn, started_at = get_active_recording_provenance(ctrl)
+        self.assertEqual(fn, "live_prov.mp4")
+        self.assertIsNotNone(started_at)
+
+        matcher = SimpleNamespace(video_filename="", current_media_offset_sec=None)
+        analytics = AnalyticsEngine(camera_id="cam_live", heatmap_enabled=False)
+        proc = FrameProcessor(PipelineBundle(config=PipelineConfig(camera_id="cam_live"), analytics=analytics, gallery_matcher=matcher))
+        frame = np.zeros((64, 64, 3), dtype=np.uint8)
+        proc.set_recording_provenance(fn, started_at)
+        proc.step(frame, timestamp=float(started_at) + 12.5)
+        self.assertEqual((matcher.video_filename, analytics.video_filename), ("live_prov.mp4", "live_prov.mp4"))
+        self.assertAlmostEqual(matcher.current_media_offset_sec, 12.5, places=2)
+
+        ctrl.stop()
+        proc.set_recording_provenance(*get_active_recording_provenance(ctrl))
+        proc.step(frame, timestamp=float(started_at) + 15.0)
+        self.assertEqual((matcher.video_filename, matcher.current_media_offset_sec), ("", None))
+
+        off_m = SimpleNamespace(video_filename="offline_clip.mp4", current_media_offset_sec=42.0)
+        FrameProcessor(PipelineBundle(config=PipelineConfig(camera_id="offline_video"), gallery_matcher=off_m)).step(frame, timestamp=1700000042.0)
+        self.assertEqual((off_m.video_filename, off_m.current_media_offset_sec), ("offline_clip.mp4", 42.0))
+
+    def test_live_recording_stamps_clip_provenance_on_alerts_sightings_and_bus_fallback(self) -> None:
+        """Live zone/tripwire/capacity/pet/ID/restricted alerts and sightings carry clip provenance."""
+        db, bus = TrackerDB(db_path=os.path.join(self.tmpdir.name, "prov.db")), EventBus()
+        bus.start()
+        self.addCleanup(db.close)
+        self.addCleanup(bus.stop)
+        eid = db.add_entity(name="Mallory", category="restricted")
+        zone = ZoneROI(name="vault", polygon=[(0, 0), (100, 0), (100, 100), (0, 100)], capacity_limit=1)
+        analytics = AnalyticsEngine(
+            zones=[zone], tripwires=[Tripwire(line_segment=((50, 0), (50, 100)), name="gate")],
+            heatmap_enabled=False, event_bus=bus, camera_id="cam_01", pet_whitelist={"pet"},
+        )
+        analytics.video_filename, analytics.current_media_offset_sec = "cam_live_rec.mp4", 14.25
+        frame = np.zeros((120, 120, 3), dtype=np.uint8)
+        t1 = Track(track_id=1, centroid=(20.0, 50.0), bbox=(10, 40, 20, 20), label="person")
+        t2 = Track(track_id=2, centroid=(30.0, 50.0), bbox=(20, 40, 20, 20), label="dog")
+        setattr(t2, "entity_category", "pet")
+        analytics.update({1: t1}, timestamp=1700000010.0, current_frame=frame)
+        t1.centroid = (80.0, 50.0)
+        analytics.update({1: t1, 2: t2}, timestamp=1700000014.25, current_frame=frame)
+
+        matcher = SimpleNamespace(
+            db=db, fts_index=None, _last_sighting_time={}, sighting_interval=5.0,
+            video_filename="cam_live_rec.mp4", current_media_offset_sec=14.25, camera_id="", run_id="", crops_dir=self.tmpdir.name,
+        )
+        bundle = PipelineBundle(config=PipelineConfig(camera_id="cam_01"), analytics=analytics, gallery_matcher=matcher, event_bus=bus)
+        id_ev = SimpleNamespace(track_id=1, entity_id=eid, name="Mallory", category="restricted", similarity=0.92, zone_id="vault")
+        publish_id_events(bundle, frame, {1: t1}, [id_ev], timestamp=1700000014.25)
+        self.assertTrue(emit_periodic_sighting(
+            matcher, entity_id=eid, name="Mallory", category="restricted", track=t1,
+            confidence=0.92, source="cam_01", zone_id="vault", timestamp=1700000014.25, frame=frame,
+        ))
+        s0 = db.get_sightings(entity_id=eid)[0]
+        self.assertEqual((s0["video_filename"], s0["camera_id"]), ("cam_live_rec.mp4", "cam_01"))
+        self.assertAlmostEqual(s0["media_offset_sec"], 14.25, places=2)
+        bus_items = query_merged_events(SimpleNamespace(event_bus=bus), db=None, limit=50)
+        self.assertTrue({"zone_enter", "tripwire_cross", "occupancy_threshold", "pet_activity", "entity_identified", "restricted_entity_alert"} <= {e["event_type"] for e in bus_items})
+        for ev in bus_items:
+            self.assertEqual((ev.get("video_filename"), round(float(ev.get("media_offset_sec") or 0.0), 2)), ("cam_live_rec.mp4", 14.25))
 
 
 if __name__ == "__main__":

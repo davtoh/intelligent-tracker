@@ -50,6 +50,35 @@ def _matches_recording_target(safe_name: str, target_abs: str | None, status: di
     return False
 
 
+def get_active_recording_provenance(controller: Any) -> tuple[str | None, float | None]:
+    """Return (filename, started_at) when controller is actively recording, else (None, None)."""
+    if controller is None or not getattr(controller, "is_recording", False):
+        return None, None
+    try:
+        if hasattr(controller, "status"):
+            status = controller.status()
+        elif hasattr(controller, "get_recording_status"):
+            status = controller.get_recording_status()
+        else:
+            return None, None
+    except Exception:
+        return None, None
+    if not isinstance(status, dict) or not status.get("is_recording"):
+        return None, None
+    filename = str(status.get("filename") or "").strip()
+    if not filename:
+        out_path = str(status.get("output_path") or "").strip()
+        filename = os.path.basename(out_path) if out_path else ""
+    if not filename:
+        return None, None
+    raw_started = status.get("started_at")
+    try:
+        started_at = float(raw_started) if raw_started is not None else None
+    except (TypeError, ValueError):
+        started_at = None
+    return filename, started_at
+
+
 def find_active_recording_for_file(filename: str, pool: Any, stream_manager: Any) -> dict[str, Any] | None:
     """Return active recording metadata if any live stream is currently writing ``filename``."""
     raw_name = str(filename or "").strip()

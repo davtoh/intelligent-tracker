@@ -16,6 +16,7 @@ from dashboard.services.async_inference_worker import build_live_step_result, bu
 from dashboard.services.cached_replay_provider import reset_bundle_loop_state
 from dashboard.services.camera_diagnostics import CameraHealthManager
 from dashboard.services.diagnostic_bridge import capture_runtime_exception
+from dashboard.services.recording_transcode_helper import get_active_recording_provenance
 
 logger = logging.getLogger("intelligent_tracker.dashboard.worker.recovery")
 
@@ -110,6 +111,9 @@ def step_worker_vs_frame(
         if not replay.is_active():
             reset_bundle_loop_state(getattr(processor, "bundle", None), time.time(), reset_tracker=True)
     is_rec = bool(getattr(worker.manager, "is_recording", False))
+    if hasattr(processor, "set_recording_provenance"):
+        rec_fn, rec_start = get_active_recording_provenance(getattr(worker.manager, "_recording_controller", None))
+        processor.set_recording_provenance(rec_fn, rec_start)
     sw_mod = sys.modules.get("dashboard.services.stream_worker")
     live_step_fn = getattr(sw_mod, "build_live_step_result", build_live_step_result)
     step_res = build_worker_step_result(

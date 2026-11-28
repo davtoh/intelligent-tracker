@@ -9,10 +9,21 @@ from intelligent_tracker.repositories._event_filter_sql import matches_event_fil
 def _event_to_dict(ev: Any) -> dict[str, Any]:
     """Normalize an EventBus event object into a plain dictionary."""
     if hasattr(ev, "to_dict"):
-        return dict(ev.to_dict())
-    if hasattr(ev, "__dataclass_fields__"):
-        return asdict(ev)
-    return {"event_type": getattr(ev, "event_type", "event")}
+        data = dict(ev.to_dict())
+    elif hasattr(ev, "__dataclass_fields__"):
+        data = asdict(ev)
+    else:
+        data = {"event_type": getattr(ev, "event_type", "event")}
+    raw_meta = data.get("metadata")
+    meta: dict[str, Any] = raw_meta if isinstance(raw_meta, dict) else {}
+    if not data.get("video_filename") and meta.get("video_filename"):
+        data["video_filename"] = str(meta["video_filename"]).strip()
+    if data.get("media_offset_sec") is None and meta.get("media_offset_sec") is not None:
+        try:
+            data["media_offset_sec"] = float(meta["media_offset_sec"])
+        except (TypeError, ValueError):
+            pass
+    return data
 
 
 def _matches_filters(

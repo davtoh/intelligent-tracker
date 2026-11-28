@@ -106,7 +106,10 @@
     const snapshotBtn = snapSrc
       ? `<button type="button" class="btn btn-xs btn-outline btn-alert-snapshot" data-alert-index="${idx}" onclick="window.AlertsView?.openAlertSnapshot?.(${idx})">View</button>`
       : '<span class="text-subtle">None</span>';
-    const vFile = ev.video_filename || ev.metadata?.video_filename || '';
+    const rawFile = ev.video_filename || ev.metadata?.video_filename || '';
+    const vFile = window.VideoTimelineLinks?.resolvePlayableFilename?.(rawFile)
+      || window.VideoLibrary?.getPairedH264?.(rawFile)?.convertedFilename
+      || rawFile;
     const vOffset = ev.media_offset_sec ?? ev.metadata?.media_offset_sec ?? 0;
     const seekBtn = window.VideoTimelineLinks?.buildSeekInStudioButtonHtml(vFile, vOffset) || '';
     const rowClass = ev.is_read ? 'alert-row-read' : 'alert-row-unread';
@@ -121,7 +124,7 @@
         <td><span class="${severityClass}">${escapeHtml(severityText)}</span></td>
         <td>${sourceCell}</td>
         <td>${escapeHtml(entityLabel)}</td><td>${escapeHtml(detailText)}</td>
-        <td>${snapshotBtn}${seekBtn}</td>
+        <td>${snapshotBtn}${seekBtn ? ` ${seekBtn}` : ''}</td>
         <td>${actionCell}</td>
       </tr>`;
   }
