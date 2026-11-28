@@ -263,10 +263,8 @@
   }
 
   async function applyTimelineFilter(opts = {}) {
-    const entSel = document.getElementById('timeline-entity-select');
-    const zoneSel = document.getElementById('timeline-zone-select');
-    const srcSel = document.getElementById('timeline-source-select');
-    const limSel = document.getElementById('timeline-limit-select');
+    const entSel = document.getElementById('timeline-entity-select'), zoneSel = document.getElementById('timeline-zone-select');
+    const srcSel = document.getElementById('timeline-source-select'), limSel = document.getElementById('timeline-limit-select');
     if (opts.entityId !== undefined && entSel) entSel.value = opts.entityId || '';
     if (opts.zoneId !== undefined && zoneSel) zoneSel.value = opts.zoneId || '';
     if (opts.source !== undefined && srcSel) srcSel.value = opts.source || '';
@@ -275,27 +273,25 @@
     timelineStartTime = opts.startTime ?? opts.from ?? '';
     timelineEndTime = opts.endTime ?? opts.to ?? '';
     timelineOffset = Math.max(0, Number(opts.offset || 0));
+    window.TimelineFilterHelpers?.syncActiveWindowChip?.({ startTime: timelineStartTime, endTime: timelineEndTime, videoFilename: timelineVideoFilename });
     await loadSightings();
+  }
+
+  async function resetTimelineFilters() {
+    timelineVideoFilename = ''; timelineStartTime = ''; timelineEndTime = ''; timelineOffset = 0;
+    window.TimelineFilterHelpers?.resetTimelineInputs?.();
+    window.TimelineFilterHelpers?.syncActiveWindowChip?.({});
+    window.TimelineFilterHelpers?.clearTimelineUrlHash?.();
+    await loadSightings({ resetOffset: true });
   }
 
   function bindTimelineEvents() {
     const resetAndLoad = () => loadSightings({ resetOffset: true });
     document.getElementById('btn-filter-sightings')?.addEventListener('click', resetAndLoad);
-    document.getElementById('timeline-entity-select')?.addEventListener('change', resetAndLoad);
-    document.getElementById('timeline-zone-select')?.addEventListener('change', resetAndLoad);
-    document.getElementById('timeline-source-select')?.addEventListener('change', resetAndLoad);
-    document.getElementById('timeline-limit-select')?.addEventListener('change', resetAndLoad);
-    document.getElementById('timeline-prev-btn')?.addEventListener('click', () => {
-      const limit = Number(document.getElementById('timeline-limit-select')?.value || 50);
-      timelineOffset = Math.max(0, timelineOffset - limit);
-      loadSightings();
-    });
-    document.getElementById('timeline-next-btn')?.addEventListener('click', () => {
-      if (!timelineHasMore) return;
-      const limit = Number(document.getElementById('timeline-limit-select')?.value || 50);
-      timelineOffset += limit;
-      loadSightings();
-    });
+    document.getElementById('btn-reset-timeline-filters')?.addEventListener('click', resetTimelineFilters);
+    ['timeline-entity-select', 'timeline-zone-select', 'timeline-source-select', 'timeline-limit-select'].forEach(id => document.getElementById(id)?.addEventListener('change', resetAndLoad));
+    document.getElementById('timeline-prev-btn')?.addEventListener('click', () => { timelineOffset = Math.max(0, timelineOffset - Number(document.getElementById('timeline-limit-select')?.value || 50)); loadSightings(); });
+    document.getElementById('timeline-next-btn')?.addEventListener('click', () => { if (!timelineHasMore) return; timelineOffset += Number(document.getElementById('timeline-limit-select')?.value || 50); loadSightings(); });
   }
 
   function showSnapshotModal(imgUrl, title) {
@@ -340,9 +336,9 @@
     loadGallery, resetGalleryFilters, renderGalleryGrid, bindGalleryEvents, loadTimelineFilters,
     loadSightings, bindTimelineEvents, showSnapshotModal, initSnapshotModal,
   };
-
   window.TimelineView = {
-    applyFilter: applyTimelineFilter, loadSightings, loadTimelineFilters, jumpToLiveSource,
+    applyFilter: applyTimelineFilter, resetFilters: resetTimelineFilters,
+    loadSightings, loadTimelineFilters, jumpToLiveSource,
   };
 })();
 

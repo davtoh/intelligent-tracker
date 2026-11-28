@@ -45,7 +45,7 @@ class TestStep1BackendSeams(unittest.TestCase):
         self.assertEqual(default_cfg.get("reid", {}).get("model"), "dual")
         profile = resolve_reid_profile(default_cfg)
         self.assertEqual(profile.model_name, "dual")
-        self.assertEqual(profile.expected_dim, 608)
+        self.assertEqual(profile.expected_dim, 2560)
         with self.assertLogs("intelligent_tracker.reid.profile", level="WARNING") as cm:
             overridden = resolve_reid_profile({"reid": {"model": "color"}})
         self.assertEqual(overridden.model_name, "dual")
@@ -58,14 +58,14 @@ class TestStep1BackendSeams(unittest.TestCase):
         cv2.imwrite(crop_path, np.full((64, 32, 3), 128, dtype=np.uint8))
         db.add_signature(eid, np.ones(96, dtype=np.float32), crop_path=crop_path)
         with self.assertLogs("intelligent_tracker.repositories.signature_repo", level="WARNING"):
-            mat, *_ = db.get_gallery_embeddings(expected_dim=608)
-        self.assertEqual(mat.shape, (0, 608))
+            mat, *_ = db.get_gallery_embeddings(expected_dim=2560)
+        self.assertEqual(mat.shape, (0, 2560))
         self.assertEqual(db._last_gallery_mismatch_count, 1)
         health_before = inspect_gallery_health(db)
         self.assertFalse(health_before["healthy"])
         fake_ext = MagicMock()
-        fake_ext.extract.return_value = np.ones(608, dtype=np.float32)
-        res = reembed_mismatched_signatures(db, extractor=fake_ext, expected_dim=608)
+        fake_ext.extract.return_value = np.ones(2560, dtype=np.float32)
+        res = reembed_mismatched_signatures(db, extractor=fake_ext, expected_dim=2560)
         self.assertEqual(res["reembedded"], 1)
         self.assertTrue(inspect_gallery_health(db)["healthy"])
 

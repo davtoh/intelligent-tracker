@@ -11,18 +11,18 @@
 ---
 
 ## Step 1: P0 Runtime Crashes, Tracking Stability, Clean Studio Overlays & Timeline Filter Reset *(Active)*
-- [ ] **Child Plan**: `.TODO/step_1_p0_runtime_tracking_and_studio_overlays.md` (`--parent tracking_studio_alerts_and_recording_parity_master_roadmap --milestone 1`).
-- [ ] **Goal**: Eliminate the `1,939` live `record_zone_exit(track_id=...)` `TypeError` crashes (`DBG-01`, `OBS-036`), fix boot `CANONICAL_REID_DIM = 608` vs `2560` mismatch (`DBG-02`), eliminate `SortTracker` trailing ghost boxes at `8 FPS` (`OBS-047`, `OBS-036`) and duplicate same-entity labels in one frame (`OBS-040`), fix Camera Edit chip selector bleed (`OBS-036`), switch `#studio` to clean `?annotated=false` + live canvas track redraws + exported `ScrubberOverlay.getCurrentTracks()` (`OBS-028`, `OBS-029`), and fix `#timeline` float-epoch SQL comparison + visible filter Reset UI (`OBS-035`).
-- [ ] **Verifier**:
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path intelligent_tracker/world/handoff.py intelligent_tracker/pipeline/post_detection_governance.py intelligent_tracker/reid/profile.py intelligent_tracker/reid/gallery_reembed.py intelligent_tracker/tracker/sort.py intelligent_tracker/pipeline/frame_processor.py intelligent_tracker/matching/gallery.py intelligent_tracker/matching/identity_hysteresis.py intelligent_tracker/repositories/sightings_query_helpers.py dashboard/services/stream_telemetry.py dashboard/static/js/camera_ai_config.js dashboard/static/studio.js dashboard/static/js/studio_media.js dashboard/static/js/active_source_context.js dashboard/static/js/scrubber_overlay.js dashboard/static/js/gallery_timeline.js dashboard/static/partials/tabs/timeline.html --max-lines 350 --max-fn-lines 40`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_p0_runtime_tracking_and_studio_overlays.py`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run tracking_coasting_and_uniqueness_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run effective_config_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run sightings_provenance_probe`
-  - [ ] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`
-- [ ] **Review Gate**: Fresh reviewer inspects diff, modularity audit (`gallery_timeline.js <= 350L`, `camera_ai_config.js < 280L`, `studio.js <= 350L`), and probe/test output before resolving `OBS-028`, `OBS-029`, `OBS-035`, `OBS-036`, `OBS-040`, `OBS-047` and advancing to Step 2.
+- [x] **Child Plan**: `.TODO/step_1_p0_runtime_tracking_and_studio_overlays.md` (`--parent tracking_studio_alerts_and_recording_parity_master_roadmap --milestone 1`).
+- [x] **Goal**: Eliminate the `1,939` live `record_zone_exit(track_id=...)` `TypeError` crashes (`DBG-01`, `OBS-036`), fix boot `CANONICAL_REID_DIM = 608` vs `2560` mismatch (`DBG-02`), eliminate `SortTracker` trailing ghost boxes at `8 FPS` (`OBS-047`, `OBS-036`) and duplicate same-entity labels in one frame (`OBS-040`), fix Camera Edit chip selector bleed (`OBS-036`), switch `#studio` to clean `?annotated=false` + live canvas track redraws + exported `ScrubberOverlay.getCurrentTracks()` (`OBS-028`, `OBS-029`), and fix `#timeline` float-epoch SQL comparison + visible filter Reset UI (`OBS-035`).
+- [x] **Verifier**:
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" audit --path intelligent_tracker/world/handoff.py intelligent_tracker/pipeline/post_detection_governance.py intelligent_tracker/reid/profile.py intelligent_tracker/reid/gallery_reembed.py intelligent_tracker/tracker/sort.py intelligent_tracker/pipeline/frame_processor.py intelligent_tracker/matching/gallery.py intelligent_tracker/matching/identity_hysteresis.py intelligent_tracker/repositories/sightings_query_helpers.py dashboard/services/stream_telemetry.py dashboard/static/js/camera_ai_config.js dashboard/static/studio.js dashboard/static/js/studio_media.js dashboard/static/js/active_source_context.js dashboard/static/js/scrubber_overlay.js dashboard/static/js/gallery_timeline.js dashboard/static/partials/tabs/timeline.html --max-lines 350 --max-fn-lines 40`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step1_p0_runtime_tracking_and_studio_overlays.py`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run tracking_coasting_and_uniqueness_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run effective_config_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run replay_pipeline_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run deep_link_navigation_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run sightings_provenance_probe`
+  - [x] `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`
+- [x] **Review Gate**: Fresh reviewer inspects diff, modularity audit (`gallery_timeline.js <= 350L`, `camera_ai_config.js < 280L`, `studio.js <= 350L`), and probe/test output before resolving `OBS-028`, `OBS-029`, `OBS-035`, `OBS-036`, `OBS-040`, `OBS-047` and advancing to Step 2.
 
 ---
 

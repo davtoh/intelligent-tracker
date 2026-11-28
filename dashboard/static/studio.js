@@ -56,7 +56,7 @@
   function resolveStudioTracks() {
     const tel = window.latestTelemetry;
     if (Array.isArray(tel?.active_tracks) && (!tel.camera_id || tel.camera_id === studioState.activeCamera)) {
-      return { tracks: tel.active_tracks, sourceResolution: tel.frame_size || null };
+      return { tracks: tel.active_tracks, sourceResolution: tel.source_resolution || tel.frame_size || null };
     }
     const vidTracks = window.ScrubberOverlay?.getCurrentTracks?.();
     return { tracks: Array.isArray(vidTracks) ? vidTracks : [], sourceResolution: null };
@@ -310,7 +310,10 @@
   const isStudioTabActive = () => Boolean(document.getElementById('tab-studio')?.classList?.contains('active'));
   function startMinimapLoop() {
     if (minimapTimer !== null) return;
-    minimapTimer = setInterval(() => { if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap(); }, 250);
+    minimapTimer = setInterval(() => {
+      if (isStudioTabActive()) drawOverlay();
+      if (isStudioTabActive() || studioState.overlays.bev_minimap) renderBEVMinimap();
+    }, 250);
   }
   function stopMinimapLoop() { if (minimapTimer !== null) { clearInterval(minimapTimer); minimapTimer = null; } }
   function syncStudioTabState(isActive) {

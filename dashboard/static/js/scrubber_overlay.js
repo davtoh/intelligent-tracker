@@ -324,6 +324,7 @@
     resolveScaleFactors: (rW, rH, rec, vw, vh, fb) => getRenderer()?.resolveScaleFactors(rW, rH, rec, vw, vh, fb ?? getPrimaryLayer()?.sourceResolution ?? null),
     get PALETTES() { return getPalettes(); },
     getCurrentDetections: () => getPrimaryLayer()?.frameDetections || [],
+    getCurrentTracks: getTracksAtCurrentTime,
     getCurrentRunId: () => getPrimaryLayer()?.runId || null,
     getCurrentSourceResolution: () => getPrimaryLayer()?.sourceResolution || null,
     getProgressiveJobId: () => progressiveJobId,

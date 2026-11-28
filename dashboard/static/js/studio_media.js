@@ -120,19 +120,22 @@
         img.hidden = false;
         img.removeAttribute?.('hidden');
         img.addEventListener?.('load', triggerRedraw, { once: true });
-        if (window.MediaEmptyState) window.MediaEmptyState.setSource(img, `${streamBase}?t=${Date.now()}`);
-        else { if (img.style) img.style.display = 'block'; img.src = `${streamBase}?t=${Date.now()}`; }
+        const streamUrl = `${streamBase}?annotated=false&t=${Date.now()}`;
+        if (window.MediaEmptyState) window.MediaEmptyState.setSource(img, streamUrl);
+        else { if (img.style) img.style.display = 'block'; img.src = streamUrl; }
       }
     } else if (img && !targetId && window.MediaEmptyState) {
       window.MediaEmptyState.showEmpty(img, 'No Active Camera Feed', 'Select a camera or recorded video.');
     }
   }
 
-  window.StudioMedia = {
-    resolveStudioMediaElement,
-    clearStudioLiveImage,
-    syncFreezeButtonVisibility,
-    bindFreezeControl,
-    attachStudioMedia,
-  };
+  let telemetryRedrawBound = false;
+  function bindTelemetryRedraw() {
+    if (telemetryRedrawBound || typeof window.addEventListener !== 'function') return;
+    telemetryRedrawBound = true;
+    window.addEventListener('telemetry-updated', () => { if (document.getElementById('tab-studio')?.classList?.contains('active')) window.Studio?.drawOverlay?.(); });
+  }
+  bindTelemetryRedraw();
+
+  window.StudioMedia = { resolveStudioMediaElement, clearStudioLiveImage, syncFreezeButtonVisibility, bindFreezeControl, attachStudioMedia, bindTelemetryRedraw };
 })();

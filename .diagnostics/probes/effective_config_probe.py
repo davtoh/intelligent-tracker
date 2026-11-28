@@ -32,6 +32,24 @@ def run_probe() -> dict[str, Any]:
     if prof.model_name != CANONICAL_REID_MODEL or prof.expected_dim != CANONICAL_REID_DIM or not prof.is_canonical:
         failures.append(f"ReidProfile SSOT mismatch: {prof}")
 
+    import tempfile
+    import numpy as np
+    from intelligent_tracker.database import TrackerDB
+    from intelligent_tracker.reid.gallery_reembed import reembed_mismatched_signatures
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db = TrackerDB(str(Path(tmpdir) / "reid.db"))
+        try:
+            eid = db.add_entity("ReembedCheck", "person")
+            vec = np.zeros(CANONICAL_REID_DIM, dtype=np.float32)
+            vec[0] = 1.0
+            db.add_signature(eid, vec)
+            re_res = reembed_mismatched_signatures(db)
+            if re_res.get("failed") != 0 or re_res.get("mismatched") != 0:
+                failures.append(f"reembed_mismatched_signatures failed on {CANONICAL_REID_DIM}D vector: {re_res}")
+        finally:
+            db.close()
+
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("IT_LOAD_DEMO_SCENARIOS", None)
         os.environ.pop("TRACKER_CONFIG", None)

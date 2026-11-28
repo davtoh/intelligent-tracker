@@ -158,7 +158,7 @@ class TestStep2StudioMinimapGating(unittest.TestCase):
         }));
         """
         out = _run_studio_vm(script)
-        self.assertIn("/stream/cam_04?t=", out["src"])
+        self.assertIn("/stream/cam_04?annotated=false&t=", out["src"])
         self.assertEqual(out["activeStreamSrc"], "/stream/cam_04")
 
 

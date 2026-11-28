@@ -118,9 +118,10 @@
   }
 
   function getPresetButtons() {
-    const scoped = document.querySelectorAll('#modal-camera-manager .btn-tag-preset:not([data-target])');
+    const sel = '.btn-tag-preset:not([data-target]):not(.btn-cat-chip):not(.btn-gallery-ent-chip)';
+    const scoped = document.querySelectorAll(`#modal-camera-manager ${sel}`);
     if (scoped && scoped.length > 0) return scoped;
-    return document.getElementById('modal-camera-manager') ? [] : document.querySelectorAll('.btn-tag-preset:not([data-target])');
+    return document.getElementById('modal-camera-manager') ? [] : document.querySelectorAll(sel);
   }
 
   function bindEvents() {

@@ -53,10 +53,31 @@ def _extract_recent_alerts(event_bus: Any) -> list[dict[str, Any]]:
     return alerts
 
 
+def _should_emit_telemetry_track(trk: Any, has_confirmed: bool) -> bool:
+    """Filter stale coasting ghosts and single-hit tentative noise from live overlays."""
+    state = str(getattr(trk, "state", "confirmed") or "confirmed").lower()
+    if state == "deleted":
+        return False
+    missed = int(getattr(trk, "missed_frames", getattr(trk, "time_since_update", 0)) or 0)
+    if state == "coasting" and (missed > 1 or has_confirmed):
+        return False
+    hits = int(getattr(trk, "hits", 1) or 0)
+    if state == "tentative" and has_confirmed and hits <= 1:
+        return False
+    return True
+
+
 def _extract_track_telemetry(tracks: dict[int, Any], homography: Any) -> list[dict[str, Any]]:
     """Map active vision tracks into telemetry dictionaries with homography coordinates."""
+    has_confirmed = any(
+        str(getattr(trk, "state", "confirmed") or "confirmed").lower() == "confirmed"
+        and int(getattr(trk, "missed_frames", getattr(trk, "time_since_update", 0)) or 0) == 0
+        for trk in tracks.values()
+    )
     telemetry_tracks: list[dict[str, Any]] = []
     for tid, trk in tracks.items():
+        if not _should_emit_telemetry_track(trk, has_confirmed):
+            continue
         gx, gy = homography.track_to_ground(trk.bbox)
         entity_cat = getattr(trk, "entity_category", None)
         learned_cls = getattr(trk, "learned_class", None)

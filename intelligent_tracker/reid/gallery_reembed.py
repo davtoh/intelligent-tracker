@@ -7,7 +7,12 @@ from typing import Any
 import cv2
 
 from intelligent_tracker.reid.factory import ReIDExtractorFactory
-from intelligent_tracker.reid.profile import ReidProfile, resolve_reid_profile
+from intelligent_tracker.reid.profile import (
+    CANONICAL_REID_DIM,
+    ReidProfile,
+    resolve_canonical_reid_dim,
+    resolve_reid_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +62,12 @@ def reembed_mismatched_signatures(
     expected_dim: int | None = None,
 ) -> dict[str, Any]:
     """Re-embed gallery signatures whose vector dim mismatches canonical DualModel."""
-    profile = resolve_reid_profile()
-    target_dim = int(expected_dim if expected_dim is not None else (profile.expected_dim or 608))
+    profile = resolve_reid_profile(extractor=extractor)
+    target_dim = int(
+        expected_dim
+        if expected_dim is not None
+        else (resolve_canonical_reid_dim(extractor) if extractor is not None else (profile.expected_dim or CANONICAL_REID_DIM))
+    )
     sigs = db.get_signatures() if db is not None and hasattr(db, "get_signatures") else []
     checked, mismatched, reembedded, failed = len(sigs), 0, 0, 0
     active_extractor = extractor

@@ -1,15 +1,38 @@
 """SQL query builders and helpers for sightings filtering, counting, and source listing."""
 
-from datetime import datetime
-from typing import Any, Optional, Tuple
+from datetime import datetime, timezone
+import math
+from typing import Any, Optional, Tuple, Union
+
+
+def _normalize_timestamp_bound(raw: Optional[Union[str, int, float]]) -> Optional[str]:
+    """Normalize numeric or float-string Unix epoch bounds to UTC ``YYYY-MM-DD HH:MM:SS``."""
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        val = float(raw)
+        if not math.isfinite(val):
+            return None
+        return datetime.fromtimestamp(val, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    text = str(raw).strip()
+    if not text:
+        return None
+    if "-" not in text and ":" not in text:
+        try:
+            val = float(text)
+            if math.isfinite(val):
+                return datetime.fromtimestamp(val, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+    return text
 
 
 def build_sightings_where_clause(
     entity_id: Optional[int] = None,
     source: Optional[str] = None,
     zone_id: Optional[str] = None,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
+    start_time: Optional[Union[str, int, float]] = None,
+    end_time: Optional[Union[str, int, float]] = None,
     video_filename: Optional[str] = None,
     camera_id: Optional[str] = None,
     run_id: Optional[str] = None,
@@ -34,12 +57,14 @@ def build_sightings_where_clause(
         if val:
             conditions.append(col)
             params.append(val)
-    if start_time:
+    norm_start = _normalize_timestamp_bound(start_time)
+    if norm_start:
         conditions.append("s.timestamp >= ?")
-        params.append(start_time)
-    if end_time:
+        params.append(norm_start)
+    norm_end = _normalize_timestamp_bound(end_time)
+    if norm_end:
         conditions.append("s.timestamp <= ?")
-        params.append(end_time)
+        params.append(norm_end)
     where_sql = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     return where_sql, params
 
