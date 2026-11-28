@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-11-28] feat: Step 2 M3: Alerts Dwell Window UI, Min-Severity Policy & Promotion Rules CRUD
+- **Type**: feat
+- **Summary**: Added #alerts-filter-min-severity, collapsible #alerts-rules-panel + alert_rules.js controller, ev.summary dwell-window rendering (OBS-033), canonical deduplicated zone facets, hardened alerts_store_probe, Node VM frontend tests, and restored CameraPool <=10 methods budget.
+- **Files** (8):
+  - `dashboard/static/partials/tabs/alerts.html`
+  - `dashboard/static/js/alerts_view.js`
+  - `dashboard/static/js/alerts_admin.js`
+  - `dashboard/static/js/alert_rules.js`
+  - `dashboard/static/index.html`
+  - `dashboard/camera_pool.py`
+  - `.diagnostics/probes/alerts_store_probe.py`
+  - `tests/test_step2_alerts_governance_frontend.py`
+- **Verification**: audit PASS, surface 0 mismatches, alerts_store_probe PASS, mini_ci --fast (1264 tests + Sphinx) PASS
+
 ## [2026-11-27] fixed: Step 1 P0 runtime tracking, Re-ID parity, studio overlays & timeline reset
 - **Type**: fixed
 - **Summary**: Added track_id support to MultiCameraHandoffCoordinator.record_zone_exit, aligned CANONICAL_REID_DIM to 2560D, added SortTracker bounded centroid fallback and stream telemetry ghost filtering, enforced 1-to-1 per-frame entity uniqueness in GalleryMatcher, isolated CameraAIConfig preset chips, switched #studio live streams to ?annotated=false with ScrubberOverlay.getCurrentTracks(), normalized float Unix epoch sightings bounds, and added #timeline active window chip and Reset button.
@@ -127,16 +141,3 @@
 - **Files** (2):
   - `.diagnostics/probes/`
   - `CHANGELOG.md`
-
-## [2026-11-24] feat: Step 4 M3: Minimap Interactions and Stale Camera Pruning
-- **Type**: feat
-- **Summary**: Pruned stale cameras from /api/topology/world-map via world_map_service, cleaned up camera_world_poses on CameraPool.remove_camera, and added interactive 2D minimap cone-focus and origin/yaw/range drag controls.
-- **Files** (8):
-  - `dashboard/services/world_map_service.py`
-  - `dashboard/routers/topology.py`
-  - `dashboard/camera_pool.py`
-  - `dashboard/static/js/world_minimap.js`
-  - `dashboard/static/js/world_minimap_interactions.js`
-  - `dashboard/static/partials/scripts_studio.html`
-  - `dashboard/static/studio.js`
-  - `tests/test_step4_minimap_interactions.py`

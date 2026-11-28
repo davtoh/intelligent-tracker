@@ -31,14 +31,27 @@
     if (prev && items.includes(prev)) selectEl.value = prev;
   }
 
-  function populateDatalist(listEl, values) {
+  function normalizeZoneName(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return '';
+    const idx = text.indexOf(':zone:');
+    return idx >= 0 ? text.slice(idx + 6).trim() : text;
+  }
+
+  function populateDatalist(listEl, values, normalizer = null) {
     if (!listEl) return;
     const items = Array.isArray(values) ? values : [];
-    listEl.innerHTML = items
-      .map((v) => String(v || '').trim())
-      .filter(Boolean)
-      .map((v) => `<option value="${escapeHtml(v)}"></option>`)
-      .join('');
+    const seen = new Set();
+    const unique = [];
+    items.forEach((v) => {
+      const val = normalizer ? normalizer(v) : String(v || '').trim();
+      const key = val.toLowerCase();
+      if (val && !seen.has(key)) {
+        seen.add(key);
+        unique.push(val);
+      }
+    });
+    listEl.innerHTML = unique.map((v) => `<option value="${escapeHtml(v)}"></option>`).join('');
   }
 
   async function loadFacets(force = false) {
@@ -49,7 +62,7 @@
       const facets = await res.json();
       populateSelectOptions(document.getElementById('alerts-filter-camera'), facets?.cameras, 'All Cameras');
       populateDatalist(document.getElementById('alerts-type-options'), facets?.event_types);
-      populateDatalist(document.getElementById('alerts-zone-options'), facets?.zones);
+      populateDatalist(document.getElementById('alerts-zone-options'), facets?.zones, normalizeZoneName);
       state.facetsLoaded = true;
       return facets;
     } catch (err) {
@@ -112,6 +125,7 @@
     const params = new URLSearchParams({ format: String(format || 'csv').toLowerCase() });
     if (filters.camera_id) params.set('camera_id', filters.camera_id);
     if (filters.severity) params.set('severity', filters.severity);
+    if (filters.min_severity) params.set('min_severity', filters.min_severity);
     if (filters.event_type) params.set('event_type', filters.event_type);
     if (filters.zone_id) params.set('zone_id', filters.zone_id);
     if (filters.start_time !== undefined && filters.start_time !== '') params.set('start_time', String(filters.start_time));

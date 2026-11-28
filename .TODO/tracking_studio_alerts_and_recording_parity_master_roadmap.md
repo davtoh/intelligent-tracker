@@ -26,13 +26,13 @@
 
 ---
 
-## Step 2: Alerts SSOT Noise Elimination, Severity/Zone Parity, Dwell Window & Alert Promotion Rules *(Deferred to Next Turn / Milestone)*
-- [ ] **Goal**: Stop persisting periodic `0.5s` `world_entity_state_changed` ticks into `world_timeline_events` while preserving in-memory `EventBus` updates (`OBS-030`), wire `EventBus.set_write_through_handler` (`DBG-04`, `ADR-14`), stamp explicit `severity` (`critical`/`warning`/`info`) and canonical unscoped `zone_id` across all formatters (`OBS-031`, `OBS-032`), add normalized/contains & multi-term zone/type filtering (`OBS-032`), enrich `ZoneEvent`/`zone_dwell`/`zone_exit` with `entry_time`, `exit_time`, and `dwell_time` surfaced in `#alerts` (`OBS-033`), and add DB-backed Alert Promotion Rules (`WorldPolicy` / `AlertRuleEngine` CRUD + `#alerts` min-severity & custom promotion UI, `OBS-034`).
-- [ ] **Target Scope**:
-  - [ ] `intelligent_tracker/memory/fts_index.py`, `intelligent_tracker/memory/_event_formatters.py`, `intelligent_tracker/events/types.py`, `intelligent_tracker/geometry/zone_roi.py`, `intelligent_tracker/repositories/memory_repo.py`, `intelligent_tracker/repositories/events_admin_repo.py`.
-  - [ ] `dashboard/services/alerts_query_service.py`, `dashboard/routers/events_admin.py`, `dashboard/static/js/alerts_view.js`, `dashboard/static/js/alerts_admin.js`, `dashboard/static/partials/tabs/alerts.html`.
-- [ ] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step2_alerts_governance_and_rules.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run alerts_store_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`.
-- [ ] **Review Gate**: Fresh reviewer verifies `0` `world_entity_state_changed` SQLite rows, `severity=info|warning|critical` parity, unscoped/contains zone filtering, dwell window display, and custom alert promotion persistence before resolving `OBS-030`–`OBS-034` and advancing to Step 3.
+## Step 2: Alerts SSOT Noise Elimination, Severity/Zone Parity, Dwell Window & Alert Promotion Rules
+- [x] **Goal**: Stop persisting periodic `0.5s` `world_entity_state_changed` ticks into `world_timeline_events` while preserving in-memory `EventBus` updates (`OBS-030`), wire `EventBus.set_write_through_handler` (`DBG-04`, `ADR-14`), stamp explicit `severity` (`critical`/`warning`/`info`) and canonical unscoped `zone_id` across all formatters (`OBS-031`, `OBS-032`), add normalized/contains & multi-term zone/type filtering (`OBS-032`), enrich `ZoneEvent`/`zone_dwell`/`zone_exit` with `entry_time`, `exit_time`, and `dwell_time` surfaced in `#alerts` (`OBS-033`), and add DB-backed Alert Promotion Rules (`WorldPolicy` / `AlertRuleEngine` CRUD + `#alerts` min-severity & custom promotion UI, `OBS-034`).
+- [x] **Target Scope**:
+  - [x] `intelligent_tracker/memory/fts_index.py`, `intelligent_tracker/memory/_event_formatters.py`, `intelligent_tracker/events/types.py`, `intelligent_tracker/geometry/zone_roi.py`, `intelligent_tracker/repositories/memory_repo.py`, `intelligent_tracker/repositories/events_admin_repo.py`.
+  - [x] `dashboard/services/alerts_query_service.py`, `dashboard/routers/events_admin.py`, `dashboard/static/js/alerts_view.js`, `dashboard/static/js/alerts_admin.js`, `dashboard/static/partials/tabs/alerts.html`.
+- [x] **Verifier**: `python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" tests tests/test_step2_alerts_governance_and_rules.py; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" probe run alerts_store_probe; python "<config_dir>/skills/system-diagnostics/scripts/diagnose.py" surface --verify --strict`.
+- [x] **Review Gate**: Fresh reviewer verifies `0` `world_entity_state_changed` SQLite rows, `severity=info|warning|critical` parity, unscoped/contains zone filtering, dwell window display, and custom alert promotion persistence before resolving `OBS-030`–`OBS-034` and advancing to Step 3.
 
 ---
 

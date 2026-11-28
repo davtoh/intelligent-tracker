@@ -32,6 +32,23 @@ from intelligent_tracker.world import (
 logger = logging.getLogger("intelligent_tracker.camera_pool")
 
 
+def _build_memory_and_promotion(
+    db_path: str, event_bus: EventBus, world_graph: WorldGraph
+) -> tuple[TrackerDB | None, ConfidenceEngine, AlertPromotionEngine | None, EventFTSIndex | None]:
+    """Initialize pool-scoped TrackerDB, ConfidenceEngine, AlertPromotionEngine, and EventFTSIndex."""
+    db = TrackerDB(db_path) if db_path else None
+    confidence_engine = ConfidenceEngine(db=db, event_bus=event_bus)
+    promotion_engine = AlertPromotionEngine(db=db, world_graph=world_graph) if db is not None else None
+    if promotion_engine is not None:
+        promotion_engine.sync_policy()
+    event_fts_index = (
+        EventFTSIndex(db=db, event_bus=event_bus, auto_attach=True, promotion_engine=promotion_engine)
+        if db is not None
+        else None
+    )
+    return db, confidence_engine, promotion_engine, event_fts_index
+
+
 class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
     """
     Thread-safe multi-camera stream pool facade.
@@ -62,7 +79,12 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             coordinate_mapper=self.coordinate_mapper,
         )
         self.world_graph.handoff_coordinator = self.handoff_coordinator
-        self._init_memory_and_promotion(db_path)
+        (
+            self._db,
+            self._confidence_engine,
+            self.promotion_engine,
+            self.event_fts_index,
+        ) = _build_memory_and_promotion(db_path, self.event_bus, self.world_graph)
         self._config_store = CameraConfigStore(config_file=config_file, lock=self._lock)
         self._coordinator = StreamPoolCoordinator(
             db_path=db_path, base_config_path=resolved_base_config, world_graph=self.world_graph,
@@ -70,23 +92,6 @@ class CameraPool(CameraPoolStateMixin, CameraPoolQueryMixin):
             confidence_engine=self._confidence_engine, event_fts_index=self.event_fts_index,
         )
         self.load_cameras()
-
-    def _init_memory_and_promotion(self, db_path: str) -> None:
-        """Initialize pool-scoped TrackerDB, ConfidenceEngine, AlertPromotionEngine, and EventFTSIndex."""
-        self._db = TrackerDB(db_path) if db_path else None
-        self._confidence_engine = ConfidenceEngine(db=self._db, event_bus=self.event_bus)
-        self.promotion_engine = (
-            AlertPromotionEngine(db=self._db, world_graph=self.world_graph) if self._db is not None else None
-        )
-        if self.promotion_engine is not None:
-            self.promotion_engine.sync_policy()
-        self.event_fts_index = (
-            EventFTSIndex(
-                db=self._db, event_bus=self.event_bus, auto_attach=True, promotion_engine=self.promotion_engine
-            )
-            if self._db is not None
-            else None
-        )
 
     def load_cameras(self) -> None:
         """Load saved camera configurations and instantiate enabled streams."""
