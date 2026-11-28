@@ -1,0 +1,14 @@
+{
+  "wsl_distro": "Ubuntu-24.04",
+  "apt_packages": ["libgl1", "libglib2.0-0", "ffmpeg", "nodejs"],
+  "pip_packages": ["ruff", "sphinx", "sphinx-rtd-theme"],
+  "env": {
+    "IT_DISABLE_EXTERNAL_SKILLS": "1"
+  },
+  "exclude_dirs": ["models", "data", "_build"],
+  "steps": [
+    ["{python}", "-m", "ruff", "check", ".", "--ignore", "E501,E722,E741,F401,F841", "--statistics", "--exit-zero"],
+    ["{python}", "-m", "unittest", "discover", "tests"],
+    ["{python}", "-m", "sphinx", "-b", "html", "documentation/", "documentation/_build/html"]
+  ]
+}
